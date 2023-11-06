@@ -1,0 +1,26 @@
+_regenerate: false
+aws_profile: default
+aws_partition: aws
+aws_region: <AWS-REGION>
+aws_account_id: <ACCOUNT-ID>
+aws_dns_suffix: amazonaws.com
+cluster_name: <CLUSTER-NAME>
+administrator_email: <EMAIL>
+vpc_cidr_block: 10.0.0.0/16
+ssh_key_pair_name: <SSH-KEY>
+cluster_access: prefix-list
+prefix_list_ids:
+  - <PREFIX-LIST-ID>
+alb_public: true
+use_vpc_endpoints: false
+directory_service_provider: aws_managed_activedirectory
+enable_aws_backup: true
+kms_key_type: aws-managed
+enabled_modules:
+  - metrics
+  - virtual-desktop-controller
+  - bastion-host
+metrics_provider: cloudwatch
+base_os: amazonlinux2
+instance_type: m5.large
+volume_size: '200'

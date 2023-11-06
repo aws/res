@@ -1,0 +1,20 @@
+# Begin: FSx Lustre Client Tuning - Post-Mount
+# https://docs.aws.amazon.com/fsx/latest/LustreGuide/performance.html#performance-tips
+{%- if context.base_os in ('amazonlinux2', 'centos7', 'rhel7', 'rhel8') %}
+  NPROCS=$(nproc)
+  GB_MEM=$(free --si -g | egrep '^Mem:' | awk '{print $2}')
+  log_info "Detected ${NPROCS} CPUs / ${GB_MEM} GiB memory for Lustre performance tuning"
+  if [[ "${NPROCS}" -ge 64 ]]; then
+    log_info "Applying CPU count Lustre performance tuning"
+    lctl set_param osc.*OST*.max_rpcs_in_flight=32
+    lctl set_param mdc.*.max_rpcs_in_flight=64
+    lctl set_param mdc.*.max_mod_rpcs_in_flight=50
+  fi
+
+  if [[ "${GB_MEM}" -ge 64 ]]; then
+    log_info "Applying memory size Lustre performance tuning"
+    lctl set_param ldlm.namespaces.*.lru_max_age=600000
+  fi
+  lctl lustre_build_version
+{% endif %}
+# End: FSx Lustre Client Tuning - Post-Mount

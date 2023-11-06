@@ -1,0 +1,354 @@
+
+version: 0.2
+env:
+  # Environment Variables configured at CodePipeline Stage level
+  # //todo: update this section when final builspec is shipped
+  # -----------
+  # - VALUES_FILE: Reference the values file to be used during quick-setup (e.g: deployment/idea/codebuild/integration_tests/us-west-2/all_modules_openldap.yml)
+  # - IDEA_DEPLOYMENT_REGION: Reference the AWS region where you want to install IDEA (e.g: us-west-2). Make sure the region selected match the one of the VALUES_FILE
+  # - RUN_TESTS_SCHEDULER: Enable (1) or Disable (0) the scheduler tests
+  # - RUN_TESTS_VDC: Enable (1) or Disable (0) the vdc tests
+  # - RUN_TESTS_CLUSTER_MANAGER: Enable (1) or Disable (0) the cluster-manager tests
+  # - DOCKER_IMAGE: > If not set, will use the regular development installer to test locally build docker
+  #                 > If "idea-administrator", use a local Docker image created via `invoke docker.build`. Do not specify the revision, we will determine it automatically
+  #                 > If "public.ecr.aws/g8j8s8q8/idea-administrator:<REVISION>", pull the image from our ECR repo
+  # - FORCE_DELETE_CLUSTER: Enable (1) or Disable (0) automatic ./res-admin.sh delete-cluster at the end of the build
+  # - JOB_TEST_CASES_SCHEDULER: > "all" to run all test cases
+  #                             > comma-separated list of test cases to run specific tests (e.g: hello_word,instance_type,fsx_2tb)
+  # -----------
+  variables:
+    # Current IDEA development environment.
+    PYTHON_VERSION: "3.9.16" # Python version to setup local dev environment
+    NODEJS_VERSION: "18.18.0" # NodeJS version to setup local dev environment
+    AWS_CDK_VERSION: "2.63.0"  # CDK version - automatically updated
+    RES_DEV_MODE: "true" # Enable developer mode. This setting is ignored if DOCKER_IMAGE is set
+    IDEA_ADMIN_AWS_CREDENTIAL_PROVIDER: "Ec2InstanceMetadata" # Authenticate to AWS via EC2 Instance Profile and not IAM user (only if not using Docker)
+
+  secrets-manager:
+    # We retrieve IAM access credentials for codebuild-idea-installer
+    # We can't use role because chained assumed roles won't give us credential for more than 1 hour
+    # This limit is not enough when trying to install via Docker
+    IAM_AWS_ACCESS_KEY_ID: codebuild/idea-installer-iam-user:AWS_ACCESS_KEY_ID
+    IAM_AWS_SECRET_ACCESS_KEY: codebuild/idea-installer-iam-user:AWS_SECRET_ACCESS_KEY
+phases:
+  install:
+    commands:
+      # Remove awscli v1 and default to v2
+      - pip uninstall awscli -y
+      - ln -sf /usr/local/aws-cli/v2/current/bin/aws /root/.pyenv/shims/aws
+      - ln -sf /usr/local/aws-cli/v2/current/bin/aws /usr/bin/aws
+      # Create local IAM user with IDEA installer
+      - aws configure set region $IDEA_DEPLOYMENT_REGION
+      - aws configure set aws_access_key_id $IAM_AWS_ACCESS_KEY_ID
+      - aws configure set aws_secret_access_key $IAM_AWS_SECRET_ACCESS_KEY
+
+  pre_build:
+    commands:
+      # System Packages
+      - echo "INSTALLING SYSTEM PACKAGES ..."
+      - yum install -y docker git gcc jq openldap-devel openssl-devel ruby zlib-devel
+      # Update Pyenv
+      - echo "Updating Pyenv"
+      - echo "Pyenv version"
+      - pyenv --version
+      - echo "Pyenv version list"
+      - pyenv install --list
+      - cd /root/.pyenv/plugins/python-build/../.. && git reset --hard && git pull && cd -
+      - echo "Post-PyEnv update"
+      - pyenv --version
+      - pyenv install --list
+      # Installing Python
+      - pyenv install --skip-existing $PYTHON_VERSION
+      - PYENV_VERSION=$PYTHON_VERSION python3 -m venv ~/.venv
+      # Installing Nodejs
+      - n $NODEJS_VERSION
+      # Installing Yarn
+      - echo "INSTALLING YARN ..."
+      - npm install yarn -g
+      # Preparing CDK/IDEA environment
+      - echo "INSTALLING CDK $AWS_CDK_VERSION ..."
+      - mkdir -p ~/.idea/lib/idea-cdk && pushd ~/.idea/lib/idea-cdk
+      - npm init --force --yes
+      - npm install aws-cdk@$AWS_CDK_VERSION --save
+      # Create unique IDEA cluster name (5 chars max)
+      - IDEA_CLUSTER_NAME="idea-$(cat /dev/urandom | tr -dc 'a-z' | fold -w 5 | head -n 1)"
+      - echo "IDEA_CLUSTER_NAME = $IDEA_CLUSTER_NAME"
+
+  build:
+    commands:
+      # cd into source directory
+      - cd $CODEBUILD_SRC_DIR
+      # Activate virtual environment and install required packages
+      - . ~/.venv/bin/activate
+      - pip install -r requirements/dev.txt
+      - invoke req.install
+      - invoke clean
+      - invoke build package
+      - rm -rf ~/.idea/clusters
+      - aws --version
+      # Prepare local docker image (idea-administrator) if DOCKER_IMAGE is set to idea-administrator:*. Skip if using ECR
+      - |
+        if [[ "$DOCKER_IMAGE" == "idea-administrator" ]]; then
+          invoke docker.build
+          # If using local Docker build, we automatically retrieve the latest tag via RES_VERSION
+          DOCKER_IMAGE="idea-administrator:v$(cat RES_VERSION.txt)"
+        fi
+      # Verify values_file provided and setup unique cluster_name
+      - sed -i "/^cluster_name:/d" $VALUES_FILE
+      - echo "cluster_name__:__ $IDEA_CLUSTER_NAME" >> $VALUES_FILE
+      - sed -i "s/__:__/:/g" $VALUES_FILE
+      # Install IDEA
+      - |
+        if [[ -z "$DOCKER_IMAGE" ]]; then
+          # DOCKER_IMAGE not specified (default), proceed to development installer (bypass docker)
+          echo "Using developer installer ... "
+          ./res-admin.sh quick-setup --force --values-file $VALUES_FILE
+          IDEA_INSTALLATION_RETURN_CODE=$?
+        else
+           # Bypass res-admin.sh and install via Docker. DOCKER_IMAGE can point to idea-administrator:<version> to use locally built docker or ECR
+           # Note: Docker container does not have access to IAM role/credential info.
+           # We cannot use role because chained assumed role have a timeout of 1H, so instead we configure a local IAM user
+           # We pull the IAM user info via SecretsManager, generate a local ~/.aws/credentials then mount this volume to Docker container via -v
+           echo "using Docker installer with image set to $DOCKER_IMAGE"
+           VALUES_FILE_DIRNAME=$(dirname $CODEBUILD_SRC_DIR/$VALUES_FILE)
+           VALUES_FILE_BASENAME=$(basename $CODEBUILD_SRC_DIR/$VALUES_FILE)
+           docker run --rm -i \
+              -v ~/.idea/clusters:/root/.idea/clusters \
+              -v ~/.aws:/root/.aws \
+              -v $VALUES_FILE_DIRNAME/$VALUES_FILE_BASENAME:/root/$VALUES_FILE_DIRNAME/$VALUES_FILE_BASENAME \
+              -v $CODEBUILD_SRC_DIR/source/idea/idea-administrator:/root/idea-administrator \
+              $DOCKER_IMAGE res-admin quick-setup --force --values-file /root/$VALUES_FILE_DIRNAME/$VALUES_FILE_BASENAME
+              IDEA_INSTALLATION_RETURN_CODE=$?
+        fi
+      - echo " === Running Integration Tests === "
+      # note: usernames start with user to match regex policy (username cannot start with a digit). Will be fixed on beta.5
+      - IDEA_ADMIN_USER="user$(openssl rand -hex 5)"
+      - IDEA_REGULAR_USER="user$(openssl rand -hex 5)"
+      # Generate temp password, enforce one uppercase/lowercase/digit/symbol in the (very unlikely) even the 20 strings generated command won't include them
+      - IDEA_ADMIN_USER_PASSWORD="A1@e$(cat /dev/urandom | tr -dc 'a-zA-Z0-9' | fold -w 20 | head -n 1)"
+      - IDEA_REGULAR_USER_PASSWORD="A1@e$(cat /dev/urandom | tr -dc 'a-zA-Z0-9' | fold -w 20 | head -n 1)"
+      - IDEA_ADMIN_EMAIL_ADDRESS="idea-tests-pipeline@amazon.com"
+      - IDEA_USER_EMAIL_ADDRESS="idea-tests-pipeline+user@amazon.com"
+      # Retrieve Client ID
+      - |
+        CLIENT_ID_ARN=$(./res-admin.sh config show \
+          --query "cluster-manager.client_id" \
+          --cluster-name $IDEA_CLUSTER_NAME \
+          --aws-region $IDEA_DEPLOYMENT_REGION \
+          --format raw)
+      - CLIENT_ID=$(aws secretsmanager get-secret-value --secret-id $CLIENT_ID_ARN --query "SecretString" --output text --region $IDEA_DEPLOYMENT_REGION)
+      # Retrieve Client Secret
+      - |
+        CLIENT_SECRET_ARN=$(./res-admin.sh config show \
+          --query "cluster-manager.client_secret" \
+          --cluster-name $IDEA_CLUSTER_NAME \
+          --aws-region $IDEA_DEPLOYMENT_REGION \
+          --format raw)
+      - CLIENT_SECRET=$(aws secretsmanager get-secret-value --secret-id $CLIENT_SECRET_ARN --query "SecretString" --output text --region $IDEA_DEPLOYMENT_REGION)
+      # Retrieve Cognito URL
+      - |
+        COGNITO_USER_POOL=$(./res-admin.sh config show \
+          --query "identity-provider.cognito.domain_url" \
+          --cluster-name $IDEA_CLUSTER_NAME \
+          --aws-region $IDEA_DEPLOYMENT_REGION \
+          --format raw)
+      # Retrieve ALB endpoint
+      - |
+        IDEA_ALB=$(./res-admin.sh config show \
+          --query "cluster.load_balancers.external_alb.load_balancer_dns_name" \
+          --cluster-name $IDEA_CLUSTER_NAME \
+          --aws-region $IDEA_DEPLOYMENT_REGION \
+          --format raw)
+      # Generate Authorization Header
+      - AUTHORIZATION_HEADER=$(echo -n $CLIENT_ID:$CLIENT_SECRET | base64 -w 0)
+      # Request Bearer
+      - |
+        curl --silent --insecure --location --request POST "$COGNITO_USER_POOL/oauth2/token" \
+          --header "Authorization: Basic $AUTHORIZATION_HEADER" \
+          --header "Content-Type: application/x-www-form-urlencoded" \
+          --data-urlencode "grant_type=client_credentials" \
+          --data-urlencode "scope=cluster-manager/read cluster-manager/write" > .bearer
+      # Bearer output is stored as text file in order to use -r. File is removed shortly after
+      - BEARER=$(cat .bearer  | jq -r ".access_token")
+      - rm -rf .bearer
+      # Create Admin User
+      - |
+        curl --silent --insecure --location --request POST "https://$IDEA_ALB/cluster-manager/api/v1" \
+          --header "Authorization: Bearer $BEARER" \
+          --header "Content-Type: application/json" \
+          --data-raw '{
+            "header": {
+                "namespace": "Accounts.CreateUser"
+            },
+            "payload": {
+                "user": {
+                    "username": "'$IDEA_ADMIN_USER'",
+                    "password": "'$IDEA_ADMIN_USER_PASSWORD'",
+                    "email": "'$IDEA_ADMIN_EMAIL_ADDRESS'",
+                    "additional_groups": ["managers-cluster-group","vdc-administrators-module-group"]
+                },
+                "email_verified": true
+            }
+          }'
+      # Create Regular User
+      - |
+        curl --silent --insecure --location --request POST "https://$IDEA_ALB/cluster-manager/api/v1" \
+          --header "Authorization: Bearer $BEARER" \
+          --header "Content-Type: application/json" \
+          --data-raw '{
+            "header": {
+                "namespace": "Accounts.CreateUser"
+            },
+            "payload": {
+                "user": {
+                    "username": "'$IDEA_REGULAR_USER'",
+                    "password": "'$IDEA_REGULAR_USER_PASSWORD'",
+                    "email": "'$IDEA_USER_EMAIL_ADDRESS'",
+                    "sudo": false
+                },
+                "email_verified": true
+            }}'
+      # Add Regular User to a Group, required for VDC tests module
+      - |
+        curl --silent --insecure --location --request POST "https://$IDEA_ALB/cluster-manager/api/v1" \
+          --header "Authorization: Bearer $BEARER" \
+          --header "Content-Type: application/json" \
+          --data-raw '{
+            "header": {
+                "namespace": "Accounts.AddUserToGroup"
+            },
+            "payload": {
+                    "usernames": ["'$IDEA_REGULAR_USER'"],
+                    "group_name": "vdc-users-module-group"
+            }}'
+
+      # Determine test cases to run for the Scheduler
+      - |
+        if [[ ${JOB_TEST_CASES_SCHEDULER} == "all" ]]; then
+          JOB_TEST_CASES_SCHEDULER="" #  this will launch all test cases
+        else
+          JOB_TEST_CASES_SCHEDULER="--param job_test_cases=${JOB_TEST_CASES_SCHEDULER}"
+        fi
+      # Test Module: cluster-manager
+      - |
+        if [[ ${RUN_TESTS_CLUSTER_MANAGER} -eq 1 ]]; then
+          ./res-admin.sh run-integration-tests cluster-manager \
+            --cluster-name $IDEA_CLUSTER_NAME \
+            --aws-region $IDEA_DEPLOYMENT_REGION \
+            --admin-username "$IDEA_ADMIN_USER" \
+            --admin-password "$IDEA_ADMIN_USER_PASSWORD" \
+            --debug
+          export RUN_TESTS_CLUSTER_MANAGER_EXIT_CODE=$?
+        else
+          export RUN_TESTS_CLUSTER_MANAGER_EXIT_CODE=0
+        fi
+      # Test Module: vdc
+      - |
+        echo "Starting VDC TESTS"
+        if [[ ${RUN_TESTS_VDC} -eq 1 ]]; then
+          ./res-admin.sh run-integration-tests vdc \
+            --cluster-name $IDEA_CLUSTER_NAME \
+            --aws-region $IDEA_DEPLOYMENT_REGION \
+            --admin-username "$IDEA_ADMIN_USER" \
+            --admin-password "$IDEA_ADMIN_USER_PASSWORD" \
+            --param test_username=$IDEA_REGULAR_USER \
+            --param test_password=$IDEA_REGULAR_USER_PASSWORD
+          export RUN_TESTS_VDC_EXIT_CODE=$?
+        else
+          export RUN_TESTS_VDC_EXIT_CODE=0
+        fi
+      # Test Module: scheduler
+      # Test cases are not run concurrently to avoid potential AWS Service Limits (eg: 3x 2TB FSxL etc ..)
+      - |
+        if [[ ${RUN_TESTS_SCHEDULER} -eq 1 ]]; then
+          # Running tests for AmazonLinux2
+          ./res-admin.sh run-integration-tests scheduler \
+            --cluster-name $IDEA_CLUSTER_NAME \
+            --aws-region $IDEA_DEPLOYMENT_REGION \
+            --admin-username "$IDEA_ADMIN_USER" \
+            --admin-password "$IDEA_ADMIN_USER_PASSWORD" \
+            --param base_os=amazonlinux2 $JOB_TEST_CASES_SCHEDULER \
+            --debug
+          export RUN_TESTS_SCHEDULER_AMAZONLINUX2_EXIT_CODE=$?
+          echo "Waiting for resources to be cleaned up ..."
+          sleep 120
+
+          # Running tests for Scheduler module for RHEL7
+          ./res-admin.sh run-integration-tests scheduler \
+            --cluster-name $IDEA_CLUSTER_NAME \
+            --aws-region $IDEA_DEPLOYMENT_REGION \
+            --admin-username "$IDEA_ADMIN_USER" \
+            --admin-password "$IDEA_ADMIN_USER_PASSWORD" \
+            --param base_os=rhel7 $JOB_TEST_CASES_SCHEDULER \
+            --debug
+          export RUN_TESTS_SCHEDULER_RHEL7_EXIT_CODE=$?
+          echo "Waiting for resources to be cleaned up ..."
+          sleep 120
+
+          # Running tests for Scheduler module for Centos7
+          ./res-admin.sh run-integration-tests scheduler \
+            --cluster-name $IDEA_CLUSTER_NAME \
+            --aws-region $IDEA_DEPLOYMENT_REGION \
+            --admin-username "$IDEA_ADMIN_USER" \
+            --admin-password "$IDEA_ADMIN_USER_PASSWORD" \
+            --param base_os=centos7 $JOB_TEST_CASES_SCHEDULER \
+            --debug
+          export RUN_TESTS_SCHEDULER_CENTOS7_EXIT_CODE=$?
+          echo "Waiting for resources to be cleaned up ..."
+          sleep 120
+        else
+          export RUN_TESTS_SCHEDULER_RHEL7_EXIT_CODE=0
+          export RUN_TESTS_SCHEDULER_CENTOS7_EXIT_CODE=0
+          export RUN_TESTS_SCHEDULER_AMAZONLINUX2_EXIT_CODE=0
+        fi
+    finally:
+      # If IDEA installation fails, verify the log and check for false positives
+      # InsufficientInstanceCapacity: We consider this as temporary issue due to EC2 capacity shortage and not specific to IDEA
+      - echo "IDEA_INSTALLATION_RETURN_CODE > $IDEA_INSTALLATION_RETURN_CODE"
+      - |
+        if [[ ${IDEA_INSTALLATION_RETURN_CODE} -ne 0 ]]; then
+          echo "IDEA Installation did not complete successfully, checking for false positive errors ..."
+          INSUFFICIENT_INSTANCE_CAPACITY=$(grep -qi "InsufficientInstanceCapacity" ~/.idea/clusters/$IDEA_CLUSTER_NAME/$IDEA_DEPLOYMENT_REGION/logs/*)
+          echo "INSUFFICIENT_INSTANCE_CAPACITY > $INSUFFICIENT_INSTANCE_CAPACITY"
+          if [[ $INSUFFICIENT_INSTANCE_CAPACITY -eq 0 ]]; then
+            CODEBUILD_BUILD_SUCCEEDING=1
+          fi
+        fi
+      # check log for error and ignore if error was part of s ome keyw
+      #- echo "Running test for VDC module"
+      #- ./res-admin.sh run-integration-tests vdc --cluster-name $IDEA_CLUSTER_NAME --aws-region $IDEA_DEPLOYMENT_REGION --admin-username clusteradmin --admin-password "Password123@"
+  post_build:
+    # Note: post_build phase is always triggered even if build phase was not successful
+    commands:
+      - |
+        if [[ ${FORCE_DELETE_CLUSTER} -eq 1 ]]; then
+          ./res-admin.sh delete-cluster \
+            --cluster-name $IDEA_CLUSTER_NAME \
+            --aws-region $IDEA_DEPLOYMENT_REGION \
+            --delete-all \
+            --force
+          export IDEA_DELETE_CLUSTER_EXIT_CODE=$?
+        else
+          export IDEA_DELETE_CLUSTER_EXIT_CODE=0
+        fi
+      # Determine exit code to return
+      - |
+        if [[ ${RUN_TESTS_SCHEDULER_AMAZONLINUX2_EXIT_CODE} -ne 0 ]] || [[ ${RUN_TESTS_SCHEDULER_RHEL7_EXIT_CODE} -ne 0 ]] || [[ ${RUN_TESTS_SCHEDULER_CENTOS7_EXIT_CODE} -ne 0 ]] || [[ ${IDEA_DELETE_CLUSTER_EXIT_CODE} -ne 0 ]] ; then
+          CODEBUILD_BUILD_SUCCEEDING=0
+        fi
+      # Output some info
+      - env | grep -E "IDEA*|DOCKER_IMAGE|VALUES_FILE|RUN_TESTS*|JOB_TEST*|CODEBUILD*" || true
+      # Exit 1 if BUILD phase was not successful
+      - |
+        if [[ ${CODEBUILD_BUILD_SUCCEEDING} -eq 0 ]]; then
+          exit 1
+        else
+          exit 0
+        fi
+
+#reports:
+#  vdc_test_reports:
+#    files:
+#      - vdc_test_report.xml
+#    base-directory: ./integration-test-results/*
+#    file-format: JUNITXML

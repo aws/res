@@ -1,0 +1,8 @@
+# Begin: Join Directory Service
+{% if context.config.get_string('directoryservice.provider') == 'openldap' %}
+  {%- include '_templates/linux/join_openldap.jinja2' %}
+{% endif -%}
+{%- if context.config.get_string('directoryservice.provider') in ['activedirectory', 'aws_managed_activedirectory'] %}
+  {%- include '_templates/linux/join_activedirectory.jinja2' %}
+{% endif -%}
+# End: Join Directory Service

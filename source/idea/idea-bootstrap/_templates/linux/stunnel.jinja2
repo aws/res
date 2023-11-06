@@ -1,0 +1,33 @@
+#
+# Begin: Install stunnel package.
+# Stunnel is used to provide data in transit encryption via TLS for EFS/NFS traffic.
+# https://docs.aws.amazon.com/efs/latest/ug/encryption-in-transit.html
+# Mounts will appear connecting to localhost / '127.0.0.1' as they are tunneled in TLS.
+#
+{%- if context.base_os in ('amazonlinux2', 'centos7', 'rhel7', 'rhel8', 'rhel9') %}
+  function install_stunnel () {
+  {%- if context.base_os in ('amazonlinux2') %}
+    STUNNEL_CMD='stunnel5'
+  {%- elif context.base_os in ('centos7','rhel7', 'rhel8', 'rhel9') %}
+    STUNNEL_CMD='stunnel'
+  {%- endif %}
+  which ${STUNNEL_CMD} > /dev/null 2>&1
+  if [[ "$?" != "0" ]]; then
+    log_info "Installing stunnel for {{ context.base_os }}"
+      yum install -y ${STUNNEL_CMD}
+  else
+    log_info "Found existing stunnel on system"
+  fi
+  # If needed - fixup configuration for older stunnel 4 packages that lack support for cert hostname enforcement
+  STUNNEL_VERSION=$(${STUNNEL_CMD} -version 2>&1 | egrep '^stunnel' | awk '{print $2}' | cut -f1 -d.)
+  log_info "Detected stunnel version ${STUNNEL_VERSION}"
+  if [[ "${STUNNEL_VERSION}" == '4' ]]; then
+    log_info "Stunnel 4 detected - Disabling stunnel_check_cert_hostname in /etc/amazon/efs/efs-utils.conf "
+    sed -i.backup 's/stunnel_check_cert_hostname = true/stunnel_check_cert_hostname = false/g' /etc/amazon/efs/efs-utils.conf
+    log_info "Configuration now:"
+    log_info "$(grep stunnel_check_cert_hostname /etc/amazon/efs/efs-utils.conf)"
+  fi
+}
+install_stunnel
+{%- endif %}
+# End: Install stunnel

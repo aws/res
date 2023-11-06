@@ -1,0 +1,58 @@
+# Begin: Install Prometheus
+{%- if context.base_os in ('amazonlinux2', 'centos7', 'rhel7', 'rhel8', 'rhel9') %}
+PROMETHEUS_AMD64_URL="{{ context.config.get_string('global-settings.package_config.prometheus.installer.linux.x86_64', required=True) }}"
+PROMETHEUS_ARM64_URL="{{ context.config.get_string('global-settings.package_config.prometheus.installer.linux.aarch64', required=True) }}"
+function install_prometheus () {
+  local MACHINE=$(uname -m)
+  local DOWNLOAD_URL=""
+  if [[ ${MACHINE} == "aarch64" ]]; then
+    DOWNLOAD_URL="${PROMETHEUS_ARM64_URL}"
+  else
+    DOWNLOAD_URL="${PROMETHEUS_AMD64_URL}"
+  fi
+  local PACKAGE_ARCHIVE=$(basename ${DOWNLOAD_URL})
+  local PACKAGE_NAME="${PACKAGE_ARCHIVE%.tar.gz*}"
+  PROMETHEUS_DIR="/root/bootstrap/prometheus"
+  mkdir -p ${PROMETHEUS_DIR}
+  pushd ${PROMETHEUS_DIR}
+  wget ${DOWNLOAD_URL}
+  tar -xvf ${PACKAGE_ARCHIVE}
+  cp ${PACKAGE_NAME}/prometheus /usr/local/bin/
+}
+function setup_prometheus_service () {
+  echo "[Unit]
+Description=Prometheus
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+User=root
+Group=root
+Type=simple
+ExecStart=/usr/local/bin/prometheus --config.file /etc/prometheus/prometheus.yml --storage.tsdb.path /opt/prometheus/data
+
+[Install]
+WantedBy=multi-user.target
+" > /etc/systemd/system/prometheus.service
+}
+install_prometheus
+mkdir -p /opt/prometheus/data
+{%- if context.is_prometheus_exporter_enabled('app_exporter') %}
+if [[ ! -f /root/metrics_api_token.txt ]]; then
+  echo -n "${RANDOM}-${RANDOM}${RANDOM}${RANDOM}-${RANDOM}" > /root/metrics_api_token.txt
+fi
+{%- endif %}
+{%- set prometheus_config = context.get_prometheus_config(additional_scrape_configs=additional_scrape_configs) %}
+{%- if prometheus_config %}
+mkdir -p /etc/prometheus
+echo '{{ context.utils.to_yaml(prometheus_config) }}' > /etc/prometheus/prometheus.yml
+setup_prometheus_service
+systemctl enable prometheus
+systemctl start prometheus
+{%- else %}
+log_warning "Install Prometheus: prometheus_config not provided."
+{%- endif %}
+{%- endif %}
+# End: Install Prometheus
+
+

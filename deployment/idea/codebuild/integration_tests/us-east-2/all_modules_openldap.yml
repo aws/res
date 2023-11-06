@@ -1,0 +1,46 @@
+
+_regenerate: false
+
+# Adjust to the region you are planning to deploy IDEA
+aws_region: us-east-2
+
+# Adjust the SSH keypair to use, usually idea-pipeline-<region_name>. Create one as needed and upload to s3://idea-test-pipeline-security-keys as backup
+ssh_key_pair_name: idea-pipeline-us-east-2
+
+# Adjust the Base OS if needed
+base_os: amazonlinux2
+
+# [IMPORTANT] Make sure the VPC is available and does not conflict with other .yml file
+vpc_cidr_block: 20.0.0.0/16
+
+# choose the directory service provider
+directory_service_provider: openldap
+
+# list modules you want to install
+enabled_modules:
+- metrics
+- scheduler
+- virtual-desktop-controller
+- bastion-host
+
+# You can change this to your personal email, but be careful as you will get one email every time a cluster is launched
+administrator_email: idea-tests-pipeline@amazon.com
+
+# DO NOT CHANGE
+alb_public: true
+aws_account_id: 597429738645
+aws_dns_suffix: amazonaws.com
+aws_partition: aws
+client_ip:
+  - 35.81.154.147/32
+cluster_access: client-ip
+instance_type: m5.large
+use_vpc_endpoints: false
+enable_aws_backup: true
+kms_key_type: aws-managed
+volume_size: '200'
+
+# this setting is ignored as build phase automatically create a new name.
+# if cluster_name exist in the .yml file, the value will be deleted and re-created
+# if cluster_name does not existing in the .yml file, the value is created automatically
+cluster_name: idea-tests

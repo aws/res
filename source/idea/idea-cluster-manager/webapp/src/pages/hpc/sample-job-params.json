@@ -1,0 +1,267 @@
+[
+  {
+    "name": "_heading-1",
+    "title": "Recommended Parameters",
+    "param_type": "heading2"
+  },
+  {
+    "name": "instance_type",
+    "title": "Instance Type",
+    "description": "What type of instance do you want to use?",
+    "param_type": "select",
+    "data_type": "str",
+    "validate": {
+      "required": true
+    },
+    "default": "m5.large",
+    "choices": [
+      {
+        "title": "Small (1 CPUs, 8GB RAM)",
+        "value": "m5.large"
+      },
+      {
+        "title": "Medium (2 CPUs, 16GB RAM)",
+        "value": "m5.xlarge"
+      },
+      {
+        "title": "Large (4 CPUs, 32GB RAM)",
+        "value": "m5.2xlarge"
+      }
+    ]
+  },
+  {
+    "name": "force_ri",
+    "title": "Force Reserved Instances?",
+    "description": "Restrict capacity to reserved instances only",
+    "param_type": "confirm",
+    "data_type": "bool",
+    "validate": {
+      "required": true
+    }
+  },
+  {
+    "name": "cpus",
+    "title": "CPUs",
+    "description": "How many CPUs do you want?",
+    "help_text": "The number of instances will be automatically calculated based on Instance Type and CPU count",
+    "param_type": "text",
+    "data_type": "int",
+    "validate": {
+      "required": true,
+      "min": 1,
+      "max": 1000
+    }
+  },
+  {
+    "name": "job_name",
+    "title": "Job Name",
+    "description": "Enter a job name",
+    "help_text": "Job name should not contain any white spaces or special characters",
+    "param_type": "text",
+    "data_type": "str",
+    "validate": {
+      "required": true,
+      "regex": "^([A-Za-z0-9_-]+){3,18}$"
+    }
+  },
+  {
+    "name": "input_file",
+    "title": "Input Location (input_file)",
+    "description": "The job submission script.",
+    "param_type": "text",
+    "data_type": "str",
+    "validate": {
+      "required": true
+    }
+  },
+  {
+    "name": "wall_time",
+    "title": "Job Duration (wall_time)",
+    "description": "Do you want to limit how long the job will be running?",
+    "param_type": "select",
+    "data_type": "str",
+    "validate": {
+      "required": true
+    },
+    "default": "01:00:00",
+    "choices": [
+      {
+        "title": "No more than 1 hour",
+        "value": "01:00:00"
+      },
+      {
+        "title": "No more than 5 hours",
+        "value": "05:00:00"
+      },
+      {
+        "title": "No more than 1 day",
+        "value": "24:00:00"
+      },
+      {
+        "title": "No more than 1 month",
+        "value": "740:00:00"
+      }
+    ]
+  },
+  {
+    "name": "scratch_size",
+    "title": "Scratch Storage Size (scratch_size)",
+    "description": "How much storage do you want (SSD under /scratch)",
+    "param_type": "select",
+    "data_type": "str",
+    "validate": {
+      "required": true
+    },
+    "default": "10",
+    "choices": [
+      {
+        "title": "10 GB",
+        "value": "10"
+      },
+      {
+        "title": "50 GB",
+        "value": "50"
+      },
+      {
+        "title": "150 GB",
+        "value": "150"
+      }
+    ]
+  },
+  {
+    "name": "queue_name",
+    "title": "Queue Name",
+    "description": "Which queue do you want to use? (queue_name)",
+    "param_type": "select",
+    "data_type": "str",
+    "validate": {
+      "required": true
+    },
+    "default": "low",
+    "choices": [
+      {
+        "title": "Queue 1 (Low Priority)",
+        "value": "low"
+      },
+      {
+        "title": "Queue 2 (High Priority)",
+        "value": "high"
+      }
+    ]
+  },
+  {
+    "name": "_heading-2",
+    "title": "Application Parameters",
+    "param_type": "heading2"
+  },
+  {
+    "name": "binary_location",
+    "title": "Solver Binary Location",
+    "description": "Which version of the solver do you want to use?",
+    "help_text": "Select the path to the solver executable/binary. It\"s usually located within the bin folder of your installation directory.",
+    "param_type": "select",
+    "data_type": "str",
+    "validate": {
+      "required": true
+    },
+    "default": "/internal/software/version2022/bin/solver.exe",
+    "choices": [
+      {
+        "title": "Version 2022",
+        "value": "/internal/software/version2022/bin/solver.exe"
+      },
+      {
+        "title": "Version 2021",
+        "value": "/internal/software/version2021/bin/solver.exe"
+      },
+      {
+        "title": "Version 2023 (BETA)",
+        "value": "/internal/software/version2023-beta/bin/solver.exe"
+      }
+    ]
+  },
+  {
+    "name": "param1",
+    "title": "--param1",
+    "description": "Application custom parameter 1",
+    "param_type": "text",
+    "data_type": "str",
+    "validate": {
+      "required": true
+    }
+  },
+  {
+    "name": "param2",
+    "title": "--param2",
+    "description": "Application custom parameter 2",
+    "param_type": "text",
+    "data_type": "str",
+    "validate": {
+      "required": true
+    }
+  },
+  {
+    "name": "param3",
+    "title": "--param3",
+    "description": "Application custom parameter 3",
+    "param_type": "text",
+    "data_type": "str",
+    "validate": {
+      "required": true
+    }
+  },
+  {
+    "name": "user_pre_exec",
+    "title": "Pre-execution Script (user_pre_exec)",
+    "description": "User code to be executed BEFORE the solver command",
+    "param_type": "text",
+    "data_type": "str",
+    "multiline": true,
+    "help_text": "Enter SHELL script code here."
+  },
+  {
+    "name": "user_post_exec",
+    "title": "Post-execution Script (user_post_exec)",
+    "description": "User code to be executed AFTER the solver command",
+    "param_type": "text",
+    "data_type": "str",
+    "multiline": true,
+    "help_text": "Enter SHELL script code here."
+  },
+  {
+    "name": "advanced_mode",
+    "title": "Click to see new section",
+    "description": "",
+    "help_text": "",
+    "param_type": "confirm",
+    "data_type": "bool",
+    "multiple": false,
+    "multiline": false,
+    "default": false,
+    "readonly": false,
+    "validate": {
+      "required": true
+    },
+    "choices": []
+  },
+  {
+    "name": "hello_world",
+    "title": "New section displayed only if previous toggle button is checked",
+    "description": "",
+    "help_text": "",
+    "param_type": "text",
+    "data_type": "str",
+    "multiple": false,
+    "multiline": false,
+    "default": "",
+    "readonly": false,
+    "validate": {
+      "required": true
+    },
+    "choices": [],
+    "when": {
+      "eq": true,
+      "param": "advanced_mode"
+    }
+  }
+]

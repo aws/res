@@ -1,0 +1,140 @@
+# Begin: Join ActiveDirectory (PowerShell/Windows)
+
+# Add the AmazonDynamoDB .NET framework class.
+Add-Type -Path (${env:ProgramFiles(x86)} + "\AWS SDK for .NET\bin\Net45\AWSSDK.DynamoDBv2.dll")
+
+$AWS_REGION = "{{ context.config.get_string('cluster.aws.region', required=True) }}"
+$AD_AUTHORIZATION_NONCE = $( Get-Random -Maximum 32767 )
+$AD_AUTHORIZATION_INSTANCE_ID = $( Get-EC2InstanceMetadata -Category InstanceId )
+$AD_AUTOMATION_SQS_QUEUE_URL = "{{ context.config.get_string('directoryservice.ad_automation.sqs_queue_url', required=True) }}"
+$AD_AUTOMATION_DDB_TABLE_NAME = "{{ context.config.get_string('cluster.cluster_name', required=True) }}.ad-automation"
+$AD_DOMAIN_NAME = "{{ context.config.get_string('directoryservice.name', required=True) }}"
+$WINDOWS_HOSTNAME = $env:COMPUTERNAME
+
+function Send-ADAutomationSQSMessage
+{
+  <#
+      .SYNOPSIS
+          Send the authorization payload to IDEA AD Automation SQS Queue
+  #>
+  [OutputType([Boolean])]
+  [CmdletBinding()]
+
+  $payload = @{ header = @{ namespace = 'ADAutomation.PresetComputer' }; payload = @{ nonce = $AD_AUTHORIZATION_NONCE; instance_id = $AD_AUTHORIZATION_INSTANCE_ID; hostname = $WINDOWS_HOSTNAME } } | ConvertTo-Json -Compress
+  # todo - support vpc endpoint
+  Send-SQSMessage -QueueUrl $AD_AUTOMATION_SQS_QUEUE_URL `
+                  -MessageBody $payload `
+                  -MessageGroupId $AD_AUTHORIZATION_INSTANCE_ID `
+                  -MessageDeduplicationId "ADAutomation.PresetComputer.$AD_AUTHORIZATION_INSTANCE_ID.$AD_AUTHORIZATION_NONCE" `
+                  -Region $AWS_REGION
+  $?
+}
+
+function Start-ADAutomationAuthorization
+{
+  <#
+      .SYNOPSIS
+          Invoke Send-ADAutomationSQSMessage until message is posted successfully.
+  #>
+  [CmdletBinding()]
+  $attemptCount = 0
+  $maxAttempts = 5
+  $success = Send-ADAutomationSQSMessage
+  while (($success -ne $true) -and ($attemptCount -le $maxAttempts))
+  {
+    $sleepTime = $( Get-Random -Maximum 10 )
+    Write-Host "($attemptCount of $maxAttempts) failed to request authorization to join AD, retrying in $sleepTime seconds ..."
+    Start-Sleep -Seconds $sleepTime
+    $attemptCount++
+    $success = Send-ADAutomationSQSMessage
+  }
+}
+
+function Get-ADAutomationAuthorizationEntry
+{
+  <#
+      .SYNOPSIS
+          Retrieve the AD Automation Authorization entry from IDEA AD Automation DynamoDB Table
+  #>
+  [OutputType([Hashtable])]
+  [OutputType([System.Void])]
+  [CmdletBinding()]
+  Param(
+    [Parameter(Mandatory = $true)]
+    [Amazon.DynamoDBv2.AmazonDynamoDBClient] $DDBClient
+  )
+
+  $request = New-Object Amazon.DynamoDBv2.Model.GetItemRequest
+  $request.TableName = $AD_AUTOMATION_DDB_TABLE_NAME
+
+  # key - hash: instance_id, range: nonce
+  $request.Key = New-Object 'system.collections.generic.dictionary[string,Amazon.DynamoDBv2.Model.AttributeValue]'
+  $hashKey = New-Object Amazon.DynamoDBv2.Model.AttributeValue
+  $hashKey.S = $AD_AUTHORIZATION_INSTANCE_ID
+  $request.Key.Add("instance_id", $hashKey)
+  $rangeKey = New-Object Amazon.DynamoDBv2.Model.AttributeValue
+  $rangeKey.S = $AD_AUTHORIZATION_NONCE
+  $request.Key.Add("nonce", $rangeKey)
+
+  $response = $DDBClient.GetItem($request)
+
+  if ($response.IsItemSet -eq $false)
+  {
+    return
+  }
+
+  if ($response.Item.status.S -eq "success")
+  {
+    @{ status = $($response.Item.status.S); domain_controller = $($response.Item.domain_controller.S); otp = $($response.Item.otp.S) }
+  }
+  else
+  {
+    @{ status = $($response.Item.status.S); error_code = $($response.Item.error_code.S); message = $($response.Item.message.S) }
+  }
+}
+
+function Start-ADAutomationWaitForAuthorizationAndJoin
+{
+  <#
+      .SYNOPSIS
+          Wait for cluster manager to create a computer account. Keep polling IDEA AD Automation DDB table for authorization entry.
+          If status = 'success', Join AD using the Domain Controller and One-Time Password available in response.
+          If status = 'fail', log error code and message
+  #>
+  [CmdletBinding()]
+
+  # Initialize DynamoDB Client
+  $regionEndpoint = [Amazon.RegionEndPoint]::GetBySystemName($AWS_REGION)
+  $ddbClient = New-Object Amazon.DynamoDBv2.AmazonDynamoDBClient($regionEndpoint)
+
+  $attemptCount = 0
+  $maxAttempts = 180 # wait for no more than 30 minutes ( as max $sleepTime: 0 <= $sleepTime <= 10 )
+  $authorizationEntry = Get-ADAutomationAuthorizationEntry -DDBClient $ddbClient
+  while (($authorizationEntry -eq $null) -and ($attemptCount -le $maxAttempts))
+  {
+    $sleepTime = $( Get-Random -Maximum 10 )
+    Write-Host "($attemptCount of $maxAttempts) waiting for AD authorization, retrying in $sleepTime seconds ..."
+    Start-Sleep -Seconds $sleepTime
+    $attemptCount++
+    $authorizationEntry = Get-ADAutomationAuthorizationEntry -DDBClient $ddbClient
+  }
+
+  if ($authorizationEntry.status -eq "success")
+  {
+    Write-Host "[Join AD] authorization successful. joining AD, Domain: $AD_DOMAIN_NAME, OTP: $($authorizationEntry.otp) ..."
+    $joinCred = New-Object pscredential -ArgumentList ([pscustomobject]@{
+      UserName = $null
+      Password = (ConvertTo-SecureString -String $($authorizationEntry.otp) -AsPlainText -Force)[0]
+    })
+    Add-Computer -Domain $AD_DOMAIN_NAME `
+                 -Options UnsecuredJoin, PasswordPass `
+                 -Credential $joinCred
+  }
+  else
+  {
+    Write-Host "[Join AD] authorization failed: ($($authorizationEntry.error_code)) $($authorizationEntry.message)"
+  }
+
+}
+
+# End: Join ActiveDirectory (PowerShell/Windows)

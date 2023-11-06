@@ -1,0 +1,17 @@
+public: {{ alb_public | lower }}
+instance_type: {{instance_type}}
+base_os: {{base_os}}
+instance_ami: {{instance_ami}}
+volume_size: {{volume_size}}
+hostname: "{{module_id}}.{{cluster_name}}.{{aws_region}}.local"
+
+cloudwatch_logs:
+  enabled: true
+
+ec2:
+  # enable detailed monitoring for bastion-host ec2 instance, disabled by default
+  enable_detailed_monitoring: false
+  # enable termination protection for bastion-host ec2 instance, disabled by default
+  enable_termination_protection: false
+  # instance metadata access method
+  metadata_http_tokens: "required"  # supported values are "required" for IMDSv2 or "optional" for IMDSv1

@@ -1,0 +1,5 @@
+pytest
+pytest-mock
+pytest-cov
+memory_profiler
+defusedxml

@@ -1,0 +1,48 @@
+Version: '2012-10-17'
+Statement:
+  - Action:
+      - ec2:DescribeVolumes
+      - ec2:DescribeNetworkInterfaces
+      - ec2:DescribeImageAttribute
+      - ec2:DescribeImages
+      - ec2:CreateImage
+      - ec2:StartInstances
+      - ec2:TerminateInstances
+      - ec2:StopInstances
+      - ec2:CreateTags
+      - ec2:RegisterImage
+      - ec2:DeregisterImage
+      - ec2:RunInstances
+      - fsx:CreateDataRepositoryTask
+      - fsx:DescribeFileSystems
+      - tag:GetResources
+      - tag:GetTagValues
+      - tag:GetTagKeys
+      - iam:PassRole
+    Resource: '*'
+    Effect: Allow
+
+  - Action:
+      - s3:GetObject
+      - s3:ListBucket
+      - s3:PutObject
+      - s3:GetBucketAcl
+    Resource:
+      {{ context.utils.to_yaml(context.arns.s3_bucket_arns) | indent(6) }}
+    Effect: Allow
+
+  - Action:
+      - secretsmanager:GetSecretValue
+    Condition:
+      StringEquals:
+        secretsmanager:ResourceTag/res:EnvironmentName: '{{ context.cluster_name }}'
+        secretsmanager:ResourceTag/res:ModuleName: virtual-desktop-controller
+    Resource: '*'
+    Effect: Allow
+
+  - Action:
+      - logs:PutRetentionPolicy
+    Resource: '*'
+    Effect: Allow
+
+{% include '_templates/custom-kms-key.yml' %}

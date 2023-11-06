@@ -1,0 +1,63 @@
+# Directory Service Settings
+#
+# IDEA Supports below Directory Service providers:
+#
+# 1) OpenLDAP (Provider: openldap)
+# When using OpenLDAP as the DirectoryService Provider, IDEA will provision an EC2 Instance with OpenLDAP.
+# OpenLDAP settings can be customized or configured using `source/idea/idea-bootstrap/openldap-server/_templates/install_openldap.jinja2`
+# An existing OpenLDAP Server is not supported and you will need to manually export / import LDAP objects from your existing OpenLDAP server to the new OpenLDAP server.
+#
+# 2) AWS Managed Microsoft AD (Provider: aws_managed_activedirectory)
+# Use AWS Managed Microsoft AD, when you can provide full control for specific OUs for the AWS Managed Microsoft AD.
+# By full control, IDEA Cluster has access to create AD Objects including Users, Groups and Computers.
+# This is applicable for use-cases where IDEA cluster's Directory Service acts independently than that of your On-Prem or CORP AD.
+# For production deployments, we recommend provisioning an AWS Managed Microsoft outside the scope of IDEA Cluster Deployment
+#  and use the existing resources flow to re-use the existing AWS Managed Microsoft AD.
+# If you are planning to run Scale-Out Workloads + eVDI Workloads, consider using the "Enterprise" edition, instead of Standard edition.
+# All Infrastructure hosts (primarily Linux), and eVDI Linux + Windows hosts will join AD.
+# Consider creating a separate OU for Users and Groups for IDEA Cluster Management.
+
+# 3) Microsoft AD (Provider: activedirectory)
+# Use Microsoft AD as the provider to make the cluster work with your On-Prem or Self-Managed AD on AWS or AWS Managed AD.
+# In this use case, IDEA does not have write access to create Users and Groups.
+# Write access to create Computer accounts is required.
+# A custom synchronization service is required to be implemented to sync Users, Groups and Memberships.
+
+provider: "{{directory_service_provider}}"
+automation_dir: "{{internal_mount_dir}}/{{cluster_name}}/{{module_id}}/automation"
+
+name: idea.local
+ldap_base: dc=idea,dc=local
+
+# Directory Service Root (Service Account) Credentials.
+# ---------------------------------------------
+# By default, the directory service stack will provision 2 Secrets in Secrets Manager.
+# 1. Root UserName - defaults to Admin
+# 2. Root Password - random generated secret string
+# set root_credentials_provided: true, if you want to specify your own credentials.
+# the secrets you manually create must be tagged with:
+#  res:EnvironmentName = {{cluster_name}}
+#  res:ModuleName = directoryservice
+#  res:ModuleId = {{module_id}}
+# Refer to Architecture FAQs: FAQ 8 for additional details.
+# IMPORTANT NOTE: If you are provisioning a new AWS Managed Microsoft AD for your cluster,
+#  it is strongly recommended your provide your own credentials via AWS Secrets Manager.
+#  The primary reason is, after 42 days, the AD Automation Agent will change the secret as admin credentials will expire.
+# After this event, if you every upgrade the directory service stack, CDK will update the password secret to the original one
+# as the changes applied by AD Automation Agent were not via CDK, and CDK state information does not know about this change.
+root_credentials_provided: {{ use_existing_directory_service | lower }}
+root_username_secret_arn: {{ directory_service_root_username_secret_arn or '~' }}
+root_password_secret_arn: {{ directory_service_root_password_secret_arn or '~' }}
+
+
+{% if directory_service_provider == 'openldap' %}
+{% include 'directoryservice/_templates/openldap.yml' %}
+{%- endif %}
+
+{%- if directory_service_provider == 'aws_managed_activedirectory' %}
+{% include 'directoryservice/_templates/aws_managed_activedirectory.yml' %}
+{%- endif %}
+
+{%- if directory_service_provider == 'activedirectory' %}
+{% include 'directoryservice/_templates/activedirectory.yml' %}
+{%- endif %}

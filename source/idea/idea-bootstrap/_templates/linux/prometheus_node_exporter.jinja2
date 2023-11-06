@@ -1,0 +1,46 @@
+# Begin: Install Prometheus Node Exporter
+{%- if context.base_os in ('amazonlinux2', 'centos7', 'rhel7', 'rhel8', 'rhel9') and context.is_prometheus_exporter_enabled('node_exporter') %}
+PROMETHEUS_NODE_EXPORTER_AMD64_URL="{{ context.config.get_string('global-settings.package_config.prometheus.exporters.node_exporter.linux.x86_64', required=True) }}"
+PROMETHEUS_NODE_EXPORTER_ARM64_URL="{{ context.config.get_string('global-settings.package_config.prometheus.exporters.node_exporter.linux.aarch64', required=True) }}"
+function install_prometheus_node_exporter () {
+  local MACHINE=$(uname -m)
+  local DOWNLOAD_URL=""
+  if [[ ${MACHINE} == "aarch64" ]]; then
+    DOWNLOAD_URL="${PROMETHEUS_NODE_EXPORTER_ARM64_URL}"
+  else
+    DOWNLOAD_URL="${PROMETHEUS_NODE_EXPORTER_AMD64_URL}"
+  fi
+  local PACKAGE_ARCHIVE=$(basename ${DOWNLOAD_URL})
+  local PACKAGE_NAME="${PACKAGE_ARCHIVE%.tar.gz*}"
+  PROMETHEUS_DIR="/root/bootstrap/prometheus"
+  mkdir -p ${PROMETHEUS_DIR}
+  pushd ${PROMETHEUS_DIR}
+  wget ${DOWNLOAD_URL}
+  tar -xvf ${PACKAGE_ARCHIVE}
+  cp ${PACKAGE_NAME}/node_exporter /usr/local/bin/
+}
+function setup_prometheus_node_exporter_service () {
+  echo "[Unit]
+Description=Prometheus Node Exporter Service
+After=network.target
+
+[Service]
+User=root
+Group=root
+Type=simple
+ExecStart=/usr/local/bin/node_exporter
+
+[Install]
+WantedBy=multi-user.target
+" > /etc/systemd/system/node-exporter.service
+}
+install_prometheus_node_exporter
+setup_prometheus_node_exporter_service
+systemctl enable node-exporter
+systemctl start node-exporter
+{%- else %}
+log_info "Prometheus Node Exporter is disabled"
+{%- endif %}
+# End: Install Prometheus Node Exporter
+
+

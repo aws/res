@@ -1,0 +1,72 @@
+#!/bin/bash
+
+set -x
+
+source /etc/environment
+if [[ -f /etc/profile.d/proxy.sh ]]; then
+    source /etc/profile.d/proxy.sh
+fi
+
+SCRIPT_DIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
+source "${SCRIPT_DIR}/../common/bootstrap_common.sh"
+
+{% set TAGS = [
+  {'Key':'res:EnvironmentName', 'Value': context.cluster_name },
+  {'Key':'res:ModuleName', 'Value': context.module_name },
+  {'Key':'res:ModuleId', 'Value': context.module_id },
+  {'Key':'Name', 'Value': context.vars.ami_name }
+] %}
+
+{%- with  ebs_volume_tags = TAGS %}
+  {% include '_templates/linux/tag_ebs_volumes.jinja2' %}
+{%- endwith %}
+
+{%- with  network_interface_tags = TAGS %}
+  {% include '_templates/linux/tag_network_interface.jinja2' %}
+{%- endwith %}
+
+{% include '_templates/linux/disable_se_linux.jinja2' %}
+
+{% include '_templates/linux/system_packages.jinja2' %}
+
+{% include '_templates/linux/cloudwatch_agent.jinja2' %}
+
+{%- if context.is_metrics_provider_prometheus() %}
+  {%- include '_templates/linux/prometheus.jinja2' %}
+  {%- include '_templates/linux/prometheus_node_exporter.jinja2' %}
+{%- endif %}
+
+{% include '_templates/linux/chronyd.jinja2' %}
+
+{% include '_templates/linux/disable_motd_update.jinja2' %}
+
+{%- with messages = [
+  'Compute Node AMI, AMI Name: ' + context.vars.ami_name + ', ModuleId: ' + context.module_id + ', Cluster: ' + context.cluster_name
+] %}
+  {% include '_templates/linux/motd.jinja2' %}
+{%- endwith %}
+
+{% if context.config.get_string('scheduler.provider') == 'openpbs' %}
+  {% include 'compute-node/_templates/configure_openpbs_compute_node.jinja2' %}
+{% endif %}
+
+{%- if 'efa' in context.vars.enabled_drivers %}
+  {% include 'compute-node/_templates/efa.jinja2' %}
+{%- endif %}
+
+{%- if 'fsx_lustre' in context.vars.enabled_drivers %}
+  {% include '_templates/linux/fsx_lustre_client.jinja2' %}
+{%- endif %}
+
+{% include '_templates/linux/disable_nouveau_drivers.jinja2' %}
+
+REBOOT_REQUIRED=$(cat /root/bootstrap/reboot_required.txt)
+if [[ "${REBOOT_REQUIRED}" == "yes" ]]; then
+  log_info "reboot required. compute_node_ami_builder_post_reboot.sh will be executed after reboot ..."
+  (crontab -l; echo "@reboot /bin/bash ${SCRIPT_DIR}/compute_node_ami_builder_post_reboot.sh >> ${IDEA_COMPUTE_NODE_AMI_BUILDER_LOGS_DIR}/compute_node_ami_builder_bootstrap.log 2>&1") | crontab -
+  reboot
+else
+  mount -a
+  log_info "reboot not required. executing compute_node_ami_builder_post_reboot.sh ..."
+  /bin/bash ${SCRIPT_DIR}/compute_node_ami_builder_post_reboot.sh >> "${IDEA_COMPUTE_NODE_AMI_BUILDER_LOGS_DIR}/compute_node_ami_builder_bootstrap.log" 2>&1
+fi

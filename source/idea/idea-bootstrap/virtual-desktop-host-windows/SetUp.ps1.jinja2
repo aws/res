@@ -1,0 +1,174 @@
+{%- if context.config.get_string('directoryservice.provider', required=True) in ['aws_managed_activedirectory', 'activedirectory'] %}
+{% include '_templates/windows/join_activedirectory.jinja2' %}
+{%- endif %}
+
+{% include '_templates/windows/mount_shared_storage.jinja2' %}
+
+function Write-ToLog {
+    # LOG: RES Bootstrap Log: Get-Content C:\ProgramData\Amazon\EC2-Windows\Launch\Log\UserdataExecutionRES.log
+    # LOG: Default User Data: Get-Content C:\ProgramData\Amazon\EC2-Windows\Launch\Log\UserdataExecution.log
+
+    Param (
+        [ValidateNotNullOrEmpty()]
+        [Parameter(Mandatory=$true)]
+        [String] $Message,
+        [String] $LogFile = ('{0}\ProgramData\Amazon\EC2-Windows\Launch\Log\UserdataExecutionRES.log' -f $env:SystemDrive),
+        [ValidateSet('Error','Warn','Info')]
+        [string] $Level = 'Info'
+    )
+
+    if (-not(Test-Path -Path $LogFile)) {
+        $null = New-Item -Path $LogFile -ItemType File -Force
+    }
+
+
+    $FormattedDate = Get-Date -Format 'yyyy-MM-dd HH:mm:ss'
+    switch ($Level) {
+        'Error' {
+            $LevelText = 'ERROR:'
+        }
+        'Warn' {
+            $LevelText = 'WARNING:'
+        }
+        'Info' {
+            $LevelText = 'INFO:'
+        }
+    }
+    # If Level == Error send ses message ?
+    "$FormattedDate $LevelText $Message" | Out-File -FilePath $LogFile -Append
+}
+
+function Setup-WindowsEC2Instance {
+  Param()
+  # Creating unique hostname to avoid NETBIOS name conflict when using an existing AMI
+  [string]$IMDS_Token = Invoke-RestMethod -Headers @{"X-aws-ec2-metadata-token-ttl-seconds" = "600"} -Method PUT -Uri http://169.254.169.254/latest/api/token
+  $InstanceId = Invoke-RestMethod -Headers @{"X-aws-ec2-metadata-token" = $IMDS_Token} -Method GET -Uri http://169.254.169.254/latest/meta-data/instance-id
+  # flip below lines if you want to enable/disable computer renaming
+  $DesktopHostname = $env:COMPUTERNAME
+  # $DesktopHostname = $InstanceId.substring($InstanceId.length - 15, 15).ToUpper()
+  if ($env:COMPUTERNAME -ne $DesktopHostname) {
+    Write-ToLog -Message ("Hostname detected $env:COMPUTERNAME . Renaming Computer to $DesktopHostname ...")
+    Rename-Computer -NewName $DesktopHostname -Force
+    Write-ToLog -Message ("Name has been changed, re-enabling user data as we are about to restart the system ...")
+    & C:\ProgramData\Amazon\EC2-Windows\Launch\Scripts\InitializeInstance.ps1 -Schedule
+    Write-ToLog -Message "Restarting Computer ..."
+    Restart-Computer -Force
+  }
+
+  $IDEASessionID = "{{ context.vars.idea_session_id }}"
+  $LocalUser = "{{ context.vars.session_owner }}"
+  $VdcRequestQueueURL = "{{ context.config.get_string('virtual-desktop-controller.events_sqs_queue_url', required=True) }}"
+  $IdeaWebPortalURL = "{{ context.config.get_cluster_external_endpoint() }}"
+
+  {%- if context.config.get_string('directoryservice.provider', required=True) in ['aws_managed_activedirectory', 'activedirectory'] %}
+  $ServerInAD = (Get-WmiObject -Class Win32_ComputerSystem).PartOfDomain
+  $DomainUserName = "{{ context.config.get_string('directoryservice.ad_short_name', required=True) }}\$LocalUser"
+  if ($ServerInAD -eq $false)
+  {
+    Start-ADAutomationAuthorization
+    Start-ADAutomationWaitForAuthorizationAndJoin
+
+    New-ItemProperty -Path "HKLM:\Software\Microsoft\Windows NT\CurrentVersion\Winlogon" -Name "AutoAdminLogon" -PropertyType "DWord" -Value 1 -Force
+    New-ItemProperty -Path "HKLM:\Software\Microsoft\Windows NT\CurrentVersion\Winlogon" -Name "DefaultUserName" -PropertyType "String" -Value $DomainUserName -Force
+  }
+  {%- else %}
+  # Avoid to hit race condition after the Restart-Computer
+  Start-Sleep -Seconds 5
+  Write-ToLog -Message "Creating new local RES user: $LocalUser"
+  $DomainUserName = $LocalUser
+  $LocalPasswordInput = "{{ context.utils.generate_password() }}"
+  $LocalPassword  = ConvertTo-SecureString -String $LocalPasswordInput -AsPlainText -Force
+  $LocalUserExist = Get-LocalUser $LocalUser
+  if ($LocalUserExist) {
+    Set-LocalUser $LocalUser -Password $LocalPassword
+  } else {
+    New-LocalUser $LocalUser -Password $LocalPassword -PasswordNeverExpires -AccountNeverExpires
+  }
+
+  $isInGroup = (Get-LocalGroupMember -Group "Administrators").Name -Contains "$env:COMPUTERNAME\$LocalUser"
+  Write-ToLog -Message "Checking if $LocalUser is in Administrators Group:  $isInGroup"
+
+  if ($isInGroup -eq $false) {
+    Write-ToLog -Message "Adding $LocalUser to the Administrators Group"
+    Add-LocalGroupMember -Group "Administrators" -Member $LocalUser
+  }
+
+  # Set OS Properties, AutoLogin
+  New-ItemProperty -Path "HKLM:\Software\Microsoft\Windows NT\CurrentVersion\Winlogon" -Name "AutoAdminLogon" -PropertyType "DWord" -Value 1 -Force
+  New-ItemProperty -Path "HKLM:\Software\Microsoft\Windows NT\CurrentVersion\Winlogon" -Name "DefaultUserName" -PropertyType "String" -Value $LocalUser -Force
+  New-ItemProperty -Path "HKLM:\Software\Microsoft\Windows NT\CurrentVersion\Winlogon" -Name "DefaultPassword" -PropertyType "String" -Value $LocalPasswordInput -Force
+
+  Write-ToLog -Message "Creating unique password for local Admin user"
+  $AdminPasswordInput = "{{ context.utils.short_uuid() }}"
+  $AdminPassword = ConvertTo-SecureString -String $AdminPasswordInput -AsPlainText -Force
+  Get-LocalUser -Name "Administrator" | Set-LocalUser -Password $AdminPassword
+
+  Write-ToLog -Message "Write LOCAL users password and make it readable only by the user. This file will be overriden if an AMI is created."
+  $LocalPasswordFile="C:\LOCAL_ADMINS_PASSWORD.txt"
+
+  if (Test-Path $LocalPasswordFile ) {
+    Write-ToLog -Message "$LocalPasswordFile exists. Removing it first."
+    Remove-Item $LocalPasswordFile
+  }
+  New-Item $LocalPasswordFile -Value "Local User(s) credentials for this machine $env:COMPUTERNAME only `r`n=========`r`r$LocalUser : $LocalPasswordInput `r`nAdministrator : $AdminPasswordInput" -Force
+  Write-ToLog -Message "Disable inheritance (required to remove all users read-only access) for $LocalPasswordFile"
+  $DisableInheritance = Get-Acl -Path $LocalPasswordFile
+  $DisableInheritance.SetAccessRuleProtection($true, $true)
+  Set-Acl -Path $LocalPasswordFile -AclObject $DisableInheritance
+
+  Write-ToLog -Message "Restrict this file to local user and admin groups only"
+
+  $DeleteAcl = (Get-Item $LocalPasswordFile).GetAccessControl('Access')
+  $UserAccessToRemove = $DeleteAcl.Access | ?{ $_.IsInherited -eq $false -and $_.IdentityReference -eq 'BUILTIN\Users' }
+  $DeleteAcl.RemoveAccessRuleAll($UserAccessToRemove)
+  Set-Acl -AclObject $DeleteAcl $LocalPasswordFile
+
+  #$AdminAccessToRemove = $DeleteAcl.Access | ?{ $_.IsInherited -eq $false -and $_.IdentityReference -eq 'BUILTIN\Administrators' }
+  #$DeleteAcl.RemoveAccessRuleAll($AdminAccessToRemove)
+  #Set-Acl -AclObject $DeleteAcl $LocalPasswordFile
+
+  Write-ToLog -Message "Restrict Viewing to local user & Admin group only for $LocalPasswordFile"
+  $NewAcl = Get-Acl -Path $LocalPasswordFile
+  $GrantAccessToLocalUser = New-Object -TypeName System.Security.AccessControl.FileSystemAccessRule("$env:COMPUTERNAME\$LocalUser", "FullControl", "Allow")
+  $NewAcl.SetAccessRule($GrantAccessToLocalUser)
+  Set-Acl -AclObject $NewAcl $LocalPasswordFile
+  {%- endif %}
+
+  # Disable User Access Control (UAC)"
+  Set-ItemProperty "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System" -Name "ConsentPromptBehaviorAdmin" -Value 00000000 -Force
+
+  # "Disable Internet Explorer Enhanced Security Configuration"
+  $AdminKey = "HKLM:\SOFTWARE\Microsoft\Active Setup\Installed Components\{A509B1A7-37EF-4b3f-8CFC-4F3A74704073}"
+  $UserKey = "HKLM:\SOFTWARE\Microsoft\Active Setup\Installed Components\{A509B1A8-37EF-4b3f-8CFC-4F3A74704073}"
+  Set-ItemProperty -Path $AdminKey -Name "IsInstalled" -Value 0 -Force
+  Set-ItemProperty -Path $UserKey -Name "IsInstalled" -Value 0 -Force
+
+  Write-ToLog -Message "Create Shortcut to RES web interface"
+  $WshShell = New-Object -comObject WScript.Shell
+  $IdeaShortcutAdmin = $WshShell.CreateShortcut("C:\Users\Default\Desktop\RES_Interface.url")
+  $IdeaShortcutAdmin.TargetPath = "$IdeaWebPortalURL"
+  $IdeaShortcutAdmin.Save()
+
+  Write-ToLog -Message "mount any applicable shared storage file systems"
+  Mount-SharedStorage -DomainUserName $DomainUserName
+
+  Write-ToLog -Message "Install and Configure NICE DCV"
+  Import-Module .\ConfigureDCVHost.ps1
+  Bootstrap-DCV-WindowsHost
+
+  $RebootNotificationContent = "
+`$CurrentTimeStamp = [DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds()
+`$RebootMessage = `"{```"event_group_id```":```"$IDEASessionID```",```"event_type```":```"DCV_HOST_REBOOT_COMPLETE_EVENT```",```"detail```":{```"idea_session_id```":```"$IDEASessionID```",```"idea_session_owner```":```"$LocalUser```",```"timestamp```":```"`$CurrentTimeStamp```"}}`"
+# todo - support vpc endpoint
+Send-SQSMessage -QueueUrl $VdcRequestQueueURL -MessageBody `$RebootMessage -MessageGroupId $IDEASessionID
+"
+  $IdeaScriptsDirectory = "C:\IDEA\LocalScripts"
+  New-Item -Path $IdeaScriptsDirectory -Name "IdeaRebootNotification.ps1" -ItemType File -Force -Value "$RebootNotificationContent"
+  schtasks /create /sc onstart /tn IdeaRebootNotification /tr "powershell -File $IdeaScriptsDirectory\IdeaRebootNotification.ps1" /ru system /f
+
+  $Message = "{{ context.vars.dcv_host_ready_message }}"
+  # todo - support vpc endpoint
+  Send-SQSMessage -QueueUrl $VdcRequestQueueURL -MessageBody $Message -MessageGroupId $IDEASessionID
+
+  Restart-Computer -Force
+}

@@ -1,0 +1,77 @@
+#!/bin/bash
+
+set -x
+
+source /etc/environment
+if [[ -f /etc/profile.d/proxy.sh ]]; then
+    source /etc/profile.d/proxy.sh
+fi
+
+# reset reboot_required.txt
+echo -n "no" > ${BOOTSTRAP_DIR}/reboot_required.txt
+
+SCRIPT_DIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
+source "${SCRIPT_DIR}/../common/bootstrap_common.sh"
+
+{% include 'compute-node/_templates/scheduler_stop.jinja2' %}
+
+{%- with node_type = 'compute' %}
+  {%- include '_templates/linux/gpu_drivers.jinja2' %}
+{%- endwith %}
+
+# a reboot may be required if GPU Drivers are installed.
+REBOOT_REQUIRED=$(cat /root/bootstrap/reboot_required.txt)
+if [[ "${REBOOT_REQUIRED}" == "yes" ]]; then
+  reboot
+else
+
+  # user data customizations
+  if [[ -f ${IDEA_CLUSTER_HOME}/${IDEA_MODULE_ID}/ami_builder/userdata_customizations.sh ]]; then
+    /bin/bash ${IDEA_CLUSTER_HOME}/${IDEA_MODULE_ID}/ami_builder/userdata_customizations.sh >> ${IDEA_COMPUTE_NODE_AMI_BUILDER_LOGS_DIR}/userdata_customizations.log 2>&1
+  fi
+
+  # clean-up: shared storage mounts
+  {% for name, storage in context.config.get_config('shared-storage').items() %}
+  {%- if context.eval_shared_storage_scope(shared_storage=storage) %}
+  {%- if storage.provider == 'efs' %}
+  remove_efs_from_fstab "{{ storage.mount_dir }}"
+  {%- endif %}
+  {%- if storage.provider == 'fsx_lustre' %}
+  remove_fsx_lustre_from_fstab "{{ storage.mount_dir }}"
+  {%- endif %}
+  {%- if storage.provider == 'fsx_netapp_ontap' %}
+  remove_fsx_netapp_ontap_from_fstab "{{ storage.mount_dir }}"
+  {%- endif %}
+  {%- if storage.provider == 'fsx_openzfs' %}
+  remove_fsx_openzfs_from_fstab "{{ storage.mount_dir }}"
+  {%- endif %}
+  {%- endif %}
+  {% endfor %}
+
+  # clean-up
+  rm -rf /var/tmp/* /tmp/* /var/crash/*
+  rm -rf /etc/ssh/ssh_host_*
+  rm -f /etc/udev/rules.d/70-persistent-net.rules
+  grep -l "Created by cloud-init on instance boot automatically" /etc/sysconfig/network-scripts/ifcfg-* | xargs rm -f
+  rm -rf /root/bootstrap/logs
+  rm -f /root/bootstrap/reboot_required.txt
+  {% if context.config.get_string('scheduler.provider') == 'openpbs' %}
+  systemctl disable pbs
+  {% endif %}
+
+  # clear crontab to ensure new image starts from clean slate
+  crontab -l | grep -v 'compute_node_ami_builder_post_reboot.sh' | crontab -
+
+  # create idea_preinstalled_packages.log file indicating packages have been preinstalled on this ami.
+  echo "$(date)" >> /root/bootstrap/idea_preinstalled_packages.log
+
+  # flush file system buffers before signaling ami creation
+  /bin/sync
+
+  # create tag indicating ec2 instance is ready for creating AMI
+  aws ec2 create-tags \
+  --resources "${AWS_INSTANCE_ID}" \
+  --region "${AWS_REGION}" \
+  --tags Key=res:AmiBuilderStatus,Value=complete
+
+fi

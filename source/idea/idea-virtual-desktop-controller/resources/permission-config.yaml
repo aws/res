@@ -1,0 +1,63 @@
+builtin:
+  name: Built In
+  description: All features
+display:
+  name: Display
+  description: Receive visual data from the NICE DCV server
+pointer:
+  name: Pointer
+  description: View NICE DCV server mouse position events and pointer shapes
+mouse:
+  name: Mouse
+  description: Input from the client mouse to the NICE DCV server
+keyboard:
+  name: Keyboard
+  description: Input from the client keyboard to the NICE DCV server
+audio_in:
+  name: Audio In
+  description: Send audio from the client to the NICE DCV server
+audio_out:
+  name: Audio Out
+  description: Receive audio from the NICE DCV server to the client
+clipboard_copy:
+  name: Clipboard Copy
+  description: Copy data from the NICE DCV server to the client clipboard
+clipboard_paste:
+  name: Clipboard Paste
+  description: Copy data to the NICE DCV server from the client clipboard
+file_upload:
+  name: File Upload
+  description: Upload files to the session storage
+file_download:
+  name: File Download
+  description: Download files from the session storage
+usb:
+  name: USB
+  description: Use USB devices from the client
+printer:
+  name: Printer
+  description: Create PDFs or XPS files from the NICE DCV server to the client
+smartcard:
+  name: Smartcard
+  description: Read the smart card from the client
+stylus:
+  name: Stylus
+  description: Input from specialized USB devices, such as 3D pointing devices or graphic tablets
+keyboard_sas:
+  name: Keyboard SAS
+  description: 'Use the secure attention sequence (CTRL+Alt+Del). Note: Requires Keyboard permissions as well'
+webcam:
+  name: Web Camera
+  description: Use the Web Camera connected to a client device in a session
+touch:
+  name: Touch
+  description: Use native touch events from the client device
+screenshot:
+  name: Screenshot
+  description: Save a screenshot of the remote desktop
+gamepad:
+  name: Gamepad
+  description: Use gamepads connected to a client computer in a session
+unsupervised_access:
+  name: Unsupervised Access
+  description: Allow a user to connect to session without supervision

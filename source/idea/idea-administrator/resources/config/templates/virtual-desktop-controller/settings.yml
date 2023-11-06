@@ -1,0 +1,296 @@
+server:
+  enable_http: true
+  hostname: 0.0.0.0
+  port: 8443
+  enable_tls: true
+  tls_certificate_file: {{internal_mount_dir}}/{{cluster_name}}/certs/idea.crt
+  tls_key_file: {{internal_mount_dir}}/{{cluster_name}}/certs/idea.key
+  enable_unix_socket: true
+  unix_socket_file: /run/idea.sock
+  max_workers: 16
+  enable_metrics: false
+  graceful_shutdown_timeout: 10
+  api_context_path: /{{ module_id }}
+  # Additional USB Remotization AllowList defined in  list format
+  # Default is an empty list / no additional devices considered for USB remotization
+  # See docs:
+  # Admin Guide: https://docs.aws.amazon.com/dcv/latest/adminguide/manage-usb-remote.html
+  # User Guide:  https://docs.aws.amazon.com/dcv/latest/userguide/using-usb.html
+  usb_remotization: []
+# Example DCV USB Filter string:
+#      - "Q-LightLampHIDDevice,3,0,0,1240,59196,0,0"
+
+
+controller:
+  autoscaling:
+    public: false
+    instance_type: {{instance_type}}
+    base_os: {{base_os}}
+    instance_ami: {{instance_ami}}
+    volume_size: {{volume_size}}
+    enabled_detailed_monitoring: false
+    min_capacity: 1
+    max_capacity: 3
+    cooldown_minutes: 5
+    new_instances_protected_from_scale_in: false
+    elb_healthcheck:
+      # Specifies the time in minutes Auto Scaling waits before checking the health status of an EC2 instance that has come into service.
+      grace_time_minutes: 15
+    cpu_utilization_scaling_policy:
+      target_utilization_percent: 80
+      estimated_instance_warmup_minutes: 15
+    rolling_update_policy:
+      max_batch_size: 1
+      min_instances_in_service: 1
+      pause_time_minutes: 15
+    # instance metadata access method
+    metadata_http_tokens: "required"  # supported values are "required" for IMDSv2 or "optional" for IMDSv1
+  request_handler_threads:
+    min: 1
+    max: 8
+  endpoints:
+    external:
+      priority: 13
+      path_patterns: [ '/{{ module_id }}/*' ]
+    internal:
+      priority: 13
+      path_patterns: [ '/{{ module_id }}/*' ]
+
+dcv_broker:
+  autoscaling:
+    public: false
+    instance_type: {{instance_type}}
+    base_os: {{base_os}}
+    instance_ami: {{instance_ami}}
+    volume_size: {{volume_size}}
+    enabled_detailed_monitoring: false
+    min_capacity: 1
+    max_capacity: 3
+    cooldown_minutes: 5
+    new_instances_protected_from_scale_in: false
+    elb_healthcheck:
+      # Specifies the time in minutes Auto Scaling waits before checking the health status of an EC2 instance that has come into service.
+      grace_time_minutes: 15
+    cpu_utilization_scaling_policy:
+      target_utilization_percent: 80
+      estimated_instance_warmup_minutes: 15
+    rolling_update_policy:
+      max_batch_size: 1
+      min_instances_in_service: 1
+      pause_time_minutes: 15
+    # instance metadata access method
+    metadata_http_tokens: "required"  # supported values are "required" for IMDSv2 or "optional" for IMDSv1
+  client_communication_port: 8444 # DO NOT CHANGE
+  agent_communication_port: 8445 # DO NOT CHANGE
+  gateway_communication_port: 8446 # DO NOT CHANGE
+  # SSL/TLS Policy on VDC HTTPS listeners
+  # For a list of policies - consult the documentation at https://docs.aws.amazon.com/elasticloadbalancing/latest/application/create-https-listener.html#describe-ssl-policies
+  ssl_policy: ELBSecurityPolicy-FS-1-2-Res-2020-10
+  session_token_validity: 1440 # in minutes
+  dynamodb_table:
+    autoscaling:
+      enabled: true
+    read_capacity:
+      min_units: 5
+      max_units: 20
+      target_utilization: 70 # in percentage
+      scale_in_cooldown: 60 # in seconds
+      scale_out_cooldown: 60 # in seconds
+    write_capacity:
+      min_units: 5
+      max_units: 20
+      target_utilization: 70 # in percentage
+      scale_in_cooldown: 60 # in seconds
+      scale_out_cooldown: 60 # in seconds
+
+dcv_connection_gateway:
+  autoscaling:
+    public: false
+    instance_type: {{instance_type}}
+    base_os: {{base_os}}
+    instance_ami: {{instance_ami}}
+    volume_size: {{volume_size}}
+    enabled_detailed_monitoring: false
+    min_capacity: 1
+    max_capacity: 3
+    cooldown_minutes: 5
+    new_instances_protected_from_scale_in: false
+    elb_healthcheck:
+      # Specifies the time in minutes Auto Scaling waits before checking the health status of an EC2 instance that has come into service.
+      grace_time_minutes: 15
+    cpu_utilization_scaling_policy:
+      target_utilization_percent: 80
+      estimated_instance_warmup_minutes: 15
+    rolling_update_policy:
+      max_batch_size: 1
+      min_instances_in_service: 1
+      pause_time_minutes: 15
+    # instance metadata access method
+    metadata_http_tokens: "required"  # supported values are "required" for IMDSv2 or "optional" for IMDSv1
+  certificate:
+    provided: {{ dcv_connection_gateway_custom_certificate_provided | lower }}
+    custom_dns_name: {{ dcv_connection_gateway_custom_dns_hostname if dcv_connection_gateway_custom_dns_hostname else '~' }}
+    certificate_secret_arn: {{ dcv_connection_gateway_custom_certificate_certificate_secret_arn if dcv_connection_gateway_custom_certificate_certificate_secret_arn else '~' }}
+    private_key_secret_arn: {{ dcv_connection_gateway_custom_certificate_private_key_secret_arn if dcv_connection_gateway_custom_certificate_private_key_secret_arn else '~' }}
+
+external_nlb:
+  # external NLB access logs are enabled by default
+  access_logs: true
+
+opensearch:
+  dcv_session:
+    alias: {{cluster_name}}_{{module_id}}_user_sessions
+  software_stack:
+    alias: {{cluster_name}}_{{module_id}}_software_stacks
+  session_permission:
+    alias: {{cluster_name}}_{{module_id}}_session_permission
+
+dcv_session:
+  idle_timeout: 1440 # in minutes
+  idle_timeout_warning: 300 # in seconds
+  cpu_utilization_threshold: 30 # in percentage
+  max_root_volume_memory: 1000 # in GB
+  additional_security_groups: []
+  allowed_sessions_per_user: 5
+  instance_types:
+    allow: # Supports both instance families and types. E.g. specify t3 for family and t3.large for instance type
+      - t3
+      - g4dn
+      - g5
+      - m6a
+      - m6g
+    deny: [] # Supports both instance families and types. E.g. specify t3 for family and t3.large for instance type
+  quic_support: {{ dcv_session_quic_support | lower }}
+
+  #
+  # By default, the eVDI subnets match the cluster private subnets.
+  # Here you can specify eVDI-specific subnets as an alternative to using the cluster.network.private_subnets
+  #
+  network:
+    private_subnets:
+      {{ utils.to_yaml(private_subnet_ids) | indent(6) }}
+
+    # Supported eVDI randomize_subnets settings:
+    # True - Randomize the subnets (dcv_session.network.private_subnets or cluster.network.private_subnets) for deployment
+    # False - (default)  Use the subnets (dcv_session.network.private_subnets or cluster.network.private_subnets) in the order specified in the configuration.
+    randomize_subnets: False
+
+    # Retry methods when encountering an eVDI deployment error
+    # True - (default) Immediately retry the next subnet (ordered or random from subnet_deployment_method)
+    # False - error the request on first error. This may be desired to avoid cross-AZ charges.
+    subnet_autoretry: True
+
+  # instance metadata access method
+  metadata_http_tokens: "required"  # supported values are "required" for IMDSv2 or "optional" for IMDSv1
+  notifications:
+    provisioning:
+      enabled: false
+      email_template: virtual-desktop-controller.session-provisioning
+    creating:
+      enabled: false
+      email_template: virtual-desktop-controller.session-creating
+    initializing:
+      enabled: false
+      email_template: virtual-desktop-controller.session-initializing
+    resuming:
+      enabled: false
+      email_template: virtual-desktop-controller.session-resuming
+    ready:
+      enabled: true
+      email_template: virtual-desktop-controller.session-ready
+    stopping:
+      enabled: false
+      email_template: virtual-desktop-controller.session-stopping
+    stopped:
+      enabled: true
+      email_template: virtual-desktop-controller.session-stopped
+    deleting:
+      enabled: false
+      email_template: virtual-desktop-controller.session-deleting
+    error:
+      enabled: true
+      email_template: virtual-desktop-controller.session-error
+    deleted:
+      enabled: true
+      email_template: virtual-desktop-controller.session-deleted
+    session-shared:
+      enabled: true
+      email_template: virtual-desktop-controller.session-shared
+    session-permission-updated:
+      enabled: true
+      email_template: virtual-desktop-controller.session-permission-updated
+    session-permission-expired:
+      enabled: true
+      email_template: virtual-desktop-controller.session-permission-expired
+
+  working_hours:
+    start_up_time: '09:00'
+    shut_down_time: '17:00'
+
+  # You can provide default schedules of every day of the week in this section.
+  # Every schedule entry looks as follows
+  #  type: NO_SCHEDULE, WORKING_HOURS (timings are defined in working_hours.start_up_time and working_hours.shut_down_time), STOP_ALL_DAY, START_ALL_DAY, CUSTOM_SCHEDULE
+  #  start_up_time: To be provided IF type is CUSTOM_SCHEDULE
+  #  shut_down_time: To be provided IF type is CUSTOM_SCHEDULE
+  schedule:
+    monday:
+      type: NO_SCHEDULE
+      start_up_time: ~
+      shut_down_time: ~
+    tuesday:
+      type: NO_SCHEDULE
+      start_up_time: ~
+      shut_down_time: ~
+    wednesday:
+      type: NO_SCHEDULE
+      start_up_time: ~
+      shut_down_time: ~
+    thursday:
+      type: NO_SCHEDULE
+      start_up_time: ~
+      shut_down_time: ~
+    friday:
+      type: NO_SCHEDULE
+      start_up_time: ~
+      shut_down_time: ~
+    saturday:
+      type: STOP_ALL_DAY
+      start_up_time: ~
+      shut_down_time: ~
+    sunday:
+      type: STOP_ALL_DAY
+      start_up_time: ~
+      shut_down_time: ~
+  default_profiles:
+    admin: admin_profile
+
+logging:
+  logs_directory: /opt/idea/app/logs
+  profile: production
+  default_log_file_name: application.log
+
+cloudwatch_logs:
+  enabled: true
+
+cache:
+  long_term:
+    max_size: 1000
+    ttl_seconds: 86400 # 1 day
+  short_term:
+    max_size: 10000
+    ttl_seconds: 600 # 10 minutes
+
+
+vdi_host_backup:
+  enabled: {{ enable_aws_backup | lower }}
+  backup_plan:
+    selection:
+      tags:
+        - "Key=res:BackupPlan,Value={{ cluster_name }}-{{ module_id }}"
+    rules:
+      default:
+        delete_after_days: 7
+        move_to_cold_storage_after_days: ~
+        schedule_expression: "cron(0 5 * * ? *)"
+        start_window_minutes: 60 # 1 hour
+        completion_window_minutes: 480 # 8 hours

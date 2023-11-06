@@ -1,0 +1,13 @@
+RulesToSuppress:
+- id: W11
+  reason: needed for idea installer
+- id: W12
+  reason: needed for idea installer
+- id: W76
+  reason: needed for idea installer
+- id: F4
+  reason: needed for idea installer
+- id: F39
+  reason: needed for idea installer
+- id: F1000
+  reason: needed for idea installer

@@ -1,0 +1,7 @@
+# Begin: Disable motd update - applicable only for amazonlinux2
+{%- if context.base_os == 'amazonlinux2' %}
+/usr/sbin/update-motd --disable
+rm /etc/cron.d/update-motd
+rm -f /etc/update-motd.d/*
+{%- endif %}
+# End: Disable motd update

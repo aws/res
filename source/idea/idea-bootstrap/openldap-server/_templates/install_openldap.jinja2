@@ -1,0 +1,242 @@
+# Begin: OpenLDAP Server Configuration
+SERVER_HOSTNAME="{{ context.config.get_string('directoryservice.hostname', required=True) }}"
+CLUSTER_HOME_DIR="{{ context.config.get_string('shared-storage.home.mount_dir', required=True) }}"
+IDEA_DS_PROVIDER="{{ context.config.get_string('directoryservice.provider', required=True) }}"
+IDEA_DS_LDAP_BASE="{{ context.config.get_string('directoryservice.ldap_base', required=True) }}"
+IDEA_DS_LDAP_NAME="{{ context.config.get_string('directoryservice.name', required=True) }}"
+
+source ${BOOTSTRAP_DIR}/infra.cfg
+
+DS_ROOT_USERNAME=$(get_secret "${LDAP_ROOT_USERNAME_SECRET_ARN}")
+DS_ROOT_PASSWORD=$(get_secret "${LDAP_ROOT_PASSWORD_SECRET_ARN}")
+DS_TLS_CERTIFICATE=$(get_secret "${LDAP_TLS_CERTIFICATE_SECRET_ARN}")
+DS_TLS_PRIVATE_KEY=$(get_secret "${LDAP_TLS_PRIVATE_KEY_SECRET_ARN}")
+
+log_info "Installing LDAP packages ..."
+OPENLDAP_SERVER_PKGS=({{ ' '.join(context.config.get_list('global-settings.package_config.linux_packages.openldap_server', required=True)) }})
+
+yum install -y ${OPENLDAP_SERVER_PKGS[*]}
+
+if [[ -f "/etc/openldap/ldap.conf" ]]; then
+  cp /etc/openldap/ldap.conf /etc/openldap/ldap.conf.orig
+fi
+
+echo -e "
+TLS_CACERTDIR /etc/openldap/cacerts
+
+# Turning this off breaks GSSAPI used with krb5 when rdns = false
+SASL_NOCANON	on
+
+URI ldap://${SERVER_HOSTNAME}
+
+BASE ${IDEA_DS_LDAP_BASE}
+" > /etc/openldap/ldap.conf
+
+systemctl enable slapd
+systemctl restart slapd
+
+if [[ ! -f "/etc/openldap/certs/idea-openldap.key" ]]; then
+  echo -n "${DS_TLS_PRIVATE_KEY}" > /etc/openldap/certs/idea-openldap.key
+  echo -n "${DS_TLS_CERTIFICATE}" > /etc/openldap/certs/idea-openldap.crt
+  chown ldap:ldap /etc/openldap/certs/idea-openldap.key /etc/openldap/certs/idea-openldap.crt
+  chmod 600 /etc/openldap/certs/idea-openldap.key /etc/openldap/certs/idea-openldap.crt
+fi
+
+# Be mindful with quotes in this section. Double-quote will clobber the crypt format strings as shell arguments
+echo -e '
+dn: olcDatabase={-1}frontend,cn=config
+changetype: modify
+replace: olcPasswordHash
+olcPasswordHash: {CRYPT}
+
+dn: cn=config
+changetype: modify
+replace: olcPasswordCryptSaltFormat
+olcPasswordCryptSaltFormat: $6$%.16s
+' > "${BOOTSTRAP_DIR}/password-hash-format.ldif"
+
+/bin/ldapmodify -Y EXTERNAL -H ldapi:/// -f "${BOOTSTRAP_DIR}/password-hash-format.ldif"
+
+ENCRYPTED_DS_ROOT_PASSWORD=$(/sbin/slappasswd -s "${DS_ROOT_PASSWORD}" -h '{CRYPT}' -c '$6$%.16s')
+
+echo -e "
+dn: olcDatabase={2}hdb,cn=config
+changetype: modify
+replace: olcSuffix
+olcSuffix: ${IDEA_DS_LDAP_BASE}
+
+dn: olcDatabase={2}hdb,cn=config
+changetype: modify
+replace: olcRootDN
+olcRootDN: cn=${DS_ROOT_USERNAME},${IDEA_DS_LDAP_BASE}
+
+dn: olcDatabase={2}hdb,cn=config
+changetype: modify
+replace: olcRootPW
+olcRootPW: ${ENCRYPTED_DS_ROOT_PASSWORD}
+" > "${BOOTSTRAP_DIR}/db.ldif"
+/bin/ldapmodify -Y EXTERNAL -H ldapi:/// -f "${BOOTSTRAP_DIR}/db.ldif"
+
+echo -e "
+dn: cn=config
+changetype: modify
+replace: olcTLSCertificateFile
+olcTLSCertificateFile: /etc/openldap/certs/idea-openldap.crt
+-
+replace: olcTLSCertificateKeyFile
+olcTLSCertificateKeyFile: /etc/openldap/certs/idea-openldap.key
+" > "${BOOTSTRAP_DIR}/update_ssl_cert.ldif"
+/bin/ldapmodify -Y EXTERNAL -H ldapi:/// -f "${BOOTSTRAP_DIR}/update_ssl_cert.ldif"
+
+echo -e "
+dn: olcDatabase={2}hdb,cn=config
+changetype: modify
+replace: olcAccess
+olcAccess: {0}to attrs=userPassword by self write by anonymous auth by group.exact=\"ou=admins,${IDEA_DS_LDAP_BASE}\" write by * none
+-
+add: olcAccess
+olcAccess: {1}to * by dn.base=\"gidNumber=0+uidNumber=0,cn=peercred,cn=external,cn=auth\" write by dn.base=\"ou=admins,${IDEA_DS_LDAP_BASE}\" write by * read
+" > "${BOOTSTRAP_DIR}/change_user_password.ldif"
+/bin/ldapmodify -Y EXTERNAL -H ldapi:/// -f "${BOOTSTRAP_DIR}/change_user_password.ldif"
+
+# configure SSSVLV overlay (server side sorting and virtual list view)
+echo -e "
+dn: cn=module,cn=config
+objectClass: olcModuleList
+cn: module
+olcModulepath: /usr/lib64/openldap
+olcModuleload: sssvlv.la
+
+dn: olcOverlay=sssvlv,olcDatabase={2}hdb,cn=config
+objectClass: olcSssVlvConfig
+olcOverlay: sssvlv
+olcSssVlvMax: 10
+olcSssVlvMaxKeys: 5
+" > "${BOOTSTRAP_DIR}/sssvlv_overlay.ldif"
+/bin/ldapadd -Y EXTERNAL -H ldapi:/// -f "${BOOTSTRAP_DIR}/sssvlv_overlay.ldif"
+
+# configure sudoers
+echo -e "
+dn: cn=sudo,cn=schema,cn=config
+objectClass: olcSchemaConfig
+cn: sudo
+olcAttributeTypes: ( 1.3.6.1.4.1.15953.9.1.1 NAME 'sudoUser' DESC 'User(s) who may run sudo' EQUALITY caseExactIA5Match SUBSTR caseExactIA5SubstringsMatch SYNTAX 1.3.6.1.4.1.1466.115.121.1.26 )
+olcAttributeTypes: ( 1.3.6.1.4.1.15953.9.1.2 NAME 'sudoHost' DESC 'Host(s) who may run sudo' EQUALITY caseExactIA5Match SUBSTR caseExactIA5SubstringsMatch SYNTAX 1.3.6.1.4.1.1466.115.121.1.26 )
+olcAttributeTypes: ( 1.3.6.1.4.1.15953.9.1.3 NAME 'sudoCommand' DESC 'Command(s) to be executed by sudo' EQUALITY caseExactIA5Match SYNTAX 1.3.6.1.4.1.1466.115.121.1.26 )
+olcAttributeTypes: ( 1.3.6.1.4.1.15953.9.1.4 NAME 'sudoRunAs' DESC 'User(s) impersonated by sudo (deprecated)' EQUALITY caseExactIA5Match SYNTAX 1.3.6.1.4.1.1466.115.121.1.26 )
+olcAttributeTypes: ( 1.3.6.1.4.1.15953.9.1.5 NAME 'sudoOption' DESC 'Options(s) followed by sudo' EQUALITY caseExactIA5Match SYNTAX 1.3.6.1.4.1.1466.115.121.1.26 )
+olcAttributeTypes: ( 1.3.6.1.4.1.15953.9.1.6 NAME 'sudoRunAsUser' DESC 'User(s) impersonated by sudo' EQUALITY caseExactIA5Match SYNTAX 1.3.6.1.4.1.1466.115.121.1.26 )
+olcAttributeTypes: ( 1.3.6.1.4.1.15953.9.1.7 NAME 'sudoRunAsGroup' DESC 'Group(s) impersonated by sudo' EQUALITY caseExactIA5Match SYNTAX 1.3.6.1.4.1.1466.115.121.1.26 )
+olcObjectClasses: ( 1.3.6.1.4.1.15953.9.2.1 NAME 'sudoRole' SUP top STRUCTURAL DESC 'Sudoer Entries' MUST ( cn ) MAY ( sudoUser $ sudoHost $ sudoCommand $ sudoRunAs $ sudoRunAsUser $ sudoRunAsGroup $ sudoOption $ description ) )
+" > "${BOOTSTRAP_DIR}/sudoers.ldif"
+/bin/ldapadd -Y EXTERNAL -H ldapi:/// -f "${BOOTSTRAP_DIR}/sudoers.ldif"
+
+
+domain_component=$(echo "${IDEA_DS_LDAP_NAME}" | cut -d "." -f1)
+echo -e "
+dn: ${IDEA_DS_LDAP_BASE}
+dc: ${domain_component}
+objectClass: top
+objectClass: domain
+
+dn: cn=${DS_ROOT_USERNAME},${IDEA_DS_LDAP_BASE}
+objectClass: organizationalRole
+cn: ${DS_ROOT_USERNAME}
+description: LDAP Manager
+
+dn: ou=People,${IDEA_DS_LDAP_BASE}
+objectClass: organizationalUnit
+ou: People
+
+dn: ou=Group,${IDEA_DS_LDAP_BASE}
+objectClass: organizationalUnit
+ou: Group
+
+dn: ou=Sudoers,${IDEA_DS_LDAP_BASE}
+objectClass: organizationalUnit
+
+dn: ou=admins,${IDEA_DS_LDAP_BASE}
+objectClass: organizationalUnit
+ou: Group
+" > "${BOOTSTRAP_DIR}/base.ldif"
+
+/bin/ldapadd -Y EXTERNAL -H ldapi:/// -f "/etc/openldap/schema/cosine.ldif"
+/bin/ldapadd -Y EXTERNAL -H ldapi:/// -f "/etc/openldap/schema/nis.ldif"
+/bin/ldapadd -Y EXTERNAL -H ldapi:/// -f "/etc/openldap/schema/inetorgperson.ldif"
+
+echo -n "${DS_ROOT_PASSWORD}" | /bin/ldapadd \
+                                        -x -W \
+                                        -y /dev/stdin \
+                                        -D "cn=${DS_ROOT_USERNAME},${IDEA_DS_LDAP_BASE}" \
+                                        -f "${BOOTSTRAP_DIR}/base.ldif"
+
+
+authconfig \
+      --enablesssd \
+      --enablesssdauth \
+      --enableldap \
+      --enableldapauth \
+      --ldapserver="ldap://${SERVER_HOSTNAME}" \
+      --ldapbasedn="${IDEA_DS_LDAP_BASE}" \
+      --enablelocauthorize \
+      --enablemkhomedir \
+      --enablecachecreds \
+      --updateall
+
+
+if [[ -f /etc/sssd/sssd.conf ]]; then
+  cp /etc/sssd/sssd.conf /etc/sssd/sssd.conf.orig
+fi
+
+echo -e "
+[domain/default]
+enumerate = True
+autofs_provider = ldap
+cache_credentials = True
+ldap_search_base = ${IDEA_DS_LDAP_BASE}
+id_provider = ldap
+auth_provider = ldap
+chpass_provider = ldap
+sudo_provider = ldap
+ldap_tls_cacert = /etc/openldap/certs/idea-openldap.crt
+ldap_sudo_search_base = ou=Sudoers,${IDEA_DS_LDAP_BASE}
+ldap_uri = ldap://${SERVER_HOSTNAME}
+ldap_id_use_start_tls = True
+use_fully_qualified_names = False
+ldap_tls_cacertdir = /etc/openldap/certs/
+ldap_sudo_full_refresh_interval=86400
+ldap_sudo_smart_refresh_interval=3600
+
+[sssd]
+services = nss, pam, autofs, sudo
+full_name_format = %2\$s\%1\$s
+domains = default
+
+[nss]
+homedir_substring = ${CLUSTER_HOME_DIR}/home
+
+[pam]
+
+[sudo]
+
+[autofs]
+
+[ssh]
+
+[pac]
+
+[ifp]
+
+[secrets]
+" > /etc/sssd/sssd.conf
+chmod 600 /etc/sssd/sssd.conf
+
+systemctl enable sssd
+systemctl restart sssd
+
+grep -q "sudoers: files sss" /etc/nsswitch.conf
+if [[ "$?" == "1" ]]; then
+  echo "sudoers: files sss" >> /etc/nsswitch.conf
+fi
+
+# End: OpenLDAP Server Configuration
