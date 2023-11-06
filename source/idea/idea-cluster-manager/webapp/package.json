@@ -26,7 +26,7 @@
     "idb": "^7.0.1",
     "moment": "^2.29.4",
     "moment-timezone": "^0.5.38",
-    "nunjucks": "^3.2.3",
+    "nunjucks": "^3.2.4",
     "react": "^18.2.0",
     "react-beautiful-dnd": "^13.1.1",
     "react-dom": "^18.2.0",
