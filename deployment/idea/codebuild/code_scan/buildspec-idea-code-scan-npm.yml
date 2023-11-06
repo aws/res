@@ -1,0 +1,28 @@
+
+version: 0.2
+env:
+  variables:
+    NODEJS_VERSION: "18.18.0" # NodeJS version to setup local dev environment
+
+phases:
+  install:
+    commands:
+      - n $NODEJS_VERSION
+
+  pre_build:
+    commands:
+      - echo "npm version"
+      - node --version
+      - echo "node version"
+      - npm --version
+
+  build:
+    commands:
+      - cd $CODEBUILD_SRC_DIR
+      - npm i --package-lock-only
+      - |
+        if [[ -z "$AUDIT_LEVEL" ]]; then
+          echo "AUDIT_LEVEL environment variable not set, default to moderate"
+          AUDIT_LEVEL="moderate"
+        fi
+      - npm audit --json --audit-level=$AUDIT_LEVEL

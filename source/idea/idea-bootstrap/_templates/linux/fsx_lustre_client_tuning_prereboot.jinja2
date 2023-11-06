@@ -1,0 +1,14 @@
+# Begin: FSx Lustre Client Tuning - Pre-Reboot
+# https://docs.aws.amazon.com/fsx/latest/LustreGuide/performance.html#performance-tips
+{%- if context.base_os in ('amazonlinux2', 'centos7', 'rhel7', 'rhel8') %}
+  NPROCS=$(nproc)
+  GB_MEM=$(free --si -g | egrep '^Mem:' | awk '{print $2}')
+  log_info "Detected ${NPROCS} CPUs / ${GB_MEM} GiB memory for Lustre performance tuning"
+  if [[ "${NPROCS}" -ge 64 ]]; then
+    log_info "Applying CPU count Lustre performance tuning"
+    echo "options ptlrpc ptlrpcd_per_cpt_max=32" >> /etc/modprobe.d/modprobe.conf
+    echo "options ksocklnd credits=2560" >> /etc/modprobe.d/modprobe.conf
+  fi
+  set_reboot_required "Lustre client tuning applied"
+{% endif %}
+# End: FSx Lustre Client Tuning - Pre-Reboot

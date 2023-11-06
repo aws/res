@@ -1,0 +1,142 @@
+spec:
+
+  title: 'IDEA / Cluster Manager API'
+
+  description: 'All APIs served by Cluster Manager'
+
+  tags:
+    - name: Accounts
+      description: Account Management APIs **(Elevated Access)**
+    - name: Auth
+      description: Authentication APIs **(Public + Authenticated Access)**
+    - name: EmailTemplates
+      description: Email Template APIs **(Elevated Access)**
+    - name: Projects
+      description: Project Management APIs **(Elevated Access)**
+    - name: ClusterSettings
+      description: Cluster Settings APIs **(Authenticated + Elevated Access)**
+    - name: FileBrowser
+      description: File Browser APIs **(Authenticated Access)**
+
+  entries:
+    - namespace: Auth.InitiateAuth
+      request:
+        examples:
+          - name: Username/Password Auth
+            value: |
+              {
+                "header": {
+                  "namespace": "Auth.InitiateAuth",
+                  "request_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+                  "version": 1
+                },
+                "payload": {
+                  "auth_flow": "USER_PASSWORD_AUTH",
+                  "username": "demouser",
+                  "password": "MySecretPassword_123"
+                }
+              }
+          - name: Refresh Token Auth
+            value: |
+              {
+                "header": {
+                  "namespace": "Auth.InitiateAuth",
+                  "request_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+                  "version": 1
+                },
+                "payload": {
+                  "auth_flow": "REFRESH_TOKEN_AUTH",
+                  "username": "demouser",
+                  "refresh_token": "eyJjd..."
+                }
+              }
+      response:
+        examples:
+          - name: Username/Password Auth
+            value: |
+              {
+                "header": {
+                  "namespace": "Auth.InitiateAuth",
+                  "request_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+                  "version": 1
+                },
+                "success": true,
+                "payload": {
+                  "auth": {
+                    "access_token": "eyJra...",
+                    "id_token": "eyJra...",
+                    "refresh_token": "eyJjd...",
+                    "expires_in": 3600,
+                    "token_type": "Bearer"
+                  }
+                }
+              }
+          - name: Refresh Token Auth
+            value: |
+              {
+                "header": {
+                  "namespace": "Auth.InitiateAuth",
+                  "request_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+                  "version": 1
+                },
+                "success": true,
+                "payload": {
+                  "auth": {
+                    "access_token": "eyJra...",
+                    "id_token": "eyJra...",
+                    "expires_in": 3600,
+                    "token_type": "Bearer"
+                  }
+                }
+              }
+
+    - namespace: Accounts.CreateUser
+      request:
+        examples:
+          - name: Create User (Invitation Email)
+            value: |
+              {
+                "header": {
+                  "namespace": "Accounts.CreateUser"
+                },
+                "payload": {
+                  "user": {
+                    "username": "demouser",
+                    "email": "demouser@example.com"
+                  }
+                }
+              }
+      response:
+        examples:
+          - name: Create User (Invited, Not Verified)
+            value: |
+              {
+                "header": {
+                  "namespace": "Accounts.CreateUser",
+                  "request_id": "fa61c1c8-5f24-442a-91a1-45f486df0939"
+                },
+                "success": true,
+                "payload": {
+                  "user": {
+                    "username": "demouser",
+                    "email": "demouser@amazon.com",
+                    "uid": 5010,
+                    "gid": 5011,
+                    "group_name": "demouserusergroup",
+                    "additional_groups": [
+                      "demouserusergroup",
+                      "defaultclustergroup"
+                    ],
+                    "login_shell": "/bin/bash",
+                    "home_dir": "/home/demouser",
+                    "sudo": false,
+                    "status": "FORCE_CHANGE_PASSWORD",
+                    "enabled": true,
+                    "created_on": "2022-07-27T02:12:43.478000+00:00",
+                    "updated_on": "2022-07-27T02:12:43.611000+00:00"
+                  }
+                }
+              }
+
+
+

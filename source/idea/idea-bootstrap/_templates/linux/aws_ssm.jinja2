@@ -1,0 +1,17 @@
+# Begin: AWS Systems Manager Agent
+{%- if context.base_os in ('amazonlinux2', 'centos7', 'rhel7', 'rhel8', 'rhel9') %}
+systemctl status amazon-ssm-agent
+if [[ "$?" != "0" ]]; then
+  machine=$(uname -m)
+  if [[ $machine == "x86_64" ]]; then
+    yum install -y {{ context.config.get_string('global-settings.package_config.aws_ssm.x86_64', required=True) }}
+  elif [[ $machine == "aarch64" ]]; then
+    yum install -y {{ context.config.get_string('global-settings.package_config.aws_ssm.aarch64', required=True) }}
+  fi
+  systemctl enable amazon-ssm-agent || true
+  systemctl restart amazon-ssm-agent
+fi
+{%- endif %}
+# End: AWS Systems Manager Agent
+
+

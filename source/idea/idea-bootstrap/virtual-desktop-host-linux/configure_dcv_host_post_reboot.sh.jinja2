@@ -1,0 +1,54 @@
+#!/bin/bash
+
+#  Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+#
+#  Licensed under the Apache License, Version 2.0 (the "License"). You may not use this file except in compliance
+#  with the License. A copy of the License is located at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+#  or in the 'license' file accompanying this file. This file is distributed on an 'AS IS' BASIS, WITHOUT WARRANTIES
+#  OR CONDITIONS OF ANY KIND, express or implied. See the License for the specific language governing permissions
+#  and limitations under the License.
+
+set -x
+source /etc/environment
+if [[ -f /etc/profile.d/proxy.sh ]]; then
+    source /etc/profile.d/proxy.sh
+fi
+timestamp=$(date +%s)
+if [[ -f ${BOOTSTRAP_DIR}/logs/configure_dcv_host_post_reboot.log ]]; then
+  mv ${BOOTSTRAP_DIR}/logs/configure_dcv_host_post_reboot.log ${BOOTSTRAP_DIR}/logs/configure_dcv_host_post_reboot.log.${timestamp}
+fi
+exec >> ${BOOTSTRAP_DIR}/logs/configure_dcv_host_post_reboot.log 2>&1
+SOURCE="${1}"
+
+if [[ "${SOURCE}" == "crontab" ]]; then
+  # clean crontab, remove current file from reboot commands
+  crontab -l | grep -v 'configure_dcv_host_post_reboot.sh' | crontab -
+fi
+echo -n "no" > ${BOOTSTRAP_DIR}/reboot_required.txt
+SCRIPT_DIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
+source "${SCRIPT_DIR}/../common/bootstrap_common.sh"
+
+CONTROLLER_EVENTS_QUEUE_URL="{{ context.config.get_string('virtual-desktop-controller.events_sqs_queue_url', required=True) }}"
+IDEA_SESSION_ID="{{ context.vars.idea_session_id }}"
+IDEA_SESSION_OWNER="{{ context.vars.session_owner }}"
+
+IDEA_SERVICES_PATH="/opt/idea/.services"
+IDEA_SERVICES_LOGS_PATH="${IDEA_SERVICES_PATH}/logs"
+mkdir -p "${IDEA_SERVICES_LOGS_PATH}"
+AWS=$(command -v aws)
+echo """#!/bin/bash
+timestamp=\$(date)
+echo \"START\" >> ${IDEA_SERVICES_LOGS_PATH}/idea-reboot-do-not-edit-or-delete-idea-notif.log 2>&1
+echo \$(date) >> ${IDEA_SERVICES_LOGS_PATH}/idea-reboot-do-not-edit-or-delete-idea-notif.log 2>&1
+${AWS} sqs send-message --queue-url ${CONTROLLER_EVENTS_QUEUE_URL} --message-body \"{\\\"event_group_id\\\":\\\"${IDEA_SESSION_ID}\\\",\\\"event_type\\\":\\\"DCV_HOST_REBOOT_COMPLETE_EVENT\\\",\\\"detail\\\":{\\\"idea_session_id\\\":\\\"${IDEA_SESSION_ID}\\\",\\\"idea_session_owner\\\":\\\"${IDEA_SESSION_OWNER}\\\",\\\"timestamp\\\":\\\"\${timestamp}\\\"}}\" --region ${AWS_REGION} --message-group-id ${IDEA_SESSION_ID} >> ${IDEA_SERVICES_LOGS_PATH}/idea-reboot-do-not-edit-or-delete-idea-notif.log 2>&1
+echo \$(date) >> ${IDEA_SERVICES_LOGS_PATH}/idea-reboot-do-not-edit-or-delete-idea-notif.log 2>&1
+echo \"END\" >> ${IDEA_SERVICES_LOGS_PATH}/idea-reboot-do-not-edit-or-delete-idea-notif.log 2>&1
+""" > "${IDEA_SERVICES_PATH}/idea-reboot-do-not-edit-or-delete-idea-notif.sh"
+
+chmod +x "${IDEA_SERVICES_PATH}/idea-reboot-do-not-edit-or-delete-idea-notif.sh"
+
+crontab -l | grep -v "idea-reboot-do-not-edit-or-delete-idea-notif.sh" | crontab -
+(crontab -l; echo "@reboot /bin/bash ${IDEA_SERVICES_PATH}/idea-reboot-do-not-edit-or-delete-idea-notif.sh") | crontab -

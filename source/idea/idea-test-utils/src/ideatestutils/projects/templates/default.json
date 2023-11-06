@@ -1,0 +1,19 @@
+{
+  "project_id": "f28879f4-9b47-45b8-beb4-9d42dde2257e",
+  "name": "default",
+  "title": "Default Project",
+  "description": "Default Project",
+  "enabled": true,
+  "ldap_groups": [
+    "default-project-group"
+  ],
+  "tags": [
+    {
+      "key": "CostCenter",
+      "value": "MockCostCenter"
+    }
+  ],
+  "enable_budgets": false,
+  "created_on": "2022-10-19T22:54:35.962000+00:00",
+  "updated_on": "2022-10-19T22:54:35.974000+00:00"
+}

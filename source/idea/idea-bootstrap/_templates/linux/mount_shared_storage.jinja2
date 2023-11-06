@@ -1,0 +1,62 @@
+# Begin: Mount Shared Storage
+{%- if context.base_os in ('amazonlinux2', 'centos7', 'rhel7', 'rhel8', 'rhel9') %}
+  {%- if context.has_storage_provider('fsx_lustre') or context.has_storage_provider('fsx_cache') %}
+    {% include '_templates/linux/fsx_lustre_client.jinja2' %}
+  {%- endif %}
+  function mount_shared_storage () {
+    {%- for name, storage in context.config.get_config('shared-storage').items() %}
+      {%- if context.eval_shared_storage_scope(shared_storage=storage) %}
+        {%- if storage['provider'] == 'efs' %}
+        echo "# Using Provider {{storage['provider']}} for {{storage['mount_dir']}} using options {{storage['mount_options']}}"
+        mkdir -p "{{storage['mount_dir']}}"
+        add_efs_to_fstab "{{storage['efs']['dns']}}" \
+                         "{{storage['mount_dir']}}" \
+                         "{{storage['mount_options']}}"
+        {%- elif storage['provider'] == 'fsx_cache' %}
+        mkdir -p "{{storage['mount_dir']}}"
+        add_fsx_lustre_to_fstab "{{storage['fsx_cache']['dns']}}" \
+                                "{{storage['mount_dir']}}" \
+                                "{{storage['mount_options']}}" \
+                                "{{storage['fsx_cache']['mount_name']}}"
+        {%- elif storage['provider'] == 'fsx_lustre' %}
+        mkdir -p "{{storage['mount_dir']}}"
+        add_fsx_lustre_to_fstab "{{storage['fsx_lustre']['dns']}}" \
+                                "{{storage['mount_dir']}}" \
+                                "{{storage['mount_options']}}" \
+                                "{{storage['fsx_lustre']['mount_name']}}"
+        {%- elif storage['provider'] == 'fsx_netapp_ontap' and storage['fsx_netapp_ontap']['volume']['security_style'] %}
+        mkdir -p "{{storage['mount_dir']}}"
+        add_fsx_netapp_ontap_to_fstab "{{storage['fsx_netapp_ontap']['svm']['nfs_dns']}}" \
+                                      "{{storage['mount_dir']}}" \
+                                      "{{storage['mount_options']}}" \
+                                      "{{storage['fsx_netapp_ontap']['volume']['volume_path']}}"
+        {%- elif storage['provider'] == 'fsx_openzfs' %}
+        mkdir -p "{{storage['mount_dir']}}"
+        add_fsx_openzfs_to_fstab "{{storage['fsx_openzfs']['dns']}}" \
+                                 "{{storage['mount_dir']}}" \
+                                 "{{storage['mount_options']}}" \
+                                 "{{storage['fsx_openzfs']['volume_path']}}"
+        {%- endif %}
+      {%- endif %}
+    {%- endfor %}
+
+    local AWS=$(command -v aws)
+    local FS_MOUNT_ATTEMPT=0
+    local FS_MOUNT_MAX_ATTEMPTS=5
+    mount -a
+    while [[ $? -ne 0 ]] && [[ ${FS_MOUNT_ATTEMPT} -le 5 ]]
+    do
+      local SLEEP_TIME=$(( RANDOM % 33 + 8 ))  # Minimum of 8 seconds sleep
+      log_info "(${FS_MOUNT_ATTEMPT} of ${FS_MOUNT_MAX_ATTEMPTS}) Failed to mount FS, retrying in ${SLEEP_TIME} seconds ..."
+      sleep ${SLEEP_TIME}
+      ((FS_MOUNT_ATTEMPT++))
+      mount -a
+    done
+  }
+  mount_shared_storage
+  {%- if context.has_storage_provider('fsx_lustre') or context.has_storage_provider('fsx_cache') %}
+    # Lustre client tuning for some adjustments takes place _after_ the client mounts have taken place
+    {% include '_templates/linux/fsx_lustre_client_tuning_postmount.jinja2' %}
+  {%- endif %}
+{%- endif %}
+# End: Mount Shared Storage

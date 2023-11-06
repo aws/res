@@ -1,0 +1,266 @@
+# AWSBackupServiceRolePolicyForBackup (Copy of AWS Managed Policy)
+#
+# Customize and/or scope down based on specific requirements for your cluster and desired infrastructure components.
+
+Version: '2012-10-17'
+Statement:
+
+- Action:
+  - dynamodb:DescribeTable
+  - dynamodb:CreateBackup
+  Resource: arn:{{ context.aws_partition }}:dynamodb:*:*:table/*
+  Effect: Allow
+
+- Action:
+  - dynamodb:DescribeBackup
+  - dynamodb:DeleteBackup
+  Resource: arn:{{ context.aws_partition }}:dynamodb:*:*:table/*/backup/*
+  Effect: Allow
+
+- Effect: Allow
+  Action:
+  - rds:AddTagsToResource
+  - rds:ListTagsForResource
+  - rds:DescribeDBSnapshots
+  - rds:CreateDBSnapshot
+  - rds:CopyDBSnapshot
+  - rds:DescribeDBInstances
+  - rds:CreateDBClusterSnapshot
+  - rds:DescribeDBClusters
+  - rds:DescribeDBClusterSnapshots
+  - rds:CopyDBClusterSnapshot
+  Resource: '*'
+
+- Effect: Allow
+  Action:
+  - rds:ModifyDBInstance
+  Resource:
+  - arn:{{ context.aws_partition }}:rds:*:*:db:*
+
+- Effect: Allow
+  Action:
+  - rds:DeleteDBSnapshot
+  - rds:ModifyDBSnapshotAttribute
+  Resource:
+  - arn:{{ context.aws_partition }}:rds:*:*:snapshot:awsbackup:*
+
+- Effect: Allow
+  Action:
+  - rds:DeleteDBClusterSnapshot
+  - rds:ModifyDBClusterSnapshotAttribute
+  Resource:
+  - arn:{{ context.aws_partition }}:rds:*:*:cluster-snapshot:awsbackup:*
+
+- Effect: Allow
+  Action:
+  - storagegateway:CreateSnapshot
+  - storagegateway:ListTagsForResource
+  Resource: arn:{{ context.aws_partition }}:storagegateway:*:*:gateway/*/volume/*
+
+- Effect: Allow
+  Action:
+  - ec2:CopySnapshot
+  Resource: arn:{{ context.aws_partition }}:ec2:*::snapshot/*
+
+- Effect: Allow
+  Action:
+  - ec2:CopyImage
+  Resource: '*'
+
+- Effect: Allow
+  Action:
+  - ec2:CreateTags
+  - ec2:DeleteSnapshot
+  Resource: arn:{{ context.aws_partition }}:ec2:*::snapshot/*
+
+- Effect: Allow
+  Action:
+  - ec2:CreateImage
+  - ec2:DeregisterImage
+  Resource: '*'
+
+- Effect: Allow
+  Action:
+  - ec2:CreateTags
+  Resource: arn:{{ context.aws_partition }}:ec2:*:*:image/*
+
+- Effect: Allow
+  Action:
+  - ec2:DescribeSnapshots
+  - ec2:DescribeTags
+  - ec2:DescribeImages
+  - ec2:DescribeInstances
+  - ec2:DescribeInstanceAttribute
+  - ec2:DescribeInstanceCreditSpecifications
+  - ec2:DescribeNetworkInterfaces
+  - ec2:DescribeElasticGpus
+  - ec2:DescribeSpotInstanceRequests
+  Resource: '*'
+
+- Effect: Allow
+  Action:
+  - ec2:ModifySnapshotAttribute
+  - ec2:ModifyImageAttribute
+  Resource: '*'
+  Condition:
+    'Null':
+      aws:ResourceTag/aws:backup:source-resource: 'false'
+
+- Effect: Allow
+  Action:
+  - backup:DescribeBackupVault
+  - backup:CopyIntoBackupVault
+  Resource: arn:{{ context.aws_partition }}:backup:*:*:backup-vault:*
+
+- Effect: Allow
+  Action:
+  - backup:CopyFromBackupVault
+  Resource: '*'
+
+- Action:
+  - elasticfilesystem:Backup
+  - elasticfilesystem:DescribeTags
+  Resource: arn:{{ context.aws_partition }}:elasticfilesystem:*:*:file-system/*
+  Effect: Allow
+
+- Effect: Allow
+  Action:
+  - ec2:CreateSnapshot
+  - ec2:DeleteSnapshot
+  - ec2:DescribeVolumes
+  - ec2:DescribeSnapshots
+  Resource:
+  - arn:{{ context.aws_partition }}:ec2:*::snapshot/*
+  - arn:{{ context.aws_partition }}:ec2:*:*:volume/*
+
+- Action:
+  - kms:Decrypt
+  - kms:GenerateDataKey
+  Effect: Allow
+  Resource: '*'
+  Condition:
+    StringLike:
+      kms:ViaService:
+      - dynamodb.*.{{ context.aws_dns_suffix }}
+
+- Action: kms:DescribeKey
+  Effect: Allow
+  Resource: '*'
+
+- Action: kms:CreateGrant
+  Effect: Allow
+  Resource: '*'
+  Condition:
+    Bool:
+      kms:GrantIsForAWSResource: 'true'
+
+- Action:
+  - kms:GenerateDataKeyWithoutPlaintext
+  Effect: Allow
+  Resource: arn:{{ context.aws_partition }}:kms:*:*:key/*
+  Condition:
+    StringLike:
+      kms:ViaService:
+      - ec2.*.{{ context.aws_dns_suffix }}
+
+- Action:
+  - tag:GetResources
+  Resource: '*'
+  Effect: Allow
+
+- Effect: Allow
+  Action:
+  - ssm:CancelCommand
+  - ssm:GetCommandInvocation
+  Resource: '*'
+
+- Effect: Allow
+  Action: ssm:SendCommand
+  Resource:
+  - arn:{{ context.aws_partition }}:ssm:*:*:document/AWSEC2-CreateVssSnapshot
+  - arn:{{ context.aws_partition }}:ec2:*:*:instance/*
+
+- Action: fsx:DescribeBackups
+  Effect: Allow
+  Resource: arn:{{ context.aws_partition }}:fsx:*:*:backup/*
+
+- Effect: Allow
+  Action: fsx:CreateBackup
+  Resource:
+  - arn:{{ context.aws_partition }}:fsx:*:*:file-system/*
+  - arn:{{ context.aws_partition }}:fsx:*:*:backup/*
+  - arn:{{ context.aws_partition }}:fsx:*:*:volume/*
+
+- Action: fsx:DescribeFileSystems
+  Effect: Allow
+  Resource: arn:{{ context.aws_partition }}:fsx:*:*:file-system/*
+
+- Effect: Allow
+  Action: fsx:DescribeVolumes
+  Resource: arn:{{ context.aws_partition }}:fsx:*:*:volume/*
+
+- Effect: Allow
+  Action: fsx:ListTagsForResource
+  Resource:
+  - arn:{{ context.aws_partition }}:fsx:*:*:file-system/*
+  - arn:{{ context.aws_partition }}:fsx:*:*:volume/*
+
+- Action: fsx:DeleteBackup
+  Effect: Allow
+  Resource: arn:{{ context.aws_partition }}:fsx:*:*:backup/*
+
+- Effect: Allow
+  Action:
+  - fsx:ListTagsForResource
+  - fsx:ManageBackupPrincipalAssociations
+  - fsx:CopyBackup
+  - fsx:TagResource
+  Resource: arn:{{ context.aws_partition }}:fsx:*:*:backup/*
+
+- Sid: DynamodbBackupPermissions
+  Effect: Allow
+  Action:
+  - dynamodb:StartAwsBackupJob
+  - dynamodb:ListTagsOfResource
+  Resource: arn:{{ context.aws_partition }}:dynamodb:*:*:table/*
+
+- Sid: BackupGatewayBackupPermissions
+  Effect: Allow
+  Action:
+  - backup-gateway:Backup
+  - backup-gateway:ListTagsForResource
+  Resource: arn:{{ context.aws_partition }}:backup-gateway:*:*:vm/*
+
+- Effect: Allow
+  Action:
+  - cloudformation:GetTemplate
+  - cloudformation:DescribeStacks
+  - cloudformation:ListStackResources
+  Resource: arn:{{ context.aws_partition }}:cloudformation:*:*:stack/*/*
+
+- Effect: Allow
+  Action:
+  - redshift:CreateClusterSnapshot
+  - redshift:DescribeClusterSnapshots
+  - redshift:DescribeTags
+  Resource:
+  - arn:{{ context.aws_partition }}:redshift:*:*:snapshot:*/*
+  - arn:{{ context.aws_partition }}:redshift:*:*:cluster:*
+
+- Effect: Allow
+  Action:
+  - redshift:DeleteClusterSnapshot
+  Resource:
+  - arn:{{ context.aws_partition }}:redshift:*:*:snapshot:*/*
+
+- Effect: Allow
+  Action:
+  - redshift:DescribeClusters
+  Resource:
+  - arn:{{ context.aws_partition }}:redshift:*:*:cluster:*
+
+- Effect: Allow
+  Action:
+  - redshift:CreateTags
+  Resource:
+  - arn:{{ context.aws_partition }}:redshift:*:*:snapshot:*/*

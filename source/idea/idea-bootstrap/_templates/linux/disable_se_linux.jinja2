@@ -1,0 +1,12 @@
+{%- if context.base_os in ('amazonlinux2', 'centos7', 'rhel7', 'rhel8', 'rhel9') %}
+# Begin: Disable SE Linux
+sestatus | grep -q "disabled"
+if [[ "$?" != "0" ]]; then
+  # disables selinux for current session
+  sestatus 0
+  # reboot is required to apply this change permanently. ensure reboot is the last line called from userdata.
+  sed -i 's/SELINUX=enforcing/SELINUX=disabled/g' /etc/selinux/config
+  set_reboot_required "Disable SE Linux"
+fi
+# End: Disable SE Linux
+{%- endif %}

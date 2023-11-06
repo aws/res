@@ -1,0 +1,46 @@
+# Begin: Mount Shared Storage
+function Mount-SharedStorage
+{
+  <#
+      .SYNOPSIS
+          Mount applicable Windows File Shares as Network Drives
+  #>
+  [CmdletBinding()]
+  Param(
+    [Parameter(Mandatory = $true)]
+    [string] $DomainUserName
+  )
+
+  $shares = [System.Collections.ArrayList]::new()
+  {%- for name, storage in context.config.get_config('shared-storage').items() %}
+  {%- if context.eval_shared_storage_scope(shared_storage=storage) %}
+  {%- if storage['provider'] == 'fsx_netapp_ontap' and 'mount_drive' in storage and 'cifs_share_name' in storage['fsx_netapp_ontap']['volume'] %}
+  $shares.Add(@{MountDrive='{{ storage['mount_drive'] }}:'; Path='\\{{ storage['fsx_netapp_ontap']['svm']['smb_dns'] }}\{{ storage['fsx_netapp_ontap']['volume']['cifs_share_name']}}'}) | Out-Null
+  {%- endif %}
+  {%- if storage['provider'] == 'fsx_windows_file_server' and 'mount_drive' in storage %}
+  $shares.Add(@{MountDrive='{{ storage['mount_drive'] }}:'; Path='\\{{ storage['fsx_windows_file_server']['dns'] }}\share'}) | Out-Null
+  {%- endif %}
+  {%- endif %}
+  {%- endfor %}
+
+  # create batch file and scheduled task only if any shared storage mounts are applicable
+  if ($shares.Count -gt 0)
+  {
+
+    $batchFileCommands = [System.Collections.ArrayList]::new()
+    for($i=0; $i -lt $shares.Count; $i++) {
+      $batchFileCommands.Add("if not exist $($shares[$i].MountDrive) (net use $($shares[$i].MountDrive) $($shares[$i].Path) /persistent:yes)") | Out-Null
+    }
+    $batchFileContent = $batchFileCommands -join "`n"
+    $batchFile = "C:\IDEA\LocalScripts\MountSharedStorage.bat"
+    New-Item $batchFile -ItemType File -Value $batchFileContent -Force
+
+    # create a scheduled task to execute after the domain user logs in
+    $action = New-ScheduledTaskAction -Execute $batchFile
+    $trigger = New-ScheduledTaskTrigger -AtLogOn -User $DomainUserName
+    Register-ScheduledTask -Action $action -Trigger $trigger -TaskName "MountSharedStorage" -Description "Mount Shared Storage" -User $DomainUserName
+
+  }
+
+}
+# End: Mount Shared Storage

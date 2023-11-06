@@ -1,0 +1,44 @@
+
+version: 0.2
+env:
+  variables:
+    PYTHON_VERSION: "3.9.16" # Python version to setup local dev environment
+
+phases:
+  pre_build:
+    commands:
+      # Update Pyenv
+      - echo "Updating Pyenv"
+      - echo "Pyenv version"
+      - pyenv --version
+      - echo "Pyenv version list"
+      - pyenv install --list
+      - cd /root/.pyenv/plugins/python-build/../.. && git reset --hard && git pull && cd -
+      - echo "Post-PyEnv update"
+      - pyenv --version
+      - pyenv install --list
+      # Installing Python
+      - pyenv install --skip-existing $PYTHON_VERSION
+      - PYENV_VERSION=$PYTHON_VERSION python3 -m venv ~/.venv
+
+  build:
+    commands:
+      - BUILD_SUCCEED="true"
+      - cd $CODEBUILD_SRC_DIR
+      - . ~/.venv/bin/activate
+      - pip install safety
+      - |
+        for req in `ls $CODEBUILD_SRC_DIR/requirements/*.txt`
+          do
+            echo "==========================================="
+            echo "Checking $req ..."
+            echo "==========================================="
+            safety check -r "$req" --output json
+            if [[ $? -ne 0 ]]; then
+              BUILD_SUCCEED="false"
+            fi
+        done
+      - |
+        if [[ $BUILD_SUCCEED == "false" ]]; then
+           exit 1
+        fi

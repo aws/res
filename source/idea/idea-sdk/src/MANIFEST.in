@@ -1,0 +1,5 @@
+include ideasdk/aws/aws_endpoints.json
+include ideasdk/metrics/cloudwatch/templates/amazon-cloudwatch-agent-linux.yml
+include ideasdk/metrics/cloudwatch/templates/amazon-cloudwatch-agent-windows.yml
+include ideasdk/metrics/prometheus/templates/prometheus-linux.yml
+include ideasdk/metrics/prometheus/templates/prometheus-windows.yml

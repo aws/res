@@ -1,0 +1,156 @@
+function Write-ToLog {
+    # LOG: IDEA Bootstrap Log: Get-Content C:\ProgramData\Amazon\EC2-Windows\Launch\Log\UserdataExecutionIDEA.log
+    # LOG: Default User Data: Get-Content C:\ProgramData\Amazon\EC2-Windows\Launch\Log\UserdataExecution.log
+
+    Param (
+        [ValidateNotNullOrEmpty()]
+        [Parameter(Mandatory=$true)]
+        [String] $Message,
+        [String] $LogFile = ('{0}\ProgramData\Amazon\EC2-Windows\Launch\Log\UserdataExecutionIDEA.log' -f $env:SystemDrive),
+        [ValidateSet('Error','Warn','Info')]
+        [string] $Level = 'Info'
+    )
+
+    if (-not(Test-Path -Path $LogFile)) {
+        $null = New-Item -Path $LogFile -ItemType File -Force
+    }
+
+
+    $FormattedDate = Get-Date -Format 'yyyy-MM-dd HH:mm:ss'
+    switch ($Level) {
+        'Error' {
+            $LevelText = 'ERROR:'
+        }
+        'Warn' {
+            $LevelText = 'WARNING:'
+        }
+        'Info' {
+            $LevelText = 'INFO:'
+        }
+    }
+    # If Level == Error send ses message ?
+    "$FormattedDate $LevelText $Message" | Out-File -FilePath $LogFile -Append
+}
+
+function Bootstrap-DCV-WindowsHost {
+  Param ()
+
+  $IDEASessionID = "{{ context.vars.idea_session_id }}"
+  $LocalUser = "{{ context.vars.session_owner }}"
+  $BrokerHostname = "{{ context.config.get_cluster_internal_endpoint().replace('https://', '') }}"
+  $InternalAlbEndpoint = "{{ context.config.get_cluster_internal_endpoint() }}"
+  $BrokerAgentConnectionPort = "{{ context.config.get_int('virtual-desktop-controller.dcv_broker.agent_communication_port', required=True) }}"
+  $IdleTimeout = "{{ context.config.get_string('virtual-desktop-controller.dcv_session.idle_timeout', required=True) }}"
+  $IdleTimeoutWarning = "{{ context.config.get_string('virtual-desktop-controller.dcv_session.idle_timeout_warning', required=True) }}"
+
+  # On Windows Machines a Console Session with session-id = console IS ALWAYS CREATED by default. That we need to close.
+  $CurrentLocation = Get-Location
+  cd "C:\Program Files\NICE\DCV\Server\bin"
+  .\dcv.exe close-session console
+  cd $CurrentLocation
+
+  Stop-Service dcvserver
+  Stop-Service DcvSessionManagerAgentService
+
+  $DCVRegistryPath = "Microsoft.PowerShell.Core\Registry::\HKEY_USERS\S-1-5-18\Software\GSettings\com\nicesoftware\dcv"
+  [string]$IMDS_Token = Invoke-RestMethod -Headers @{"X-aws-ec2-metadata-token-ttl-seconds" = "600"} -Method PUT -Uri http://169.254.169.254/latest/api/token
+  $Hostname = Invoke-RestMethod -Headers @{"X-aws-ec2-metadata-token" = $IMDS_Token} -Method GET -Uri http://169.254.169.254/latest/meta-data/hostname
+  $InstanceId = Invoke-RestMethod -Headers @{"X-aws-ec2-metadata-token" = $IMDS_Token} -Method GET -Uri http://169.254.169.254/latest/meta-data/instance-id
+
+  New-Item -Path "$DCVRegistryPath\" -Name "connectivity" -Force
+  New-ItemProperty -Path "$DCVRegistryPath\connectivity" -Name "idle-timeout" -PropertyType "DWord" -Value $IdleTimeout -Force
+  New-ItemProperty -Path "$DCVRegistryPath\connectivity" -Name "idle-timeout-warning" -PropertyType "DWord" -Value $IdleTimeoutWarning -Force
+  New-ItemProperty -Path "$DCVRegistryPath\connectivity" -Name "enable-quic-frontend" -PropertyType "DWord" -Value 1 -Force
+
+  # Session Authentication
+  New-Item -Path "$DCVRegistryPath\" -Name "security" -Force
+  New-ItemProperty -Path "$DCVRegistryPath\security" -Name "auth-token-verifier" -PropertyType "String" -Value "$InternalAlbEndpoint`:$BrokerAgentConnectionPort/agent/validate-authentication-token" -Force
+  New-ItemProperty -Path "$DCVRegistryPath\security" -Name "no-tls-strict" -PropertyType "DWord" -Value 1 -Force
+  New-ItemProperty -Path "$DCVRegistryPath\security" -Name "os-auto-lock" -PropertyType "DWord" -Value 0 -Force
+
+  # Disable sleep
+  New-Item -Path "$DCVRegistryPath\" -Name "windows" -Force
+  New-ItemProperty -Path "$DCVRegistryPath\windows" -Name "disable-display-sleep" -PropertyType "DWord" -Value 1 -Force
+
+  if (Test-Path -Path "$DCVRegistryPath\session-management") {
+      # Disabling the original settings to start a CONSOLE session on start up
+
+      Remove-Item -Path "$DCVRegistryPath\session-management" -Recurse -Force -Confirm:$false
+      # This will remove the following
+      #Remove-ItemProperty -Path "$DCVRegistryPath\session-management\automatic-console-session" -Name "owner" -Force
+      #Remove-ItemProperty -Path "$DCVRegistryPath\session-management\automatic-console-session" -Name "storage-root" -Force
+      #Remove-Item -Path "$DCVRegistryPath\session-management\automatic-console-session" -Force
+      #Remove-ItemProperty -Path "$DCVRegistryPath\session-management" -Name "create-session" -Force
+      #Remove-Item -Path "$DCVRegistryPath\session-management\defaults" -Force
+      #Remove-Item -Path "$DCVRegistryPath\session-management" -Force
+  }
+
+  $IdeaTagsFolder = "C:\Program Files\NICE\DCVSessionManagerAgent\conf\tags"
+  if (-not(Test-Path -Path "$IdeaTagsFolder")) {
+      New-Item -Path $IdeaTagsFolder -ItemType Directory
+  }
+  New-Item -Path $IdeaTagsFolder -Name "idea_tags.toml" -ItemType File -Force -Value "idea_session_id=`"$IDEASessionID`""
+
+  # SET AGENT.CONF
+  $AgentConfContent = "version = '0.1'
+[agent]
+broker_host = '$BrokerHostname'
+broker_port = $BrokerAgentConnectionPort
+tls_strict = false
+tags_folder = '$IdeaTagsFolder'
+broker_update_interval = 15
+[log]
+level = 'debug'
+rotation = 'daily'
+# directory = 'C:\ProgramData\NICE\DCVSessionManagerAgent\log'
+"
+
+  $AgentConfFolder = "C:\Program Files\NICE\DCVSessionManagerAgent\conf"
+  $CurrentTimeStamp = [DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds()
+
+  if (Test-Path -Path "$AgentConfFolder\agent.conf") {
+      Move-Item -Path $AgentConfFolder -Destination "$AgentConfFolder\agent.conf.$CurrentTimeStamp" -Force
+  }
+
+  New-Item -Path $AgentConfFolder -Name "agent.conf" -ItemType File -Force -Value "$AgentConfContent"
+
+  if (-Not (Test-Path -Path "C:\session-storage\$LocalUser")) {
+      New-Item -Path "C:\session-storage\$LocalUser" -ItemType Directory
+  }
+
+  # DCVSessionManagerAgentService is usually disabled on the system. Need to enable it.
+  Set-Service -Name DcvSessionManagerAgentService -StartupType Automatic
+
+  # Determine if we have any additional USB remotization configurations
+  $UsbDevicesConfFile = "C:\Program Files\NICE\DCV\Server\conf\usb-devices.conf"
+
+  {%- for usb_info in context.config.get_list('vdc.server.usb_remotization', default=[]) %}
+    Add-Content $UsbDevicesConfFile -Value "{{ usb_info }}"
+  {%- endfor %}
+{%- if context.config.get_string('directoryservice.provider', required=True) in ['aws_managed_activedirectory', 'activedirectory'] %}
+  # if ActiveDirectory, add the user to local Administrators group.
+  # todo: need to have a broader discussion with the group on this. this will work well as long as no shared storage is mounted automatically.
+  # once support for NETAPP OnTAP is added and if NETAPP OnTAP is used for /internal, this potentially introduces a data security risk.
+  $IdeaScriptsDirectory = "C:\IDEA\LocalScripts"
+  $ActiveDirectoryNetbiosName = "{{ context.config.get_string('directoryservice.ad_short_name', required=True) }}"
+  $PostBootstrapRebootExecuteOnceContent = "
+# Add user to local Administrators group  (commenting this for now, until we have decision. may be make  this configurable via eVDI settings ...)
+# Add-LocalGroupMember -Group Administrators -Member `"$ActiveDirectoryNetbiosName\$LocalUser`"
+
+# Set session owner to the one in Domain. (Does this need to be here? Need to check with @madbajaj if this can be moved outside.)
+New-Item -Path `"$DCVRegistryPath`" -Name `"session-management/automatic-console-session`" -Force
+New-ItemProperty -Path `"$DCVRegistryPath\session-management\automatic-console-session`" -Name `"owner`" -PropertyType `"String`" -Value `"$ActiveDirectoryNetbiosName\$LocalUser`" -Force
+New-ItemProperty -Path `"$DCVRegistryPath\session-management\automatic-console-session`" -Name `"storage-root`" -PropertyType `"String`" -Value `"C:\session-storage\$LocalUser`" -Force
+
+# remove scheduled task after executing once
+Unregister-ScheduledTask -TaskName PostBootstrapRebootExecuteOnce -Confirm:`$false
+"
+
+  New-Item -Path $IdeaScriptsDirectory -Name "PostBootstrapRebootExecuteOnce.ps1" -ItemType File -Force -Value "$PostBootstrapRebootExecuteOnceContent"
+  Register-ScheduledTask -TaskName PostBootstrapRebootExecuteOnce -AtStartup -User Administrator
+{%- endif %}
+
+  # Restart Services
+  Start-Service dcvserver
+  Start-Service DcvSessionManagerAgentService
+}

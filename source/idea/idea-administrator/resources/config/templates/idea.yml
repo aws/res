@@ -1,0 +1,76 @@
+modules:
+
+  - name: global-settings
+    id: global-settings
+    type: config
+    config_files:
+      - settings.yml
+
+  - name: cluster
+    id: cluster
+    type: stack
+    config_files:
+      - settings.yml
+      - logging.yml
+
+  - name: analytics
+    id: analytics
+    type: stack
+    config_files:
+      - settings.yml
+
+  - name: identity-provider
+    id: identity-provider
+    type: stack
+    config_files:
+      - settings.yml
+
+  - name: directoryservice
+    id: directoryservice
+    type: stack
+    config_files:
+      - settings.yml
+
+  - name: shared-storage
+    id: shared-storage
+    type: stack
+    config_files:
+      - settings.yml
+
+  - name: cluster-manager
+    id: cluster-manager
+    type: app
+    config_files:
+      - settings.yml
+
+    {% if 'scheduler' in enabled_modules %}
+  - name: scheduler
+    id: scheduler
+    type: app
+    config_files:
+      - settings.yml
+    {% endif %}
+
+    {% if 'virtual-desktop-controller' in enabled_modules %}
+  - name: virtual-desktop-controller
+    id: vdc
+    type: app
+    config_files:
+      - settings.yml
+    {% endif %}
+
+    {% if 'metrics' in enabled_modules %}
+  - name: metrics
+    id: metrics
+    type: stack
+    config_files:
+      - settings.yml
+    {% endif %}
+
+    {% if 'bastion-host' in enabled_modules %}
+  - name: bastion-host
+    id: bastion-host
+    type: stack
+    config_files:
+      - settings.yml
+    {% endif %}

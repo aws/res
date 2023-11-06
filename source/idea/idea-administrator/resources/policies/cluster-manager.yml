@@ -1,0 +1,180 @@
+Version: '2012-10-17'
+Statement:
+  - Action: sqs:SendMessage
+    Resource:
+      - '{{ context.arns.get_sqs_arn(context.config.get_module_id("virtual-desktop-controller") + "-controller") }}'
+    Effect: Allow
+  - Action:
+      - ec2:DescribeVolumes
+      - ec2:DescribeNetworkInterfaces
+      - ec2:DescribeInstances
+      - ec2:DescribeInstanceTypes
+      - budgets:ViewBudget
+      - elasticfilesystem:CreateFileSystem
+      - elasticfilesystem:DescribeFileSystems
+      - fsx:DescribeFileSystems
+      - fsx:DescribeVolumes
+      - fsx:DescribeStorageVirtualMachines
+      - elasticfilesystem:DescribeMountTargets
+      - ec2:DescribeSubnets
+      - ec2:DescribeNetworkInterfaces
+      - ec2:CreateNetworkInterface
+      - ec2:CreateTags
+    Resource: '*'
+    Effect: Allow
+
+  - Action:
+      - elasticfilesystem:CreateMountTarget
+      - elasticfilesystem:TagResource
+      - elasticfilesystem:PutFileSystemPolicy
+    Resource:
+      - '{{ context.arns.get_arn("elasticfilesystem", "file-system/*", aws_region="*") }}'
+    Effect: Allow
+
+  - Action:
+      - fsx:CreateFileSystem
+      - fsx:CreateStorageVirtualMachine
+      - fsx:CreateVolume
+      - fsx:TagResource
+    Resource:
+      - '{{ context.arns.get_arn("fsx", "file-system/*", aws_region="*") }}'
+      - '{{ context.arns.get_arn("fsx", "storage-virtual-machine/*", aws_region="*") }}'
+      - '{{ context.arns.get_arn("fsx", "volume/*", aws_region="*") }}'
+    Effect: Allow
+
+  - Action:
+      - ec2:CreateTags
+    Resource:
+      - '{{ context.arns.get_arn("ec2", "volume/*", aws_region="*") }}'
+      - '{{ context.arns.get_arn("ec2", "network-interface/*", aws_region="*") }}'
+    Effect: Allow
+
+  - Action:
+      - ses:SendEmail
+    Resource:
+      - '{{ context.arns.ses_arn }}'
+    Effect: Allow
+
+  - Action:
+      - s3:GetObject
+      - s3:ListBucket
+      - s3:PutObject
+      - s3:GetBucketAcl
+    Resource:
+      {{ context.utils.to_yaml(context.arns.s3_bucket_arns) | indent(6) }}
+    Effect: Allow
+
+  - Action:
+      - dynamodb:GetItem
+      - dynamodb:Query
+      - dynamodb:Scan
+      - dynamodb:DescribeTable
+      - dynamodb:DescribeStream
+      - dynamodb:GetRecords
+      - dynamodb:GetShardIterator
+      - dynamodb:ListStreams
+      - dynamodb:UpdateItem
+      - dynamodb:PutItem
+      - dynamodb:DeleteItem
+      - dynamodb:TagResource
+      - dynamodb:CreateTable
+      - dynamodb:TransactWriteItems
+      - dynamodb:UpdateTable
+      - dynamodb:UpdateTimeToLive
+    Resource:
+      - '{{ context.arns.get_ddb_table_arn("cluster-settings") }}'
+      - '{{ context.arns.get_ddb_table_arn("cluster-settings/stream/*") }}'
+      - '{{ context.arns.get_ddb_table_arn("modules") }}'
+      - '{{ context.arns.get_ddb_table_arn("email-templates") }}'
+      - '{{ context.arns.get_ddb_table_arn("accounts.users") }}'
+      - '{{ context.arns.get_ddb_table_arn("accounts.users/index/*") }}'
+      - '{{ context.arns.get_ddb_table_arn("accounts.groups") }}'
+      - '{{ context.arns.get_ddb_table_arn("accounts.group-members") }}'
+      - '{{ context.arns.get_ddb_table_arn("accounts.sso-state") }}'
+      - '{{ context.arns.get_ddb_table_arn("accounts.group-members/stream/*") }}'
+      - '{{ context.arns.get_ddb_table_arn("projects") }}'
+      - '{{ context.arns.get_ddb_table_arn("projects/index/*") }}'
+      - '{{ context.arns.get_ddb_table_arn("projects.user-projects") }}'
+      - '{{ context.arns.get_ddb_table_arn("projects.project-groups") }}'
+      - '{{ context.arns.get_ddb_table_arn("ad-automation") }}'
+      - '{{ context.arns.get_ddb_table_arn(context.module_id + ".distributed-lock") }}'
+      - '{{ context.arns.get_ddb_table_arn("snapshots") }}'
+    Effect: Allow
+
+  - Action:
+      - dynamodb:ExportTableToPointInTime
+      - dynamodb:UpdateContinuousBackups
+    Resource:
+      - '{{ context.arns.get_ddb_table_arn("*") }}'
+    Effect: Allow
+
+  - Action:
+      - dynamodb:DescribeExport
+    Resource:
+      - '{{ context.arns.get_ddb_table_export_arn() }}'
+    Effect: Allow
+
+  - Action:
+      - cloudwatch:PutMetricData
+    Resource: '*'
+    Effect: Allow
+    Condition:
+      StringLike:
+        cloudwatch:namespace: IDEA/*
+
+    {%- if context.config.get_string('directoryservice.provider') == 'aws_managed_activedirectory' %}
+  - Action:
+      - ds:ResetUserPassword
+    Resource: '{{ context.arns.get_directory_service_arn() }}'
+    Effect: Allow
+    {%- endif %}
+
+
+  # PutSecret value is required so that cluster-manager can refresh directory service credentials when nearing expiration
+  - Action:
+      - secretsmanager:GetSecretValue
+      - secretsmanager:PutSecretValue
+    Condition:
+      StringEquals:
+        secretsmanager:ResourceTag/res:EnvironmentName: '{{ context.cluster_name }}'
+        secretsmanager:ResourceTag/res:ModuleName:
+          - cluster-manager
+          - directoryservice
+    Resource: '*'
+    Effect: Allow
+
+  - Action:
+      - secretsmanager:CreateSecret
+      - secretsmanager:DescribeSecret
+      - secretsmanager:TagResource
+      - secretsmanager:UpdateSecret
+    Resource: {{ context.arns.get_arn("secretsmanager", "secret:" + context.cluster_name + "-sso-client-secret*") }}
+    Effect: Allow
+
+  - Action:
+      - cognito-idp:*
+    Resource: '{{ context.arns.user_pool_arn }}'
+    Effect: Allow
+
+  - Action:
+      - sqs:*
+    Resource:
+      - '{{ context.arns.get_sqs_arn(context.module_id + "-tasks.fifo") }}'
+      - '{{ context.arns.get_sqs_arn(context.module_id + "-notifications.fifo") }}'
+      - '{{ context.arns.get_sqs_arn(context.config.get_module_id("directoryservice") + "-ad-automation.fifo") }}'
+    Effect: Allow
+    Sid: ClusterManagerSQSQueues
+
+  - Action:
+      - logs:PutRetentionPolicy
+    Resource: '*'
+    Effect: Allow
+
+  - Action:
+      - kinesis:PutRecord
+      - kinesis:PutRecords
+    Resource:
+      - '{{ context.arns.get_kinesis_arn() }}'
+    Effect: Allow
+
+{% include '_templates/custom-kms-key.yml' %}

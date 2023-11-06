@@ -1,0 +1,27 @@
+# Begin: AWS EFS Mount Helper installation
+
+{%- if context.base_os in ('amazonlinux2', 'centos7', 'rhel7', 'rhel8', 'rhel9') %}
+
+  {% include '_templates/linux/stunnel.jinja2' %}
+
+function install_efs_mount_helper () {
+    which amazon-efs-mount-watchdog > /dev/null 2>&1
+    if [[ "$?" != "0" ]]; then
+      log_info "Installing Amazon EFS Mount Helper for {{ context.base_os }}"
+      {%- if context.base_os in ('amazonlinux2') %}
+        yum install -y amazon-efs-utils
+      {%- elif context.base_os in ('centos7', 'rhel7', 'rhel8', 'rhel9') %}
+        log_info "Installing Amazon EFS Mount Helper from Github"
+        git clone https://github.com/aws/efs-utils
+        cd efs-utils
+        make rpm
+        yum -y install build/amazon-efs-utils*rpm
+      {%- endif %}
+  else
+    log_info "Found existing Amazon EFS Mount Helper on system"
+  fi
+}
+install_efs_mount_helper
+{%- endif %}
+
+# End: AWS EFS Mount Helper
