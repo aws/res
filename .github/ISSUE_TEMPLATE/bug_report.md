@@ -6,7 +6,13 @@ labels: bug
 assignees: ''
 
 ---
+If you have an active AWS support contract, please open a case with AWS Premium Support team using the below documentation to report the issue:
 
+https://docs.aws.amazon.com/awssupport/latest/user/case-management.html
+
+Before submitting a new issue, please search through open GitHub Issues (https://github.com/aws/res/issues) and check out the troubleshooting documentation.
+
+Please make sure to add the following data in order to facilitate the root cause detection.
 **Describe the bug**
 A clear and concise description of what the bug is.
 
