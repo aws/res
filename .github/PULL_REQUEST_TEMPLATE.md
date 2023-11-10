@@ -6,7 +6,9 @@ _Please add links to any issues, RFCs or other items that are relevant to this P
 
 ## How was this PR tested?
 
-_Please describe any testing performed._
+_Please describe any testing performed._ 
+- Describe the automated and/or manual tests executed to validate the patch.
+- Describe the added/modified tests.
 
 ### Checklist
 
@@ -15,6 +17,9 @@ _Please describe any testing performed._
 - Check all commits' messages are clear, describing what and why vs how.
 - Make sure to have added unit tests or integration tests to cover the new/modified code.
 - Check if documentation is impacted by this change.
+- Link to impacted open issues.
+- Link to related PRs in other packages (i.e. cookbook, node).
+- Link to documentation useful to understand the changes.
 
 ## License
 
