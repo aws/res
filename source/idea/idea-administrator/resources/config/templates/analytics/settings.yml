@@ -1,0 +1,29 @@
+# Configure your AWS OpenSearch/Kibana options below
+opensearch:
+  use_existing: {{use_existing_opensearch_cluster | lower}}
+  {%- if use_existing_opensearch_cluster %}
+  domain_vpc_endpoint_url: "{{opensearch_domain_endpoint}}"
+  {%- else %}
+  data_node_instance_type: "m5.large.search" # instance type for opensearch data nodes
+  data_nodes: 2  # number of data nodes for elasticsearch
+  ebs_volume_size: 100  # ebs volume size attached to data nodes
+  removal_policy: "DESTROY"  # RETAIN will preserve the cluster even if you delete the stack.
+  node_to_node_encryption: true
+  logging:
+    app_log_enabled: true # Specify if Amazon OpenSearch Service application logging should be set up.
+    slow_index_log_enabled: true # Log Amazon OpenSearch Service audit logs to this log group
+    slow_search_log_enabled: true # Specify if slow search logging should be set up.
+  {%- endif %}
+  kms_key_id: {{ kms_key_id if kms_key_id else '~' }} # Specify your own CMK to encrypt OpenSearch domain. If set to ~ encryption will be managed by the default AWS key
+  default_number_of_shards: 2
+  default_number_of_replicas: 1
+
+  endpoints:
+    external:
+      priority: 16
+      path_patterns: ['/_dashboards*']
+
+kinesis:
+  shard_count: 2
+  stream_mode: PROVISIONED
+  kms_key_id: {{ kms_key_id if kms_key_id else '~' }} # Specify your own CMK to encrypt Kinesis stream. If set to ~ encryption will be managed by the default AWS key

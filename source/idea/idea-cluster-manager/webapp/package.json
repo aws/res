@@ -1,0 +1,107 @@
+{
+  "name": "web-portal", 
+  "version": "2023.11", 
+  "private": true,
+  "dependencies": {
+    "@cloudscape-design/components": "^3.0.82",
+    "@cloudscape-design/design-tokens": "^3.0.4",
+    "@cloudscape-design/global-styles": "^1.0.1",
+    "@fortawesome/fontawesome-svg-core": "^6.2.0",
+    "@fortawesome/free-brands-svg-icons": "^6.2.0",
+    "@fortawesome/free-solid-svg-icons": "^6.2.0",
+    "@fortawesome/react-fontawesome": "^0.2.0",
+    "@types/dot-object": "^2.1.2",
+    "@types/react": "^18.0.0",
+    "@types/react-beautiful-dnd": "^13.1.2",
+    "@types/react-dom": "^18.0.0",
+    "@types/uuid": "^8.3.4",
+    "@uppy/core": "^3.0.3",
+    "@uppy/dashboard": "^3.1.0",
+    "@uppy/xhr-upload": "^3.0.3",
+    "ace-builds": "^1.12.3",
+    "browser-image-compression": "^2.0.0",
+    "chonky": "^2.3.2",
+    "chonky-icon-fontawesome": "^2.3.2",
+    "dot-object": "^2.1.4",
+    "idb": "^7.0.1",
+    "moment": "^2.29.4",
+    "moment-timezone": "^0.5.38",
+    "nunjucks": "^3.2.3",
+    "react": "^18.2.0",
+    "react-beautiful-dnd": "^13.1.1",
+    "react-dom": "^18.2.0",
+    "react-json-view": "^1.21.3",
+    "react-markdown": "^8.0.3",
+    "react-range": "^1.8.14",
+    "react-router-dom": "^6.4.2",
+    "react-toastify": "^9.0.8",
+    "rehype-raw": "^6.1.1",
+    "remark-gfm": "^3.0.1",
+    "uuid": "^9.0.0",
+    "xterm-addon-fit": "^0.6.0",
+    "xterm-for-react": "^1.0.4"
+  },
+  "devDependencies": {
+    "@testing-library/jest-dom": "^5.14.1",
+    "@testing-library/react": "^13.0.0",
+    "@testing-library/user-event": "^13.2.1",
+    "@types/jest": "^27.0.1",
+    "@types/node": "^18.0.0",
+    "@types/sass": "^1.43.1",
+    "prettier": "2.8.8",
+    "react-scripts": "5.0.1",
+    "sass": "^1.44.0",
+    "source-map-explorer": "^2.5.3",
+    "stream-http": "^3.2.0",
+    "typescript": "^4.4.2",
+    "workbox-background-sync": "^6.4.2",
+    "workbox-broadcast-update": "^6.4.2",
+    "workbox-cacheable-response": "^6.4.2",
+    "workbox-core": "^6.4.2",
+    "workbox-expiration": "^6.4.2",
+    "workbox-google-analytics": "^6.4.2",
+    "workbox-navigation-preload": "^6.4.2",
+    "workbox-precaching": "^6.4.2",
+    "workbox-range-requests": "^6.4.2",
+    "workbox-routing": "^6.4.2",
+    "workbox-strategies": "^6.4.2",
+    "workbox-streams": "^6.4.2"
+  },
+  "scripts": {
+    "serve": "react-scripts start",
+    "start": "react-scripts start",
+    "build": "react-scripts build",
+    "analyze": "source-map-explorer 'build/static/js/*.js'",
+    "test": "react-scripts test",
+    "eject": "react-scripts eject",
+    "sass": "sass src/Sass:src/Css --watch --no-source-map"
+  },
+  "resolutions": {
+    "minimatch": ">=3.0.5",
+    "nth-check": ">=2.0.1",
+    "d3-color": ">=3.1.0",
+    "minimist": ">=1.2.6",
+    "moment": ">=2.29.4",
+    "@babel/traverse": ">=7.23.2",
+    "webpack" : ">=5.76.0"
+  },
+  "eslintConfig": {
+    "extends": [
+      "react-app",
+      "react-app/jest"
+    ]
+  },
+  "browserslist": {
+    "production": [
+      ">0.2%",
+      "not dead",
+      "not op_mini all"
+    ],
+    "development": [
+      "last 1 chrome version",
+      "last 1 firefox version",
+      "last 1 safari version"
+    ]
+  },
+  "homepage": "."
+}

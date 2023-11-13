@@ -1,0 +1,96 @@
+#!/bin/bash
+
+set -x
+
+source /etc/environment
+if [[ -f /etc/profile.d/proxy.sh ]]; then
+    source /etc/profile.d/proxy.sh
+fi
+
+SCRIPT_DIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
+source "${SCRIPT_DIR}/../common/bootstrap_common.sh"
+
+{% set TAGS = [
+  {'Key':'res:EnvironmentName', 'Value': context.cluster_name },
+  {'Key':'res:ModuleName', 'Value': context.module_name },
+  {'Key':'res:ModuleId', 'Value': context.module_id },
+  {'Key':'Name', 'Value': 'JobId: ' + context.vars.job.job_id + ', Cluster: ' + context.cluster_name },
+  {'Key':'res:JobOwner', 'Value': context.vars.job.owner },
+  {'Key':'res:Project', 'Value': context.vars.job.project },
+  {'Key':'res:JobQueue', 'Value': context.vars.job.queue }
+] %}
+
+{%- with  ebs_volume_tags = TAGS %}
+  {% include '_templates/linux/tag_ebs_volumes.jinja2' %}
+{%- endwith %}
+
+{%- with  network_interface_tags = TAGS %}
+  {% include '_templates/linux/tag_network_interface.jinja2' %}
+{%- endwith %}
+
+if [[ ! -f ${BOOTSTRAP_DIR}/idea_preinstalled_packages.log ]]; then
+
+  {% include '_templates/linux/disable_se_linux.jinja2' %}
+
+  {% include '_templates/linux/system_packages.jinja2' %}
+
+  {% include '_templates/linux/cloudwatch_agent.jinja2' %}
+
+  {%- if context.is_metrics_provider_prometheus() %}
+    {%- include '_templates/linux/prometheus.jinja2' %}
+    {%- include '_templates/linux/prometheus_node_exporter.jinja2' %}
+  {%- endif %}
+
+else
+   log_info "Found ${BOOTSTRAP_DIR}/idea_preinstalled_packages.log... skipping package installation..."
+fi
+
+{% include '_templates/linux/chronyd.jinja2' %}
+
+{% include '_templates/linux/disable_ulimit.jinja2' %}
+
+{% include '_templates/linux/disable_strict_host_check.jinja2' %}
+
+{% include '_templates/linux/disable_motd_update.jinja2' %}
+
+{%- if context.vars.job.is_persistent_capacity() %}
+  {% set motd_messages = [
+    'Compute Node, Queue: ' + context.vars.job.queue + ', Keep Forever - Stack UUID: ' + context.vars.job.provisioning_options.stack_uuid + ', Cluster: ' + context.cluster_name
+  ] %}
+{%- elif context.vars.job.is_shared_capacity() %}
+  {% set motd_messages = [
+    'Compute Node, Queue: ' + context.vars.job.queue + ', JobGroup: ' + context.vars.job.job_group + ', Cluster: ' + context.cluster_name
+  ] %}
+{%- else %}
+  {% set motd_messages = [
+    'Compute Node, Queue: ' + context.vars.job.queue + ', JobId: ' + context.vars.job.job_id + ', Cluster: ' + context.cluster_name
+  ] %}
+{%- endif %}
+{%- with messages = motd_messages %}
+  {% include '_templates/linux/motd.jinja2' %}
+{%- endwith %}
+
+{% include '_templates/linux/join_directoryservice.jinja2' %}
+
+{% if context.config.get_string('scheduler.provider') == 'openpbs' %}
+  {% include 'compute-node/_templates/configure_openpbs_compute_node.jinja2' %}
+{% endif %}
+
+{% include 'compute-node/_templates/scratch_storage.jinja2' %}
+
+{%- if context.vars.job.params.enable_efa_support %}
+  {% include 'compute-node/_templates/efa.jinja2' %}
+{%- endif %}
+
+{% include '_templates/linux/disable_nouveau_drivers.jinja2' %}
+
+REBOOT_REQUIRED=$(cat /root/bootstrap/reboot_required.txt)
+if [[ "${REBOOT_REQUIRED}" == "yes" ]]; then
+  log_info "reboot required. compute_node_post_reboot.sh will be executed after reboot ..."
+  (crontab -l; echo "@reboot /bin/bash ${SCRIPT_DIR}/compute_node_post_reboot.sh >> ${IDEA_COMPUTE_NODE_LOGS_DIR}/compute_node_bootstrap.log" 2>&1) | crontab -
+  reboot
+else
+  mount -a
+  log_info "reboot not required. executing compute_node_post_reboot.sh ..."
+  /bin/bash ${SCRIPT_DIR}/compute_node_post_reboot.sh >> "${IDEA_COMPUTE_NODE_LOGS_DIR}/compute_node_bootstrap.log" 2>&1
+fi

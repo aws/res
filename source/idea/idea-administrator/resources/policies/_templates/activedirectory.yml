@@ -1,0 +1,20 @@
+  {%- if context.config.get_string('directoryservice.provider') == 'activedirectory' %}
+  - Action:
+      - sqs:SendMessage
+    Resource:
+      - '{{ context.arns.get_ad_automation_sqs_queue_arn() }}'
+    Effect: Allow
+    Sid: ADAutomationSQS
+  - Action:
+      - dynamodb:GetItem
+    Resource: '{{ context.arns.get_ad_automation_ddb_table_arn() }}'
+    Effect: Allow
+    Sid: ADAutomationDDB
+  - Action:
+      - dynamodb:Query
+    Resource:
+      - '{{ context.arns.get_ddb_table_arn("accounts.users") }}'
+      - '{{ context.arns.get_ddb_table_arn("accounts.users/index/*") }}'
+    Effect: Allow
+    Sid: UsersDDB
+  {%- endif %}

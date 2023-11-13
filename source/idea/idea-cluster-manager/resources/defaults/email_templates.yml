@@ -1,0 +1,153 @@
+templates:
+  - name: "virtual-desktop-controller.session-provisioning"
+    title: "Virtual Desktop Provisioning"
+    template_type: jinja2
+    subject: "[{{cluster_name}}] Virtual Desktop Provisioning {{session.name}}"
+    body: |
+      Hello <b>{{session.owner}}</b>, <br><br>
+      This email is to notify you that the infrastructure for your session <b> {{session.name}} </b> is being provisioned.
+      <br>
+      <br>
+      <hr>
+      <i> This is an automated email, please do not respond.</i>
+  - name: "virtual-desktop-controller.session-creating"
+    title: "Virtual Desktop Creating"
+    template_type: jinja2
+    subject: "[{{cluster_name}}] Virtual Desktop Creating {{session.name}}"
+    body: |
+      Hello <b>{{session.owner}}</b>, <br><br>
+      This email is to notify you that the infrastructure provisioning for your session <b> {{session.name}} </b> is now complete, and your session is being created.
+      <br>
+      <br>
+      <hr>
+      <i> This is an automated email, please do not respond.</i>
+  - name: "virtual-desktop-controller.session-initializing"
+    title: "Virtual Desktop Initializing"
+    template_type: jinja2
+    subject: "[{{cluster_name}}] Virtual Desktop Initializing {{session.name}}"
+    body: |
+      Hello <b>{{session.owner}}</b>, <br><br>
+      This email is to notify you that your Virtual Desktop Session <b> {{session.name}} </b> has been created and is now being initialized.
+      <br>
+      <br>
+      <hr>
+      <i> This is an automated email, please do not respond.</i>
+  - name: "virtual-desktop-controller.session-resuming"
+    title: "Virtual Desktop Resuming"
+    template_type: jinja2
+    subject: "[{{cluster_name}}] Virtual Desktop Resuming {{session.name}}"
+    body: |
+      Hello <b>{{session.owner}}</b>, <br><br>
+      This email is to notify you that your Virtual Desktop Session <b> {{session.name}} </b> is resuming.
+      <br>
+      <br>
+      <hr>
+      <i> This is an automated email, please do not respond.</i>
+  - name: "virtual-desktop-controller.session-ready"
+    title: "Virtual Desktop Ready"
+    template_type: jinja2
+    subject: "[{{cluster_name}}] Virtual Desktop Ready {{session.name}}"
+    body: |
+      Hello <b>{{session.owner}}</b>, <br><br>
+      This email is to notify you that your Virtual Desktop Session <b> {{session.name}} </b> is now Ready.
+      <br>
+      <br>
+      <hr>
+      <i> This is an automated email, please do not respond.</i>
+  - name: "virtual-desktop-controller.session-stopping"
+    title: "Virtual Desktop Stopping"
+    template_type: jinja2
+    subject: "[{{cluster_name}}] Virtual Desktop Stopping {{session.name}}"
+    body: |
+      Hello <b>{{session.owner}}</b>, <br><br>
+      This email is to notify you that your Virtual Desktop Session <b> {{session.name}} </b> is being stopped.
+      <br>
+      <br>
+      <hr>
+      <i> This is an automated email, please do not respond.</i>
+  - name: "virtual-desktop-controller.session-stopped"
+    title: "Virtual Desktop Stopped"
+    template_type: jinja2
+    subject: "[{{cluster_name}}] Virtual Desktop Stopped {{session.name}}"
+    body: |
+      Hello <b>{{session.owner}}</b>, <br><br>
+      This email is to notify you that your Virtual Desktop Session <b> {{session.name}} </b> has stopped.
+      <br>
+      <br>
+      <hr>
+      <i> This is an automated email, please do not respond.</i>
+  - name: "virtual-desktop-controller.session-deleting"
+    title: "Virtual Desktop Deleting"
+    template_type: jinja2
+    subject: "[{{cluster_name}}] Virtual Desktop Deleting {{session.name}}"
+    body: |
+      Hello <b>{{session.owner}}</b>, <br><br>
+      This email is to notify you that your Virtual Desktop Session <b> {{session.name}} </b> is being deleted.
+      <br>
+      <br>
+      <hr>
+      <i> This is an automated email, please do not respond.</i>
+  - name: "virtual-desktop-controller.session-error"
+    title: "Virtual Desktop Error"
+    template_type: jinja2
+    subject: "[{{cluster_name}}] Virtual Desktop Error {{session.name}}"
+    body: |
+      Hello <b>{{session.owner}}</b>, <br><br>
+      This email is to notify you that your Virtual Desktop Session <b> {{session.name}} </b> has entered an error state.
+      <br>
+      Please reach out to your system administrator for further help.
+      <br>
+      <br>
+      <hr>
+      <i> This is an automated email, please do not respond.</i>
+  - name: "virtual-desktop-controller.session-deleted"
+    title: "Virtual Desktop Deleted"
+    template_type: jinja2
+    subject: "[{{cluster_name}}] Virtual Desktop Deleted {{session.name}}"
+    body: |
+      Hello <b>{{session.owner}}</b>, <br><br>
+      This email is to notify you that your Virtual Desktop Session <b> {{session.name}} </b> has been deleted.
+      <br>
+      <br>
+      <hr>
+      <i> This is an automated email, please do not respond.</i>
+  - name: "virtual-desktop-controller.session-shared"
+    title: "Virtual Desktop Shared"
+    template_type: jinja2
+    subject: "[{{cluster_name}}] Virtual Desktop shared with you"
+    body: |
+      Hello <b>{{session_permission.actor_name}}</b>, <br><br>
+      This email is to notify you that Virtual Desktop <b>{{session_permission.idea_session_name}}</b> owned by <b>{{session_permission.idea_session_owner}}</b> has been shared with you.
+      <br> You can access the session via the following url:
+      <br> {{url}}
+      <br> <br> Access to this virtual desktop expires on <b>{{formatted_expiry_date}}</b>
+      <br>
+      <hr>
+      <i> This is an automated email, please do not respond.</i>
+  - name: "virtual-desktop-controller.session-permission-updated"
+    title: "Virtual Desktop Permission Updated"
+    template_type: jinja2
+    subject: "[{{cluster_name}}] Permissions updated for your shared session: {{session_permission.idea_session_name}} owned by {{session_permission.idea_session_owner}}"
+    body: |
+      Hello <b>{{session_permission.actor_name}}</b>, <br><br>
+      Permissions for the shared session: <b>{{session_permission.idea_session_name}}</b> owned by <b>{{session_permission.idea_session_owner}}</b> has been updated
+      <br> You can access the session using the below url:
+      <br> {{url}}
+      <br> <br> Access to this virtual desktop expires on <b>{{formatted_expiry_date}}</b>
+      <br>
+      <br>
+      <hr>
+      <i> This is an automated email, please do not respond.</i>
+  - name: "virtual-desktop-controller.session-permission-expired"
+    title: "Virtual Desktop Permission Expired"
+    template_type: jinja2
+    subject: "[{{cluster_name}}] Access for shared session: {{session_permission.idea_session_name}} owned by {{session_permission.idea_session_owner}} has expired"
+    body: |
+      Hello <b>{{session_permission.actor_name}}</b>, <br><br>
+      Access to the shared session: <b>{{session_permission.idea_session_name}}</b> owned by <b>{{session_permission.idea_session_owner}}</b> has expired
+      <br> You will no longer be able to access this shared virtual desktop session.
+      <br> <br> Contact the session owner: <b>{{session_permission.idea_session_owner}}</b> if you want to continue accessing this session.
+      <br>
+      <br>
+      <hr>
+      <i> This is an automated email, please do not respond.</i>

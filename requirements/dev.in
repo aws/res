@@ -1,0 +1,11 @@
+-r idea-dev-lambda.in
+-r idea-administrator.in
+-r idea-virtual-desktop-controller.in
+-r idea-cluster-manager.in
+-r doc.in
+-r tests.in
+pip-tools
+invoke
+pyfiglet
+openapi-schema-pydantic
+pylint

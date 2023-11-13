@@ -1,0 +1,111 @@
+# Cluster Settings
+cluster_name: idea-sample
+cluster_timezone: ~  # leaving blank or ~ will result in using the TimezoneId for the city closest to the selected AWS Region
+cluster_locale: en_US
+
+# Cluster Administrator
+administrator_email: admin@example.com
+administrator_username: clusteradmin # name cannot be administrator, admin, root, ideaserviceaccount, ec2-user, centos, ssm-user to avoid conflicts with DirectoryService or system accounts.
+
+# AWS Account and Region Settings
+aws_account_id: 123456789012
+aws_dns_suffix: amazonaws.com
+aws_partition: aws
+aws_region: us-east-1
+
+# Shared Storage Settings
+storage_internal_provider: efs
+internal_mount_dir: /internal
+storage_home_provider: efs
+home_mount_dir: /home
+
+# Network Settings
+prefix_list_ids: [ ]
+client_ip: [ ]
+ssh_key_pair_name: my-ec2-key-pair
+vpc_cidr_block: 10.0.0.0/16
+use_vpc_endpoints: false
+
+# Application LoadBalancer Settings
+# if alb_public = true external ALB will be deployed in public subnet
+# if alb_public = false external ALB will be deployed in private subnet
+alb_public: true
+
+# if alb_custom_certificate_provided = false, self signed certificates will be generated for external ALB
+# if alb_custom_certificate_provided = true, import your own certificates to AWS ACM and provide alb_custom_certificate_acm_certificate_arn, alb_custom_dns_name
+alb_custom_certificate_provided:
+alb_custom_certificate_acm_certificate_arn: ~
+alb_custom_dns_name: ~
+
+# Identity Provider
+identity_provider: cognito-idp
+
+# Directory Service
+directory_service_provider: aws_managed_activedirectory # openldap or activedirectory
+
+# Provide a custom KMS Key ID for Secrets and Shared Storage Encryption/Decryption
+kms_key_id: ~
+
+# Provide the default Instance Types for all infrastructure EC2 instances
+instance_type: ~
+base_os: ~
+instance_ami: ~
+volume_size: 200
+
+# Provide a list of module names to be enabled. cluster, directoryservice, cluster-manager and analytics are mandatory modules for IDEA to operate and will always be deployed
+enabled_modules: [ ]
+
+# metrics
+metrics_provider: cloudwatch
+# required when metrics_provider = prometheus
+prometheus_remote_write_url: ~
+
+# aws backup
+enable_aws_backup: true
+
+# Virtual Desktop Controller - DCV Broker
+dcv_broker_instance_ami: ~
+dcv_broker_instance_type: ~
+dcv_broker_volume_size: 200
+
+# Virtual Desktop Controller - DCV Connection Gateway
+dcv_connection_gateway_instance_ami: ~
+dcv_connection_gateway_instance_type: ~
+dcv_connection_gateway_volume_size: 200
+# Virtual Desktop Controller - DCV Gateway/Reverse Proxy Server
+reverse_proxy_server_instance_ami: ~
+reverse_proxy_server_instance_type: ~
+reverse_proxy_server_volume_size: 200
+
+# dcv_session_quic_support is the flag to control for QUIC support.
+# if dcv_session_quic_support: true, then we can not use internal certificates, turn dcv_session_nlb_custom_certificate_provided to true
+dcv_session_quic_support: false
+
+# if dcv_connection_gateway_custom_certificate_provided: true, generate your own self signed certificates import the certificate content and private key to 2 separate secrets and provide
+# dcv_connection_gateway_custom_certificate_certificate_secret_arn, dcv_connection_gateway_custom_certificate_private_key_secret_arn, dcv_connection_gateway_custom_dns_hostname
+# if dcv_connection_gateway_custom_certificate_provided: false, we will create our internal self signed certificates and use our internal hostname.
+dcv_connection_gateway_custom_certificate_provided: false
+dcv_connection_gateway_custom_certificate_certificate_secret_arn: ~
+dcv_connection_gateway_custom_certificate_private_key_secret_arn: ~
+dcv_connection_gateway_custom_dns_hostname: ~
+
+# Build cluster using existing resources
+use_existing_vpc: false
+vpc_id: ~ # value is required when use_existing_vpc == true
+private_subnet_ids: [ ] # value is required when use_existing_vpc == true
+public_subnet_ids: [ ] # value is required when use_existing_vpc == true
+
+use_existing_internal_fs: false # use_existing_vpc should be true when use_existing_internal_fs == true
+existing_internal_fs_id: ~ # value is required when use_existing_internal_fs == true
+
+use_existing_home_fs: false # use_existing_vpc should be true when use_existing_home_fs == true
+existing_home_fs_id: ~ # value is required when use_existing_home_fs == true
+
+use_existing_opensearch_cluster: false # use_existing_vpc should be true when use_existing_opensearch_cluster == true
+opensearch_domain_endpoint: ~ # value is required when use_existing_opensearch_cluster == true
+
+use_existing_directory_service: false # use_existing_vpc should be true when use_existing_directory_service == true
+directory_id: ~ # value is required when use_existing_directory_service == true
+directory_service_root_username_secret_arn: ~ # value is required when use_existing_directory_service == true
+directory_service_root_password_secret_arn: ~ # value is required when use_existing_directory_service == true
+

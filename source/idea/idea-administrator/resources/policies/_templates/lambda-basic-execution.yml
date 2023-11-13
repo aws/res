@@ -1,0 +1,6 @@
+  - Action:
+      - logs:CreateLogGroup
+      - logs:CreateLogStream
+      - logs:PutLogEvents
+    Resource: {{ context.arns.get_lambda_log_group_arn() }}
+    Effect: Allow

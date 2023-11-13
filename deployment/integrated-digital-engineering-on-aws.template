@@ -1,0 +1,696 @@
+AWSTemplateFormatVersion: 2010-09-09
+Description: (SO0280) Engineering Studio on AWS (Engineering Studio)
+
+Metadata:
+
+  AWS::CloudFormation::Interface:
+    ParameterGroups:
+      - Label:
+          default: Linux Distribution
+        Parameters:
+          - ClusterName
+          - BaseOS
+      - Label:
+          default: Network and Security
+        Parameters:
+          - ClientIp
+          - SSHKeyPair
+          - VpcId
+          - ESAPrivateSubnets
+          - ESAPublicSubnets
+      - Label:
+          default: Home File System
+        Parameters:
+          - ESAHomeFilesystemProvider
+          - ESAHomeFilesystemId
+      - Label:
+          default: Cluster Administrator
+        Parameters:
+          - AdministratorEmail
+      - Label:
+          default: Installer EC2 Instance
+        Parameters:
+          - InstallerAmiId
+          - InstallerSubnets
+
+    ParameterLabels:
+      InstallerAmiId:
+        default: The AMI ID for the installer EC2 Instance
+      InstallerSubnets:
+        default: Subnets to launch EC2 installer (select 1 or more public subnets)
+
+Parameters:
+
+  InstallerAmiId:
+    Type: 'AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>'
+    Description: Do not change this value. We will use the latest Amazon Linux 2 instance AMI ID based on your region.
+    Default: /aws/service/ami-amazon-linux-latest/amzn2-ami-hvm-x86_64-gp2
+
+  ClusterName:
+    Type: String
+    Description: Name of your cluster.
+    AllowedPattern: 'idea-.+'
+    ConstraintDescription: The name of the cluster must start with "idea-" and should be less than 11 characters.
+    MaxLength: 10
+
+  BaseOS:
+    Type: String
+    "AllowedValues": [
+      "amazonlinux2",
+      "centos7",
+      "rhel7"
+    ]
+    "Description": IMPORTANT CENTOS USERS > You MUST subscribe to https://aws.amazon.com/marketplace/pp/B00O7WM7QW first if using CentOS
+    "Default": amazonlinux2
+
+
+  ClientIp:
+    Type: String
+    Description: Default IP(s) allowed to directly SSH into the scheduler and access ElasticSearch. 0.0.0.0/0 means ALL INTERNET access. You probably want to change it with your own IP/subnet (x.x.x.x/32 for your own ip or x.x.x.x/24 for range. Replace x.x.x.x with your own PUBLIC IP. You can get your public IP using tools such as https://ifconfig.co/). Make sure to keep it restrictive!
+    AllowedPattern: '(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})/(\d{1,2})'
+    ConstraintDescription: ClientIP must be a valid IP or network range of the form x.x.x.x/x. If you want to add everyone (not recommended) use 0.0.0.0/0 otherwise specify your IP/NETMASK (e.g x.x.x/32 or x.x.x.x/24 for subnet range)
+
+  SSHKeyPair:
+    Type: AWS::EC2::KeyPair::KeyName
+    Description: Default SSH pem keys used to SSH into cluster instances.
+    AllowedPattern: .+
+
+  AdministratorEmail:
+    Type: String
+    Description: |
+      Provide an Email Address for the cluster administrator account. You will receive an email with your temporary credentials during cluster installation. After the solution is deployed, you can use the temporary credentials to login
+      and reset the password.
+    MinLength: 3
+
+  VpcId:
+    Type: AWS::EC2::VPC::Id
+    Description: VPC onto which ESA cluster to be launched and home file system available
+    AllowedPattern: .+
+
+  ESAPrivateSubnets:
+    Type: List<AWS::EC2::Subnet::Id>
+    Description: Pick at least 2 subnets from 2 different Availability Zones
+    AllowedPattern: .+
+
+  ESAPublicSubnets:
+    Type: List<AWS::EC2::Subnet::Id>
+    Description: Pick at least 2 subnets from 2 different Availability Zones
+    AllowedPattern: .+
+
+  ESAHomeFilesystemProvider:
+    Type: String
+    Description: Specify the Filesystem-Provider for home file system [efs, or fsx]
+    AllowedValues: [efs, fsx_netapp_ontap]
+
+  ESAHomeFilesystemId:
+    Type: String
+    Description: Specify the Filesystem-id to be used as home file system
+
+  InstallerSubnets:
+    Type: List<AWS::EC2::Subnet::Id>
+    AllowedPattern: .+
+
+Resources:
+  AutomationAssumeRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - ssm.amazonaws.com
+            Action:
+              - sts:AssumeRole
+      Policies:
+        - PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - ssm:DescribeInstanceInformation
+                  - ssm:ListCommands
+                  - ssm:ListCommandInvocations
+                Resource: "*"
+              - Effect: Allow
+                Action:
+                  - ssm:SendCommand
+                Resource:
+                  - Fn::Sub: arn:${AWS::Partition}:ssm:${AWS::Region}::document/AWS-RunShellScript
+                  - Fn::Sub: arn:${AWS::Partition}:ec2:*:*:instance/*
+          PolicyName: SSM-Automation-Policy
+        - PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - autoscaling:CompleteLifecycleAction
+                Resource:
+                  Fn::Sub: arn:${AWS::Partition}:autoscaling:${AWS::Region}:${AWS::AccountId}:autoScalingGroup:*:autoScalingGroupName/${InstallerAutoScalingGroup}
+          PolicyName: SSM-Automation-Permission-to-CompleteLifecycle-Policy
+
+  InstallerTerminateEvent:
+    Type: AWS::Events::Rule
+    Properties:
+      Description: CloudWatch Event rule that will trigger AWS Systems Manager Automation
+        document when an instance go in Terminate:wait
+      EventPattern:
+        source:
+          - aws.autoscaling
+        detail-type:
+          - EC2 Instance-terminate Lifecycle Action
+        detail:
+          AutoScalingGroupName:
+            - Ref: InstallerAutoScalingGroup
+      Name: !Sub ${AWS::StackName}-terminate-installer
+      Targets:
+        - Arn:
+            Fn::Sub: arn:${AWS::Partition}:ssm:${AWS::Region}:${AWS::AccountId}:automation-definition/${SSMAutomationDocument}:$DEFAULT
+          RoleArn:
+            Fn::GetAtt:
+                  - CloudWatchEventRole
+                  - Arn
+          Id: TargetFunctionV1
+          InputTransformer:
+            InputPathsMap:
+              instanceid: "$.detail.EC2InstanceId"
+            InputTemplate:
+              Fn::Join:
+                - ''
+                - - '{"InstanceId":[<instanceid>]}'
+
+  CloudWatchEventRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - events.amazonaws.com
+            Action:
+              - sts:AssumeRole
+      Policies:
+        - PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - ssm:StartAutomationExecution
+                Resource:
+                  Fn::Sub: arn:${AWS::Partition}:ssm:${AWS::Region}:${AWS::AccountId}:automation-definition/${SSMAutomationDocument}:$DEFAULT
+          PolicyName: Start-SSM-Automation-Policy
+        - PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - iam:PassRole
+                Resource:
+                  Fn::GetAtt:
+                    - AutomationAssumeRole
+                    - Arn
+          PolicyName: Pass-Role-SSM-Automation-Policy
+
+  SSMAutomationDocument:
+    Type: AWS::SSM::Document
+    Properties:
+      DocumentType: Automation
+      Content:
+        schemaVersion: '0.3'
+        assumeRole: "{{AutomationAssumeRole}}"
+        description: This Document Created as part of CloudFormation stack named.
+          This document will run shell script and send a signal to the LifeCycleHook to terminate the
+          instance
+        parameters:
+          InstanceId:
+            type: String
+          ASGName:
+            type: String
+            default:
+              Ref: InstallerAutoScalingGroup
+            description: The name of the AutoScaling Group.
+          LCHName:
+            type: String
+            default:
+              Ref: TerminateLifecycleHook
+            description: The name of the Life Cycle Hook.
+          AutomationAssumeRole:
+            type: String
+            default:
+              Fn::GetAtt:
+                - AutomationAssumeRole
+                - Arn
+            description: "(Required) The ARN of the role that allows Automation to
+              perform the actions on your behalf."
+        mainSteps:
+          - name: RunCommand
+            action: aws:runCommand
+            onFailure: Continue
+            inputs:
+              DocumentName: AWS-RunShellScript
+              InstanceIds:
+                - "{{ InstanceId }}"
+              Parameters:
+                executionTimeout: '7200'
+                commands:
+                  - IDEA_ECR_REPO="SOLUTIONS_ECR_REPO/idea-administrator"
+                  - IDEA_REVISION="VERSION"
+                  - !Sub |
+                    docker run --rm -i \
+                    -v /root/.idea/clusters:/root/.idea/clusters \
+                    -e AWS_DEFAULT_REGION=${AWS::Region} \
+                    -e IDEA_ADMIN_AWS_CREDENTIAL_PROVIDER=Ec2InstanceMetadata \
+                    ${!IDEA_ECR_REPO}:${!IDEA_REVISION} \
+                    res-admin delete-cluster --cluster-name ${ClusterName} --aws-region ${AWS::Region} --force
+          - name: TerminateTheInstance
+            action: aws:executeAwsApi
+            inputs:
+              Service: autoscaling
+              Api: CompleteLifecycleAction
+              AutoScalingGroupName: "{{ ASGName }}"
+              InstanceId: "{{ InstanceId }}"
+              LifecycleActionResult: CONTINUE
+              LifecycleHookName: "{{ LCHName }}"
+
+  InstallerIamRole:
+    Type: AWS::IAM::Role
+    Properties:
+      Path: /
+      AssumeRolePolicyDocument:
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - !Sub ec2.${AWS::URLSuffix}
+                - !Sub ssm.${AWS::URLSuffix}
+            Action:
+              - sts:AssumeRole
+      ManagedPolicyArns:
+        - !Sub arn:${AWS::Partition}:iam::aws:policy/AmazonSSMManagedInstanceCore
+
+  InstallerInstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    DependsOn: InstallerAdminPolicy
+    Properties:
+      Path: /
+      Roles:
+        - !Ref InstallerIamRole
+
+  InstallerLaunchConfig:
+    Type: AWS::AutoScaling::LaunchConfiguration
+    Properties:
+      SecurityGroups:
+        - !Sub ${InstallerEc2SecurityGroup.GroupId}
+      KeyName: !Ref SSHKeyPair
+      ImageId: !Ref InstallerAmiId
+      IamInstanceProfile: !Ref InstallerInstanceProfile
+      InstanceType: t3.medium
+      UserData: !Base64
+        'Fn::Join':
+          - ''
+          - - |
+              #!/bin/bash -xe
+            - |
+              yum update -y aws-cfn-bootstrap
+              yum install -y docker
+              systemctl enable docker.service
+              systemctl start docker.service
+
+              IDEA_ECR_REPO="SOLUTIONS_ECR_REPO/idea-administrator"
+              IDEA_REVISION="VERSION"
+              INSTANCE_PUBLIC_IP=$(TOKEN=$(curl --silent -X PUT 'http://169.254.169.254/latest/api/token' -H 'X-aws-ec2-metadata-token-ttl-seconds: 300') && curl --silent -H "X-aws-ec2-metadata-token: ${!TOKEN}" 'http://169.254.169.254/latest/meta-data/public-ipv4')
+
+              docker pull ${IDEA_ECR_REPO}:${IDEA_REVISION}
+
+            - 'docker run --rm -i '
+            - '-v /root/.idea/clusters:/root/.idea/clusters '
+            - '${IDEA_ECR_REPO}:${IDEA_REVISION}'
+            - ' /root/.idea/downloads/cfn_params_2_values.sh '
+            - !Ref 'AWS::Partition'
+            - ' '
+            - !Ref 'AWS::Region'
+            - ' '
+            - !Ref 'AWS::AccountId'
+            - ' '
+            - !Ref 'AWS::URLSuffix'
+            - ' '
+            - !Ref 'ClusterName'
+            - ' '
+            - !Ref 'AdministratorEmail'
+            - ' '
+            - !Ref 'SSHKeyPair'
+            - ' '
+            - !Ref 'ClientIp'
+            - ' '
+            - '${INSTANCE_PUBLIC_IP}/32'
+            - ' '
+            - !Ref 'VpcId'
+            - ' '
+            - !Join [ ',', !Ref 'ESAPublicSubnets' ]
+            - ' '
+            - !Join [ ',', !Ref 'ESAPrivateSubnets' ]
+            - ' '
+            - !Ref 'ESAHomeFilesystemProvider'
+            - ' '
+            - !Ref 'ESAHomeFilesystemId'
+            - |+
+
+            - 'docker run --rm -i '
+            - '-v /root/.idea/clusters:/root/.idea/clusters '
+            - '-e AWS_DEFAULT_REGION='
+            - !Ref 'AWS::Region'
+            - ' -e IDEA_ADMIN_AWS_CREDENTIAL_PROVIDER=Ec2InstanceMetadata '
+            - '${IDEA_ECR_REPO}:${IDEA_REVISION}'
+            - ' res-admin quick-setup --values-file /root/.idea/clusters/'
+            - !Ref 'ClusterName'
+            - '/'
+            - !Ref 'AWS::Region'
+            - '/values.yml --force'
+            - |+
+
+            - '/opt/aws/bin/cfn-signal -e "$?" --stack '
+            - !Ref 'AWS::StackName'
+            - ' --resource InstallerAutoScalingGroup --region '
+            - !Ref 'AWS::Region'
+            - |+
+
+  InstallerAutoScalingGroup:
+    Type: AWS::AutoScaling::AutoScalingGroup
+    CreationPolicy:
+      ResourceSignal:
+        Count: '1'
+        Timeout: PT2H
+    Properties:
+      LaunchConfigurationName: !Sub ${InstallerLaunchConfig}
+      VPCZoneIdentifier: !Ref InstallerSubnets
+      MinSize: 0
+      DesiredCapacity: 1
+      MaxSize: 1
+      Tags:
+        - Key: Name
+          Value: !Sub ${ClusterName}-installer
+          PropagateAtLaunch: true
+
+  TerminateLifecycleHook:
+    Type: AWS::AutoScaling::LifecycleHook
+    Properties:
+      AutoScalingGroupName: !Ref InstallerAutoScalingGroup
+      HeartbeatTimeout: 7200
+      LifecycleTransition: autoscaling:EC2_INSTANCE_TERMINATING
+      DefaultResult: CONTINUE
+
+  InstallerEc2SecurityGroup:
+    Type: 'AWS::EC2::SecurityGroup'
+    Properties:
+      GroupDescription: Enable SSH access via port 22 from ClientIP
+      SecurityGroupIngress:
+        Description: ssh allow for client ip
+        IpProtocol: tcp
+        FromPort: 22
+        ToPort: 22
+        CidrIp: !Ref ClientIp
+
+  InstallerCdkToolkitPolicy:
+    Type: AWS::IAM::Policy
+    Properties:
+      PolicyName: !Sub ${AWS::StackName}-Installer-Cdk-Toolkit-Policy
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: S3BucketPermissionsForCDK
+            Effect: Allow
+            Action:
+              - s3:PutEncryptionConfiguration
+              - s3:PutBucketVersioning
+              - s3:PutBucketPublicAccessBlock
+              - s3:PutBucketPolicy
+              - s3:GetBucketPolicy
+              - s3:CreateBucket
+              - s3:PutBucketTagging
+            Resource: arn:aws:s3:::idea*
+          - Sid: CreateCDKToolkit
+            Effect: Allow
+            Action:
+              - ecr:CreateRepository
+              - ecr:DescribeRepositories
+              - ecr:SetRepositoryPolicy
+              - ecr:TagResource
+              - ec2:DescribeAccountAttributes
+              - ec2:DescribeTags
+              - ssm:GetParameter
+              - ssm:GetParameters
+              - ssm:PutParameter
+              - ssm:DeleteParameter
+              - ssm:GetParametersByPath
+              - iam:CreateRole
+              - iam:CreateServiceLinkedRole
+              - iam:GetRole
+              - iam:PutRolePolicy
+              - sts:AssumeRole
+              - ssm:AddTagsToResource
+            Resource: '*'
+      Roles:
+        - !Ref InstallerIamRole
+
+  InstallerAdminPolicy:
+    Type: AWS::IAM::Policy
+    Properties:
+      PolicyName: !Sub ${AWS::StackName}-Installer-Admin-Create-Policy
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: CreatePermissionsToInstallIDEA
+            Effect: Allow
+            Action:
+              - sns:CreateTopic
+              - sns:GetTopicAttributes
+              - sns:ListSubscriptionsByTopic
+              - sns:SetTopicAttributes
+              - sns:Subscribe
+              - sns:TagResource
+              - backup-storage:MountCapsule
+              - backup:CreateBackupPlan
+              - backup:CreateBackupSelection
+              - backup:CreateBackupVault
+              - backup:DescribeBackupVault
+              - backup:GetBackupPlan
+              - backup:GetBackupSelection
+              - backup:TagResource
+              - cloudformation:CreateChangeSet
+              - cloudformation:CreateStack
+              - cloudformation:DeleteChangeSet
+              - cloudformation:DescribeChangeSet
+              - cloudformation:DescribeStackEvents
+              - cloudformation:DescribeStacks
+              - cloudformation:ExecuteChangeSet
+              - cloudformation:GetTemplate
+              - cloudformation:UpdateTerminationProtection
+              - cloudwatch:PutMetricAlarm
+              - ds:CreateMicrosoftAD
+              - ds:DescribeDirectories
+              - ec2:DescribeImages
+              - ec2:AllocateAddress
+              - ec2:AssociateAddress
+              - ec2:AssociateRouteTable
+              - ec2:AttachInternetGateway
+              - ec2:AuthorizeSecurityGroupEgress
+              - ec2:AuthorizeSecurityGroupIngress
+              - ec2:CreateFlowLogs
+              - ec2:CreateInternetGateway
+              - ec2:CreateNatGateway
+              - ec2:CreateNetworkInterface
+              - ec2:CreateNetworkInterfacePermission
+              - ec2:CreateRoute
+              - ec2:CreateRouteTable
+              - ec2:CreateSecurityGroup
+              - ec2:CreateSubnet
+              - ec2:CreateTags
+              - ec2:CreateVpc
+              - ec2:CreateVpcEndpoint
+              - ec2:DescribeAddresses
+              - ec2:DescribeAvailabilityZones
+              - ec2:DescribeFlowLogs
+              - ec2:DescribeInstances
+              - ec2:DescribeInternetGateways
+              - ec2:DescribeKeyPairs
+              - ec2:DescribeNatGateways
+              - ec2:DescribeNetworkInterfaces
+              - ec2:DescribeNetwork*
+              - ec2:DescribeRegions
+              - ec2:DescribeRouteTables
+              - ec2:DescribeSecurityGroups
+              - ec2:DescribeSubnets
+              - ec2:DescribeTags
+              - ec2:DescribeVpcAttribute
+              - ec2:DescribeVpcEndpoints
+              - ec2:DescribeVpcEndpointServices
+              - ec2:DescribeVpcs
+              - ec2:ModifySubnetAttribute
+              - ec2:ModifyVpcAttribute
+              - ec2:RevokeSecurityGroupEgress
+              - ec2:RunInstances
+              - elasticfilesystem:CreateFileSystem
+              - elasticfilesystem:CreateMountTarget
+              - elasticfilesystem:DescribeFileSystems
+              - elasticfilesystem:DescribeMountTargets
+              - elasticfilesystem:PutLifecycleConfiguration
+              - elasticloadbalancing:AddTags
+              - elasticloadbalancing:CreateListener
+              - elasticloadbalancing:CreateLoadBalancer
+              - elasticloadbalancing:CreateRule
+              - elasticloadbalancing:CreateTargetGroup
+              - elasticloadbalancing:DeleteTargetGroup
+              - elasticloadbalancing:DescribeListeners
+              - elasticloadbalancing:DescribeLoadBalancers
+              - elasticloadbalancing:DescribeRules
+              - elasticloadbalancing:DescribeTargetGroups
+              - elasticloadbalancing:DescribeTargetHealth
+              - elasticloadbalancing:ModifyLoadBalancerAttributes
+              - elasticloadbalancing:ModifyRule
+              - elasticloadbalancing:RegisterTargets
+              - es:AddTags
+              - es:CreateElasticsearchDomain
+              - es:DescribeElasticsearchDomain
+              - es:ListDomainNames
+              - fsx:CreateFileSystem
+              - fsx:DescribeFileSystems
+              - fsx:TagResource
+              - iam:AddRoleToInstanceProfile
+              - iam:AttachRolePolicy
+              - iam:CreateInstanceProfile
+              - iam:CreateRole
+              - iam:GetRole
+              - iam:GetRolePolicy
+              - iam:ListRoles
+              - iam:PassRole
+              - iam:PutRolePolicy
+              - iam:TagRole
+              - kms:CreateGrant
+              - kms:Decrypt
+              - kms:DescribeKey
+              - kms:GenerateDataKey
+              - kms:RetireGrant
+              - lambda:AddPermission
+              - lambda:CreateFunction
+              - lambda:GetFunction
+              - lambda:InvokeFunction
+              - logs:CreateLogGroup
+              - logs:DescribeLogGroups
+              - logs:PutRetentionPolicy
+              - route53resolver:AssociateResolverEndpointIpAddress
+              - route53resolver:AssociateResolverRule
+              - route53resolver:CreateResolverEndpoint
+              - route53resolver:CreateResolverRule
+              - route53resolver:GetResolverEndpoint
+              - route53resolver:GetResolverRule
+              - route53resolver:GetResolverRuleAssociation
+              - route53resolver:PutResolverRulePolicy
+              - route53resolver:TagResource
+              - s3:*Object
+              - s3:GetBucketLocation
+              - s3:ListBucket
+              - secretsmanager:CreateSecret
+              - secretsmanager:TagResource
+              - sts:DecodeAuthorizationMessage
+              - dynamodb:*
+              - events:*
+              - sqs:*
+              - route53:CreateHostedZone
+              - route53:CreateVPCAssociationAuthorization
+              - route53:GetHostedZone
+            Resource: '*'
+      Roles:
+        - !Ref InstallerIamRole
+
+  InstallerDeletePolicy:
+    Type: AWS::IAM::Policy
+    Properties:
+      PolicyName: !Sub ${AWS::StackName}-Installer-Admin-Delete-Policy
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: SendCommandForDeleteCluster
+            Effect: Allow
+            Action:
+              - ssm:SendCommand
+            Resource:
+              - Fn::Sub: arn:${AWS::Partition}:ssm:${AWS::Region}::document/AWS-RunShellScript
+              - Fn::Sub: arn:${AWS::Partition}:ec2:*:*:instance/*
+          - Sid: DeletePermissionsIfIDEAInstallFails
+            Effect: Allow
+            Action:
+              - sns:DeleteTopic
+              - sns:Unsubscribe
+              - backup:DeleteBackupPlan
+              - backup:DeleteBackupSelection
+              - backup:DeleteBackupVault
+              - cloudformation:DeleteChangeSet
+              - cloudformation:DeleteStack
+              - cloudwatch:DeleteAlarms
+              - cloudwatch:DescribeAlarms
+              - ds:DeleteDirectory
+              - ec2:DeleteFlowLogs
+              - ec2:DeleteInternetGateway
+              - ec2:DeleteNatGateway
+              - ec2:DeleteNetworkInterface
+              - ec2:DeleteRoute
+              - ec2:DeleteRouteTable
+              - ec2:DeleteSecurityGroup
+              - ec2:DeleteSubnet
+              - ec2:DeleteVpc
+              - ec2:DeleteVpcEndpoints
+              - ec2:DescribeVpcEndpoints
+              - ec2:DescribeManagedPrefixLists
+              - ec2:DescribeInstanceAttribute
+              - ec2:DescribeTags
+              - ec2:DetachInternetGateway
+              - ec2:DisassociateAddress
+              - ec2:DisassociateRouteTable
+              - ec2:ReleaseAddress
+              - ec2:RevokeSecurityGroupIngress
+              - ec2:TerminateInstances
+              - ec2:ModifyInstanceAttribute
+              - ecr:DeleteRepository
+              - elasticfilesystem:DeleteFileSystem
+              - elasticfilesystem:DeleteMountTarget
+              - elasticloadbalancing:DeRegisterTargets
+              - elasticloadbalancing:DeleteListener
+              - elasticloadbalancing:DeleteLoadBalancer
+              - elasticloadbalancing:DeleteRule
+              - es:DeleteElasticsearchDomain
+              - fsx:DeleteFileSystem
+              - iam:DeleteInstanceProfile
+              - iam:DeleteRole
+              - iam:DeleteRolePolicy
+              - iam:DeleteServiceLinkedRole
+              - iam:DetachRolePolicy
+              - iam:RemoveRoleFromInstanceProfile
+              - lambda:DeleteFunction
+              - lambda:RemovePermission
+              - logs:DescribeLogGroups
+              - logs:DeleteLogGroup
+              - route53resolver:DeleteResolverEndpoint
+              - route53resolver:DeleteResolverRule
+              - route53resolver:DisassociateResolverRule
+              - secretsmanager:DeleteSecret
+              - s3:DeleteBucketPolicy
+              - s3:DeleteBucket
+              - s3:ListAllMyBuckets
+              - s3:ListBucketVersions
+              - route53:DeleteHostedZone
+              - acm:DescribeCertificate
+              - acm:ListCertificates
+              - acm:RequestCertificate
+              - tag:GetResources
+              - ssm:DescribeInstanceInformation
+              - ssm:ListCommands
+              - ssm:ListCommandInvocations
+              - cognito-idp:ListUserPools
+              - cognito-idp:DescribeUserPool
+              - cognito-idp:UpdateUserPool
+            Resource: '*'
+      Roles:
+        - !Ref InstallerIamRole

@@ -1,0 +1,164 @@
+Version: '2012-10-17'
+Statement:
+  - Action:
+      - events:PutTargets
+      - events:PutRule
+      - events:PutEvents
+      - events:DeleteRule
+      - events:RemoveTargets
+      - ec2:DescribeVolumes
+      - ec2:DescribeNetworkInterfaces
+      - ec2:DescribeImageAttribute
+      - ec2:DescribeImages
+      - ec2:ModifyInstanceAttribute
+      - ec2:CreateImage
+      - ec2:StartInstances
+      - ec2:TerminateInstances
+      - ec2:StopInstances
+      - ec2:RebootInstances
+      - ec2:DescribeInstances
+      - ec2:DescribeInstanceTypes
+      - ec2:CreateTags
+      - ec2:RegisterImage
+      - ec2:DeregisterImage
+      - ec2:RunInstances
+      - budgets:ViewBudget
+      - budgets:DescribeBudget
+      - fsx:CreateDataRepositoryTask
+      - fsx:DescribeFileSystems
+      - tag:GetResources
+      - tag:GetTagValues
+      - tag:GetTagKeys
+      - ssm:ListDocuments
+      - ssm:ListDocumentVersions
+      - ssm:DescribeDocument
+      - ssm:GetDocument
+      - ssm:DescribeInstanceInformation
+      - ssm:DescribeDocumentParameters
+      - ssm:DescribeInstanceProperties
+      - ssm:ListCommands
+      - ssm:SendCommand
+      - ssm:GetCommandInvocation
+      - ssm:DescribeAutomationExecutions
+      - dynamodb:ListTables
+      - application-autoscaling:RegisterScalableTarget
+      - application-autoscaling:PutScalingPolicy
+      - application-autoscaling:DescribeScalingPolicies
+    Resource: '*'
+    Effect: Allow
+
+  - Action:
+      - s3:GetObject
+      - s3:ListBucket
+      - s3:PutObject
+      - s3:GetBucketAcl
+    Resource:
+      {{ context.utils.to_yaml(context.arns.s3_bucket_arns) | indent(6) }}
+    Effect: Allow
+
+  - Effect: Allow
+    Action:
+      - sqs:DeleteMessage
+      - sqs:ReceiveMessage
+      - sqs:SendMessage
+      - sqs:GetQueueAttributes
+    Resource:
+      - '{{ context.arns.get_sqs_arn(context.config.get_module_id("virtual-desktop-controller") + "-events.fifo") }}'
+      - '{{ context.arns.get_sqs_arn(context.config.get_module_id("virtual-desktop-controller") + "-controller") }}'
+
+  - Effect: Allow
+    Action: route53:ChangeResourceRecordSets
+    Resource: '{{ context.arns.get_route53_hostedzone_arn() }}'
+
+  - Action:
+      - dynamodb:GetItem
+      - dynamodb:Query
+      - dynamodb:Scan
+      - dynamodb:DescribeTable
+      - dynamodb:DescribeStream
+      - dynamodb:GetRecords
+      - dynamodb:GetShardIterator
+      - dynamodb:ListStreams
+    Resource:
+      {{ context.utils.to_yaml(context.arns.cluster_config_ddb_arn) | indent(6) }}
+    Effect: Allow
+
+  - Action:
+      - dynamodb:BatchGet*
+      - dynamodb:DescribeStream
+      - dynamodb:DescribeTable
+      - dynamodb:Get*
+      - dynamodb:Query
+      - dynamodb:Scan
+      - dynamodb:BatchWrite*
+      - dynamodb:CreateTable
+      - dynamodb:Delete*
+      - dynamodb:Update*
+      - dynamodb:PutItem
+      - dynamodb:TagResource
+    Resource:
+      - '{{ context.arns.get_ddb_table_arn(context.config.get_module_id("virtual-desktop-controller") + ".*") }}'
+    Effect: Allow
+
+  - Action:
+      - cloudwatch:PutMetricData
+    Resource: '*'
+    Effect: Allow
+
+  - Action:
+      - secretsmanager:GetSecretValue
+    Condition:
+      StringEquals:
+        secretsmanager:ResourceTag/res:EnvironmentName: '{{ context.cluster_name }}'
+        secretsmanager:ResourceTag/res:ModuleName: virtual-desktop-controller
+    Resource: '*'
+    Effect: Allow
+
+    {%- if context.config.get_string("directoryservice.tls_certificate_secret_arn", '') != '' %}
+  - Action:
+      - secretsmanager:GetSecretValue
+    Resource: '{{ context.config.get_string("directoryservice.tls_certificate_secret_arn") }}'
+    Effect: Allow
+    {%- endif %}
+
+  - Action:
+      - sqs:SendMessage
+    Resource:
+      - '{{ context.arns.get_sqs_arn(context.config.get_module_id("cluster-manager") + "-notifications.fifo") }}'
+    Effect: Allow
+    Sid: SendUserNotifications
+
+  - Action:
+      - logs:PutRetentionPolicy
+    Resource: '*'
+    Effect: Allow
+
+  - Action:
+      - kinesis:PutRecord
+      - kinesis:PutRecords
+    Resource:
+      - '{{ context.arns.get_kinesis_arn() }}'
+    Effect: Allow
+
+  - Action:
+      - iam:CreateServiceLinkedRole
+    Resource: '{{ context.arns.get_ddb_application_autoscaling_service_role_arn() }}'
+    Effect: Allow
+    Condition:
+      StringLike:
+        iam:AWSServiceName: 'dynamodb.application-autoscaling.amazonaws.com'
+
+  - Action:
+      - iam:AttachRolePolicy
+      - iam:PutRolePolicy
+    Resource: '{{ context.arns.get_ddb_application_autoscaling_service_role_arn() }}'
+    Effect: Allow
+
+
+  {% include '_templates/aws-managed-ad.yml' %}
+
+  {% include '_templates/activedirectory.yml' %}
+
+  {% include '_templates/openldap.yml' %}
+
+  {% include '_templates/custom-kms-key.yml' %}

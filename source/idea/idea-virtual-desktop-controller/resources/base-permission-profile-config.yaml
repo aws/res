@@ -1,0 +1,51 @@
+admin_profile:
+  profile_title: Admin Profile
+  profile_description: This profile grants the same access as the Admin on the DCV Session
+  builtin: true # Setting this as true will override ALL the below permissions, and grant all permissions to the user.
+                # Set this true, if you want to ensure that all the new permissions introduced by DCV are applied to the session owner.
+  display: true
+  clipboard_copy: true
+  clipboard_paste: true
+  file_download: true
+  file_upload: true
+  mouse: true
+  keyboard: true
+  keyboard_sas: true
+  touch: true
+  stylus: true
+  usb: true
+  pointer: true
+  audio_in: true
+  audio_out: true
+  printer: true
+  smartcard: true
+  webcam: true
+  screenshot: true
+  unsupervised_access: true
+  gamepad: true
+
+observer_profile:
+  profile_title: View Only Profile
+  profile_description: This profile grants view only access on the DCV Session. Can see screen only. Can not control session
+  builtin: false # Setting this as true will override ALL the below permissions, and grant all permissions to the user.
+                 # Set this true, if you want to ensure that all the new permissions introduced by DCV are applied to the session owner.
+  display: true
+  clipboard_copy: false
+  clipboard_paste: false
+  file_download: false
+  file_upload: false
+  mouse: false
+  keyboard: false
+  keyboard_sas: false
+  touch: false
+  stylus: false
+  usb: false
+  pointer: true
+  audio_in: true
+  audio_out: true
+  printer: false
+  smartcard: false
+  webcam: false
+  screenshot: false
+  unsupervised_access: false
+  gamepad: false
