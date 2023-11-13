@@ -1,0 +1,47 @@
+version: 0.2
+
+phases:
+  install:
+    runtime-versions:
+      python: 3.9
+  pre_build:
+    commands:
+      - echo "Installing dependencies - `pwd`"
+      - echo "node use 18.18.0"
+      - n 18.18.0
+      - echo "npm install yarn"
+      - npm install --global yarn
+      - echo "yum install -y openldap-devel zlib-devel"
+      - yum install -y openldap-devel zlib-devel
+      - echo "install python requirements"
+      - pip uninstall -y pyOpenSSL
+      - pip install -r requirements/dev.txt
+      - echo "Updating pyenv"
+      - cd /root/.pyenv/plugins/python-build/../.. && git pull && cd -
+      - echo "Installing dependencies completed - `date`"
+  build:
+    commands:
+      - echo "Starting build `date` in `pwd`"
+      - invoke release.update-version $VERSION
+      - invoke clean
+      - invoke release.build-opensource-dist
+      - |
+        if [ $PIPELINE_TYPE != "release" ]
+        then
+          invoke release.build-s3-dist $PUBLIC_ECR_REGISTRY $VERSION-$PIPELINE_TYPE
+        else
+          invoke release.build-s3-dist $PUBLIC_ECR_REGISTRY $VERSION
+        fi
+      - invoke build package
+      - invoke docker.prepare-artifacts
+      - echo "Build completed `date`"
+  post_build:
+    commands:
+      - echo "Retrieving next stage buildspec `date` in `pwd`"
+      - aws s3 cp s3://solutions-build-assets/changelog-spec.yml ./buildspec.yml
+      - echo "Retrieving next stage buildspec complete"
+      - echo "Post build completed on `date`"
+
+artifacts:
+  files:
+    - '**/*'

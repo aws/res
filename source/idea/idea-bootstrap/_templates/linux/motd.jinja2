@@ -1,0 +1,15 @@
+# Begin: motd update
+{%- if context.base_os in ('amazonlinux2', 'centos7', 'rhel7', 'rhel8', 'rhel9') %}
+echo -e "
+  ____  _____ ____
+ |  _ \| ____/ ___|
+ | |_| |  _| \___ \
+ |  _ <| |___ ___| |
+ |_| \_\_____|____/
+{% for message in messages %}
+{{ message }}
+{% endfor %}
+> source /etc/environment to load RES paths
+" > /etc/motd
+{%- endif %}
+# End: motd update

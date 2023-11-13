@@ -1,0 +1,81 @@
+# Begin: Microsoft AD Settings (activedirectory)
+
+# Below is a template configuration to connect to your existing "On-Prem" or "Self-Managed" AD on AWS
+# customize the configuration based on your environment requirements - The configuration below will not work out of the box.
+#
+#
+# When using the 'activedirectory' Directory Service back-end - READ-ONLY access is activated in IDEA
+# for User and Group management. All user and group management activities take place in Active Directory directly.
+# READ-WRITE is still required for the creation of Computer objects.
+# SSO is required to be configured and linked to the same Active Directory back-end.
+#
+
+# The NetBIOS name for your domain
+ad_short_name: IDEA
+
+# Password Max Age in Days. Used by Cluster IDP such as Cognito UserPool or KeyCloak in JWT Claims
+# Authenticated API requests will be rejected if the password has expired.
+# see: https://docs.aws.amazon.com/directoryservice/latest/admin-guide/ms_ad_password_policies.html
+password_max_age: 42
+
+# for on-prem AD, using ldaps is strongly recommended.
+ldap_connection_uri: "ldap://idea.local"
+
+sssd:
+  # By default, the 'activedirectory' provider will rely on POSIX attributes defined in Active Directory (uidNumber, gidNumber).
+  # If a user does not have these POSIX attributes - they will not be able to log into IDEA.
+  # It is up to the AD Administrator / IDEA Administrator to arrange for POSIX attributes to be properly added to the AD schema for the IDEA users.
+  # If you want to enable ID mapping from the object SID, set ldap_id_mapping = true
+  # Note that this can have consequences when using systems that do not understand ID mapping.
+  # For further details about ID mapping and the ldap_id_mapping parameter, see the sssd-ldap(8) man page.
+  ldap_id_mapping: false
+
+ad_automation:
+  # time to live - for the ad-automation DDB table entry containing OTP and any other attributes
+  entry_ttl_seconds: 1800
+
+  # enable or disable service account's password rotation
+  # when set to true, IDEA ADAutomationAgent running in Cluster Manager will try to reset the service account credentials,
+  #  when nearing expiration.
+  # This should be left as 'false' unless you know the AD service account is allowed to update its password in 'activedirectory' mode.
+  enable_root_password_reset: false
+
+  # the max amount of time it could take to process the AD automation request.
+  sqs_visibility_timeout_seconds: 30
+
+  # the hostname prefix
+  # this should ideally be 5chars or below to provide space for unique hostname generation.
+  # Unique hostnames of 15chars are generated for NetBIOS compatibility (e.g. IDEA-C2C2C429E1)
+  hostname_prefix: "IDEA-"
+
+users:
+  # The Organizational Unit (OU) in your domain, in which IDEA cluster Users can be found
+  # If just the name of the OU, e.g. "Users" is provided, the qualified OU path will be computed as below:
+  # OU=Users,OU=IDEA,dc=idea,dc=local
+  # Provide the fully qualified OU to avoid any ambiguity.
+  ou: OU=Users,OU=IDEA,DC=idea,DC=local
+
+groups:
+  # The Organizational Unit (OU) in your domain, in which IDEA cluster Groups can be found
+  # If just the name of the OU, e.g. "Users" is provided, the qualified OU path will be computed as below:
+  # OU=Users,OU=IDEA,dc=idea,dc=local
+  # Provide the fully qualified OU to avoid any ambiguity.
+  ou: OU=Users,OU=IDEA,DC=idea,DC=local
+
+computers:
+  # The Organizational Unit (OU) in your domain, in which IDEA Computer Accounts (Applicable Infra + SOCA Compute + eVDI) can be _added_
+  # The IDEA service account _must_ be allowed to create Computer objects in this OU in order to join devices to AD.
+  # If just the name of the OU, e.g. "Computers" is provided, the qualified OU path will be computed as below:
+  # OU=Computers,OU=IDEA,DC=idea,DC=local
+  # Provide the fully qualified OU to avoid any ambiguity.
+  ou: OU=Computers,OU=IDEA,DC=idea,DC=local
+
+sudoers:
+  # specify the group name to be used to manage Sudo users.
+  # this group will be added to /etc/sudoers on all cluster nodes that join AD.
+  group_name: AWS Delegated Administrators
+
+  # specify the OU to be used for managing sudoers group (if applicable)
+  ou: ~
+
+# End: Microsoft AD Settings

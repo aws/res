@@ -1,0 +1,738 @@
+module_sets:
+  default:
+    cluster:
+      module_id: cluster
+    analytics:
+      module_id: analytics
+    identity-provider:
+      module_id: identity-provider
+    directoryservice:
+      module_id: directoryservice
+    shared-storage:
+      module_id: shared-storage
+    cluster-manager:
+      module_id: cluster-manager
+    {% if 'bastion-host' in enabled_modules -%}
+    bastion-host:
+      module_id: bastion-host
+    {%- endif %}
+    {% if 'scheduler' in enabled_modules -%}
+    scheduler:
+      module_id: scheduler
+    {%- endif %}
+    {% if 'virtual-desktop-controller' in enabled_modules -%}
+    virtual-desktop-controller:
+      module_id: vdc
+    {%- endif %}
+    {% if 'metrics' in enabled_modules -%}
+    metrics:
+      module_id: metrics
+    {%- endif %}
+
+package_config:
+  amazon_cloudwatch_agent:
+    download_link: ~
+    # since there are multiple variations and platforms, to avoid creating multiple configuration entries, below pattern is used.
+    # you can always override the downloading link by providing the download_link.
+    # if download_link is empty, download_link_pattern will be used to download cloudwatch agent
+    # refer to below files to perform additional customizations or implementation details:
+    #  * idea-bootstrap/_templates/linux/cloudwatch_agent.jinja2
+    #  * idea-bootstrap/_templates/windows/cloudwatch_agent.jinja2
+    # CN and GovCloud Partitions will need to change or adjust the download_url_pattern accordingly.
+    download_link_pattern: https://s3.%region%.amazonaws.com/amazoncloudwatch-agent-%region%/%os%/%architecture%/latest/amazon-cloudwatch-agent.%ext%
+
+  aws_ssm:
+    x86_64: https://s3.amazonaws.com/ec2-downloads-windows/SSMAgent/latest/linux_amd64/amazon-ssm-agent.rpm
+    aarch64: https://s3.amazonaws.com/ec2-downloads-windows/SSMAgent/latest/linux_arm64/amazon-ssm-agent.rpm
+
+  linux_packages:
+    application:
+      # Extra package to install on Scheduler host, including OpenPBS dependencies
+      - dejavu-sans-fonts
+      - fontconfig
+      - fontpackages-filesystem
+      - freetype
+      - htop
+      - hwloc
+      - hwloc-libs
+      - libICE
+      - libSM
+      - libX11
+      - libX11-common
+      - libX11-devel
+      - libXau
+      - libXft
+      - libXrender
+      - libical
+      - libpng
+      - libtool-ltdl
+      - libxcb
+      - tcl
+      - tk
+      - rpm-build
+      - libtool
+      - hwloc-devel
+      - libXt-devel
+      - libedit-devel
+      - libical-devel
+      - ncurses-devel
+      - perl
+      - python3
+      - python3-pip
+      - python3-devel
+      - tcl-devel
+      - tk-devel
+      - swig
+      - expat-devel
+      - openssl-devel
+      - libXext
+      - libXft
+      - autoconf
+      - automake
+      - hwloc-devel
+      - stress
+
+    dcv_amazonlinux:
+      # List of packages to install when using Mate Desktop
+      - gdm
+      - gnome-session
+      - gnome-classic-session
+      - gnome-session-xsession
+      - gnome-terminal
+      - gnu-free-fonts-common
+      - gnu-free-mono-fonts
+      - gnu-free-sans-fonts
+      - gnu-free-serif-fonts
+      - xorg-x11-server-Xorg
+      - xorg-x11-server-utils
+      - xorg-x11-utils
+      - xorg-x11-fonts-Type1
+      - xorg-x11-drivers
+      - gstreamer1-plugins-good
+      - pcsc-lite-libs
+
+    openldap_client:
+      - openldap-clients
+
+    openldap_server:
+      # OpenLDAP Server and dependencies
+      - compat-openldap
+      - cyrus-sasl
+      - cyrus-sasl-devel
+      - openldap
+      - openldap-devel
+      - openldap-servers
+      - unixODBC
+      - unixODBC-devel
+
+    sssd:
+      # SSSD and dependencies
+      - adcli
+      - avahi-libs
+      - bind-libs
+      - bind-libs-lite
+      - bind-license
+      - bind-utils
+      - c-ares
+      - cups-libs
+      - cyrus-sasl-gssapi
+      - http-parser
+      - krb5-workstation
+      - libdhash
+      - libipa_hbac
+      - libldb
+      - libsmbclient
+      - libsss_autofs
+      - libsss_certmap
+      - libsss_idmap
+      - libsss_nss_idmap
+      - libsss_sudo
+      - libtalloc
+      - libtdb
+      - libtevent
+      - libwbclient
+      - oddjob
+      - oddjob-mkhomedir
+      - realmd
+      - samba-client-libs
+      - samba-common
+      - samba-common-libs
+      - samba-common-tools
+      - sssd
+      - sssd-ad
+      - sssd-client
+      - sssd-common
+      - sssd-common-pac
+      - sssd-ipa
+      - sssd-krb5
+      - sssd-krb5-common
+      - sssd-ldap
+      - sssd-proxy
+
+    sssd_rhel7:
+      - python-sssdconfig
+
+    system:
+      # Default packages installed on all Linux systems
+      - chrony
+      - cpp
+      - e2fsprogs
+      - e2fsprogs-libs
+      - gcc
+      - gcc-c++
+      - gcc-gfortran
+      - glibc
+      - glibc-common
+      - glibc-devel
+      - glibc-headers
+      - gssproxy
+      - htop
+      - kernel
+      - kernel-devel
+      - kernel-headers
+      - keyutils
+      - keyutils-libs-devel
+      - krb5-devel
+      - krb5-libs
+      - libbasicobjects
+      - libcollection
+      - libcom_err
+      - libcom_err-devel
+      - libevent
+      - libffi-devel
+      - libgcc
+      - libgfortran
+      - libgomp
+      - libini_config
+      - libkadm5
+      - libmpc
+      - libnfsidmap
+      - libpath_utils
+      - libquadmath
+      - libquadmath-devel
+      - libref_array
+      - libselinux
+      - libselinux-devel
+      - libselinux-utils
+      - libsepol
+      - libsepol-devel
+      - libss
+      - libstdc++
+      - libstdc++-devel
+      - libtalloc
+      - libtevent
+      - libtirpc
+      - libverto-devel
+      - libglvnd-devel
+      - make
+      - mpfr
+      - mdadm
+      - nvme-cli
+      - elfutils-libelf-devel
+      - nfs-utils
+      - git
+      - htop
+      - jq
+      - openssl
+      - openssl-devel
+      - openssl-libs
+      - pcre
+      - pcre-devel
+      - perl
+      - perl-Carp
+      - perl-Encode
+      - perl-Env
+      - perl-Exporter
+      - perl-File-Path
+      - perl-File-Temp
+      - perl-Filter
+      - perl-Getopt-Long
+      - perl-HTTP-Tiny
+      - perl-PathTools
+      - perl-Pod-Escapes
+      - perl-Pod-Perldoc
+      - perl-Pod-Simple
+      - perl-Pod-Usage
+      - perl-Scalar-List-Utils
+      - perl-Socket
+      - perl-Storable
+      - perl-Switch
+      - perl-Text-ParseWords
+      - perl-Time-HiRes
+      - perl-Time-Local
+      - perl-constant
+      - perl-libs
+      - perl-macros
+      - perl-parent
+      - perl-podlators
+      - perl-threads
+      - perl-threads-shared
+      - quota
+      - quota-nls
+      - rpcbind
+      - sqlite-devel
+      - nss-pam-ldapd
+      - tcp_wrappers
+      - vim
+      - wget
+      - zlib
+      - zlib-devel
+
+    system_rhel7:
+      - libselinux-python
+      - libverto-tevent
+      - system-lsb
+
+    # used by cluster-manager to convert .pem files to .ppk files
+    putty:
+      - putty
+
+  nodejs:
+    version: "18.18.0"
+    nvm_version: "0.39.0"
+    npm_version: "7.15.1"
+    url: "https://raw.githubusercontent.com/nvm-sh/nvm/"
+  openmpi:
+    version: "4.1.5"
+    url: "https://download.open-mpi.org/release/open-mpi/v4.1/openmpi-4.1.5.tar.gz"
+    checksum: "ca1bff69624909f16fb6c240cddb7b44236de616dfb6dd68d26cb264654e737457e265c61a78b7e42ec4832cfd6d48a5"
+    checksum_method: sha384
+  python:
+    version: "3.9.16"
+    url: "https://www.python.org/ftp/python/3.9.16/Python-3.9.16.tgz"
+    checksum: "87acee12323b63a2e0c368193c03fd57e008585c754b6bceec6d5ec4c0bc34b3bb1ff20f31b6f5aff6e02502e7f5b291"
+    checksum_method: sha384
+
+  {%- if metrics_provider and 'prometheus' in metrics_provider %}
+  prometheus:
+    installer:
+      linux:
+        x86_64: https://github.com/prometheus/prometheus/releases/download/v2.37.0/prometheus-2.37.0.linux-amd64.tar.gz
+        aarch64: https://github.com/prometheus/prometheus/releases/download/v2.37.0/prometheus-2.37.0.linux-arm64.tar.gz
+      windows:
+        x86_64: https://github.com/prometheus/prometheus/releases/download/v2.37.0/prometheus-2.37.0.windows-amd64.zip
+        aarch64: https://github.com/prometheus/prometheus/releases/download/v2.37.0/prometheus-2.37.0.windows-arm64.zip
+    exporters:
+      node_exporter:
+        linux:
+          x86_64: https://github.com/prometheus/node_exporter/releases/download/v1.3.1/node_exporter-1.3.1.linux-amd64.tar.gz
+          aarch64: https://github.com/prometheus/node_exporter/releases/download/v1.3.1/node_exporter-1.3.1.linux-arm64.tar.gz
+  {%- endif %}
+
+  {%- if 'scheduler' in enabled_modules %}
+  efa:
+    version: "1.22.1"
+    url: "https://efa-installer.amazonaws.com/aws-efa-installer-1.22.1.tar.gz"
+    checksum: "081eed2a4e4be6cc44e3426916e7440bbd15734ace21a1013cb212aaf2a10f1c9cb7a1b380fa41ab7106b1a302712939"
+    checksum_method: sha384
+  openpbs:
+    version: "22.05.11"
+    url: "https://github.com/openpbs/openpbs/archive/v22.05.11.tar.gz"
+    checksum: "b1516586af058b3b52074fbc8e7849243ff983c58baff9a39e4d80d8e8c960e4c4cef1ae063b9729aea87fe5c52ca193"
+    checksum_method: sha384
+    # can be release or dev. if dev, sources will be cloned from github and installed for the configured release version.
+    # additional customizations can be implemented in idea-bootstrap/_templates/linux/openpbs.jinja2
+    type: release
+    packages:
+      - postgresql
+      - postgresql-contrib
+      - postgresql-devel
+      - postgresql-libs
+      - postgresql-server
+  {%- endif %}
+
+  {%- if 'virtual-desktop-controller' in enabled_modules %}
+  dcv:
+    gpg_key: https://d1uj6qtbmh3dt5.cloudfront.net/NICE-GPG-KEY
+    host:
+      x86_64:
+        {%- if 'windows' in supported_base_os %}
+        windows:
+          url: https://d1uj6qtbmh3dt5.cloudfront.net/2023.0/Servers/nice-dcv-server-x64-Release-2023.0-14852.msi
+          sha256sum: 877edd544e04a2b18b180baa766fd5c200872bce8ae44092162e908033a38000
+        {%- endif %}
+        linux:
+          {%- if 'amazonlinux2' in supported_base_os or 'rhel7' in supported_base_os or 'centos7' in supported_base_os %}
+          al2_rhel_centos7:
+            version: 2023.0-14852-el7-x86_64
+            tgz: nice-dcv-2023.0-14852-el7-x86_64.tgz
+            url: https://d1uj6qtbmh3dt5.cloudfront.net/2023.0/Servers/nice-dcv-2023.0-14852-el7-x86_64.tgz
+            sha256sum: ab662e5bb79f06c46182f83b582538f2dffe5faa1d3da0251404fb96e8310ffe
+          {%- endif %}
+          {%- if 'rhel8' in supported_base_os or 'centos8' in supported_base_os or 'rocky8' in supported_base_os %}
+          rhel_centos_rocky8:
+            version: 2023.0-14852-el8-x86_64
+            tgz: nice-dcv-2023.0-14852-el8-x86_64.tgz
+            url: https://d1uj6qtbmh3dt5.cloudfront.net/2023.0/Servers/nice-dcv-2023.0-14852-el8-x86_64.tgz
+            sha256sum: 357436715d0304f10a518b423dc73dd12bd9ea935dd9f79faf41c24ec542b449
+          {%- endif %}
+          {%- if 'rhel9' in supported_base_os or 'centos9' in supported_base_os or 'rocky9' in supported_base_os %}
+          rhel_centos_rocky9:
+            version: 2023.0-14852-el9-x86_64
+            tgz: nice-dcv-2023.0-14852-el9-x86_64.tgz
+            url: https://d1uj6qtbmh3dt5.cloudfront.net/2023.0/Servers/nice-dcv-2023.0-14852-el9-x86_64.tgz
+            sha256sum: 4bf7d3a21a4aa76314b6c976a1c9d20d1d397c0c44e533f403175db72f92d486
+          {%- endif %}
+          {%- if 'suse12' in supported_base_os %}
+          suse12:
+            version: 2023.0-14852-sles12-x86_64
+            tgz: nice-dcv-2023.0-14852-sles12-x86_64.tgz
+            url: https://d1uj6qtbmh3dt5.cloudfront.net/2023.0/Servers/nice-dcv-2023.0-14852-sles12-x86_64.tgz
+            sha256sum: 26592817b6d049080290d2ede2ce342aa35a59af1af8d7b3d2c791195cbf0a9a
+          {%- endif %}
+          {%- if 'suse15' in supported_base_os %}
+          suse15:
+            version: 2023.0-14852-sles15-x86_64
+            tgz: nice-dcv-2023.0-14852-sles15-x86_64.tgz
+            url: https://d1uj6qtbmh3dt5.cloudfront.net/2023.0/Servers/nice-dcv-2023.0-14852-sles15-x86_64.tgz
+            sha256sum: 558e859d7e6a6aa65ac5a0d71193092c26a3faeb6b09a6ac48192d51af77e5a3
+          {%- endif %}
+        ubuntu:
+          {%- if 'ubuntu1804' in supported_base_os %}
+          ubuntu1804:
+            version: 2023.0-14852-ubuntu1804-x86_64
+            tgz: nice-dcv-2023.0-14852-ubuntu1804-x86_64.tgz
+            url: https://d1uj6qtbmh3dt5.cloudfront.net/2023.0/Servers/nice-dcv-2023.0-14852-ubuntu1804-x86_64.tgz
+            sha256sum: 25488fb09585fc86381e1f4b20c7fe232708d027918518d429bcf79fe149a399
+          {%- endif %}
+          {%- if 'ubuntu2004' in supported_base_os %}
+          ubuntu2004:
+            version: 2023.0-14852-ubuntu2004-x86_64
+            tgz: nice-dcv-2023.0-14852-ubuntu2004-x86_64.tgz
+            url: https://d1uj6qtbmh3dt5.cloudfront.net/2023.0/Servers/nice-dcv-2023.0-14852-ubuntu2004-x86_64.tgz
+            sha256sum: 7bc3547a172530f7a2d7086943d85c8c54d9afa7386024eb745faddd951688c5
+          {%- endif %}
+          {%- if 'ubuntu2204' in supported_base_os %}
+          ubuntu2204:
+            version: 2023.0-14852-ubuntu2204-x86_64
+            tgz: nice-dcv-2023.0-14852-ubuntu2204-x86_64.tgz
+            url: https://d1uj6qtbmh3dt5.cloudfront.net/2023.0/Servers/nice-dcv-2023.0-14852-ubuntu2204-x86_64.tgz
+            sha256sum: 975b37eec1b260b6459400e38ad99c9c7b8bc6b4b0e095da7ed38d7653144fd8
+          {%- endif %}
+      aarch64:
+        linux:
+          {%- if 'amazonlinux2' in supported_base_os or 'rhel7' in supported_base_os or 'centos7' in supported_base_os %}
+          al2_rhel_centos7:
+            version: 2023.0-14852-el7-aarch64
+            tgz: nice-dcv-2023.0-14852-el7-aarch64.tgz
+            url: https://d1uj6qtbmh3dt5.cloudfront.net/2023.0/Servers/nice-dcv-2023.0-14852-el7-aarch64.tgz
+            sha256sum: 1c7965898ad963b90047bf05bd23f2b6fd9d6e074d11354687a8a908f11257c3
+          {%- endif %}
+          {%- if 'rhel8' in supported_base_os or 'centos8' in supported_base_os or 'rocky8' in supported_base_os %}
+          rhel_centos_rocky8:
+            version: 2023.0-14852-el8-aarch64
+            tgz: nice-dcv-2023.0-14852-el8-aarch64.tgz
+            url: https://d1uj6qtbmh3dt5.cloudfront.net/2023.0/Servers/nice-dcv-2023.0-14852-el8-aarch64.tgz
+            sha256sum: 57bb821bd07c6f3aab134caa4c05616ab11b6445562e181d22099d603f917964
+          {%- endif %}
+          {%- if 'rhel9' in supported_base_os or 'centos9' in supported_base_os or 'rocky9' in supported_base_os %}
+          rhel_centos_rocky9:
+            version: 2023.0-15487-el9-aarch64
+            tgz: nice-dcv-2023.0-15487-el9-aarch64.tgz
+            url: https://d1uj6qtbmh3dt5.cloudfront.net/2023.0/Servers/nice-dcv-2023.0-15487-el9-aarch64.tgz
+            sha256sum: 07148327f30dae656b338e24102945830601e85df4e135029b624df1e9ee3c2e
+          {%- endif %}
+        ubuntu:
+          {%- if 'ubuntu1804' in supported_base_os %}
+          ubuntu1804:
+            version: 2023.0-14852-ubuntu1804-aarch64.tgz
+            tgz: nice-dcv-2023.0-14852-ubuntu1804-aarch64.tgz
+            url: https://d1uj6qtbmh3dt5.cloudfront.net/2023.0/Servers/nice-dcv-2023.0-14852-ubuntu1804-aarch64.tgz
+            sha256sum: 07d624beb69cfe5a0edc5d22507905ce1ed9a59595cc3e661fde94927de55a5f
+          {%- endif %}
+          {%- if 'ubuntu2204' in supported_base_os %}
+          ubuntu2204:
+            version: 2023.0-14852-ubuntu2204-aarch64
+            tgz: nice-dcv-2023.0-14852-ubuntu2204-aarch64.tgz
+            url: https://d1uj6qtbmh3dt5.cloudfront.net/2023.0/Servers/nice-dcv-2023.0-14852-ubuntu2204-aarch64.tgz
+            sha256sum: 9a703bea9a9bf5eeef9c691f69c255049b567acae39e1f16d3b29875685b2544
+          {%- endif %}
+    agent:
+      x86_64:
+        {%- if 'windows' in supported_base_os %}
+        windows:
+          url: https://d1uj6qtbmh3dt5.cloudfront.net/2023.0/SessionManagerAgents/nice-dcv-session-manager-agent-x64-Release-2023.0-642.msi
+          sha256sum: 7b70ebb79c5edf33d42c53973047f30d0ed85fbd9a6c1d72686b05805c29eb3f
+        {%- endif %}
+        linux:
+          {%- if 'amazonlinux2' in supported_base_os or 'rhel7' in supported_base_os or 'centos7' in supported_base_os %}
+          al2_rhel_centos7:
+            version: 2023.0.642-1.el7.x86_64
+            url: https://d1uj6qtbmh3dt5.cloudfront.net/2023.0/SessionManagerAgents/nice-dcv-session-manager-agent-2023.0.642-1.el7.x86_64.rpm
+            sha256sum: e7ce42827b462ee9119db54d7bbf4826c58ee81156b2362d9c81f500f434ce40
+          {%- endif %}
+          {%- if 'rhel8' in supported_base_os or 'centos8' in supported_base_os or 'rocky8' in supported_base_os %}
+          rhel_centos_rocky8:
+            version: 2023.0.642-1.el8.x86_64
+            url: https://d1uj6qtbmh3dt5.cloudfront.net/2023.0/SessionManagerAgents/nice-dcv-session-manager-agent-2023.0.642-1.el8.x86_64.rpm
+            sha256sum: d1ac5a48a878d2a0a753202a19220fae379fe7121be54bad0008b4478c67e22e
+          {%- endif %}
+          {%- if 'rhel9' in supported_base_os or 'centos8' in supported_base_os or 'rocky9' in supported_base_os %}
+          rhel_centos_rocky9:
+            version: 2023.0.642-1.el9.x86_64
+            url: https://d1uj6qtbmh3dt5.cloudfront.net/2023.0/SessionManagerAgents/nice-dcv-session-manager-agent-2023.0.642-1.el9.x86_64.rpm
+            sha256sum: 1c9037ec0b3c167b1d97af2147e32c012c4356a4a92b010417bf55bb780ce8f7
+          {%- endif %}
+          {%- if 'suse12' in supported_base_os %}
+          suse12:
+            version: 2023.0.642-1.sles12.x86_64
+            url: https://d1uj6qtbmh3dt5.cloudfront.net/2023.0/SessionManagerAgents/nice-dcv-session-manager-agent-2023.0.642-1.sles12.x86_64.rpm
+            sha256sum: 23d3acb7d9e023f3e85e2f6a01258710fab2d8c7567d63f3c47a15b11b324982
+          {%- endif %}
+          {%- if 'suse15' in supported_base_os %}
+          suse15:
+            version: 2023.0.642-1.sles15.x86_64
+            url: https://d1uj6qtbmh3dt5.cloudfront.net/2023.0/SessionManagerAgents/nice-dcv-session-manager-agent-2023.0.642-1.sles15.x86_64.rpm
+            sha256sum: d41aa3ec0f6910ebdc505a4ddc91113621e44605824e90a7086fb128e8b0f3b8
+          {%- endif %}
+        ubuntu:
+          {%- if 'ubuntu1804' in supported_base_os %}
+          ubuntu1804:
+            version: 2023.0.642-1_amd64.ubuntu1804
+            url: https://d1uj6qtbmh3dt5.cloudfront.net/2023.0/SessionManagerAgents/nice-dcv-session-manager-agent_2023.0.642-1_amd64.ubuntu1804.deb
+            sha256sum: b03f1e80585ae598681d87ef75ede068f64928653458780d7ccb26ab15127e4b
+          {%- endif %}
+          {%- if 'ubuntu2004' in supported_base_os %}
+          ubuntu2004:
+            version: 2023.0.642-1_amd64.ubuntu2004
+            url: https://d1uj6qtbmh3dt5.cloudfront.net/2023.0/SessionManagerAgents/nice-dcv-session-manager-agent_2023.0.642-1_amd64.ubuntu2004.deb
+            sha256sum: 9133b41c29445e2181077cf1823eeae8b984da815e74b3406b2a50dcd924b010
+          {%- endif %}
+          {%- if 'ubuntu2204' in supported_base_os %}
+          ubuntu2204:
+            version: 2023.0.642-1_amd64.ubuntu2204
+            url: https://d1uj6qtbmh3dt5.cloudfront.net/2023.0/SessionManagerAgents/nice-dcv-session-manager-agent_2023.0.642-1_amd64.ubuntu2204.deb
+            sha256sum: f2577536d2b0e8bddf71cd257168e8d8ceb0814f4f5e02d4015776cdc8144fa1
+          {%- endif %}
+      aarch64:
+        linux:
+          {%- if 'amazonlinux2' in supported_base_os or 'rhel7' in supported_base_os or 'centos7' in supported_base_os %}
+          al2_rhel_centos7:
+            version: 2023.0.642-1.el7.aarch64
+            url: https://d1uj6qtbmh3dt5.cloudfront.net/2023.0/SessionManagerAgents/nice-dcv-session-manager-agent-2023.0.642-1.el7.aarch64.rpm
+            sha256sum: 875f73cbc0f7cc308e74334862c89e449736648a6e4c5747984c6c131a17b069
+          {%- endif %}
+          {%- if 'rhel8' in supported_base_os or 'centos8' in supported_base_os or 'rocky8' in supported_base_os %}
+          rhel_centos_rocky8:
+            version: 2023.0.642-1.el8.aarch64
+            url: https://d1uj6qtbmh3dt5.cloudfront.net/2023.0/SessionManagerAgents/nice-dcv-session-manager-agent-2023.0.642-1.el8.aarch64.rpm
+            sha256sum: 4fbab9b6d0658ce5c3d1087dd2feb4f9ec1b84bca102527b1a755c452de19501
+          {%- endif %}
+          {%- if 'rhel9' in supported_base_os or 'centos9' in supported_base_os or 'rocky9' in supported_base_os %}
+          rhel_centos_rocky9:
+            version: 2023.0.675-1.el9.aarch64
+            url: https://d1uj6qtbmh3dt5.cloudfront.net/2023.0/SessionManagerAgents/nice-dcv-session-manager-agent-2023.0.675-1.el9.aarch64.rpm
+            sha256sum: 728d50ca0cbe582d9c29531333f8fc3f2d144b20366fa00f1d68a8f996b10062
+          {%- endif %}
+        ubuntu:
+          {%- if 'ubuntu1804' in supported_base_os %}
+          ubuntu1804:
+            version: 2023.0.642-1_arm64.ubuntu1804
+            url: https://d1uj6qtbmh3dt5.cloudfront.net/2023.0/SessionManagerAgents/nice-dcv-session-manager-agent_2023.0.642-1_arm64.ubuntu1804.deb
+            sha256sum: 80c69e60d13590fe2a8a70c6b8026b04d183b1cac9ebae570cfd70c654e8c104
+          {%- endif %}
+          {%- if 'ubuntu2204' in supported_base_os %}
+          ubuntu2204:
+            version: 2023.0.642-1_arm64.ubuntu2204
+            url: https://d1uj6qtbmh3dt5.cloudfront.net/2023.0/SessionManagerAgents/nice-dcv-session-manager-agent_2023.0.642-1_arm64.ubuntu2204.deb
+            sha256sum: b19bc62c189a6a0b8439536e5640b5cefe4984b3f2ffeb0a383e96035844a7e9
+          {%- endif %}
+    connection_gateway:
+      x86_64:
+        linux:
+          {%- if 'amazonlinux2' in supported_base_os or 'rhel7' in supported_base_os or 'centos7' in supported_base_os %}
+          al2_rhel_centos7:
+            version: 2023.0.531-1.el7.x86_64
+            url: https://d1uj6qtbmh3dt5.cloudfront.net/2023.0/Gateway/nice-dcv-connection-gateway-2023.0.531-1.el7.x86_64.rpm
+            sha256sum: 7abc061b94807510c8284849fd2545b170dc8d47954f1afa9f38966f47ce15ae
+          {%- endif %}
+          {%- if 'rhel8' in supported_base_os or 'centos8' in supported_base_os or 'rocky8' in supported_base_os %}
+          rhel_centos_rocky8:
+            version: 2023.0.531-1.el8.x86_64
+            url: https://d1uj6qtbmh3dt5.cloudfront.net/2023.0/Gateway/nice-dcv-connection-gateway-2023.0.531-1.el8.x86_64.rpm
+            sha256sum: 67a71866996f1bd32b22d9cadb695ca357d165270e2d4373e5d4c9e2a56cb974
+          {%- endif %}
+          {%- if 'rhel9' in supported_base_os or 'centos9' in supported_base_os or 'rocky9' in supported_base_os %}
+          rhel_centos_rocky9:
+            version: 2023.0.531-1.el9.x86_64
+            url: https://d1uj6qtbmh3dt5.cloudfront.net/2023.0/Gateway/nice-dcv-connection-gateway-2023.0.531-1.el9.x86_64.rpm
+            sha256sum: b58748fc3f726c6073c3c6d82688d5360e05a0d42244f420ba3ba9bdb92b0655
+          {%- endif %}
+        ubuntu:
+          {%- if 'ubuntu1804' in supported_base_os %}
+          ubuntu1804:
+            version: 2023.0.531-1_amd64.ubuntu1804
+            url: https://d1uj6qtbmh3dt5.cloudfront.net/2023.0/Gateway/nice-dcv-connection-gateway_2023.0.531-1_amd64.ubuntu1804.deb
+            sha256sum: b710ecb96e350ea3f8d53926c60f8001441c1f4b0db4f476ca282c720d6a265e
+          {%- endif %}
+          {%- if 'ubuntu2004' in supported_base_os %}
+          ubuntu2004:
+            version: 2023.0.531-1_amd64.ubuntu2004
+            url: https://d1uj6qtbmh3dt5.cloudfront.net/2023.0/Gateway/nice-dcv-connection-gateway_2023.0.531-1_amd64.ubuntu2004.deb
+            sha256sum: 87d8e3269f3bcfc648f80f7117e8d486ee7f6605449dc8c73f0a394a1c1035be
+          {%- endif %}
+          {%- if 'ubuntu2204' in supported_base_os %}
+          ubuntu2204:
+            version: 2023.0.531-1_amd64.ubuntu2204
+            url: https://d1uj6qtbmh3dt5.cloudfront.net/2023.0/Gateway/nice-dcv-connection-gateway_2023.0.531-1_amd64.ubuntu2204.deb
+            sha256sum: b5c48779cec33a9fe26829ca0f28aa15702151b8ebc42d354f95254db5dedcb3
+          {%- endif %}
+      aarch64:
+        linux:
+          {%- if 'amazonlinux2' in supported_base_os or 'rhel7' in supported_base_os or 'centos7' in supported_base_os %}
+          al2_rhel_centos7:
+            version: 2023.0.531-1.el7.aarch64
+            url: https://d1uj6qtbmh3dt5.cloudfront.net/2023.0/Gateway/nice-dcv-connection-gateway-2023.0.531-1.el7.aarch64.rpm
+            sha256sum: 77d29efa59e08d669058037a2a8aba6b0d51822b8771e2abdb42a0c9f425685f
+          {%- endif %}
+          {%- if 'rhel8' in supported_base_os or 'centos8' in supported_base_os or 'rocky8' in supported_base_os %}
+          rhel_centos_rocky8:
+            version: 2023.0.531-1.el8.aarch64
+            url: https://d1uj6qtbmh3dt5.cloudfront.net/2023.0/Gateway/nice-dcv-connection-gateway-2023.0.531-1.el8.aarch64.rpm
+            sha256sum: b55f344eff9ed07e3d706da24f369f7e93d2e106edc4b3589569c06308571664
+          {%- endif %}
+          {%- if 'rhel9' in supported_base_os or 'centos9' in supported_base_os or 'rocky9' in supported_base_os %}
+          rhel_centos_rocky9:
+            version: 2023.0.531-1.el8.aarch64
+            url: https://d1uj6qtbmh3dt5.cloudfront.net/2023.0/Gateway/nice-dcv-connection-gateway-2023.0.531-1.el8.aarch64.rpm
+            sha256sum: b55f344eff9ed07e3d706da24f369f7e93d2e106edc4b3589569c06308571664
+          {%- endif %}
+        ubuntu:
+          {%- if 'ubuntu1804' in supported_base_os %}
+          ubuntu1804:
+            version: 2023.0.531-1_arm64.ubuntu1804
+            url: https://d1uj6qtbmh3dt5.cloudfront.net/2023.0/Gateway/nice-dcv-connection-gateway_2023.0.531-1_arm64.ubuntu1804.deb
+            sha256sum: 1e7936fc95e9d4e7afb66ed044e1030ac51bc6bdb6ae2023e7389f3aa0890681
+          {%- endif %}
+          {%- if 'ubuntu2004' in supported_base_os %}
+          ubuntu2004:
+            version: 2023.0-531-1_arm64.ubuntu2004
+            url: https://d1uj6qtbmh3dt5.cloudfront.net/2023.0/Gateway/nice-dcv-connection-gateway_2023.0.531-1_arm64.ubuntu2004.deb
+            sha256sum: 2f940ed9f345370f1b46754d6ff3fd3348dad4030d162dff0d34cb56110c4d8a
+          {%- endif %}
+          {%- if 'ubuntu2204' in supported_base_os %}
+          ubuntu2204:
+            version: 2023.0-531-1_arm64.ubuntu2204
+            url: https://d1uj6qtbmh3dt5.cloudfront.net/2023.0/Gateway/nice-dcv-connection-gateway_2023.0.531-1_arm64.ubuntu2204.deb
+            sha256sum: 727c7ff0882edafa061bf18e9d7840c55cadc3ca1f716618bff7f70e4cf0919d
+          {%- endif %}
+    broker:
+      linux:
+        {%- if 'amazonlinux2' in supported_base_os or 'rhel7' in supported_base_os or 'centos7' in supported_base_os %}
+        al2_rhel_centos7:
+          version: 2023.0.392-1.el7.noarch
+          url: https://d1uj6qtbmh3dt5.cloudfront.net/2023.0/SessionManagerBrokers/nice-dcv-session-manager-broker-2023.0.392-1.el7.noarch.rpm
+          sha256sum: fc0f29de9d2c9d3799a6b2235c01ba48159fede6bb5e7500cb8cf121a27471be
+        {%- endif %}
+        {%- if 'rhel8' in supported_base_os or 'centos8' in supported_base_os or 'rocky8' in supported_base_os %}
+        rhel_centos_rocky8:
+          version: 2023.0.392-1.el8.noarch
+          url: https://d1uj6qtbmh3dt5.cloudfront.net/2023.0/SessionManagerBrokers/nice-dcv-session-manager-broker-2023.0.392-1.el8.noarch.rpm
+          sha256sum: 5fc81cbc697f944c67127b529c620789f555fdc2585b07040a77c72ac0927f95
+        {%- endif %}
+        {%- if 'rhel9' in supported_base_os or 'centos9' in supported_base_os or 'rocky9' in supported_base_os %}
+        rhel_centos_rocky9:
+          version: 2023.0.392-1.el9.noarch
+          url: https://d1uj6qtbmh3dt5.cloudfront.net/2023.0/SessionManagerBrokers/nice-dcv-session-manager-broker-2023.0.392-1.el9.noarch.rpm
+          sha256sum: 97fd73bce10700c419902df6200890ad07d4d637aacc063b59ea9b4dfca58da1
+        {%- endif %}
+      ubuntu:
+        {%- if 'ubuntu1804' in supported_base_os %}
+        ubuntu1804:
+          version: 2023.0.392-1_all.ubuntu1804
+          url: https://d1uj6qtbmh3dt5.cloudfront.net/2023.0/SessionManagerBrokers/nice-dcv-session-manager-broker_2023.0.392-1_all.ubuntu1804.deb
+          sha256sum: 662fb5d6da94898c30c565612a5fa11662757d431c02397704a7089ef9fe0e08
+        {%- endif %}
+        {%- if 'ubuntu2004' in supported_base_os %}
+        ubuntu2004:
+          version: 2023.0.392-1_all.ubuntu2004
+          url: https://d1uj6qtbmh3dt5.cloudfront.net/2023.0/SessionManagerBrokers/nice-dcv-session-manager-broker_2023.0.392-1_all.ubuntu2004.deb
+          sha256sum: 2511816811712a3a1354c9cee4c0305dce3d396fa470341f30fe9168264312d4
+        {%- endif %}
+        {%- if 'ubuntu2204' in supported_base_os %}
+        ubuntu2204:
+          version: 2023.0.392-1_all.ubuntu2204
+          url: https://d1uj6qtbmh3dt5.cloudfront.net/2023.0/SessionManagerBrokers/nice-dcv-session-manager-broker_2023.0.392-1_all.ubuntu2204.deb
+          sha256sum: 3c058d4849625c553eb0939c4b4bbcb9de4a5473ca0692eea058491aa2221f2a
+        {%- endif %}
+    clients:
+      windows:
+        msi:
+          label: MSI
+          url: https://d1uj6qtbmh3dt5.cloudfront.net/2023.0/Clients/nice-dcv-client-Release-2023.0-8655.msi
+        zip:
+          label: ZIP
+          url: https://d1uj6qtbmh3dt5.cloudfront.net/2023.0/Clients/nice-dcv-client-Release-portable-2023.0-8655.zip
+      macos:
+        m1:
+          label: M1 Chip
+          url: https://d1uj6qtbmh3dt5.cloudfront.net/2023.0/Clients/nice-dcv-viewer-2023.0.5388.arm64.dmg
+        intel:
+          label: Intel Chip
+          url: https://d1uj6qtbmh3dt5.cloudfront.net/2023.0/Clients/nice-dcv-viewer-2023.0.5388.x86_64.dmg
+      linux:
+        rhel_centos7:
+          label: RHEL 7 | Cent OS 7
+          url: https://d1uj6qtbmh3dt5.cloudfront.net/2023.0/Clients/nice-dcv-viewer-2023.0.5388-1.el7.x86_64.rpm
+        rhel_centos_rocky8:
+          label: RHEL 8 | Cent OS 8 | Rocky Linux 8
+          url: https://d1uj6qtbmh3dt5.cloudfront.net/2023.0/Clients/nice-dcv-viewer-2023.0.5388-1.el8.x86_64.rpm
+        rhel_centos_rocky9:
+          label: RHEL 9 | Cent OS 9 | Rocky Linux 9
+          url: https://d1uj6qtbmh3dt5.cloudfront.net/2023.0/Clients/nice-dcv-viewer-2023.0.5388-1.el9.x86_64.rpm
+        suse15:
+          label: SUSE Enterprise Linux 15
+          url: https://d1uj6qtbmh3dt5.cloudfront.net/2023.0/Clients/nice-dcv-viewer-2023.0.5388-1.sles15.x86_64.rpm
+      ubuntu:
+        ubuntu1804:
+          label: Ubuntu 18.04
+          url: https://d1uj6qtbmh3dt5.cloudfront.net/2023.0/Clients/nice-dcv-viewer_2023.0.5388-1_amd64.ubuntu1804.deb
+        ubuntu2004:
+          label: Ubuntu 20.04
+          url: https://d1uj6qtbmh3dt5.cloudfront.net/2023.0/Clients/nice-dcv-viewer_2023.0.5388-1_amd64.ubuntu2004.deb
+        ubuntu2204:
+          label: Ubuntu 22.04
+          url: https://d1uj6qtbmh3dt5.cloudfront.net/2023.0/Clients/nice-dcv-viewer_2023.0.5388-1_amd64.ubuntu2204.deb
+  {%- endif %}
+
+gpu_settings:
+  nvidia:
+    s3_bucket_url: "ec2-linux-nvidia-drivers.s3.amazonaws.com"
+    s3_bucket_path: "s3://ec2-linux-nvidia-drivers/latest/"
+  amd:
+    s3_bucket_url: "ec2-amd-linux-drivers.s3.amazonaws.com"
+    s3_bucket_path: "s3://ec2-amd-linux-drivers/latest/"
+
+  instance_families:
+  - p2
+  - p3
+  - p4d
+  - p4de
+  - g2
+  - g3
+  - g3s
+  - g5
+  - g5g
+  - g4dn
+  - g4ad
+  nvidia_public_driver_versions:
+    ltsb_version: &ltsb_version 470.141.03
+    production_version: &production_version 510.47.03
+    p2: *ltsb_version
+    g2: *ltsb_version
+    g3: *production_version
+    g3s: *production_version
+    g4dn: *production_version
+    g5: *production_version
+    g5g: *production_version
+    p3: *production_version
+    p4d: *production_version
+    p4de: *production_version
+
+# provide custom tags for all resources created by IDEA
+# for eg. to add custom tags, tags as below:
+# custom_tags:
+#   - Key=custom:MyTagName,Value=MyTagValue
+#   - Key=AnotherExampleName,Value=Another Example Value
+custom_tags: []
+

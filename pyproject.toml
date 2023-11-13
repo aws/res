@@ -1,0 +1,59 @@
+# Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+[build-system]
+requires = ["setuptools"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+package-dir = {"" = "source"}
+
+[project]
+name = "idea"
+dynamic = ["version"]
+description = "Research and Engineering Studio"
+readme = "README.md"
+requires-python = ">=3.9.16,<3.10"
+license = {text = "Apache Software License"}
+classifiers = [
+    "Development Status :: 2 - Pre-Alpha",
+    "Framework :: AWS CDK :: 2",
+    "License :: OSI Approved :: Apache Software License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.9",
+    "Typing :: Typed",
+]
+dependencies = [
+    "boto3",
+    "botocore",
+    "aws-cdk-lib",
+    "constructs",
+    "cdk-nag",
+]
+
+[tool.setuptools.dynamic]
+version = {file = ["RES_VERSION.txt"]}
+
+[project.scripts]
+cdk-app = "idea.app:main"
+
+[project.optional-dependencies]
+dev = [
+    "black",
+    "tox",
+    "pytest",
+    "pytest-cov",
+    "boto3-stubs-lite[essential]",
+    "boto3-stubs-lite[cloudformation]",
+]
+
+[tool.black]
+include = 'source/.*\.py'
+# TODO: Change the path to include all the source files
+extend-exclude = 'source/idea/idea-*'
+
+[tool.isort]
+profile = "black"
+known_first_party = "idea,ideadatamodel"
+# TODO: Change the path to include all the source files
+skip_glob = ["source/idea/idea-*"]

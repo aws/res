@@ -1,0 +1,63 @@
+/**
+ * Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License"). You may not use this file except in compliance
+ * with the License. A copy of the License is located at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * or in the 'license' file accompanying this file. This file is distributed on an 'AS IS' BASIS, WITHOUT WARRANTIES
+ * OR CONDITIONS OF ANY KIND, express or implied. See the License for the specific language governing permissions
+ * and limitations under the License.
+ */
+
+@use "@cloudscape-design/design-tokens/index.scss" as awsui;
+
+// 912px is the container breakpoint-s, the viewport breakpoint is 912(container width) + 40(closed side navigation width) + 4(negative margin from grid)
+$viewport-breakpoint-s: 957px;
+$open-navigation-width: 240px;
+
+.custom-home__header {
+}
+
+.custom-home__header-title {
+    color: awsui.$color-text-home-header-default;
+}
+
+.custom-home__category,
+.custom-home__header-sub-title {
+    color: awsui.$color-text-home-header-secondary;
+}
+
+.custom-home-image__placeholder:before {
+    content: "X";
+    display: block;
+    background-color: awsui.$color-background-input-disabled;
+    color: awsui.$color-background-container-content;
+    text-align: center;
+    font-size: 400px;
+    line-height: 400px;
+}
+
+ul.custom-list-separator {
+    list-style-type: none;
+    margin: 0;
+    padding: 0;
+
+    li {
+        border-top: 1px solid awsui.$color-border-divider-default;
+        padding: 0.8rem 0;
+        display: flex;
+        justify-content: space-between;
+        flex-wrap: wrap;
+
+        &:first-child {
+            padding-top: 0;
+            border-top: none;
+        }
+
+        &:last-child {
+            padding-bottom: 0;
+        }
+    }
+}

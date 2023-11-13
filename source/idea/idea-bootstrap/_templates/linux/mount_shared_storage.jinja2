@@ -1,0 +1,116 @@
+# Begin: Mount Shared Storage
+{%- if context.base_os in ('amazonlinux2', 'centos7', 'rhel7', 'rhel8', 'rhel9') %}
+  {%- if context.has_storage_provider('fsx_lustre') or context.has_storage_provider('fsx_cache') %}
+    {% include '_templates/linux/fsx_lustre_client.jinja2' %}
+  {%- endif %}
+  function mount_shared_storage () {
+    {%- for name, storage in context.config.get_config('shared-storage').items() %}
+      {%- if context.eval_shared_storage_scope(shared_storage=storage) %}
+        {%- if storage['provider'] == 'efs' %}
+        echo "# Using Provider {{storage['provider']}} for {{storage['mount_dir']}} using options {{storage['mount_options']}}"
+        mkdir -p "{{storage['mount_dir']}}"
+        add_efs_to_fstab "{{storage['efs']['dns']}}" \
+                         "{{storage['mount_dir']}}" \
+                         "{{storage['mount_options']}}"
+        {%- elif storage['provider'] == 'fsx_cache' %}
+        mkdir -p "{{storage['mount_dir']}}"
+        add_fsx_lustre_to_fstab "{{storage['fsx_cache']['dns']}}" \
+                                "{{storage['mount_dir']}}" \
+                                "{{storage['mount_options']}}" \
+                                "{{storage['fsx_cache']['mount_name']}}"
+        {%- elif storage['provider'] == 'fsx_lustre' %}
+        mkdir -p "{{storage['mount_dir']}}"
+        add_fsx_lustre_to_fstab "{{storage['fsx_lustre']['dns']}}" \
+                                "{{storage['mount_dir']}}" \
+                                "{{storage['mount_options']}}" \
+                                "{{storage['fsx_lustre']['mount_name']}}"
+        {%- elif storage['provider'] == 'fsx_netapp_ontap' and storage['fsx_netapp_ontap']['volume']['security_style'] %}
+        mkdir -p "{{storage['mount_dir']}}"
+        add_fsx_netapp_ontap_to_fstab "{{storage['fsx_netapp_ontap']['svm']['nfs_dns']}}" \
+                                      "{{storage['mount_dir']}}" \
+                                      "{{storage['mount_options']}}" \
+                                      "{{storage['fsx_netapp_ontap']['volume']['volume_path']}}"
+        {%- elif storage['provider'] == 'fsx_openzfs' %}
+        mkdir -p "{{storage['mount_dir']}}"
+        add_fsx_openzfs_to_fstab "{{storage['fsx_openzfs']['dns']}}" \
+                                 "{{storage['mount_dir']}}" \
+                                 "{{storage['mount_options']}}" \
+                                 "{{storage['fsx_openzfs']['volume_path']}}"
+        {%- endif %}
+      {%- endif %}
+    {%- endfor %}
+
+    local AWS=$(command -v aws)
+    local FS_MOUNT_ATTEMPT=0
+    local FS_MOUNT_MAX_ATTEMPTS=5
+    mount -a
+    while [[ $? -ne 0 ]] && [[ ${FS_MOUNT_ATTEMPT} -le 5 ]]
+    do
+      local SLEEP_TIME=$(( RANDOM % 33 + 8 ))  # Minimum of 8 seconds sleep
+      log_info "(${FS_MOUNT_ATTEMPT} of ${FS_MOUNT_MAX_ATTEMPTS}) Failed to mount FS, retrying in ${SLEEP_TIME} seconds ..."
+      sleep ${SLEEP_TIME}
+      ((FS_MOUNT_ATTEMPT++))
+      mount -a
+    done
+  }
+
+  #-- cp from local disk to /tmp before mount
+  TMP_DIR="/tmp/tmpdir.$$"
+  if [ -d ${TMP_DIR} ]; then
+    rm -fr ${TMP_DIR}
+  fi
+  mkdir -p ${TMP_DIR}
+  files=$(ls /home/*/.ssh/authorized_keys)
+  for file in $files
+  do
+    user=$(echo $file|awk -F\/ '{print $3}')
+    dest="${TMP_DIR}/${user}::$(basename ${file})"
+    cp -p $file $dest
+  done
+
+  mount_shared_storage
+
+  #-- cp from /tmp to shared home after mount
+  for file in $(ls ${TMP_DIR}) # One key file for each local user
+  do
+     SRC_FILE="${TMP_DIR}/${file}"
+     user=$(echo $file|awk -F'::' '{print $1}')  # extract the user-name
+     DST_HOME="/home/${user}"              # user's home dir, may not even exist in shared-home
+     DST_DIR="${DST_HOME}/.ssh"            # user's ssh dir in shared home
+     DST_FILE="${DST_DIR}/authorized_keys" # authorized_keys file
+     if [ ! -d ${DST_DIR} ] ; then         # create user's home in shared home, if not exists
+         mkdir -p ${DST_DIR}
+         chown ${user}: ${DST_HOME}        # give right ownership for the home
+         chown ${user}: ${DST_DIR}         # give right ownership for the .ssh
+         chmod 700 ${DST_HOME} ${DST_DIR}  # and the permission
+     fi
+     if [ ! -f ${DST_FILE} ] ; then
+         touch ${DST_FILE}                 # create the authorized_keys file with
+         chown --reference=${SRC_FILE} ${DST_FILE}  # right ownership
+         chmod --reference=${SRC_FILE} ${DST_FILE}  # right permission
+     fi
+     while read -r line_src                # loop through each line / key of source
+     do
+         SRC_SIGNATURE=$(echo ${line_src} | awk '{print $2}') 
+         ALREADY_PRESENT="0"                # initialize the ALREDY_PRESENT flag to 0
+         while read -r line_dst            # loop through each destination key / line
+         do
+             DST_SIGNATURE=$(echo ${line_dst} | awk '{print $2}')
+             if [ "${SRC_SIGNATURE}" = "${DST_SIGNATURE}" ] ; then # if both src / dest key are equal
+                  ALREADY_PRESENT="1"                              # then set the present flag and break
+                  break
+             fi
+         done < ${DST_FILE}
+         if [ "${ALREADY_PRESENT}" = "0" ] ; then   # if the flag still 0 implies the source key line
+             echo ${line_src} >> ${DST_FILE}     # is not already present in destination, so append it.
+         fi
+     done  < ${SRC_FILE}
+  done
+  rm -fr ${TMP_DIR}                   # remove the temporary directory
+
+  {%- if context.has_storage_provider('fsx_lustre') or context.has_storage_provider('fsx_cache') %}
+    # Lustre client tuning for some adjustments takes place _after_ the client mounts have taken place
+    {% include '_templates/linux/fsx_lustre_client_tuning_postmount.jinja2' %}
+  {%- endif %}
+{%- endif %}
+# End: Mount Shared Storage

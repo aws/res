@@ -1,0 +1,88 @@
+# Begin: Install OpenPBS
+{%- if context.base_os in ('amazonlinux2', 'centos7', 'rhel7', 'rhel8', 'rhel9') %}
+{%- if context.config.get_string('global-settings.package_config.openpbs.type') == 'release' %}
+function install_openpbs () {
+  local OPENPBS_VERSION="{{ context.config.get_string('global-settings.package_config.openpbs.version', required=True) }}"
+  local OPENPBS_URL="{{ context.config.get_string('global-settings.package_config.openpbs.url', required=True) }}"
+  local OPENPBS_HASH="{{ context.config.get_string('global-settings.package_config.openpbs.checksum', required=True).lower().strip() }}"
+  local OPENPBS_HASH_METHOD="{{ context.config.get_string('global-settings.package_config.openpbs.checksum_method', required=True).lower().strip() }}"
+  local OPENPBS_TGZ="$(basename ${OPENPBS_URL})"
+  local OPENPBS_WORK_DIR="/root/bootstrap/openpbs"
+  # check if already installed and is the correct version
+  local OPENPBS_INSTALLED_VERSION=$(/opt/pbs/bin/qstat --version | awk '{print $NF}')
+  if [[ "${OPENPBS_INSTALLED_VERSION}" == "${OPENPBS_VERSION}" ]]; then
+    log_info "OpenPBS is already installed. Version: ${OPENPBS_VERSION}"
+    return 0
+  fi
+
+  log_info "OpenPBS not detected or incorrect version, Installing OpenPBS version: ${OPENPBS_VERSION}..."
+
+  OPENPBS_PKGS="{{ ' '.join(context.config.get_list('global-settings.package_config.openpbs.packages')) }}"
+  {%- if context.base_os in ('rhel7') %}
+  yum install -y ${OPENPBS_PKGS} --enablerepo rhel-7-server-rhui-optional-rpms
+  {%- endif %}
+  {%- if context.base_os in ('amazonlinux2', 'centos7', 'rhel8', 'rhel9') %}
+  yum install -y $(echo ${OPENPBS_PKGS[*]})
+  {%- endif %}
+  mkdir -p "${OPENPBS_WORK_DIR}"
+  pushd ${OPENPBS_WORK_DIR}
+  # ADD A WAITER SO THAT IF CONNECTION IS THROTTLED WE CAN CONTINUE AFTER WAITING.
+  wget ${OPENPBS_URL}
+  if [[ $(openssl ${OPENPBS_HASH_METHOD} ${OPENPBS_TGZ} | awk '{print $2}') != ${OPENPBS_HASH} ]];  then
+    echo -e "FATAL ERROR: ${OPENPBS_HASH_METHOD} Checksum for OpenPBS failed. File may be compromised." > /etc/motd
+    exit 1
+  fi
+  tar zxvf ${OPENPBS_TGZ}
+  local OPENPBS_WORK_DIR="${OPENPBS_WORK_DIR}/openpbs-${OPENPBS_VERSION}"
+  pushd ${OPENPBS_WORK_DIR}
+  ./autogen.sh
+  ./configure PBS_VERSION=${OPENPBS_VERSION} --prefix=/opt/pbs
+  local NUM_PROCS=`nproc --all`
+  local MAKE_FLAGS="-j${NUM_PROCS}"
+  make ${MAKE_FLAGS}
+  make install ${MAKE_FLAGS}
+  /opt/pbs/libexec/pbs_postinstall
+  chmod 4755 /opt/pbs/sbin/pbs_iff /opt/pbs/sbin/pbs_rcp
+  popd
+  popd
+}
+install_openpbs
+{%- endif %}
+{%- if context.config.get_string('global-settings.package_config.openpbs.type') == 'dev' %}
+function install_openpbs () {
+  local OPENPBS_VERSION="{{ context.config.get_string('global-settings.package_config.openpbs.version', required=True) }}"
+  local OPENPBS_WORK_DIR="/root/bootstrap/openpbs"
+  # check if already installed and is the correct version
+  local OPENPBS_INSTALLED_VERSION=$(/opt/pbs/bin/qstat --version | awk '{print $NF}')
+  if [[ "${OPENPBS_INSTALLED_VERSION}" == "${OPENPBS_VERSION}" ]]; then
+    log_info "OpenPBS is already installed. Version: ${OPENPBS_VERSION}"
+    return 0
+  fi
+
+  log_info "OpenPBS Not Detected, Installing OpenPBS ..."
+
+  OPENPBS_PKGS="{{ ' '.join(context.config.get_list('global-settings.package_config.openpbs.packages')) }}"
+  {%- if context.base_os in ('rhel7') %}
+  yum install -y ${OPENPBS_PKGS} --enablerepo rhel-7-server-rhui-optional-rpms
+  {%- endif %}
+  {%- if context.base_os in ('amazonlinux2', 'centos7', 'rhel8', 'rhel9') %}
+  yum install -y $(echo ${OPENPBS_PKGS[*]})
+  {%- endif %}
+  mkdir -p "${OPENPBS_WORK_DIR}"
+  pushd ${OPENPBS_WORK_DIR}
+  git clone https://github.com/openpbs/openpbs.git
+  cd openpbs
+  sh ./autogen.sh
+  ./configure PBS_VERSION=${OPENPBS_VERSION} --prefix=/opt/pbs
+  local NUM_PROCS=`nproc --all`
+  local MAKE_FLAGS="-j${NUM_PROCS}"
+  make ${MAKE_FLAGS}
+  make install ${MAKE_FLAGS}
+  /opt/pbs/libexec/pbs_postinstall
+  chmod 4755 /opt/pbs/sbin/pbs_iff /opt/pbs/sbin/pbs_rcp
+  popd
+}
+install_openpbs
+{%- endif %}
+{%- endif %}
+# End: Install OpenPBS

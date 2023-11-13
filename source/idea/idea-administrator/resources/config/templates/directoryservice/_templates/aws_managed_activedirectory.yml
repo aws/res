@@ -1,0 +1,79 @@
+# Begin: AWS Managed Microsoft AD Settings (aws_managed_activedirectory)
+
+{%- if use_existing_directory_service %}
+# Indicates if the AWS Managed Microsoft AD is already provisioned and a new AD should not be provisioned.
+use_existing: true
+
+# The DirectoryId of the existing AWS Managed Microsoft AD.
+directory_id: {{ directory_id or '~' }}
+{%- endif %}
+
+# The NetBIOS name for your domain
+ad_short_name: "IDEA"
+
+# AWS Managed Microsoft AD Edition. Must be one of: [Standard, Enterprise]
+# Note: Enterprise edition is not tested/supported yet, and additional configurations may be required and/or cdk stack needs to be updated.
+ad_edition: "Standard"
+
+# added for future use - not supported yet.
+# primary_region: "{{aws_region}}"
+# replica_region: "{{aws_region}}"
+
+# Password Max Age in Days. Used by Cluster IDP such as Cognito UserPool or KeyCloak in JWT Claims
+# Authenticated API requests will be rejected if the password has expired.
+# see: https://docs.aws.amazon.com/directoryservice/latest/admin-guide/ms_ad_password_policies.html
+password_max_age: 42
+
+ldap_connection_uri: "ldap://idea.local"
+
+sssd:
+  # By default, the AD provider will rely on POSIX attributes defined in Active Directory.
+  # By default, IDEA will populate these values during user/group creation (uidNumber, gidNumber).
+  # If you want to enable ID mapping from the object SID, set ldap_id_mapping = true
+  # For further details about ID mapping and the ldap_id_mapping parameter, see the sssd-ldap(8) man page.
+  ldap_id_mapping: false
+
+ad_automation:
+  # time to live - for the ad-automation DDB table entry containing OTP and any other attributes
+  entry_ttl_seconds: 1800
+
+  # enable or disable service account's password rotation
+  # when set to true, IDEA ADAutomationAgent running in Cluster Manager will try to reset the service account credentials,
+  #  when nearing expiration.
+  enable_root_password_reset: true
+
+  # the max amount of time it could take to process the ad automation request.
+  sqs_visibility_timeout_seconds: 30
+
+users:
+  # The Organizational Unit (OU) in your domain, in which IDEA cluster Users can be managed
+  # If just the name of the OU, e.g. "Users" is provided, the qualified OU path will be computed as below:
+  # OU=Users,OU=IDEA,dc=idea,dc=local
+  # Provide the fully qualified OU to avoid any ambiguity.
+  ou: OU=Users,OU=IDEA,DC=idea,DC=local
+
+groups:
+  # The Organizational Unit (OU) in your domain, in which IDEA cluster Groups can be managed
+  # If just the name of the OU, e.g. "Users" is provided, the qualified OU path will be computed as below:
+  # OU=Users,OU=IDEA,dc=idea,dc=local
+  # Provide the fully qualified OU to avoid any ambiguity.
+  ou: OU=Users,OU=IDEA,DC=idea,DC=local
+
+computers:
+  # The Organizational Unit (OU) in your domain, in which IDEA Computer Accounts (Applicable Infra + SOCA Compute + eVDI) can be added
+  # If just the name of the OU, e.g. "Computers" is provided, the qualified OU path will be computed as below:
+  # OU=Computers,OU=IDEA,DC=idea,DC=local
+  # Provide the fully qualified OU to avoid any ambiguity.
+  ou: OU=Computers,OU=IDEA,DC=idea,DC=local
+
+sudoers:
+  # specify the group name to be used to manage Sudo users.
+  # this group will be added to /etc/sudoers on all cluster nodes that join AD.
+  group_name: AWS Delegated Administrators
+
+  # The Organizational Unit (OU) in your domain, in which the Sudoers group is available.
+  # Provide the fully qualified OU to avoid any ambiguity.
+  ou: OU=AWS Delegated Groups,DC=idea,DC=local
+
+
+# End: AWS Managed Microsoft AD Settings (aws_managed_activedirectory)

@@ -1,0 +1,147 @@
+# Shared Storage Settings
+# * internal and home shared storage are mandatory.
+# * you can optionally provide additional "existing" file systems
+
+{%- macro storage_provider_config(provider, kwargs) %}
+{%- if provider == 'efs' %}
+  {%- include 'shared-storage/_templates/efs.yml' %}
+{%- elif provider == 'fsx_lustre' %}
+  {%- include 'shared-storage/_templates/fsx_lustre.yml' %}
+{%- endif %}
+{%- endmacro %}
+
+# application storage for cluster.
+# used to store common applications, scripts, files and logs across the cluster
+internal:
+  title: "Shared Storage - Internal"
+  provider: "{{storage_internal_provider}}"
+  mount_dir: "{{internal_mount_dir}}"
+  # Mount options default to using NFSv4.
+  # Adjust mount_options if encryption in transit is needed via the Amazon EFS Mount Helper
+  mount_options: "nfs4 nfsvers=4.1,rsize=1048576,wsize=1048576,hard,timeo=600,retrans=2,noresvport 0 0"
+  #mount_options: "efs _netdev,noresvport,tls,iam 0 0"
+  scope:
+    - cluster
+  {{ storage_provider_config(provider=storage_internal_provider, kwargs={
+      'use_existing_fs': use_existing_internal_fs,
+      'file_system_id': existing_internal_fs_id,
+      'kms_key_id': kms_key_id,
+      'efs': {
+        'cloudwatch_monitoring': True
+      },
+      'fsx_lustre': {
+        'deployment_type': 'PERSISTENT_1'
+      }
+  }) | indent(2) }}
+
+# home storage for cluster.
+# used to store user home directories
+home:
+  title: "Shared Storage - Home"
+  provider: "{{storage_home_provider}}"
+  mount_dir: "{{home_mount_dir}}"
+  # Mount options default to using NFSv4.
+  # Adjust mount_options if encryption in transit is needed via the Amazon EFS Mount Helper
+  mount_options: "nfs4 nfsvers=4.1,rsize=1048576,wsize=1048576,hard,timeo=600,retrans=2,noresvport 0 0"
+  #mount_options: "efs _netdev,noresvport,tls,iam 0 0"
+  scope:
+    - cluster
+  {{ storage_provider_config(provider=storage_home_provider, kwargs={
+      'use_existing_fs': use_existing_home_fs,
+      'file_system_id': existing_home_fs_id,
+      'kms_key_id': kms_key_id,
+      'efs': {
+        'cloudwatch_monitoring': False,
+        'transition_to_ia': 'AFTER_30_DAYS'
+      },
+      'fsx_lustre': {
+        'deployment_type': 'PERSISTENT_1'
+      }
+  }) | indent(2) }}
+
+
+# Example configurations for existing File Systems
+# Below configurations are for quick reference.
+# Configurations specific to your environment and cluster can be generated using below utility:
+#  ./res-admin.sh shared-storage attach-file-system --help
+
+# Existing Amazon EFS
+# demo:
+#   title: Demo FS
+#   provider: efs
+#   scope:
+#     - cluster
+#   mount_dir: /demo
+#   mount_options: nfs4 nfsvers=4.1,rsize=1048576,wsize=1048576,hard,timeo=600,retrans=2,noresvport 0 0
+#   efs:
+#     use_existing_fs: true
+#     file_system_id: fs-05b067d4a78e0fb29
+#     dns: fs-05b067d4a78e0fb29.efs.us-east-1.amazonaws.com
+#     encrypted: true
+
+# Existing FSx for Lustre
+# demo:
+#   title: Demo FS
+#   provider: fsx_lustre
+#   scope:
+#     - cluster
+#   mount_dir: /demo
+#   mount_options: lustre defaults,noatime,flock,_netdev 0 0
+#   fsx_lustre:
+#     use_existing_fs: true
+#     file_system_id: fs-01a2ccc035f0f007c
+#     dns: fs-01a2ccc035f0f007c.fsx.us-east-1.amazonaws.com
+#     mount_name: drohpbev
+#     version: '2.10'
+
+# Existing FSx for NetApp ONTAP
+# demo:
+#   title: Demo FS
+#   provider: fsx_netapp_ontap
+#   scope:
+#     - cluster
+#   mount_drive: Z
+#   mount_dir: /demo
+#   mount_options: nfs4 nfsvers=4.1,rsize=1048576,wsize=1048576,hard,timeo=600,retrans=2,noresvport 0 0
+#   fsx_netapp_ontap:
+#     use_existing_fs: true
+#     file_system_id: fs-09753a84872d3209b
+#     svm:
+#       svm_id: svm-064990494a2dbd4c2
+#       smb_dns: IDEA-DEV-SVM1.IDEA.LOCAL
+#       nfs_dns: svm-064990494a2dbd4c2.fs-09753a84872d3209b.fsx.us-east-1.amazonaws.com
+#       management_dns: svm-064990494a2dbd4c2.fs-09753a84872d3209b.fsx.us-east-1.amazonaws.com
+#       iscsi_dns: iscsi.svm-064990494a2dbd4c2.fs-09753a84872d3209b.fsx.us-east-1.amazonaws.com
+#     volume:
+#       volume_id: fsvol-0f791716b33592fff
+#       volume_path: /
+#       security_style: MIXED
+#       cifs_share_name: share # Use same name reported by 'vserver cifs share show' command in ONTAP CLI
+
+# Existing FSx for OpenZFS
+# demo:
+#   title: Demo FS
+#   provider: fsx_openzfs
+#   scope:
+#     - cluster
+#   mount_dir: /demo
+#   mount_options: nfs4 nfsvers=4.1,rsize=1048576,wsize=1048576,timeo=600 0 0
+#   fsx_openzfs:
+#     use_existing_fs: true
+#     file_system_id: fs-09e1b30aab982aa34
+#     dns: fs-09e1b30aab982aa34.fsx.us-east-1.amazonaws.com
+#     volume_id: fsvol-00d420eeb064ac36a
+#     volume_path: /fsx
+
+# Existing FSx for Windows File Server
+# demo:
+#   title: Demo FS
+#   provider: fsx_windows_file_server
+#   scope:
+#     - cluster
+#   mount_drive: Z
+#   fsx_windows_file_server:
+#     use_existing_fs: true
+#     file_system_id: fs-0c1f74968df26462e
+#     dns: amznfsx0wallrm9.idea.local
+#     preferred_file_server_ip: 10.0.113.174

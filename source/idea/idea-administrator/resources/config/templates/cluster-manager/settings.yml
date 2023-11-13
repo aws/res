@@ -1,0 +1,102 @@
+# Cluster Manager Settings
+
+endpoints:
+  external:
+    priority: 12
+    path_patterns: ['/{{ module_id }}/*']
+  internal:
+    priority: 12
+    path_patterns: ['/{{ module_id }}/*']
+
+server:
+  enable_http: true
+  hostname: 0.0.0.0
+  port: 8443
+  enable_tls: true
+  tls_certificate_file: {{internal_mount_dir}}/{{cluster_name}}/certs/idea.crt
+  tls_key_file: {{internal_mount_dir}}/{{cluster_name}}/certs/idea.key
+  enable_unix_socket: true
+  unix_socket_file: /run/idea.sock
+  max_workers: 16
+  enable_metrics: false
+  graceful_shutdown_timeout: 10
+  api_context_path: /{{ module_id }}
+  web_resources_context_path: /
+
+web_portal:
+  title: 'Research and Engineering Studio'
+  logo: ~
+  subtitle: ~
+  copyright_text: 'Copyright 2023 Amazon Inc. or its affiliates. All Rights Reserved.'
+
+  # session management refers to client side session management
+  # valid values are one of: [in-memory, local-storage]
+  # * in-memory: implies access tokens and refresh tokens will be saved in-memory within ServerWorker instance in WebBrowser. (recommended)
+  # * local-storage: implies access tokens and refresh tokens will be saved in browser local storage.
+  # Note: ServiceWorkers cannot be activated on Browsers when serving over insecure HTTPS/TLS context. Unless you are using valid TLS certs, ServiceWorkers will not be activated.
+  # Web Portal implementation will fall back to local-storage for session management when ServiceWorker cannot be installed.
+  # Change below value to local-storage only if you want to disable ServiceWorker based session management.
+  session_management: in-memory
+
+  # front end default log level
+  #  0: OFF
+  #  1: ERROR
+  #  2: WARN
+  #  3: INFO
+  #  4: DEBUG
+  #  5: TRACE
+  # log level can be overriden by user by setting the `idea.log-level` local storage key using browser console
+  # eg. localStorage.setItem('idea.log-level', '4')
+  default_log_level: 3
+
+oauth2_client:
+  # cluster manager OAuth 2.0 client is used for managing authentication for web-portal (when single sign-on is disabled)
+  # set the below to an appropriate value based on your requirements and security posture.
+  # recommended value is between 12 and 24 hours. web-portal session will expire and user will need to log in again after this interval.
+  refresh_token_validity_hours: 12
+
+logging:
+  logs_directory: /opt/idea/app/logs
+  profile: production
+  default_log_file_name: application.log
+
+cloudwatch_logs:
+  enabled: true
+
+ec2:
+  autoscaling:
+    public: false
+    instance_type: {{instance_type}}
+    base_os: {{base_os}}
+    instance_ami: {{instance_ami}}
+    volume_size: {{volume_size}}
+    enable_detailed_monitoring: false
+    min_capacity: 1
+    max_capacity: 3
+    cooldown_minutes: 5
+    new_instances_protected_from_scale_in: false
+    elb_healthcheck:
+      # Specifies the time in minutes Auto Scaling waits before checking the health status of an EC2 instance that has come into service.
+      grace_time_minutes: 15
+    cpu_utilization_scaling_policy:
+      target_utilization_percent: 80
+      estimated_instance_warmup_minutes: 15
+    rolling_update_policy:
+      max_batch_size: 1
+      min_instances_in_service: 1
+      pause_time_minutes: 15
+    # instance metadata access method
+    metadata_http_tokens: "required"  # supported values are "required" for IMDSv2 or "optional" for IMDSv1
+
+cache:
+  long_term:
+    max_size: 1000
+    ttl_seconds: 86400 # 1 day
+  short_term:
+    max_size: 10000
+    ttl_seconds: 600 # 10 minutes
+
+notifications:
+  # email notifications are supported at the moment. slack, sms and other channels will be supported in a future release.
+  email:
+    enabled: true

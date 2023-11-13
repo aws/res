@@ -1,0 +1,640 @@
+#  Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+#
+#  Licensed under the Apache License, Version 2.0 (the "License"). You may not use this file except in compliance
+#  with the License. A copy of the License is located at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+#  or in the 'license' file accompanying this file. This file is distributed on an 'AS IS' BASIS, WITHOUT WARRANTIES
+#  OR CONDITIONS OF ANY KIND, express or implied. See the License for the specific language governing permissions
+#  and limitations under the License.
+
+SocaInputParamSpec:
+
+  name: idea-installation-params
+  title: "RES Installation User Input Params"
+  version: 1.0.0
+
+  modules:
+    - name: install-idea
+      title: "Install RES"
+      sections:
+        - name: aws-account
+          title: "AWS Credentials and Region"
+          required: yes
+          params:
+            - name: aws_profile
+            - name: aws_partition
+            - name: aws_profile2
+            - name: aws_region
+        - name: cluster-settings
+          title: "Environment Settings"
+          required: yes
+          params:
+            - name: cluster_name
+            - name: administrator_email
+            - name: vpc_cidr_block
+            - name: ssh_key_pair_name
+            - name: client_ip
+            - name: prefix_list_ids
+            - name: alb_public
+            - name: use_vpc_endpoints
+            - name: directory_service_provider
+            - name: enable_aws_backup
+            - name: kms_key_type
+            - name: kms_key_id
+        - name: module-settings
+          title: "Module Settings"
+          required: yes
+          params:
+            - name: enabled_modules
+            # - name: identity_provider todo - enable after keycloak implementation
+            - name: metrics_provider
+            - name: prometheus_remote_write_url
+            - name: base_os
+            - name: instance_type
+            - name: volume_size
+
+    - name: install-idea-using-existing-resources
+      title: "Install RES (using existing resources)"
+      sections:
+        - name: aws-account
+          title: "AWS Credentials and Region"
+          required: yes
+          params:
+            - name: aws_profile
+            - name: aws_partition
+            - name: aws_profile2
+            - name: aws_region
+        - name: cluster-settings
+          title: "Environment Settings"
+          required: yes
+          params:
+            - name: cluster_name
+            - name: administrator_email
+            - name: ssh_key_pair_name
+            - name: client_ip
+            - name: prefix_list_ids
+            - name: alb_public
+            - name: use_vpc_endpoints
+            - name: directory_service_provider
+            - name: enable_aws_backup
+            - name: kms_key_type
+            - name: kms_key_id
+        - name: existing-resources
+          title: "Existing Resources"
+          required: yes
+          params:
+            - name: vpc_id
+            - name: existing_resources
+            - name: public_subnet_ids
+            - name: private_subnet_ids
+            - name: directory_id
+            - name: directory_service_root_username_secret_arn
+            - name: directory_service_root_password_secret_arn
+            - name: storage_internal_provider
+            - name: existing_internal_fs_id
+            - name: storage_home_provider
+            - name: existing_home_fs_id
+            - name: opensearch_domain_endpoint
+        - name: module-settings
+          title: "Module Settings"
+          required: yes
+          params:
+            - name: enabled_modules
+            # - name: identity_provider todo - enable after keycloak implementation
+            - name: metrics_provider
+            - name: prometheus_remote_write_url
+            - name: base_os
+            - name: instance_type
+            - name: volume_size
+
+  #--------------------------------------------------------------------------------------------------
+  # deployment input parameters
+  # these parameters can be included or customized in the deployment options configured above
+  #--------------------------------------------------------------------------------------------------
+  params:
+    #--------------------------------------------------------------------------------------------------
+    # aws credential selection params
+    #--------------------------------------------------------------------------------------------------
+    - name: aws_profile
+      title: "AWS Profile"
+      description: "Select the AWS Profile you wish to use for RES Installation:"
+      param_type: select
+      data_type: str
+      help_text: ~
+      default: default
+      validate:
+        required: yes
+      tag: default
+
+    - name: aws_partition
+      title: "AWS Partition"
+      description: "Select the AWS Partition you wish to use for the RES environment:"
+      param_type: select
+      data_type: str
+      help_text: ~
+      default: aws
+      tag: default
+      markdown: |
+        A Partition is a group of AWS Region and Service objects.
+        We use the Partition to determine the applicable AWS Regions in which you want to install RES.
+
+    # In some scenarios a secondary AWS Profile is required to bootstrap the installation.
+    # This is common when the selected partition/region lacks the SSM namespace to probe
+    # for service availability. This question is only asked if the 'when' clause is matched.
+    # Defaults to ask when the aws_partition is aws-us-gov (US GovCloud)
+    - name: aws_profile2
+      title: "AWS Profile2"
+      description: "Select the AWS Commercial Profile you wish to use for RES Installation:"
+      param_type: select
+      data_type: str
+      help_text: ~
+      default: default
+      validate:
+        required: yes
+      tag: default
+      when:
+        param: aws_partition
+        eq: aws-us-gov
+
+    - name: aws_region
+      title: "AWS Region"
+      description: "Select the AWS Region you want to use for the RES environment:"
+      param_type: select
+      data_type: str
+      help_text: ~
+      default: ~
+      validate:
+        required: yes
+      tag: default
+      custom:
+        defaults:
+          aws: us-east-1
+          aws-cn: cn-north-1
+          aws-us-gov: us-gov-east-1
+          aws-iso: us-iso-east-1
+          aws-iso-b: us-isob-east-1
+
+    #--------------------------------------------------------------------------------------------------
+    # environment params
+    #--------------------------------------------------------------------------------------------------
+    - name: cluster_name
+      title: "Environment Name"
+      description: "Enter the RES Environment"
+      param_type: text
+      data_type: str
+      help_text: "eg. 'prod', 'beta' or 'dev'. EnvironmentName will be automatically prefixed 'res-'"
+      default: ~
+      validate:
+        required: yes
+        auto_prefix: 'res-'
+
+    - name: administrator_email
+      title: "Administrator Email Address"
+      description: "Enter the email address of the RES Environment Administrator"
+      param_type: text
+      data_type: str
+      help_text: ~
+      default: ~
+      validate:
+        required: yes
+        regex: ^(\S+@\S+)$
+      markdown: |
+        An administrator account will be created using this email address.
+        You'll receive an invitation email with the administrator username and a temporary password.
+
+    #--------------------------------------------------------------------------------------------------
+    # network params
+    #--------------------------------------------------------------------------------------------------
+    - name: prefix_list_ids
+      title: "Prefix List"
+      description: "Enter existing VPC Prefix List Ids"
+      param_type: text
+      multiple: true
+      data_type: str
+      custom_type: vpc-prefix-list
+      help_text: "multiple prefix list ids can be separated by comma"
+      tag: default
+      validate:
+        required: yes
+
+    - name: client_ip
+      title: "Client IP"
+      description: "Enter the IP Address or CIDR Block to allow access to Environment:"
+      param_type: text
+      data_type: str
+      help_text: ~
+      default: ~
+      refreshable: yes
+      validate:
+        regex: ^([0-9]{1,3}\.){3}[0-9]{1,3}(\/([0-9]|[1-2][0-9]|3[0-2]))?$
+        required: yes
+
+    - name: vpc_cidr_block
+      title: "VPC CIDR Block"
+      description: "Enter the CIDR Block for your VPC"
+      param_type: text
+      data_type: str
+      help_text: ~
+      default: 10.0.0.0/16
+      validate:
+        regex: ^([0-9]{1,3}\.){3}[0-9]{1,3}($|/(16|18|20|22|24|26))$
+        required: yes
+
+    - name: ssh_key_pair_name
+      title: "SSH KeyPair"
+      description: "Select the SSH KeyPair for accessing the EC2 Instance"
+      param_type: select
+      data_type: str
+      help_text: ~
+      default: $first
+      validate:
+        required: yes
+      markdown: ~
+
+    - name: use_vpc_endpoints
+      title: "Use VPC Endpoints?"
+      description: "Do you want to use VPC Endpoints?"
+      param_type: confirm
+      data_type: bool
+      help_text: "VPC endpoints allow traffic to flow between a VPC and other services without ever leaving the AWS network"
+      default: no
+
+    - name: confirm_vpc_endpoints
+      title: "VPC Endpoints"
+      description: "VPC Endpoint Configuration"
+      param_type: confirm
+      data_type: bool
+      help_text: "Verify the above VPC endpoint configuration."
+      default: ~
+      required: true
+      when:
+        param: use_vpc_endpoints
+        eq: yes
+
+    - name: enable_aws_backup
+      title: "Enable AWS Backup?"
+      description: "Do you want to enable integration with AWS Backup?"
+      param_type: confirm
+      data_type: bool
+      help_text: ~
+      default: yes
+
+    - name: kms_key_type
+      title: "KMS Encryption Key Type"
+      description: "Select the encryption key type for the environment"
+      param_type: select
+      data_type: str
+      help_text: ~
+      default: $first
+      choices:
+        - title: AWS Managed
+          value: aws-managed
+        - title: Customer Managed
+          value: customer-managed
+      validate:
+        required: yes
+      markdown: ~
+
+    - name: kms_key_id
+      title: "Customer Managed KMS Key ID"
+      description: "Enter the ID of the customer managed key from AWS Key Management Service"
+      param_type: select
+      data_type: str
+      help_text: ~
+      default: $first
+      validate:
+        required: yes
+      markdown: ~
+      when:
+        param: kms_key_type
+        eq: customer-managed
+
+    #--------------------------------------------------------------------------------------------------
+    # external application load balancer params
+    #--------------------------------------------------------------------------------------------------
+    - name: alb_public
+      title: "Is ALB Public?"
+      description: "Deploy application load balancer in public subnets?"
+      param_type: confirm
+      data_type: bool
+      help_text: "Recommended: Yes"
+      default: yes
+
+    #--------------------------------------------------------------------------------------------------
+    # module settings
+    #--------------------------------------------------------------------------------------------------
+
+    - name: enabled_modules
+      title: "RES Modules"
+      description: "Select all applicable modules you want to deploy"
+      param_type: checkbox
+      data_type: str
+      multiple: true
+      help_text: ~
+      tag: default
+      markdown: ~
+      validate:
+        required: yes
+
+    - name: identity_provider
+      title: "Identity Provider"
+      description: "Select the Identity Provider"
+      param_type: select
+      data_type: str
+      help_text: ~
+      default: openldap
+      tag: default
+      choices:
+        - title: Amazon Cognito UserPool
+          value: cognito-idp
+        - title: Keycloak
+          value: keycloak
+      validate:
+        required: yes
+
+    - name: directory_service_provider
+      title: "Directory Service"
+      description: "Select the DirectoryService Provider"
+      param_type: select
+      data_type: str
+      help_text: ~
+      default: aws_managed_activedirectory
+      tag: default
+      choices:
+        - title: AWS Managed Microsoft AD
+          value: aws_managed_activedirectory
+        - title: Microsoft Active Directory (On-Prem or Self-Managed)
+          value: activedirectory
+      validate:
+        required: yes
+
+    - name: base_os
+      title: "Base OS"
+      description: "Select the Base Operating System:"
+      param_type: select
+      data_type: str
+      help_text: ~
+      default: amazonlinux2
+      choices:
+        - title: Amazon Linux 2
+          value: amazonlinux2
+        - title: CentOS 7
+          value: centos7
+        - title: Red Hat Enterprise Linux 7
+          value: rhel7
+      tag: default
+      markdown: ~
+
+    - name: instance_type
+      title: "Instance Type"
+      description: "Select the EC2 Instance Type:"
+      param_type: select
+      data_type: str
+      help_text: ~
+      default: m5.large
+      tag: default
+      choices:
+        - value: t3.medium
+        - value: t3.large
+        - value: m5.large
+        - value: m5.xlarge
+      validate:
+        required: yes
+
+    - name: volume_size
+      title: "Volume Size (GB)"
+      description: "Enter the storage volume size for node"
+      param_type: text
+      data_type: int
+      help_text: "Size of the EBS root disk in GBs"
+      default: 200
+      validate:
+        required: yes
+        min: 20
+        max: 1000
+
+    #--------------------------------------------------------------------------------------------------
+    # metrics settings
+    #--------------------------------------------------------------------------------------------------
+
+    - name: metrics_provider
+      title: "Metrics Provider"
+      description: "Select a metrics provider"
+      param_type: select
+      data_type: str
+      help_text: ~
+      default: $first
+      validate:
+        required: yes
+      when:
+        param: enabled_modules
+        contains: metrics
+
+    - name: prometheus_remote_write_url
+      title: "Remote Write URL"
+      description: "Enter your custom prometheus remote write url"
+      param_type: text
+      data_type: str
+      help_text: ~
+      validate:
+        required: yes
+      when:
+        param: metrics_provider
+        eq: prometheus
+
+    #--------------------------------------------------------------------------------------------------
+    # existing resources
+    #--------------------------------------------------------------------------------------------------
+    - name: vpc_id
+      title: "VPC"
+      description: "Select an existing VPC to deploy RES"
+      param_type: select
+      data_type: str
+      help_text: ~
+      default: $first
+      validate:
+        required: yes
+
+    - name: existing_resources
+      title: "Existing Resources"
+      description: "Select existing resources from the VPC you want to use for the environment"
+      param_type: checkbox
+      data_type: str
+      multiple: true
+      help_text: ~
+      tag: default
+      markdown: ~
+      validate:
+        required: yes
+
+    - name: private_subnet_ids
+      title: "Existing Private Subnets"
+      description: "Select existing private subnets"
+      param_type: checkbox
+      data_type: str
+      multiple: true
+      help_text: ~
+      tag: default
+      markdown: ~
+      validate:
+        required: yes
+      when:
+        param: existing_resources
+        contains: 'subnets:private'
+
+    - name: public_subnet_ids
+      title: "Existing Public Subnets"
+      description: "Select existing public subnets"
+      param_type: checkbox
+      data_type: str
+      multiple: true
+      help_text: ~
+      tag: default
+      markdown: ~
+      validate:
+        required: yes
+      when:
+        param: existing_resources
+        contains: 'subnets:public'
+
+    - name: storage_internal_provider
+      title: "Storage Provider: Internal"
+      description: "Select internal storage provider"
+      param_type: select
+      data_type: str
+      help_text: ~
+      tag: default
+      markdown: ~
+      validate:
+        required: yes
+      choices:
+        - title: 'Amazon EFS'
+          value: efs
+        - title: 'Amazon FSx for Lustre'
+          value: fsx_lustre
+      when:
+        param: existing_resources
+        contains: 'shared-storage:internal'
+
+    - name: existing_internal_fs_id
+      title: "Existing Internal File System"
+      description: "Select existing file system for Internal"
+      param_type: select
+      data_type: str
+      help_text: ~
+      tag: default
+      markdown: ~
+      validate:
+        required: yes
+      when:
+        param: existing_resources
+        contains: 'shared-storage:internal'
+
+    - name: storage_home_provider
+      title: "Storage Provider: Home"
+      description: "Select home storage provider"
+      param_type: select
+      data_type: str
+      help_text: ~
+      tag: default
+      markdown: ~
+      validate:
+        required: yes
+      choices:
+        - title: 'Amazon EFS'
+          value: efs
+        - title: 'Amazon FSx for Lustre'
+          value: fsx_lustre
+      when:
+        param: existing_resources
+        contains: 'shared-storage:home'
+
+    - name: existing_home_fs_id
+      title: "Existing Home File System"
+      description: "Select existing file system for Home"
+      param_type: select
+      data_type: str
+      help_text: ~
+      tag: default
+      markdown: ~
+      validate:
+        required: yes
+      when:
+        param: existing_resources
+        contains: 'shared-storage:home'
+
+    - name: opensearch_domain_endpoint
+      title: "Existing OpenSearch Service Domain"
+      description: "Select existing OpenSearch Service Domain"
+      param_type: select
+      data_type: str
+      help_text: ~
+      tag: default
+      markdown: ~
+      validate:
+        required: yes
+      when:
+        param: existing_resources
+        contains: 'analytics:opensearch'
+
+    - name: directory_id
+      title: "Existing Directory"
+      description: "Select existing AWS Managed Microsoft AD"
+      param_type: select
+      data_type: str
+      help_text: ~
+      tag: default
+      markdown: ~
+      validate:
+        required: yes
+      when:
+        and:
+          - param: existing_resources
+            contains: directoryservice:aws_managed_activedirectory
+          - param: directory_service_provider
+            eq: aws_managed_activedirectory
+
+    - name: directory_service_root_username_secret_arn
+      title: "Microsoft AD Service Account Name"
+      description: "Enter the ARN of the secret containing service account username"
+      param_type: text
+      data_type: str
+      help_text: ~
+      tag: default
+      markdown: ~
+      validate:
+        required: yes
+      when:
+        and:
+          - param: existing_resources
+            contains: directoryservice:aws_managed_activedirectory
+          - param: directory_service_provider
+            eq: aws_managed_activedirectory
+
+    - name: directory_service_root_password_secret_arn
+      title: "AD Service Account Password"
+      description: "Enter the ARN of the secret containing service account password"
+      param_type: text
+      data_type: str
+      help_text: ~
+      tag: default
+      markdown: ~
+      validate:
+        required: yes
+      when:
+        and:
+          - param: existing_resources
+            contains: directoryservice:aws_managed_activedirectory
+          - param: directory_service_provider
+            eq: aws_managed_activedirectory
+
+  #--------------------------------------------------------------------------------------------------
+  # tags: these indicate the icon or status of a parameter.
+  # developer note: currently these are not used, but do not ignore them, as they will be used
+  # in a future release.
+  #--------------------------------------------------------------------------------------------------
+  tags:
+    - name: default
+      ascii: '?'
