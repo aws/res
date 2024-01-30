@@ -12,7 +12,7 @@
 import ideaclustermanager
 from ideasdk.api import ApiInvocationContext
 from ideasdk.protocols import ApiInvokerProtocol
-from ideasdk.auth import TokenService
+from ideasdk.auth import TokenService, ApiAuthorizationServiceBase
 from ideasdk.utils import Utils
 from ideadatamodel.auth import (
     CreateUserRequest,
@@ -39,13 +39,11 @@ from ideasdk.app import SocaAppAPI
 from ideasdk.filesystem.filebrowser_api import FileBrowserAPI
 from ideaclustermanager.app.api.cluster_settings_api import ClusterSettingsAPI
 from ideaclustermanager.app.api.filesystem_api import FileSystemAPI
-from ideaclustermanager.app.api.analytics_api import AnalyticsAPI
 from ideaclustermanager.app.api.projects_api import ProjectsAPI
 from ideaclustermanager.app.api.accounts_api import AccountsAPI
 from ideaclustermanager.app.api.auth_api import AuthAPI
 from ideaclustermanager.app.api.email_templates_api import EmailTemplatesAPI
 from ideaclustermanager.app.api.snapshots_api import SnapshotsAPI
-
 from typing import Optional, Dict
 
 
@@ -56,7 +54,6 @@ class ClusterManagerApiInvoker(ApiInvokerProtocol):
         self.app_api = SocaAppAPI(context)
         self.file_browser_api = FileBrowserAPI(context)
         self.cluster_settings_api = ClusterSettingsAPI(context)
-        self.analytics_api = AnalyticsAPI(context)
         self.projects_api = ProjectsAPI(context)
         self.filesystem_api = FileSystemAPI(context)
         self.auth_api = AuthAPI(context)
@@ -72,6 +69,9 @@ class ClusterManagerApiInvoker(ApiInvokerProtocol):
 
     def get_token_service(self) -> Optional[TokenService]:
         return self._context.token_service
+
+    def get_api_authorization_service(self) -> Optional[ApiAuthorizationServiceBase]:
+        return self._context.api_authorization_service
 
     def get_request_logging_payload(self, context: ApiInvocationContext) -> Optional[Dict]:
         namespace = context.namespace
@@ -190,8 +190,6 @@ class ClusterManagerApiInvoker(ApiInvokerProtocol):
             self.file_browser_api.invoke(context)
         elif namespace.startswith('ClusterSettings.'):
             self.cluster_settings_api.invoke(context)
-        elif namespace.startswith('Analytics.'):
-            self.analytics_api.invoke(context)
         elif namespace.startswith('Projects.'):
             self.projects_api.invoke(context)
         elif namespace.startswith('FileSystem.'):

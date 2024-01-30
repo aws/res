@@ -25,9 +25,16 @@ class VirtualDesktopDCVAPI(VirtualDesktopAPI):
         super().__init__(context)
         self.context = context
         self._logger = context.logger('virtual-desktop-dcv-api')
-        self.namespace_handler_map = {
-            'VirtualDesktopDCV.DescribeServers': self.describe_dcv_servers,
-            'VirtualDesktopDCV.DescribeSessions': self.describe_dcv_sessions
+        self.SCOPE_READ = f'{self.context.module_id()}/read'
+        self.acl = {
+            'VirtualDesktopDCV.DescribeServers': {
+                'scope': self.SCOPE_READ,
+                'method': self.describe_dcv_servers,
+            },
+            'VirtualDesktopDCV.DescribeSessions': {
+                'scope': self.SCOPE_READ,
+                'method': self.describe_dcv_sessions,
+            },
         }
 
     def describe_dcv_servers(self, context: ApiInvocationContext):
@@ -44,10 +51,16 @@ class VirtualDesktopDCVAPI(VirtualDesktopAPI):
         ))
 
     def invoke(self, context: ApiInvocationContext):
+        namespace = context.namespace
 
-        if not context.is_authorized(elevated_access=True):
+        acl_entry = self.acl.get(namespace)
+        if acl_entry is None:
             raise exceptions.unauthorized_access()
 
-        namespace = context.namespace
-        if namespace in self.namespace_handler_map:
-            self.namespace_handler_map[namespace](context)
+        acl_entry_scope = acl_entry.get('scope')
+        is_authorized = context.is_authorized(elevated_access=True, scopes=[acl_entry_scope])
+
+        if is_authorized:
+            acl_entry['method'](context)
+        else:
+            raise exceptions.unauthorized_access()

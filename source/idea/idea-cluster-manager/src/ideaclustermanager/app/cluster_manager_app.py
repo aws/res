@@ -15,6 +15,7 @@ from ideadatamodel import constants
 from ideasdk.client.evdi_client import EvdiClient
 from ideasdk.server import SocaServerOptions
 from ideasdk.utils import GroupNameHelper
+from ideasdk.client.vdc_client import SocaClientOptions, VirtualDesktopControllerClient
 
 import ideaclustermanager
 from ideaclustermanager.app.api.api_invoker import ClusterManagerApiInvoker
@@ -29,7 +30,7 @@ from ideaclustermanager.app.adsync.adsync_service import ADSyncService
 from ideaclustermanager.app.accounts.cognito_user_pool import CognitoUserPool, CognitoUserPoolOptions
 
 from ideaclustermanager.app.accounts.ldapclient.ldap_client_factory import build_ldap_client
-
+from ideaclustermanager.app.auth.api_authorization_service import ClusterManagerApiAuthorizationService
 from ideaclustermanager.app.accounts.ad_automation_agent import ADAutomationAgent
 from ideaclustermanager.app.accounts.account_tasks import (
     SyncUserInDirectoryServiceTask,
@@ -47,6 +48,7 @@ from ideaclustermanager.app.web_portal import WebPortal
 from ideaclustermanager.app.email_templates.email_templates_service import EmailTemplatesService
 from ideaclustermanager.app.notifications.notifications_service import NotificationsService
 from ideaclustermanager.app.snapshots.snapshots_service import SnapshotsService
+from ideaclustermanager.app.shared_filesystem.shared_filesystem_service import SharedFilesystemService
 
 from typing import Optional
 
@@ -95,6 +97,7 @@ class ClusterManagerApp(ideasdk.app.SocaApp):
         provider_url = self.context.config().get_string('identity-provider.cognito.provider_url', required=True)
         client_id = self.context.config().get_secret('cluster-manager.client_id', required=True)
         client_secret = self.context.config().get_secret('cluster-manager.client_secret', required=True)
+        vdc_module_id = self.context.config().get_module_id(constants.MODULE_VIRTUAL_DESKTOP_CONTROLLER)
         self.context.token_service = TokenService(
             context=self.context,
             options=TokenServiceOptions(
@@ -102,6 +105,10 @@ class ClusterManagerApp(ideasdk.app.SocaApp):
                 cognito_user_pool_domain_url=domain_url,
                 client_id=client_id,
                 client_secret=client_secret,
+                client_credentials_scope=[
+                    f'{vdc_module_id}/read',
+                    f'{vdc_module_id}/write',
+                ],
                 administrators_group_name=administrators_group_name,
                 managers_group_name=managers_group_name
             )
@@ -156,12 +163,25 @@ class ClusterManagerApp(ideasdk.app.SocaApp):
             evdi_client=evdi_client,
             token_service=self.context.token_service
         )
+        
+        #api authorization service
+        self.context.api_authorization_service = ClusterManagerApiAuthorizationService(accounts=self.context.accounts)
 
         # adsync service
         self.context.ad_sync = ADSyncService(
             context=self.context,
             task_manager=self.context.task_manager,
         )
+
+        internal_endpoint = self.context.config().get_cluster_internal_endpoint()
+        self.context.vdc_client = VirtualDesktopControllerClient(
+                context=self.context,
+                options=SocaClientOptions(
+                    endpoint=f'{internal_endpoint}/{vdc_module_id}/api/v1',
+                    enable_logging=False,
+                    verify_ssl=False),
+                token_service=self.context.token_service
+            )
 
         self.context.snapshots = SnapshotsService(
             context=self.context
@@ -171,7 +191,8 @@ class ClusterManagerApp(ideasdk.app.SocaApp):
         self.context.projects = ProjectsService(
             context=self.context,
             accounts_service=self.context.accounts,
-            task_manager=self.context.task_manager
+            task_manager=self.context.task_manager,
+            vdc_client=self.context.vdc_client
         )
 
         # email templates
@@ -184,6 +205,10 @@ class ClusterManagerApp(ideasdk.app.SocaApp):
             context=self.context,
             accounts=self.context.accounts,
             email_templates=self.context.email_templates
+        )
+        
+        self.context.shared_filesystem = SharedFilesystemService(
+            context=self.context
         )
 
         # web portal

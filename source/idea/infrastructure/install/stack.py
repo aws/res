@@ -10,12 +10,13 @@ from aws_cdk import aws_secretsmanager as secretsmanager
 from constructs import Construct, DependencyGroup
 
 import idea
+from idea.batteries_included.parameters.parameters import BIParameters
 from idea.infrastructure.install import installer
 from idea.infrastructure.install.parameters.common import CommonKey
 from idea.infrastructure.install.parameters.directoryservice import DirectoryServiceKey
 from idea.infrastructure.install.parameters.parameters import (
-    AllParameterGroups,
-    Parameters,
+    AllRESParameterGroups,
+    RESParameters,
 )
 from ideadatamodel import constants  # type: ignore
 
@@ -38,7 +39,7 @@ class InstallStack(Stack):
         self,
         scope: Construct,
         stack_id: str,
-        parameters: Parameters = Parameters(),
+        parameters: Union[RESParameters, BIParameters] = RESParameters(),
         registry_name: Optional[str] = None,
         dynamodb_kms_key_alias: Optional[str] = None,
         env: Union[Environment, dict[str, Any], None] = None,
@@ -54,7 +55,7 @@ class InstallStack(Stack):
 
         self.parameters = parameters
         self.parameters.generate(self)
-        self.template_options.metadata = AllParameterGroups.template_metadata()
+        self.template_options.metadata = AllRESParameterGroups.template_metadata()
         self.registry_name = (
             registry_name if registry_name is not None else PUBLIC_REGISTRY_NAME
         )

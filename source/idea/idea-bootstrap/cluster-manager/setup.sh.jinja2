@@ -27,7 +27,9 @@ IDEA_CLUSTER_S3_BUCKET={{ context.cluster_s3_bucket }}
 IDEA_CLUSTER_NAME={{ context.cluster_name }}
 IDEA_CLUSTER_HOME={{ context.cluster_home_dir }}
 IDEA_APP_DEPLOY_DIR={{ context.app_deploy_dir }}
-BOOTSTRAP_DIR=/root/bootstrap" > /etc/environment
+BOOTSTRAP_DIR=/root/bootstrap
+## Disable the RES test mode by default - Do not enable it in production as it will bypass API authorization
+RES_TEST_MODE=False" > /etc/environment
 
 {% if context.https_proxy != '' %}
 echo -e "IDEA_HTTPS_PROXY={{ context.https_proxy }}

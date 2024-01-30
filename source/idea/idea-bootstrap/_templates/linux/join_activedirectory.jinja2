@@ -10,7 +10,7 @@ AD_DOMAIN_NAME="{{ context.config.get_string('directoryservice.name', required=T
 AD_REALM_NAME="{{ context.config.get_string('directoryservice.name', required=True).upper() }}"
 AD_SUDOERS_GROUP_NAME="{{ context.config.get_string('directoryservice.sudoers.group_name', required=True) }}"
 AD_SUDOERS_GROUP_NAME_ESCAPED="{{ context.config.get_string('directoryservice.sudoers.group_name', required=True).replace(' ', '\ ') }}"
-SSSD_LDAP_ID_MAPPING="{{ context.config.get_bool('directoryservice.sssd.ldap_id_mapping', default=False) | lower }}"
+SSSD_LDAP_ID_MAPPING="{{ context.config.get_bool('directoryservice.sssd.ldap_id_mapping', default=True) | lower }}"
 AD_TLS_CERTIFICATE_SECRET_ARN="{{context.config.get_string('directoryservice.tls_certificate_secret_arn', default='')}}"
 AD_LDAP_BASE="{{context.config.get_string('directoryservice.ldap_base', required=True)}}"
 
@@ -154,6 +154,12 @@ if [[ -f /etc/sssd/sssd.conf ]]; then
   cp /etc/sssd/sssd.conf /etc/sssd/sssd.conf.orig
 fi
 
+if [[ ${IDEA_MODULE_NAME} == "cluster-manager" ]]; then
+  enumerate_value=True
+else
+  enumerate_value=False
+fi
+
 if [[ "${AD_TLS_CERTIFICATE_SECRET_ARN}" == '' ]]; then
   echo -e "[sssd]
 domains = ${AD_DOMAIN_NAME}
@@ -180,7 +186,7 @@ use_fully_qualified_names = false
 fallback_homedir = ${IDEA_CLUSTER_HOME_DIR}/%u
 
 # disable or set to false for very large environments
-enumerate = true
+enumerate = "${enumerate_value}"
 
 sudo_provider = none
 
@@ -232,7 +238,7 @@ use_fully_qualified_names = false
 fallback_homedir = ${IDEA_CLUSTER_HOME_DIR}/%u
 
 # disable or set to false for very large environments
-enumerate = true
+enumerate = "${enumerate_value}"
 
 sudo_provider = none
 

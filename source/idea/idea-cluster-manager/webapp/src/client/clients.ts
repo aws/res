@@ -20,7 +20,6 @@ import FileBrowserClient from "./file-browser-client";
 import VirtualDesktopClient from "./virtual-desktop-client";
 import VirtualDesktopAdminClient from "./virtual-desktop-admin-client";
 import ClusterSettingsClient from "./cluster-settings-client";
-import AnalyticsClient from "./analytics-client";
 import ProjectsClient from "./projects-client";
 import EmailTemplatesClient from "./email-templates-client";
 import Utils from "../common/utils";
@@ -50,7 +49,6 @@ class IdeaClients {
     private readonly virtualDesktopUtilsClient: VirtualDesktopUtilsClient;
     private readonly virtualDesktopDCVClient: VirtualDesktopDCVClient;
     private readonly clusterSettingsClient: ClusterSettingsClient;
-    private readonly analyticsClient: AnalyticsClient;
     private readonly projectsClient: ProjectsClient;
     private readonly filesystemClient: FileSystemClient;
     private readonly emailTemplatesClient: EmailTemplatesClient;
@@ -159,15 +157,6 @@ class IdeaClients {
         });
         this.clients.push(this.clusterSettingsClient);
 
-        this.analyticsClient = new AnalyticsClient({
-            name: "analytics-client",
-            baseUrl: props.baseUrl,
-            authContext: props.authContext,
-            apiContextPath: Utils.getApiContextPath(Constants.MODULE_CLUSTER_MANAGER),
-            serviceWorkerRegistration: props.serviceWorkerRegistration,
-        });
-        this.clients.push(this.analyticsClient);
-
         this.projectsClient = new ProjectsClient({
             name: "projects-client",
             baseUrl: props.baseUrl,
@@ -242,10 +231,6 @@ class IdeaClients {
 
     clusterSettings(): ClusterSettingsClient {
         return this.clusterSettingsClient;
-    }
-
-    analytics(): AnalyticsClient {
-        return this.analyticsClient;
     }
 
     projects(): ProjectsClient {

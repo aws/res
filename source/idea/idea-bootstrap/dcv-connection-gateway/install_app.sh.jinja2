@@ -48,7 +48,7 @@ tar -xvf ${BOOTSTRAP_DIR}/${PACKAGE_ARCHIVE} -C ${APP_DIR}
   DCV_GPG_KEY="{{ context.config.get_string('global-settings.package_config.dcv.gpg_key', required=True) }}"
   DCV_CONNECTION_GATEWAY_VERSION="{{ context.config.get_string('global-settings.package_config.dcv.connection_gateway.x86_64.linux.rhel_centos_rocky9.version', required=True) }}"
   DCV_CONNECTION_GATEWAY_URL="{{ context.config.get_string('global-settings.package_config.dcv.connection_gateway.x86_64.linux.rhel_centos_rocky9.url', required=True) }}"
-  DCV_CONNECTION_GATEWAY_SHA256_HASH="{{ context.config.get_string('global-settings.package_config.dcv.connection_gateway.x86_64.linux.rhel_centos_rocky9.sha256sum', required=True) }}"
+  DCV_CONNECTION_GATEWAY_SHA256_URL="{{ context.config.get_string('global-settings.package_config.dcv.connection_gateway.x86_64.linux.rhel_centos_rocky9.sha256sum', required=True) }}"
 
   INTERNAL_ALB_ENDPOINT="{{ context.config.get_cluster_internal_endpoint() }}"
   GATEWAY_TO_BROKER_PORT="{{ context.config.get_string("virtual-desktop-controller.dcv_broker.gateway_communication_port", required=True) }}"
@@ -71,7 +71,7 @@ tar -xvf ${BOOTSTRAP_DIR}/${PACKAGE_ARCHIVE} -C ${APP_DIR}
   DCV_GPG_KEY="{{ context.config.get_string('global-settings.package_config.dcv.gpg_key', required=True) }}"
   DCV_CONNECTION_GATEWAY_VERSION="{{ context.config.get_string('global-settings.package_config.dcv.connection_gateway.x86_64.linux.al2_rhel_centos7.version', required=True) }}"
   DCV_CONNECTION_GATEWAY_URL="{{ context.config.get_string('global-settings.package_config.dcv.connection_gateway.x86_64.linux.al2_rhel_centos7.url', required=True) }}"
-  DCV_CONNECTION_GATEWAY_SHA256_HASH="{{ context.config.get_string('global-settings.package_config.dcv.connection_gateway.x86_64.linux.al2_rhel_centos7.sha256sum', required=True) }}"
+  DCV_CONNECTION_GATEWAY_SHA256_URL="{{ context.config.get_string('global-settings.package_config.dcv.connection_gateway.x86_64.linux.al2_rhel_centos7.sha256sum', required=True) }}"
 
   INTERNAL_ALB_ENDPOINT="{{ context.config.get_cluster_internal_endpoint() }}"
   GATEWAY_TO_BROKER_PORT="{{ context.config.get_string("virtual-desktop-controller.dcv_broker.gateway_communication_port", required=True) }}"
@@ -92,30 +92,18 @@ DCV_WEB_VIEWER_INSTALL_LOCATION="/usr/share/dcv/www"
 
 timestamp=$(date +%s)
 
-function setup_nginx() {
-  yum install nginx1 -y
-  yum install nginx -y
-echo """
-server {
-  listen 80;
-  listen [::]:80;
-  root ${DCV_WEB_VIEWER_INSTALL_LOCATION};
-}
-""" > /etc/nginx/conf.d/default.conf
-  systemctl enable nginx
-  systemctl start nginx
-}
-
 function install_dcv_connection_gateway() {
   yum install -y nc
   rpm --import ${DCV_GPG_KEY}
   wget ${DCV_CONNECTION_GATEWAY_URL}
-  if [[ $(sha256sum nice-dcv-connection-gateway-${DCV_CONNECTION_GATEWAY_VERSION}.rpm | awk '{print $1}') != ${DCV_CONNECTION_GATEWAY_SHA256_HASH} ]];  then
+  fileName=$(basename ${DCV_CONNECTION_GATEWAY_URL})
+  urlSha256Sum=$(wget -O - ${DCV_CONNECTION_GATEWAY_SHA256_URL})
+  if [[ $(sha256sum ${fileName} | awk '{print $1}') != ${urlSha256Sum} ]];  then
     echo -e "FATAL ERROR: Checksum for DCV Connection Gateway failed. File may be compromised." > /etc/motd
     exit 1
   fi
-  yum install -y nice-dcv-connection-gateway-${DCV_CONNECTION_GATEWAY_VERSION}.rpm
-  rm -rf nice-dcv-connection-gateway-${DCV_CONNECTION_GATEWAY_VERSION}.rpm
+  yum install -y ${fileName}
+  rm -f ${fileName}
 }
 
 function install_dcv_web_viewer() {
@@ -213,7 +201,7 @@ url = \"${INTERNAL_ALB_ENDPOINT}:${GATEWAY_TO_BROKER_PORT}\"
 tls-strict = false
 
 [web-resources]
-url = \"http://localhost:80\"
+local-resources-path = \"/usr/share/dcv/www\"
 tls-strict = false
 " > /etc/dcv-connection-gateway/dcv-connection-gateway.conf
 
@@ -221,7 +209,6 @@ tls-strict = false
   systemctl start dcv-connection-gateway
 }
 
-setup_nginx
 install_dcv_connection_gateway
 install_dcv_web_viewer
 configure_certificates

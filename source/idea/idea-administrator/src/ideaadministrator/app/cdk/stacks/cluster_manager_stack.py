@@ -91,7 +91,6 @@ class ClusterManagerStack(IdeaBaseStack):
         self.user_pool = self.lookup_user_pool()
 
         self.build_oauth2_client()
-        self.build_access_control_groups(user_pool=self.user_pool)
         self.build_sqs_queues()
         self.build_iam_roles()
         self.build_security_groups()
@@ -246,6 +245,7 @@ class ClusterManagerStack(IdeaBaseStack):
         min_capacity = self.context.config().get_int('cluster-manager.ec2.autoscaling.min_capacity', default=1)
         max_capacity = self.context.config().get_int('cluster-manager.ec2.autoscaling.max_capacity', default=3)
         cooldown_minutes = self.context.config().get_int('cluster-manager.ec2.autoscaling.cooldown_minutes', default=5)
+        default_instance_warmup = self.context.config().get_int('cluster-manager.ec2.autoscaling.default_instance_warmup', default=15)
         new_instances_protected_from_scale_in = self.context.config().get_bool('cluster-manager.ec2.autoscaling.new_instances_protected_from_scale_in', default=True)
         elb_healthcheck_grace_time_minutes = self.context.config().get_int('cluster-manager.ec2.autoscaling.elb_healthcheck.grace_time_minutes', default=15)
         scaling_policy_target_utilization_percent = self.context.config().get_int('cluster-manager.ec2.autoscaling.cpu_utilization_scaling_policy.target_utilization_percent', default=80)
@@ -324,6 +324,7 @@ class ClusterManagerStack(IdeaBaseStack):
             min_capacity=min_capacity,
             max_capacity=max_capacity,
             new_instances_protected_from_scale_in=new_instances_protected_from_scale_in,
+            default_instance_warmup=cdk.Duration.minutes(default_instance_warmup),
             cooldown=cdk.Duration.minutes(cooldown_minutes),
             health_check=asg.HealthCheck.elb(
                 grace=cdk.Duration.minutes(elb_healthcheck_grace_time_minutes)

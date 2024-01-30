@@ -13,14 +13,20 @@
 Test Cases for ApiInvocationContext
 """
 
-from typing import Dict
+import os
+from typing import Dict, Mapping, Optional
 
 import pytest
 from ideasdk.api import ApiInvocationContext
-from ideasdk.auth import TokenService
+from ideasdk.auth.api_authorization_service_base import ApiAuthorizationServiceBase
 from ideasdk.context import SocaContext, SocaContextOptions
+from ideasdk.protocols import TokenServiceProtocol
 from ideasdk.utils import GroupNameHelper, Utils
+from ideatestutils.api_authorization_service.mock_api_authorization_service import (
+    MockApiAuthorizationService,
+)
 from ideatestutils.config.mock_config import MockConfig
+from ideatestutils.token_service.mock_token_service import MockTokenService
 
 from ideadatamodel import constants, errorcodes, exceptions
 
@@ -34,9 +40,11 @@ def context():
 def build_invocation_context(
     context: SocaContext,
     payload: Dict,
+    http_headers: Optional[Mapping] = None,
     invocation_source: str = None,
     token: Dict = None,
-    token_service: TokenService = None,
+    token_service: TokenServiceProtocol = None,
+    api_authorization_service: ApiAuthorizationServiceBase = None,
 ) -> ApiInvocationContext:
     if Utils.is_empty(invocation_source):
         invocation_source = constants.API_INVOCATION_SOURCE_HTTP
@@ -44,11 +52,13 @@ def build_invocation_context(
     return ApiInvocationContext(
         context=context,
         request=payload,
+        http_headers=http_headers,
         invocation_source=invocation_source,
         group_name_helper=GroupNameHelper(context=context),
         logger=context.logger(),
         token=token,
         token_service=token_service,
+        api_authorization_service=api_authorization_service,
     )
 
 
@@ -83,3 +93,38 @@ def test_api_invocation_context_validate_request_invalid(context):
     with pytest.raises(exceptions.SocaException) as exc_info:
         api_context.validate_request()
     assert exc_info.value.error_code == errorcodes.INVALID_PARAMS
+
+
+def test_api_invocation_context_get_authorization_in_test_mode_valid(context):
+    """
+    get API authorization in test mode - valid API authorization
+    """
+    test_username = "username"
+    mock_token_service = MockTokenService()
+    mock_api_authorization_service = MockApiAuthorizationService()
+    api_context = build_invocation_context(
+        context=context,
+        payload={
+            "header": {"namespace": "Hello.World", "request_id": Utils.uuid()},
+            "payload": {},
+        },
+        http_headers={
+            "X_RES_TEST_USERNAME": test_username,
+        },
+        token_service=mock_token_service,
+        api_authorization_service=mock_api_authorization_service,
+    )
+    os.environ["RES_TEST_MODE"] = "True"
+
+    authorization = api_context.get_authorization()
+
+    os.environ.pop("RES_TEST_MODE")
+    decoded_token = {
+        "username": test_username,
+    }
+    assert authorization.username == test_username
+    assert (
+        authorization.type
+        == mock_api_authorization_service.get_authorization(decoded_token).type
+    )
+    assert authorization.invocation_source == constants.API_INVOCATION_SOURCE_HTTP

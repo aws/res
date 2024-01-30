@@ -31,7 +31,7 @@ If you have a [support plan](https://aws.amazon.com/premiumsupport/) with AWS Su
 
 You can also [open an issue](https://github.com/aws/res/issues/new/choose) and choose from one of our templates for guidance, bug reports, or feature requests. Please check for open [similar issues](https://github.com/aws/res/issues) before opening another one.
   		  
-##More Resources
+## More Resources
   		   		  
 * [Changelog](https://github.com/aws/res/blob/mainline/CHANGELOG.md)
 * [Amazon Web Services Discussion Forums](https://repost.aws/) 

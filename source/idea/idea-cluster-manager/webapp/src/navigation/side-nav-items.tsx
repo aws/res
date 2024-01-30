@@ -34,7 +34,7 @@ export const IdeaSideNavItems = (context: AppContext): SideNavigationProps.Item[
     };
     result.push(userNav);
 
-    if (context.getClusterSettingsService().isVirtualDesktopDeployed() && context.auth().hasModuleAccess(Constants.MODULE_VIRTUAL_DESKTOP_CONTROLLER)) {
+    if (context.getClusterSettingsService().isVirtualDesktopDeployed()) {
         userNav.items.push({
             type: "link",
             text: "My Virtual Desktops",
@@ -45,22 +45,21 @@ export const IdeaSideNavItems = (context: AppContext): SideNavigationProps.Item[
             text: "Shared Desktops",
             href: "#/home/shared-desktops",
         });
-    }
-
-    if (context.auth().hasModuleAccess(Constants.MODULE_CLUSTER_MANAGER)) {
         userNav.items.push({
             type: "link",
             text: "File Browser",
             href: "#/home/file-browser",
         });
-        if (context.getClusterSettingsService().isBastionHostDeployed()) {
-            userNav.items.push({
-                type: "link",
-                text: "SSH Access Instructions",
-                href: "#/home/ssh-access",
-            });
-        }
     }
+
+    if (context.getClusterSettingsService().isBastionHostDeployed()) {
+        userNav.items.push({
+            type: "link",
+            text: "SSH Access Instructions",
+            href: "#/home/ssh-access",
+        });
+    }
+
 
     // start admin section
 
@@ -68,7 +67,7 @@ export const IdeaSideNavItems = (context: AppContext): SideNavigationProps.Item[
         type: "divider",
     });
 
-    if (context.getClusterSettingsService().isVirtualDesktopDeployed() && context.auth().isModuleAdmin(Constants.MODULE_VIRTUAL_DESKTOP_CONTROLLER)) {
+    if (context.getClusterSettingsService().isVirtualDesktopDeployed() && context.auth().isAdmin()) {
         adminNavItems.push({
             type: "section",
             text: "Session Management",
@@ -108,7 +107,7 @@ export const IdeaSideNavItems = (context: AppContext): SideNavigationProps.Item[
         });
     }
 
-    if (context.auth().isModuleAdmin(Constants.MODULE_CLUSTER_MANAGER)) {
+    if (context.auth().isAdmin()) {
         adminNavItems.push({
             type: "section",
             text: "Environment Management",
@@ -141,8 +140,8 @@ export const IdeaSideNavItems = (context: AppContext): SideNavigationProps.Item[
                 },
                 {
                     type: "link",
-                    text: "Environment Snapshots",
-                    href: "#/cluster/snapshots",
+                    text: "Snapshot Management",
+                    href: "#/cluster/snapshot-management",
                 },
                 {
                     type: "link",

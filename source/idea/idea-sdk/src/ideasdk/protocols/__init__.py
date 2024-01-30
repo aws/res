@@ -27,6 +27,7 @@ from ideadatamodel import (
     SocaJob,
     AuthResult
 )
+from ideadatamodel.api.api_model import ApiAuthorization
 
 from abc import ABC, abstractmethod
 from typing import Dict, Optional, Tuple, List, Callable, Any, Union, Hashable, Set, TypeVar
@@ -584,10 +585,6 @@ class SocaContextProtocol(SocaBaseProtocol):
     def is_leader(self) -> bool:
         ...
 
-    @abstractmethod
-    def analytics_service(self) -> AnalyticsServiceProtocol:
-        ...
-
 
 class SocaServiceProtocol(SocaBaseProtocol):
 
@@ -666,6 +663,21 @@ class ApiInvocationContextProtocol(SocaBaseProtocol):
         ...
 
 
+class ApiAuthorizationServiceProtocol(SocaBaseProtocol):
+    
+    @abstractmethod
+    def get_authorization(self, decoded_token: Optional[Dict]) -> Optional[ApiAuthorization]:
+        ...
+
+    @abstractmethod
+    def is_scope_authorized(self, decoded_token: str, scope: str) -> bool:
+        ...
+    
+    @abstractmethod
+    def get_username(self, decoded_token: str) -> Optional[str]:
+        ...
+
+
 class TokenServiceProtocol(SocaBaseProtocol):
 
     @abstractmethod
@@ -680,15 +692,15 @@ class TokenServiceProtocol(SocaBaseProtocol):
     def is_token_expired(self, token: str) -> bool:
         ...
 
-    @abstractmethod
-    def get_username(self, access_token: str, verify_exp=True) -> Optional[str]:
-        ...
-
 
 class ApiInvokerProtocol(SocaBaseProtocol):
 
     @abstractmethod
     def get_token_service(self) -> Optional[TokenServiceProtocol]:
+        ...
+
+    @abstractmethod
+    def get_api_authorization_service(self) -> Optional[APIAuthorizationServiceProtocol]:
         ...
 
     @abstractmethod
@@ -721,10 +733,3 @@ class DistributedLockProtocol(SocaBaseProtocol):
     @abstractmethod
     def release(self, key: str):
         pass
-
-
-class AnalyticsServiceProtocol(SocaBaseProtocol):
-
-    @abstractmethod
-    def post_entry(self, document):
-        ...

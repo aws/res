@@ -22,7 +22,6 @@ from .cluster_resources import *
 from .scheduler import *
 from .virtual_desktop import *
 from .cluster_settings import *
-from .analytics import *
 from .email_templates import *
 from .notifications import *
 from .shared_filesystem import *

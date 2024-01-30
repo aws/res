@@ -36,7 +36,6 @@ AWS_CLIENT_PRICING = 'pricing'
 AWS_CLIENT_CLOUDWATCH = 'cloudwatch'
 AWS_CLIENT_CLOUDWATCHLOGS = 'logs'
 AWS_CLIENT_ES = 'es'
-AWS_CLIENT_OPENSEARCH = 'opensearch'
 AWS_CLIENT_DS = 'ds'
 AWS_CLIENT_FSX = 'fsx'
 AWS_CLIENT_EFS = 'efs'
@@ -72,7 +71,6 @@ SUPPORTED_CLIENTS = {
     AWS_CLIENT_CLOUDWATCH,
     AWS_CLIENT_CLOUDWATCHLOGS,
     AWS_CLIENT_ES,
-    AWS_CLIENT_OPENSEARCH,
     AWS_CLIENT_EVENTS,
     AWS_CLIENT_DS,
     AWS_CLIENT_FSX,
@@ -322,9 +320,6 @@ class AwsClientProvider(AwsClientProviderProtocol):
 
     def es(self):
         return self.get_client(service_name=AWS_CLIENT_ES)
-
-    def opensearch(self):
-        return self.get_client(service_name=AWS_CLIENT_OPENSEARCH)
 
     def sts(self):
         return self.get_client(service_name=AWS_CLIENT_STS)

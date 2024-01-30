@@ -2,6 +2,7 @@
 #  SPDX-License-Identifier: Apache-2.0
 import pathlib
 import typing
+from typing import Union
 
 from aws_cdk import CfnOutput, Duration, IStackSynthesizer, RemovalPolicy, Stack, Stage
 from aws_cdk import aws_codebuild as codebuild
@@ -11,13 +12,18 @@ from aws_cdk import aws_iam as iam
 from aws_cdk import pipelines
 from constructs import Construct
 
+from idea.batteries_included.parameters.parameters import BIParameters
+from idea.batteries_included.stack import BiStack
 from idea.constants import (
     ARTIFACTS_BUCKET_PREFIX_NAME,
+    BATTERIES_INCLUDED_STACK_NAME,
     DEFAULT_ECR_REPOSITORY_NAME,
     INSTALL_STACK_NAME,
 )
-from idea.infrastructure.install.parameters.parameters import Parameters
+from idea.infrastructure.install.parameters.parameters import RESParameters
 from idea.infrastructure.install.stack import InstallStack
+from idea.pipeline.integ_tests.integ_test_step_builder import IntegTestStepBuilder
+from idea.pipeline.utils import get_commands_for_scripts
 
 UNITTESTS = [
     "tests.administrator",
@@ -28,7 +34,7 @@ UNITTESTS = [
     "tests.infrastructure",
 ]
 COVERAGEREPORTS = ["coverage"]
-INTEG_TESTS = ["integ-tests.cluster-manager"]
+COMPONENT_INTEG_TESTS = ["integ-tests.cluster-manager"]
 SCANS = ["npm_audit", "bandit"]
 PUBLICECRRepository = "public.ecr.aws/l6g7n3r5/research-engineering-studio"
 
@@ -38,6 +44,8 @@ class PipelineStack(Stack):
     _repository_name: str = "DigitalEngineeringPlatform"
     _branch_name: str = "develop"
     _deploy: bool = False
+    _integ_tests: bool = False
+    _bi: bool = False
     _destroy: bool = False
     _publish_templates: bool = False
 
@@ -70,15 +78,29 @@ class PipelineStack(Stack):
         context_deploy = self.node.try_get_context("deploy")
         if context_deploy:
             self._deploy = context_deploy.lower() == "true"
+        context_bi = self.node.try_get_context("batteries_included")
+        if context_bi:
+            self._bi = context_bi.lower() == "true"
         context_destroy = self.node.try_get_context("destroy")
+        context_integ_tests = self.node.try_get_context("integration_tests")
+        self._integ_tests = (
+            context_integ_tests.lower() == "true" if context_integ_tests else "true"
+        )
         if context_destroy:
             self._destroy = context_destroy.lower() == "true"
         context_publish_templates = self.node.try_get_context("publish_templates")
         if context_publish_templates:
             self._publish_templates = context_publish_templates.lower() == "true"
-        self.params = Parameters.from_context(self)
+        self.params: Union[RESParameters, BIParameters]
+        if self._bi:
+            self.params = BIParameters.from_context(self)
+        else:
+            self.params = RESParameters.from_context(self)
         if self.params.cluster_name is None:
             self.params.cluster_name = "res-deploy"
+
+        bi_stack_template_url = self.node.try_get_context("BIStackTemplateURL")
+        bi_stack_template_url = bi_stack_template_url if bi_stack_template_url else ""
 
         ecr_public_repository_name = self.node.try_get_context(
             "ecr_public_repository_name"
@@ -125,7 +147,9 @@ class PipelineStack(Stack):
         self._pipeline = pipelines.CodePipeline(
             self,
             "Pipeline",
-            synth=self.get_synth_step(ecr_repository_name, ecr_public_repository_name),
+            synth=self.get_synth_step(
+                ecr_repository_name, ecr_public_repository_name, bi_stack_template_url
+            ),
             code_build_defaults=pipelines.CodeBuildOptions(
                 build_environment=codebuild.BuildEnvironment(
                     build_image=codebuild.LinuxBuildImage.STANDARD_5_0,
@@ -149,18 +173,30 @@ class PipelineStack(Stack):
 
         if self._deploy:
             deploy_stage = DeployStage(self, "Deploy", parameters=self.params)
-            integ_test_steps = self.get_integ_test_step(INTEG_TESTS)
+
+            post_steps = []
+            if self._integ_tests:
+                component_integ_test_steps = self.get_component_integ_test_steps(
+                    COMPONENT_INTEG_TESTS
+                )
+                smoke_test_step = self.get_smoke_test_step()
+                # Smoke test cannot run with other integ tests in parallel, as it requires to relaunch the web servers
+                # and the servers will become temporarily unresponsive to other integ tests.
+                for component_integ_test_step in component_integ_test_steps:
+                    smoke_test_step.add_step_dependency(component_integ_test_step)
+
+                post_steps += component_integ_test_steps
+                post_steps.append(smoke_test_step)
 
             if self._destroy:
                 destroy_step = self.get_destroy_step()
-                for integ_test_step in integ_test_steps:
-                    destroy_step.add_step_dependency(integ_test_step)
-                self._pipeline.add_stage(
-                    deploy_stage,
-                    post=integ_test_steps + [destroy_step],
-                )
-            else:
-                self._pipeline.add_stage(deploy_stage, post=integ_test_steps)
+                # Destroy step should only execute after all the other steps complete
+                for step in post_steps:
+                    destroy_step.add_step_dependency(step)
+                post_steps.append(destroy_step)
+
+            self._pipeline.add_stage(deploy_stage, post=post_steps)
+
         if self._publish_templates:
             publish_steps = self.get_publish_steps(ecr_public_repository_name)
             publish_wave = self._pipeline.add_wave("Publish")
@@ -184,7 +220,10 @@ class PipelineStack(Stack):
         )
 
     def get_synth_step(
-        self, ecr_repository_name: str, ecr_public_repository_name: str
+        self,
+        ecr_repository_name: str,
+        ecr_public_repository_name: str,
+        bi_stack_template_url: str,
     ) -> pipelines.CodeBuildStep:
         return pipelines.CodeBuildStep(
             "Synth",
@@ -193,19 +232,22 @@ class PipelineStack(Stack):
                 REPOSITORY_NAME=self._repository_name,
                 BRANCH=self._branch_name,
                 DEPLOY="true" if self._deploy else "false",
+                INTEGRATION_TESTS="true" if self._integ_tests else "false",
                 DESTROY="true" if self._destroy else "false",
+                BATTERIES_INCLUDED="true" if self._bi else "false",
+                BIStackTemplateURL=bi_stack_template_url,
                 ECR_REPOSITORY=ecr_repository_name,
                 ECR_PUBLIC_REPOSITORY_NAME=ecr_public_repository_name,
                 PUBLISH_TEMPLATES="true" if self._publish_templates else "false",
                 **self.params.to_context(),
             ),
-            install_commands=self.get_commands_for_scripts(
+            install_commands=get_commands_for_scripts(
                 [
                     "source/idea/pipeline/scripts/common/install_commands.sh",
                     "source/idea/pipeline/scripts/synth/install_commands.sh",
                 ]
             ),
-            commands=self.get_commands_for_scripts(
+            commands=get_commands_for_scripts(
                 [
                     "source/idea/pipeline/scripts/synth/commands.sh",
                 ]
@@ -213,7 +255,7 @@ class PipelineStack(Stack):
             partial_build_spec=self.get_reports_partial_build_spec("pytest-report.xml"),
         )
 
-    def get_integ_test_step(
+    def get_component_integ_test_steps(
         self, integ_test_envs: list[str]
     ) -> list[pipelines.CodeBuildStep]:
         steps: list[pipelines.CodeBuildStep] = []
@@ -221,41 +263,17 @@ class PipelineStack(Stack):
         clusteradmin_password = "RESPassword1."  # fixed password for running tests
 
         for _env in integ_test_envs:
-            # Setting up commands necessary to set clusteradmin password and then run integ tests
-            commands = self.get_commands_for_scripts(
-                ["source/idea/pipeline/scripts/integ_tests/setup_commands.sh"]
-            )
-            # The following command uses tox to invoke the integ-test; _env is in format like integ-tests.cluseter-manager
-            commands += [
-                f"tox -e {_env} -- -p cluster-name={self.params.cluster_name} -p aws-region={self.region} "
-                f"-p admin-username={clusteradmin_username} "
-                f"-p admin-password={clusteradmin_password}",
-            ]
-            commands += self.get_commands_for_scripts(
-                ["source/idea/pipeline/scripts/integ_tests/teardown_commands.sh"]
-            )
-            _step = pipelines.CodeBuildStep(
-                _env,
-                build_environment=codebuild.BuildEnvironment(
-                    build_image=codebuild.LinuxBuildImage.STANDARD_5_0,
-                    compute_type=codebuild.ComputeType.SMALL,
-                    privileged=True,
-                ),
-                env=dict(
-                    CLUSTER_NAME=self.params.cluster_name,
-                    AWS_REGION=self.region,
+            _step = (
+                IntegTestStepBuilder(_env, self.params.cluster_name, self.region, True)
+                .test_specific_tox_command_argument(
+                    f"admin-username={clusteradmin_username}",
+                    f"admin-password={clusteradmin_password}",
+                )
+                .test_specific_env(
                     CLUSTERADMIN_USERNAME=clusteradmin_username,
                     CLUSTERADMIN_PASSWORD=clusteradmin_password,
-                ),
-                install_commands=self.get_commands_for_scripts(
-                    [
-                        "source/idea/pipeline/scripts/common/install_commands.sh",
-                        "source/idea/pipeline/scripts/integ_tests/install_commands.sh",
-                        "source/idea/pipeline/scripts/tox/install_commands.sh",
-                    ]
-                ),
-                commands=commands,
-                role_policy_statements=[
+                )
+                .test_specific_role_policy_statement(
                     iam.PolicyStatement.from_json(
                         {
                             "Effect": "Allow",
@@ -280,23 +298,94 @@ class PipelineStack(Stack):
                             ],
                         }
                     ),
-                    iam.PolicyStatement.from_json(
-                        {
-                            "Effect": "Allow",
-                            "Action": [
-                                "ec2:DescribeSecurityGroups",
-                                "ec2:DescribeSecurityGroupRules",
-                                "ec2:AuthorizeSecurityGroupIngress",
-                                "ec2:RevokeSecurityGroupIngress",
-                            ],
-                            "Resource": "*",
-                        }
-                    ),
-                ],
-                timeout=Duration.hours(4),
+                )
+                .build()
             )
             steps.append(_step)
         return steps
+
+    def get_smoke_test_step(self) -> pipelines.CodeBuildStep:
+        step = (
+            IntegTestStepBuilder(
+                "integ-tests.smoke", self.params.cluster_name, self.region
+            )
+            .test_specific_install_command(
+                *get_commands_for_scripts(
+                    ["source/idea/pipeline/scripts/chrome/install_commands.sh"]
+                )
+            )
+            .test_specific_role_policy_statement(
+                iam.PolicyStatement.from_json(
+                    {
+                        "Effect": "Allow",
+                        "Action": [
+                            "ssm:SendCommand",
+                        ],
+                        "Resource": [
+                            f"arn:{self.partition}:ssm:{self.region}:*:document/*",
+                        ],
+                    }
+                ),
+                iam.PolicyStatement.from_json(
+                    {
+                        "Effect": "Allow",
+                        "Action": [
+                            "ssm:SendCommand",
+                        ],
+                        "Resource": [
+                            f"arn:{self.partition}:ec2:{self.region}:{self.account}:instance/*"
+                        ],
+                        "Condition": {
+                            "StringLike": {
+                                "ssm:resourceTag/res:EnvironmentName": [
+                                    self.params.cluster_name
+                                ]
+                            }
+                        },
+                    }
+                ),
+                iam.PolicyStatement.from_json(
+                    {
+                        "Effect": "Allow",
+                        "Action": [
+                            "ssm:GetCommandInvocation",
+                        ],
+                        "Resource": "*",
+                    }
+                ),
+                iam.PolicyStatement.from_json(
+                    {
+                        "Effect": "Allow",
+                        "Action": [
+                            "s3:GetObject",
+                        ],
+                        # TODO: Specify the bucket to which SSM writes command outputs
+                        "Resource": "*",
+                    }
+                ),
+                iam.PolicyStatement.from_json(
+                    {
+                        "Effect": "Allow",
+                        "Action": [
+                            "elasticloadbalancing:DescribeLoadBalancers",
+                        ],
+                        "Resource": "*",
+                    }
+                ),
+                iam.PolicyStatement.from_json(
+                    {
+                        "Effect": "Allow",
+                        "Action": [
+                            "autoscaling:DescribeAutoScalingGroups",
+                        ],
+                        "Resource": "*",
+                    }
+                ),
+            )
+            .build()
+        )
+
+        return step
 
     @staticmethod
     def get_steps_from_tox(tox_env: list[str]) -> list[pipelines.CodeBuildStep]:
@@ -304,7 +393,7 @@ class PipelineStack(Stack):
         for _env in tox_env:
             _step = pipelines.CodeBuildStep(
                 _env,
-                install_commands=PipelineStack.get_commands_for_scripts(
+                install_commands=get_commands_for_scripts(
                     [
                         "source/idea/pipeline/scripts/common/install_commands.sh",
                         "source/idea/pipeline/scripts/tox/install_commands.sh",
@@ -331,7 +420,6 @@ class PipelineStack(Stack):
                 f"arn:{self.partition}:cloudformation:{self.region}:{self.account}:stack/{self.params.cluster_name}-metrics/*",
                 f"arn:{self.partition}:cloudformation:{self.region}:{self.account}:stack/{self.params.cluster_name}-directoryservice/*",
                 f"arn:{self.partition}:cloudformation:{self.region}:{self.account}:stack/{self.params.cluster_name}-identity-provider/*",
-                f"arn:{self.partition}:cloudformation:{self.region}:{self.account}:stack/{self.params.cluster_name}-analytics/*",
                 f"arn:{self.partition}:cloudformation:{self.region}:{self.account}:stack/{self.params.cluster_name}-shared-storage/*",
                 f"arn:{self.partition}:cloudformation:{self.region}:{self.account}:stack/{self.params.cluster_name}-cluster-manager/*",
                 f"arn:{self.partition}:cloudformation:{self.region}:{self.account}:stack/{self.params.cluster_name}-vdc/*",
@@ -347,6 +435,89 @@ class PipelineStack(Stack):
                 f"arn:{self.partition}:cloudformation:{self.region}:{self.account}:stack/Deploy-{INSTALL_STACK_NAME}/*"
             ],
         )
+        codebuild_read_ssm_parameter_vpc_id_policy = iam.PolicyStatement(
+            effect=iam.Effect.ALLOW,
+            actions=[
+                "ssm:GetParameter",
+            ],
+            resources=[
+                f"arn:{self.partition}:ssm:{self.region}:{self.account}:parameter{self.params.vpc_id}"
+            ],
+        )
+        codebuild_read_file_systems_policy = iam.PolicyStatement(
+            effect=iam.Effect.ALLOW,
+            actions=[
+                "elasticfilesystem:DescribeFileSystems",
+                "elasticfilesystem:DescribeMountTargets",
+                "fsx:DescribeFileSystems",
+                "fsx:DescribeStorageVirtualMachines",
+                "fsx:DescribeVolumes",
+            ],
+            resources=["*"],
+        )
+        codebuild_efs_delete_file_systems_policy = iam.PolicyStatement(
+            effect=iam.Effect.ALLOW,
+            actions=[
+                "elasticfilesystem:DeleteMountTarget",
+                "elasticfilesystem:DeleteFileSystem",
+            ],
+            resources=["*"],
+            conditions={
+                "StringEquals": {
+                    "aws:ResourceTag/res:EnvironmentName": [self.params.cluster_name],
+                },
+            },
+        )
+        codebuild_efs_filesystem_ec2_delete_eni_policy = iam.PolicyStatement(
+            effect=iam.Effect.ALLOW,
+            actions=[
+                "ec2:DeleteNetworkInterface",
+            ],
+            resources=["*"],
+        )
+        codebuild_fsx_delete_file_systems_policy = iam.PolicyStatement(
+            effect=iam.Effect.ALLOW,
+            actions=[
+                "fsx:DeleteFileSystem",
+            ],
+            resources=["*"],
+            conditions={
+                "StringEquals": {
+                    "aws:ResourceTag/res:EnvironmentName": [self.params.cluster_name],
+                },
+            },
+        )
+        codebuild_fsx_delete_svms_volumes_policy = iam.PolicyStatement(
+            effect=iam.Effect.ALLOW,
+            actions=[
+                "fsx:DeleteVolume",
+                "fsx:DeleteStorageVirtualMachine",
+                "fsx:CreateBackup",
+                "fsx:TagResource",
+            ],
+            resources=["*"],
+        )
+        codebuild_shared_storage_security_group_read_policy = iam.PolicyStatement(
+            effect=iam.Effect.ALLOW,
+            actions=[
+                "ec2:DescribeSecurityGroups",
+            ],
+            resources=["*"],
+        )
+        codebuild_shared_storage_security_group_delete_policy = iam.PolicyStatement(
+            effect=iam.Effect.ALLOW,
+            actions=[
+                "ec2:DeleteSecurityGroup",
+            ],
+            resources=["*"],
+            conditions={
+                "StringEquals": {
+                    "aws:ResourceTag/Name": [
+                        f"{self.params.cluster_name}-shared-storage-security-group"
+                    ],
+                },
+            },
+        )
         return pipelines.CodeBuildStep(
             "Destroy",
             build_environment=codebuild.BuildEnvironment(
@@ -357,9 +528,17 @@ class PipelineStack(Stack):
             env=dict(
                 CLUSTER_NAME=self.params.cluster_name,
                 AWS_REGION=self.region,
+                BATTERIES_INCLUDED="true" if self._bi else "false",
+                VPC_ID=self.params.vpc_id,
                 INSTALL_STACK_NAME=INSTALL_STACK_NAME,
             ),
-            commands=self.get_commands_for_scripts(
+            install_commands=get_commands_for_scripts(
+                [
+                    "source/idea/pipeline/scripts/common/install_commands.sh",
+                    "source/idea/pipeline/scripts/destroy/install_commands.sh",
+                ]
+            ),
+            commands=get_commands_for_scripts(
                 [
                     "source/idea/pipeline/scripts/destroy/commands.sh",
                 ]
@@ -367,6 +546,14 @@ class PipelineStack(Stack):
             role_policy_statements=[
                 codebuild_cloudformation_read_policy,
                 codebuild_cloudformation_delete_stack_policy,
+                codebuild_read_ssm_parameter_vpc_id_policy,
+                codebuild_read_file_systems_policy,
+                codebuild_efs_delete_file_systems_policy,
+                codebuild_efs_filesystem_ec2_delete_eni_policy,
+                codebuild_fsx_delete_file_systems_policy,
+                codebuild_fsx_delete_svms_volumes_policy,
+                codebuild_shared_storage_security_group_read_policy,
+                codebuild_shared_storage_security_group_delete_policy,
             ],
             timeout=Duration.hours(2),
         )
@@ -420,13 +607,13 @@ class PipelineStack(Stack):
                 PUBLISH_TEMPLATES="true" if self._publish_templates else "false",
                 ECR_REPOSITORY_URI_PARAMETER=ecr_public_repository_uri,
             ),
-            install_commands=self.get_commands_for_scripts(
+            install_commands=get_commands_for_scripts(
                 [
                     "source/idea/pipeline/scripts/common/install_commands.sh",
                     "source/idea/pipeline/scripts/publish/install_commands.sh",
                 ]
             ),
-            commands=self.get_commands_for_scripts(
+            commands=get_commands_for_scripts(
                 [
                     "source/idea/pipeline/scripts/publish/commands.sh",
                 ]
@@ -468,9 +655,33 @@ class PipelineStack(Stack):
 
 
 class DeployStage(Stage):
-    def __init__(self, scope: Construct, construct_id: str, parameters: Parameters):
+    def __init__(
+        self,
+        scope: Construct,
+        construct_id: str,
+        parameters: Union[RESParameters, BIParameters],
+    ):
         super().__init__(scope, construct_id)
         registry_name = self.node.try_get_context("registry_name")
-        self.install_stack = InstallStack(
-            self, INSTALL_STACK_NAME, parameters=parameters, registry_name=registry_name
-        )
+        if isinstance(parameters, BIParameters):
+            bi_stack_template_url = self.node.try_get_context("BIStackTemplateURL")
+            self.batteries_included_stack = BiStack(
+                self,
+                BATTERIES_INCLUDED_STACK_NAME,
+                template_url=bi_stack_template_url,
+                parameters=parameters,
+            )
+            self.install_stack = InstallStack(
+                self,
+                INSTALL_STACK_NAME,
+                parameters=parameters,
+                registry_name=registry_name,
+            )
+            self.install_stack.add_dependency(target=self.batteries_included_stack)
+        else:
+            self.install_stack = InstallStack(
+                self,
+                INSTALL_STACK_NAME,
+                parameters=parameters,
+                registry_name=registry_name,
+            )

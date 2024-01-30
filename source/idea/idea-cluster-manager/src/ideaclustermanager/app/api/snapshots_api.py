@@ -13,7 +13,10 @@ from ideasdk.api import BaseAPI, ApiInvocationContext
 from ideadatamodel.snapshots import (
     CreateSnapshotRequest,
     CreateSnapshotResult,
-    ListSnapshotsRequest
+    ListSnapshotsRequest,
+    ApplySnapshotRequest,
+    ApplySnapshotResult,
+    ListApplySnapshotRecordsRequest
 )
 from ideadatamodel import exceptions
 from ideasdk.utils import Utils
@@ -37,6 +40,14 @@ class SnapshotsAPI(BaseAPI):
             'Snapshots.ListSnapshots': {
                 'scope': self.SCOPE_READ,
                 'method': self.list_snapshots
+            },
+            'Snapshots.ApplySnapshot': {
+                'scope': self.SCOPE_WRITE,
+                'method': self.apply_snapshot
+            },
+            'Snapshots.ListAppliedSnapshots': {
+                'scope': self.SCOPE_READ,
+                'method': self.list_applied_snapshots
             }
         }
 
@@ -47,12 +58,27 @@ class SnapshotsAPI(BaseAPI):
 
         self.context.snapshots.create_snapshot(request.snapshot)
         context.success(CreateSnapshotResult(
-            result='Successfully created Snapshot.'
+            message='Successfully created Snapshot.'
         ))
 
     def list_snapshots(self, context: ApiInvocationContext):
         request = context.get_request_payload_as(ListSnapshotsRequest)
         result = self.context.snapshots.list_snapshots(request)
+        context.success(result)
+
+    def apply_snapshot(self, context: ApiInvocationContext):
+        request = context.get_request_payload_as(ApplySnapshotRequest)
+        if not request.snapshot:
+            raise exceptions.invalid_params('Snapshot details are empty.')
+
+        self.context.snapshots.apply_snapshot(request.snapshot)
+        context.success(ApplySnapshotResult(
+            message='Successfully submitted Apply Snapshot request.'
+        ))
+        
+    def list_applied_snapshots(self, context: ApiInvocationContext):
+        request = context.get_request_payload_as(ListApplySnapshotRecordsRequest)
+        result = self.context.snapshots.list_applied_snapshots(request)
         context.success(result)
 
     def invoke(self, context: ApiInvocationContext):

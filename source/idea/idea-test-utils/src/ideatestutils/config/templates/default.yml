@@ -53,6 +53,7 @@ identity-provider:
     sso_idp_provider_name: test-provider
     sso_idp_provider_type: SAML-OIDC
     sso_idp_provider_email_attribute: email
+    sso_enabled: false
   provider: cognito-idp
 
 directoryservice:
@@ -84,6 +85,7 @@ directoryservice:
   tls_certificate_secret_arn: arn:aws:secretsmanager:us-east-1:123456789012:secret:{{ context.cluster_name }}-directoryservice-certificate-FN5MSq
   tls_private_key_secret_arn: arn:aws:secretsmanager:us-east-1:123456789012:secret:{{ context.cluster_name }}-directoryservice-private-key-FRWbNY
   volume_size: 200
+  sssd.ldap_id_mapping: True
 
 
 scheduler:
@@ -161,8 +163,6 @@ global-settings:
     default:
       cluster:
         module_id: cluster
-      analytics:
-        module_id: analytics
       identity-provider:
         module_id: identity-provider
       directoryservice:

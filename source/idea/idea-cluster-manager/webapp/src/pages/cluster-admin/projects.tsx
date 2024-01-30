@@ -101,6 +101,23 @@ const PROJECT_TABLE_COLUMN_DEFINITIONS: TableProps.ColumnDefinition<Project>[] =
         },
     },
     {
+        id: "user",
+        header: "Users",
+        cell: (project) => {
+            if (project.users) {
+                return (
+                    <div>
+                        {project.users.map((user, index) => {
+                            return <li key={index}>{user}</li>;
+                        })}
+                    </div>
+                );
+            } else {
+                return "-";
+            }
+        },
+    },
+    {
         id: "updated_on",
         header: "Updated On",
         cell: (project) => new Date(project.updated_on!).toLocaleString(),
@@ -227,6 +244,24 @@ class Projects extends Component<ProjectsProps, ProjectsState> {
         });
         return params;
     }
+
+    buildUserParam(): SocaUserInputParamMetadata[] {
+        const params: SocaUserInputParamMetadata[] = [];
+        params.push({
+            name: "users",
+            title: "Users",
+            description: "Select applicable users for the Project",
+            param_type: "select",
+            multiple: true,
+            data_type: "str",
+            dynamic_choices: true,
+            validate: {
+                required: false,
+            },
+        });
+        return params;
+    }
+
     buildCreateProjectForm() {
         let values = undefined;
         const isUpdate = this.state.createProjectModalType === "update";
@@ -315,6 +350,30 @@ class Projects extends Component<ProjectsProps, ProjectsState> {
                                         };
                                     }
                                 });
+                        } else if (request.param === "users") {
+                            return this.accounts()
+                                .listUsers()
+                                .then((result) => {
+                                    const listing = result.listing!;
+                                    if (listing.length === 0) {
+                                        return {
+                                            listing: [],
+                                        };
+                                    } else {
+                                        const choices: SocaUserInputChoice[] = [];
+                                        listing.forEach((value) => {
+                                            if (value.username != "clusteradmin") {
+                                                choices.push({
+                                                    title: `${value.username} (${value.uid})`,
+                                                    value: value.username,
+                                                });
+                                            }
+                                        });
+                                        return {
+                                            listing: choices,
+                                        };
+                                    }
+                                });
                         } else if (request.param === "add_filesystems") {
                             let promises: Promise<any>[] = [];
                             promises.push(this.clusterSettings().getModuleSettings({ module_id: Constants.MODULE_SHARED_STORAGE }));
@@ -392,6 +451,7 @@ class Projects extends Component<ProjectsProps, ProjectsState> {
                             },
                             dynamic_choices: true,
                         },
+                        ...this.buildUserParam(),
                         ...this.buildAddFileSystemParam(isUpdate),
                         {
                             name: "enable_budgets",

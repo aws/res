@@ -12,6 +12,8 @@
  */
 
 export const Constants = {
+    ADMIN_ROLE: 'admin',
+    USER_ROLE: 'user',
     MODULE_VIRTUAL_DESKTOP_CONTROLLER: "virtual-desktop-controller",
     MODULE_SCHEDULER: "scheduler",
     MODULE_DIRECTORY_SERVICE: "directoryservice",
@@ -19,7 +21,6 @@ export const Constants = {
     MODULE_SHARED_STORAGE: "shared-storage",
     MODULE_METRICS: "metrics",
     MODULE_BASTION_HOST: "bastion-host",
-    MODULE_ANALYTICS: "analytics",
     MODULE_CLUSTER: "cluster",
     MODULE_CLUSTER_MANAGER: "cluster-manager",
     MODULE_GLOBAL_SETTINGS: "global-settings",

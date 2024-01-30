@@ -11,13 +11,15 @@
 
 from ideasdk.context import SocaContext
 from ideadatamodel.snapshots import (
-    Snapshot, SnapshotStatus, ListSnapshotsRequest, ListSnapshotsResult
+    Snapshot, SnapshotStatus, ListSnapshotsRequest, ListSnapshotsResult, ListApplySnapshotRecordsRequest, ListApplySnapshotRecordsResult
 )
 from ideadatamodel import exceptions
 from ideasdk.context import ArnBuilder
 from ideasdk.utils import Utils
+from ideaclustermanager.app.snapshots.apply_snapshot import ApplySnapshot
 from ideaclustermanager.app.snapshots import snapshot_constants
-from ideaclustermanager.app.snapshots.snapshot_dao import SnapshotDAO
+from ideaclustermanager.app.snapshots.db.apply_snapshot_dao import ApplySnapshotDAO
+from ideaclustermanager.app.snapshots.db.snapshot_dao import SnapshotDAO
 
 import botocore.exceptions
 import re
@@ -70,6 +72,7 @@ class SnapshotsService:
     1. Creating Snapshots
     2. Listing Snapshots
     3. Deleting Snapshots
+    4. Applying Snapshots
 
     The service is primarily invoked via AuthAPI and SnapshotsAPI
     """
@@ -81,6 +84,8 @@ class SnapshotsService:
         self.logger = context.logger('snapshots-service')
         self.snapshot_dao = SnapshotDAO(context)
         self.snapshot_dao.initialize()
+        self.apply_snapshot_dao = ApplySnapshotDAO(context)
+        self.apply_snapshot_dao.initialize()
 
     def create_snapshot(self, snapshot: Snapshot):
         """
@@ -119,13 +124,13 @@ class SnapshotsService:
                 table_export_descriptions[table_name] = export_response['ExportDescription']
 
             metadata = {
-                'table_export_descriptions': table_export_descriptions,
+                snapshot_constants.TABLE_EXPORT_DESCRIPTION_KEY: table_export_descriptions,
                 'version': self.context.module_version()
             }
 
             self.context.aws().s3().put_object(
                 Bucket=snapshot.s3_bucket_name,
-                Key=f'{snapshot.snapshot_path}/metadata.json',
+                Key=f'{snapshot.snapshot_path}/{snapshot_constants.METADATA_FILE_NAME_AND_EXTENSION}',
                 Body=json.dumps(metadata, default=str)
             )
             self.snapshot_dao.create_snapshot({
@@ -146,10 +151,13 @@ class SnapshotsService:
 
     def __update_snapshot_status(self, snapshot: Snapshot):
         try:
-            metadata_s3_object = self.context.aws().s3().get_object(Bucket=snapshot.s3_bucket_name, Key=f'{snapshot.snapshot_path}/metadata.json')
+            metadata_s3_object = self.context.aws().s3().get_object(
+                Bucket=snapshot.s3_bucket_name,
+                Key=f'{snapshot.snapshot_path}/{snapshot_constants.METADATA_FILE_NAME_AND_EXTENSION}',
+            )
             metadata_file_content = metadata_s3_object['Body'].read().decode('utf-8')
             metadata = json.loads(metadata_file_content)
-            table_export_descriptions = metadata['table_export_descriptions']
+            table_export_descriptions = metadata[snapshot_constants.TABLE_EXPORT_DESCRIPTION_KEY]
             is_export_status_updated = False
             export_completed_tables_count = 0
             is_export_failed = False
@@ -157,7 +165,9 @@ class SnapshotsService:
             for table_name in DYNAMODB_TABLES_TO_EXPORT:
                 table_export_description = table_export_descriptions[table_name]
                 if table_export_description['ExportStatus'] == SnapshotStatus.IN_PROGRESS:
-                    describe_export_response = self.context.aws().dynamodb().describe_export(ExportArn=table_export_description['ExportArn'])
+                    describe_export_response = (
+                        self.context.aws().dynamodb().describe_export(ExportArn=table_export_description['ExportArn'])
+                    )
                     latest_table_export_description = describe_export_response['ExportDescription']
                     if latest_table_export_description['ExportStatus'] == SnapshotStatus.COMPLETED:
                         export_completed_tables_count += 1
@@ -178,10 +188,10 @@ class SnapshotsService:
                     break
 
             if is_export_status_updated:
-                metadata['table_export_descriptions'] = table_export_descriptions
+                metadata[snapshot_constants.TABLE_EXPORT_DESCRIPTION_KEY] = table_export_descriptions
                 self.context.aws().s3().put_object(
                     Bucket=snapshot.s3_bucket_name,
-                    Key=f'{snapshot.snapshot_path}/metadata.json',
+                    Key=f'{snapshot.snapshot_path}/{snapshot_constants.METADATA_FILE_NAME_AND_EXTENSION}',
                     Body=json.dumps(metadata, default=str)
                 )
                 if is_export_failed:
@@ -203,3 +213,14 @@ class SnapshotsService:
                 self.__update_snapshot_status(snapshot)
 
         return list_snapshots_response
+
+    def apply_snapshot(self, snapshot: Snapshot):
+        """
+        apply a snapshot
+        """
+        apply_snapshot = ApplySnapshot(snapshot, self.apply_snapshot_dao, self.context)
+        apply_snapshot.initialize()
+        
+    def list_applied_snapshots(self, request: ListApplySnapshotRecordsRequest) -> ListApplySnapshotRecordsResult:
+        return self.apply_snapshot_dao.list(request)
+        

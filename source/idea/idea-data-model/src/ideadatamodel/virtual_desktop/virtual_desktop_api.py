@@ -34,6 +34,8 @@ __all__ = (
     'ListSessionsRequest',
     'CreateSoftwareStackRequest',
     'CreateSoftwareStackResponse',
+    'DeleteSoftwareStackRequest',
+    'DeleteSoftwareStackResponse',
     'UpdateSoftwareStackRequest',
     'UpdateSoftwareStackResponse',
     'GetSoftwareStackInfoRequest',
@@ -58,10 +60,6 @@ __all__ = (
     'ListAllowedInstanceTypesResponse',
     'ListAllowedInstanceTypesForSessionRequest',
     'ListAllowedInstanceTypesForSessionResponse',
-    'ReIndexUserSessionsRequest',
-    'ReIndexUserSessionsResponse',
-    'ReIndexSoftwareStacksRequest',
-    'ReIndexSoftwareStacksResponse',
     'ListPermissionProfilesRequest',
     'ListPermissionProfilesResponse',
     'GetPermissionProfileRequest',
@@ -70,6 +68,8 @@ __all__ = (
     'CreatePermissionProfileRequest',
     'UpdatePermissionProfileRequest',
     'UpdatePermissionProfileResponse',
+    'DeletePermissionProfileRequest',
+    'DeletePermissionProfileResponse',
     'GetBasePermissionsRequest',
     'GetBasePermissionsResponse',
     'UpdateSessionPermissionRequest',
@@ -158,6 +158,7 @@ class GetSessionInfoResponse(SocaPayload):
 # VirtualDesktopAdmin.GetSoftwareStackInfo - Request
 class GetSoftwareStackInfoRequest(SocaPayload):
     stack_id: Optional[str]
+    base_os: Optional[str]
 
 
 # VirtualDesktopAdmin.GetSoftwareStackInfo - Response
@@ -248,6 +249,16 @@ class CreateSoftwareStackRequest(SocaPayload):
 # VirtualDesktopAdmin.CreateSoftwareStack - Response
 class CreateSoftwareStackResponse(SocaPayload):
     software_stack: Optional[VirtualDesktopSoftwareStack]
+
+
+# VirtualDesktopAdmin.DeleteSoftwareStack - Request
+class DeleteSoftwareStackRequest(SocaPayload):
+    software_stack: Optional[VirtualDesktopSoftwareStack]
+
+
+# VirtualDesktopAdmin.DeleteSoftwareStack - Response
+class DeleteSoftwareStackResponse(SocaPayload):
+    pass
 
 
 # VirtualDesktopAdmin.UpdateSoftwareStack - Request
@@ -350,25 +361,6 @@ class ListAllowedInstanceTypesForSessionResponse(SocaListingPayload):
 # VirtualDesktopAdmin.CreateSharedSession
 # VirtualDesktopAdmin.DeleteSharedSession
 
-# VirtualDesktopAdmin.ReIndexUserSessions - Request
-class ReIndexUserSessionsRequest(SocaPayload):
-    pass
-
-
-# VirtualDesktopAdmin.ReIndexUserSessions - Response
-class ReIndexUserSessionsResponse(SocaPayload):
-    pass
-
-
-# VirtualDesktopAdmin.ReIndexSoftwareStacks - Request
-class ReIndexSoftwareStacksRequest(SocaPayload):
-    pass
-
-
-# VirtualDesktopAdmin.ReIndexSoftwareStacks - Response
-class ReIndexSoftwareStacksResponse(SocaPayload):
-    pass
-
 
 # VirtualDesktopUtils.ListPermissionProfiles - Request
 class ListPermissionProfilesRequest(SocaListingPayload):
@@ -408,6 +400,16 @@ class CreatePermissionProfileRequest(SocaPayload):
 # VirtualDesktopAdmin.CreatePermissionProfile - Response
 class CreatePermissionProfileResponse(SocaPayload):
     profile: Optional[VirtualDesktopPermissionProfile]
+
+
+# VirtualDesktopAdmin.DeletePermissionProfile - Request
+class DeletePermissionProfileRequest(SocaPayload):
+    profile_id: Optional[str]
+
+
+# VirtualDesktopAdmin.DeletePermissionProfile - Response
+class DeletePermissionProfileResponse(SocaPayload):
+    pass
 
 
 # VirtualDesktopUtils.GetBasePermissions - Request
@@ -637,6 +639,13 @@ OPEN_API_SPEC_ENTRIES_VIRTUAL_DESKTOP = [
         is_public=False
     ),
     IdeaOpenAPISpecEntry(
+        namespace='VirtualDesktopAdmin.DeleteSoftwareStack',
+        request=DeleteSoftwareStackRequest,
+        result=DeleteSoftwareStackResponse,
+        is_listing=False,
+        is_public=False
+    ),
+    IdeaOpenAPISpecEntry(
         namespace='VirtualDesktopAdmin.UpdateSoftwareStack',
         request=UpdateSoftwareStackRequest,
         result=UpdateSoftwareStackResponse,
@@ -679,6 +688,13 @@ OPEN_API_SPEC_ENTRIES_VIRTUAL_DESKTOP = [
         is_public=False
     ),
     IdeaOpenAPISpecEntry(
+        namespace='VirtualDesktopAdmin.DeletePermissionProfile',
+        request=DeletePermissionProfileRequest,
+        result=DeletePermissionProfileResponse,
+        is_listing=False,
+        is_public=False
+    ),
+    IdeaOpenAPISpecEntry(
         namespace='VirtualDesktopAdmin.ListSessionPermissions',
         request=ListPermissionsRequest,
         result=ListPermissionsResponse,
@@ -696,20 +712,6 @@ OPEN_API_SPEC_ENTRIES_VIRTUAL_DESKTOP = [
         namespace='VirtualDesktopAdmin.UpdateSessionPermissions',
         request=UpdateSessionPermissionRequest,
         result=UpdateSessionPermissionResponse,
-        is_listing=False,
-        is_public=False
-    ),
-    IdeaOpenAPISpecEntry(
-        namespace='VirtualDesktopAdmin.ReIndexUserSessions',
-        request=ReIndexUserSessionsRequest,
-        result=ReIndexUserSessionsResponse,
-        is_listing=False,
-        is_public=False
-    ),
-    IdeaOpenAPISpecEntry(
-        namespace='VirtualDesktopAdmin.ReIndexSoftwareStacks',
-        request=ReIndexSoftwareStacksRequest,
-        result=ReIndexSoftwareStacksResponse,
         is_listing=False,
         is_public=False
     ),

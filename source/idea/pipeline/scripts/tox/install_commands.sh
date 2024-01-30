@@ -4,4 +4,4 @@
 
 set -ex
 
-pip install tox
+pip install tox==4.12.0

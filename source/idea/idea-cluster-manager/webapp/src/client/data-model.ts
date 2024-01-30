@@ -40,7 +40,8 @@ export type SocaUserInputParamType =
     | "datepicker"
     | "radio-group"
     | "file-upload"
-    | "tiles";
+    | "tiles"
+    | "container";
 export type VirtualDesktopBaseOS = "amazonlinux2" | "centos7" | "rhel7" | "rhel8" | "rhel9" | "windows";
 export type SocaMemoryUnit = "bytes" | "kib" | "mib" | "gib" | "tib" | "kb" | "mb" | "gb" | "tb";
 export type VirtualDesktopArchitecture = "x86_64" | "arm64";
@@ -62,6 +63,7 @@ export type SocaComputeNodeSharing = "default-excl" | "default-exlchost" | "defa
 export type SocaJobPlacementArrangement = "free" | "pack" | "scatter" | "vscatter";
 export type SocaJobPlacementSharing = "excl" | "shared" | "exclhost" | "vscatter";
 export type SnapshotStatus = "IN_PROGRESS" | "COMPLETED" | "FAILED";
+export type ApplySnapshotStatus = "IN_PROGRESS" | "COMPLETED" | "FAILED" | "ROLLBACK_IN_PROGRESS" | "ROLLBACK_COMPLETE" | "ROLLBACK_FAILED";
 
 export interface FileList {
     cwd?: string;
@@ -115,6 +117,7 @@ export interface Snapshot {
     snapshot_path?: string;
     status?: SnapshotStatus;
     created_on?: string;
+    failure_reason?: string
 }
 
 export interface ListSnapshotsRequest {
@@ -126,6 +129,30 @@ export interface ListSnapshotsRequest {
 }
 
 export interface ListSnapshotsResult {
+    paginator?: SocaPaginator;
+    sort_by?: SocaSortBy;
+    date_range?: SocaDateRange;
+    listing?: Snapshot[];
+    filters?: SocaFilter[];
+}
+
+export interface ApplySnapshot {
+    s3_bucket_name?: string;
+    snapshot_path?: string;
+    status?: ApplySnapshotStatus;
+    created_on?: string;
+    failure_reason?: string
+}
+
+export interface ListApplySnapshotRecordsRequest {
+    paginator?: SocaPaginator;
+    sort_by?: SocaSortBy;
+    date_range?: SocaDateRange;
+    listing?: (SocaBaseModel | unknown)[];
+    filters?: SocaFilter[];
+}
+
+export interface ListApplySnapshotRecordsResult {
     paginator?: SocaPaginator;
     sort_by?: SocaSortBy;
     date_range?: SocaDateRange;
@@ -199,6 +226,8 @@ export interface SocaUserInputParamMetadata {
     custom?: {
         [k: string]: unknown;
     };
+    container_items?: SocaUserInputParamMetadata[];
+    custom_error_message?: string;
 }
 export interface SocaUserInputValidate {
     eq?: unknown;
@@ -338,6 +367,7 @@ export interface Project {
     description?: string;
     enabled?: boolean;
     ldap_groups?: string[];
+    users?: string[];
     enable_budgets?: boolean;
     budget?: AwsProjectBudget;
     tags?: SocaKeyValue[];
@@ -645,7 +675,7 @@ export interface ListJobsRequest {
 export interface InitiateAuthRequest {
     client_id?: string;
     auth_flow?: string;
-    username?: string;
+    cognito_username?: string;
     password?: string;
     refresh_token?: string;
     authorization_code?: string;
@@ -873,6 +903,7 @@ export interface VirtualDesktopSession {
     is_launched_by_admin?: boolean;
     locked?: boolean;
     failure_reason?: string;
+    tags?: Record<string,string>[]
 }
 export interface VirtualDesktopServer {
     server_id?: string;
@@ -1012,6 +1043,8 @@ export interface InitiateAuthResult {
         [k: string]: unknown;
     };
     auth?: AuthResult;
+    db_username?: string;
+    role?: string;
 }
 export interface AuthenticateUserResult {
     status?: boolean;
@@ -1238,6 +1271,15 @@ export interface CreateSnapshotRequest {
 export interface CreateSnapshotResult {
     result?: string;
 }
+
+export interface ApplySnapshotRequest {
+    snapshot?: Snapshot
+}
+
+export interface ApplySnapshotResult {
+    message?: string
+}
+
 export interface SendNotificationRequest {
     notification?: Notification;
 }
@@ -1568,7 +1610,6 @@ export interface CreateQueueProfileResult {
     queue_profile?: HpcQueueProfile;
     validation_errors?: JobValidationResult;
 }
-export interface ReIndexUserSessionsRequest {}
 export interface CheckHpcLicenseResourceAvailabilityResult {
     available_count?: number;
 }
@@ -1578,11 +1619,6 @@ export interface ListSessionsRequest {
     date_range?: SocaDateRange;
     listing?: (SocaBaseModel | unknown)[];
     filters?: SocaFilter[];
-}
-export interface OpenSearchQueryResult {
-    data?: {
-        [k: string]: unknown;
-    };
 }
 export interface UpdatePermissionProfileRequest {
     profile?: VirtualDesktopPermissionProfile;
@@ -1724,7 +1760,6 @@ export interface SocaUserInputTag {
 export interface EnableGroupRequest {
     group_name?: string;
 }
-export interface ReIndexUserSessionsResponse {}
 export interface GetParamDefaultRequest {
     module?: string;
     param?: string;
@@ -1810,11 +1845,6 @@ export interface DeleteSessionResponse {
     failed?: VirtualDesktopSession[];
     success?: VirtualDesktopSession[];
 }
-export interface OpenSearchQueryRequest {
-    data?: {
-        [k: string]: unknown;
-    };
-}
 export interface UpdateHpcLicenseResourceRequest {
     license_resource?: HpcLicenseResource;
     dry_run?: boolean;
@@ -1835,7 +1865,6 @@ export interface ModifyUserRequest {
     email_verified?: boolean;
 }
 export interface EnableGroupResult {}
-export interface ReIndexSoftwareStacksRequest {}
 export interface GetParamDefaultResult {
     default?: unknown;
 }
@@ -2006,7 +2035,6 @@ export interface TailFileRequest {
     line_count?: number;
     next_token?: string;
 }
-export interface ReIndexSoftwareStacksResponse {}
 export interface BatchCreateSessionResponse {
     failed?: VirtualDesktopSession[];
     success?: VirtualDesktopSession[];
@@ -2111,6 +2139,7 @@ export interface ConfigureSSORequest {
 export interface ConfigureSSOResponse {}
 export interface GetSoftwareStackInfoRequest {
     stack_id?: string;
+    base_os?: string
 }
 export interface AddAdminUserResult {
     user?: User;

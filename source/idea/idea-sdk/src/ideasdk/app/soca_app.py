@@ -208,10 +208,6 @@ class SocaApp(SocaBaseProtocol):
 
             self.app_stop()
 
-            analytics_service = self.context.service_registry().get_service(constants.SERVICE_ID_ANALYTICS)
-            if analytics_service is not None:
-                analytics_service.stop()
-
             leader_election_service = self.context.service_registry().get_service(constants.SERVICE_ID_LEADER_ELECTION)
             if leader_election_service is not None:
                 leader_election_service.stop()

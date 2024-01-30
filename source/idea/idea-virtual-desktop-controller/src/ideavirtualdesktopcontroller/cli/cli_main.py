@@ -19,13 +19,10 @@ import sys
 import click
 
 from ideavirtualdesktopcontroller.cli.sessions import (
-    reindex_user_sessions,
     batch_create_sessions,
     create_session,
     delete_session
 )
-from ideavirtualdesktopcontroller.cli.software_stacks import reindex_software_stacks
-from ideavirtualdesktopcontroller.cli.module import app_module_clean_up
 
 
 @click.group(CLICK_SETTINGS)
@@ -38,12 +35,9 @@ def main():
 
 
 main.add_command(logs)
-main.add_command(reindex_user_sessions)
 main.add_command(batch_create_sessions)
 main.add_command(create_session)
 main.add_command(delete_session)
-main.add_command(reindex_software_stacks)
-main.add_command(app_module_clean_up)
 
 # used only for local testing
 if __name__ == '__main__':

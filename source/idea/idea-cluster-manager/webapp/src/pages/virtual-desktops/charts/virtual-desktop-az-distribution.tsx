@@ -12,7 +12,6 @@
  */
 
 import { Box } from "@cloudscape-design/components";
-import { AppContext } from "../../../common";
 import VirtualDesktopBaseChart from "./virtual-desktop-base-chart";
 import PieOrDonutChart from "../../../components/charts/pie-or-donut-chart";
 
@@ -34,68 +33,6 @@ class VirtualDesktopAZDistributionChart extends VirtualDesktopBaseChart<VirtualD
             total: "-",
             statusType: "loading",
         };
-    }
-
-    componentDidMount() {
-        this.loadChartData();
-    }
-
-    reload() {
-        this.loadChartData();
-    }
-
-    loadChartData() {
-        this.setState(
-            {
-                statusType: "loading",
-            },
-            () => {
-                AppContext.get()
-                    .client()
-                    .analytics()
-                    .queryOpenSearch({
-                        data: {
-                            index: this.props.indexName,
-                            body: {
-                                size: 0,
-                                aggs: {
-                                    availability_zone: {
-                                        terms: {
-                                            field: "server.availability_zone.raw",
-                                        },
-                                    },
-                                },
-                            },
-                        },
-                    })
-                    .then((result) => {
-                        let chartData: any = [];
-                        if (result.data?.aggregations) {
-                            const aggregations: any = result.data.aggregations;
-                            let availability_zone = aggregations.availability_zone;
-                            let buckets: any[] = availability_zone.buckets;
-                            buckets.forEach((bucket) => {
-                                chartData.push({
-                                    title: bucket.key,
-                                    value: bucket.doc_count,
-                                });
-                            });
-                        }
-                        let hits: any = result.data?.hits;
-                        this.setState({
-                            chartData: chartData,
-                            total: `${hits.total.value}`,
-                            statusType: "finished",
-                        });
-                    })
-                    .catch((error) => {
-                        console.error(error);
-                        this.setState({
-                            statusType: "error",
-                        });
-                    });
-            }
-        );
     }
 
     render() {

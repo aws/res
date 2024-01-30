@@ -14,7 +14,6 @@ from ideadatamodel import (
 )
 
 import ideasdk
-from ideasdk.analytics.analytics_service import AnalyticsService
 from ideasdk.protocols import (
     SocaContextProtocol, CacheProviderProtocol, SocaPubSubProtocol,
     SocaServiceRegistryProtocol, SocaConfigType
@@ -48,7 +47,6 @@ class SocaContextOptions(SocaBaseModel):
     module_id: Optional[str]
     module_set: Optional[str]
 
-    enable_analytics: Optional[bool]
     enable_metrics: Optional[bool]
     metrics_namespace: Optional[str]
 
@@ -84,7 +82,6 @@ class SocaContextOptions(SocaBaseModel):
             use_vpc_endpoints=False,
             enable_distributed_lock=False,
             enable_leader_election=False,
-            enable_analytics=False,
             config=None
         )
 
@@ -109,7 +106,6 @@ class SocaContext(SocaContextProtocol):
             self._distributed_lock: Optional[DistributedLock] = None
             self._metrics_service: Optional[MetricsService] = None
             self._leader_election: Optional[LeaderElection] = None
-            self._analytics_service: Optional[AnalyticsService] = None
 
             is_app_server = Utils.get_as_bool(options.is_app_server, False)
             if is_app_server:
@@ -216,10 +212,6 @@ class SocaContext(SocaContextProtocol):
             if options.enable_leader_election:
                 self._leader_election = LeaderElection(context=self)
 
-            # analytics
-            if options.enable_analytics:
-                self._analytics_service = AnalyticsService(context=self)
-
             # metrics
             if options.enable_metrics:
                 self._metrics_service = MetricsService(context=self, default_namespace=options.metrics_namespace)
@@ -229,8 +221,6 @@ class SocaContext(SocaContextProtocol):
                 self._distributed_lock.stop()
             if self._leader_election is not None:
                 self._leader_election.stop()
-            if self._analytics_service is not None:
-                self._analytics_service.stop()
             if self._metrics_service is not None:
                 self._metrics_service.stop()
             if self._config is not None and isinstance(self._config, ClusterConfig):
@@ -325,6 +315,3 @@ class SocaContext(SocaContextProtocol):
         if self._leader_election is None:
             return True
         return self._leader_election.is_leader()
-
-    def analytics_service(self) -> AnalyticsService:
-        return self._analytics_service

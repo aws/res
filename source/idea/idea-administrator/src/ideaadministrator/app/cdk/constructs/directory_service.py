@@ -418,26 +418,6 @@ class UserPool(SocaBaseConstruct):
             IdeaNagSuppression(rule_id='AwsSolutions-COG3', reason='suppress advanced security rule 1/to save cost, 2/Not supported in GovCloud')
         ])
 
-        group_name_helper = GroupNameHelper(self.context)
-
-        cognito.CfnUserPoolGroup(
-            scope=self.scope,
-            id=f'{user_pool_name}-administrators-group',
-            description='Administrators group (Sudo Users)',
-            group_name=group_name_helper.get_cluster_administrators_group(),
-            precedence=1,
-            user_pool_id=self.user_pool.user_pool_id
-        )
-
-        cognito.CfnUserPoolGroup(
-            scope=self.scope,
-            id=f'{user_pool_name}-managers-group',
-            description='Managers group with limited administration access.',
-            group_name=group_name_helper.get_cluster_managers_group(),
-            precedence=2,
-            user_pool_id=self.user_pool.user_pool_id
-        )
-
         domain_url = self.context.config().get_string('identity-provider.cognito.domain_url')
         if Utils.is_not_empty(domain_url):
             domain_prefix = domain_url.replace('https://', '').split('.')[0]

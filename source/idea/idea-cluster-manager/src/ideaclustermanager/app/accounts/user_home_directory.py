@@ -12,7 +12,7 @@
 from ideasdk.context import SocaContext
 from ideadatamodel.auth import User
 from ideasdk.utils import Utils
-from ideadatamodel import exceptions
+from ideadatamodel import exceptions, errorcodes
 
 import time
 import os
@@ -105,20 +105,10 @@ class UserHomeDirectory:
             self.own_path(dest_file)
 
     def initialize(self):
-        # wait for system to sync the newly created user by using system libraries to resolve the user
-        # this happens on a fresh installation of auth-server, where all system services have just started
-        # and a new clusteradmin user is created.
-        # although the user is created in directory services, it's not yet synced with the local system
-        # If you continue to see this log message it may indicate that the underlying cluster-manager
-        # host is not probably linked to the back-end directory service in some fashion.
-        while True:
-            try:
-                pwd.getpwnam(self.user.username)
-                break
-            except KeyError:
-                self._logger.info(f'{self.user.username} not available yet. waiting for user to be synced ...')
-                time.sleep(5)
-
+        try:
+            pwd.getpwnam(self.user.username)
+        except KeyError:
+            raise exceptions.soca_exception(error_code=errorcodes.USER_NOT_AVAILABLE, message=f'{self.user.username} is not available.')
         self.initialize_home_dir()
         self.initialize_ssh_dir()
 

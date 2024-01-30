@@ -96,7 +96,6 @@ class VirtualDesktopAPI(BaseAPI):
         )
 
         self.DEFAULT_ROOT_VOL_IOPS = '100'
-        self.VDI_GROUPS = [self.controller_utils.get_virtual_desktop_users_group(), self.controller_utils.get_virtual_desktop_admin_group()]
 
     def get_session_if_owner(self, username: str, idea_session_id: str) -> Optional[VirtualDesktopSession]:
         return self.session_db.get_from_db(idea_session_id=idea_session_id, idea_session_owner=username)
@@ -404,8 +403,8 @@ class VirtualDesktopAPI(BaseAPI):
 
         return session
 
-    def _get_software_stack_info(self, software_stack_id: str) -> VirtualDesktopSoftwareStack:
-        software_stack_response = self.software_stack_db.get_from_index(stack_id=software_stack_id)
+    def _get_software_stack_info(self, software_stack_id: str, software_stack_base_os: str) -> VirtualDesktopSoftwareStack:
+        software_stack_response = self.software_stack_db.get_with_project_info(stack_id=software_stack_id, base_os=software_stack_base_os)
         if Utils.is_empty(software_stack_response):
             software_stack = VirtualDesktopSoftwareStack(
                 stack_id=software_stack_id,
@@ -414,14 +413,6 @@ class VirtualDesktopAPI(BaseAPI):
         else:
             software_stack = software_stack_response
         return software_stack
-
-    def _get_session_info(self, session: VirtualDesktopSession) -> VirtualDesktopSession:
-        session_response = self.session_db.get_from_index(idea_session_id=session.idea_session_id)
-        if Utils.is_empty(session_response):
-            session.failure_reason = f'invalid session.res_session_id: {session.idea_session_id} for {session.name} owned by user: {session.owner}'
-        else:
-            session = session_response
-        return session
 
     @staticmethod
     def validate_resume_session_request(session: VirtualDesktopSession) -> (VirtualDesktopSession, bool):
@@ -443,10 +434,6 @@ class VirtualDesktopAPI(BaseAPI):
 
         if Utils.is_empty(software_stack.name):
             software_stack.failure_reason = 'missing software_stack.name'
-            return software_stack, False
-
-        if Utils.is_empty(software_stack.projects):
-            software_stack.failure_reason = 'missing software_stack.projects'
             return software_stack, False
 
         return software_stack, True
@@ -527,7 +514,6 @@ class VirtualDesktopAPI(BaseAPI):
 
             # self.default_instance_profile_arn = self.context.app_config.virtual_desktop_dcv_host_profile_arn
             # self.default_security_group = self.context.app_config.virtual_desktop_dcv_host_security_group_id
-
 
         if Utils.is_empty(session.server.key_pair_name):
             session.server.key_pair_name = self.context.config().get_string('cluster.network.ssh_key_pair', required=True)
@@ -706,6 +692,9 @@ class VirtualDesktopAPI(BaseAPI):
 
         return new_software_stack
 
+    def _delete_software_stack(self, software_stack: VirtualDesktopSoftwareStack):
+        self.software_stack_utils.delete_software_stack(software_stack)
+
     def _list_session_permissions(self, idea_session_id: str, request: ListPermissionsRequest) -> ListPermissionsResponse:
         session_filter_found = False
         if Utils.is_empty(request.filters):
@@ -722,7 +711,7 @@ class VirtualDesktopAPI(BaseAPI):
                 value=idea_session_id
             ))
 
-        return self.session_permissions_db.list_from_index(request)
+        return self.session_permissions_db.list_session_permissions(request)
 
     def _list_shared_permissions(self, username: str, request: ListPermissionsRequest) -> ListPermissionsResponse:
         actor_filter_found = False
@@ -740,10 +729,10 @@ class VirtualDesktopAPI(BaseAPI):
                 value=username
             ))
 
-        return self.session_permissions_db.list_from_index(request)
+        return self.session_permissions_db.list_session_permissions(request)
 
     def _list_software_stacks(self, request: ListSoftwareStackRequest) -> ListSoftwareStackResponse:
-        return self.software_stack_db.list_from_index(request)
+        return self.software_stack_db.list_all_from_db(request)
 
     def _get_session_connection_info(self, connection_info_request: VirtualDesktopSessionConnectionInfo, context: ApiInvocationContext) -> VirtualDesktopSessionConnectionInfo:
         connection_info = VirtualDesktopSessionConnectionInfo()

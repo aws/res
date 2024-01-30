@@ -26,12 +26,38 @@ class Project(SocaBaseModel):
     title: Optional[str]
     description: Optional[str]
     enabled: Optional[bool]
-    ldap_groups: Optional[List[str]]
+    ldap_groups: Optional[List[str]] = []
+    users: Optional[List[str]]
     enable_budgets: Optional[bool]
     budget: Optional[AwsProjectBudget]
     tags: Optional[List[SocaKeyValue]]
     created_on: Optional[datetime]
     updated_on: Optional[datetime]
+
+    def __eq__(self, other):
+        eq = True
+        eq = eq and self.name == other.name
+        eq = eq and self.title == other.title
+        eq = eq and self.description == other.description
+        eq = eq and self.enable_budgets == other.enable_budgets
+        eq = eq and self.budget == other.budget
+
+        self_ldap_groups = self.ldap_groups if self.ldap_groups else []
+        other_ldap_groups = other.ldap_groups if other.ldap_groups else []
+        eq = eq and len(self_ldap_groups) == len(other_ldap_groups)
+        eq = eq and all(ldap_group in self_ldap_groups for ldap_group in other_ldap_groups)
+
+        self_users = self.users if self.users else []
+        other_users = other.users if other.users else []
+        eq = eq and len(self_users) == len(other_users)
+        eq = eq and all(user in self_users for user in other_users)
+
+        self_tags = self.tags if self.tags else []
+        other_tags = other.tags if other.tags else []
+        eq = eq and len(self_tags) == len(other_tags)
+        eq = eq and all(tag in self_tags for tag in other_tags)
+
+        return eq
 
     def is_enabled(self) -> bool:
         return ModelUtils.get_as_bool(self.enabled, False)

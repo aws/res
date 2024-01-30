@@ -20,6 +20,8 @@ from ideadatamodel.auth import (
     ListUsersInGroupResult,
     GetUserRequest,
     GetUserResult,
+    GetUserByEmailRequest,
+    GetUserByEmailResult,
     GetGroupRequest,
     GetGroupResult
 )
@@ -63,6 +65,14 @@ class AccountsClient:
             namespace='Accounts.GetUser',
             payload=request,
             result_as=GetUserResult,
+            access_token=self.get_access_token()
+        )
+
+    def get_user_by_email(self, request: GetUserByEmailRequest) -> GetUserByEmailResult:
+        return self.client.invoke_alt(
+            namespace='Accounts.GetUserByEmail',
+            payload=request,
+            result_as=GetUserByEmailResult,
             access_token=self.get_access_token()
         )
 

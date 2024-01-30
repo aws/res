@@ -8,7 +8,7 @@ from aws_cdk import assertions
 from aws_cdk.assertions import Template
 
 from idea.infrastructure.install.installer import Installer
-from idea.infrastructure.install.parameters.parameters import Parameters
+from idea.infrastructure.install.parameters.parameters import RESParameters
 from idea.infrastructure.install.stack import InstallStack
 
 
@@ -52,7 +52,7 @@ def stack(
     return InstallStack(
         app,
         "IDEAInstallStack",
-        parameters=Parameters(cluster_name=cluster_name),
+        parameters=RESParameters(cluster_name=cluster_name),
         registry_name=registry_name,
         dynamodb_kms_key_alias=dynamodb_kms_key_alias,
         env=env,

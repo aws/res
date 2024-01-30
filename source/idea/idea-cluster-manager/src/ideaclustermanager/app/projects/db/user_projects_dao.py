@@ -17,7 +17,7 @@ from ideaclustermanager.app.accounts.accounts_service import AccountsService
 from ideaclustermanager.app.projects.db.projects_dao import ProjectsDAO
 
 from typing import List
-from boto3.dynamodb.conditions import Key
+from boto3.dynamodb.conditions import Attr, Key
 
 
 class UserProjectsDAO:
@@ -98,21 +98,53 @@ class UserProjectsDAO:
         self.user_projects_table = self.context.aws().dynamodb_table().Table(self.get_user_projects_table_name())
         self.project_groups_table = self.context.aws().dynamodb_table().Table(self.get_project_groups_table_name())
 
-    def create_user_project(self, project_id: str, username: str):
+    def create_user_project(self, project_id: str, username: str, by_ldaps: list[str]):
         if Utils.is_empty(project_id):
             raise exceptions.invalid_params('project_id is required')
         if Utils.is_empty(username):
             raise exceptions.invalid_params('username is required')
 
         self.logger.info(f'added user project: {project_id}, username: {username}')
-        self.user_projects_table.put_item(
-            Item={
-                'project_id': project_id,
-                'username': username
-            }
-        )
+        # if user is already in this project, update by_ldap attribute
+        if self.is_user_in_project(username, project_id):
+            result = self.user_projects_table.get_item(
+                Key={
+                    'username': username,
+                    'project_id': project_id
+                }
+            )
+            existing_user = Utils.get_value_as_dict('Item', result)
+            existing_user_ldaps = set(existing_user['by_ldaps'] if existing_user['by_ldaps'] else []) 
 
-    def delete_user_project(self, project_id: str, username: str):
+            by_ldaps = list(existing_user_ldaps.union(set(by_ldaps)))
+
+            # Update Expression
+            update_expression = 'SET #attr = :val'
+
+            # Expression Attribute Names and Values
+            expression_attribute_names = {'#attr': 'by_ldaps'}
+            expression_attribute_values = {':val': by_ldaps}
+            self.user_projects_table.update_item(
+                Key={
+                    'project_id': project_id,
+                    'username': username
+                },
+                UpdateExpression=update_expression,
+                ExpressionAttributeNames=expression_attribute_names,
+                ExpressionAttributeValues=expression_attribute_values
+            )
+
+        else:
+            self.user_projects_table.put_item(
+                Item={
+                    'project_id': project_id,
+                    'username': username,
+                    'by_ldaps': by_ldaps
+                }
+            )
+
+
+    def delete_user_project(self, project_id: str, username: str, by_ldaps: list[str], force: bool = False):
         if Utils.is_empty(project_id):
             raise exceptions.invalid_params('project_id is required')
         if Utils.is_empty(username):
@@ -125,38 +157,53 @@ class UserProjectsDAO:
                 message=f'project: {project_id} not found.'
             )
 
-        project_groups = set(project['ldap_groups'] if 'ldap_groups' in project else [])
-
         user = self.accounts_service.user_dao.get_user(
             username=username)
         if user is None:
             raise exceptions.soca_exception(
                 error_code=errorcodes.AUTH_USER_NOT_FOUND,
                 message=f'user: {username} not found.'
-            )
-
-        user_groups = set(user['additional_groups'] if 'additional_groups' in user else [])
-
-        common_groups = project_groups.intersection(user_groups)
-        # delete user-project relation only user's additional_groups and project's ldap_groups has no common groups.
-        if len(common_groups) == 0:
-            self.logger.info(
-                f'deleted user project: {project_id}, username: {username}')
-            self.user_projects_table.delete_item(
+            )                                                                                                                                                                                                                                                                                                                                                                                                                                      
+        if self.is_user_in_project(username, project_id):
+            result = self.user_projects_table.get_item(
                 Key={
-                    'project_id': project_id,
-                    'username': username
+                    'username': username,
+                    'project_id': project_id
                 }
             )
-        else:
-            self.logger.info(
-                f'Not deleting user project: {project_id}, username: {username} as user has permissions to access project through group/s: {common_groups}')
+            existing_user = Utils.get_value_as_dict('Item', result)
+            existing_user_ldaps = set(existing_user['by_ldaps'] if existing_user['by_ldaps'] else []) 
+            by_ldaps = list(existing_user_ldaps - set(by_ldaps))
+            if by_ldaps:
+                # Update Expression
+                update_expression = 'SET #attr = :val'
+
+                # Expression Attribute Names and Values
+                expression_attribute_names = {'#attr': 'by_ldaps'}
+                expression_attribute_values = {':val': by_ldaps}
+                self.user_projects_table.update_item(
+                    Key={
+                        'project_id': project_id,
+                        'username': username
+                    },
+                    UpdateExpression=update_expression,
+                    ExpressionAttributeNames=expression_attribute_names,
+                    ExpressionAttributeValues=expression_attribute_values
+                )
+            else:
+                # remove previous record
+                self.user_projects_table.delete_item(
+                    Key={
+                        'project_id': project_id,
+                        'username': username
+                    }
+                )
 
     def ldap_group_added(self, project_id: str, group_name: str):
         if Utils.is_empty(project_id):
             raise exceptions.invalid_params('project_id is required')
         if Utils.is_empty(group_name):
-            raise exceptions.invalid_params('username is required')
+            raise exceptions.invalid_params('group_name is required')
 
         self.project_groups_table.put_item(
             Item={
@@ -169,14 +216,15 @@ class UserProjectsDAO:
         for username in usernames:
             self.create_user_project(
                 project_id=project_id,
-                username=username
+                username=username,
+                by_ldaps=[group_name]
             )
 
-    def ldap_group_removed(self, project_id: str, group_name: str):
+    def ldap_group_removed(self, project_id: str, group_name: str, force: bool = False):
         if Utils.is_empty(project_id):
             raise exceptions.invalid_params('project_id is required')
         if Utils.is_empty(group_name):
-            raise exceptions.invalid_params('username is required')
+            raise exceptions.invalid_params('group_name is required')
 
         self.project_groups_table.delete_item(
             Key={
@@ -189,8 +237,20 @@ class UserProjectsDAO:
         for username in usernames:
             self.delete_user_project(
                 project_id=project_id,
-                username=username
+                username=username,
+                by_ldaps=[group_name],
+                force=force,
             )
+
+    def delete_project(self, project_id: str):
+        if Utils.is_empty(project_id):
+            raise exceptions.invalid_params('project_id is required')
+
+        result = self.project_groups_table.scan(
+            FilterExpression=Attr("project_id").eq(project_id)
+        )
+        for item in Utils.get_value_as_list('Items', result, []):
+            self.ldap_group_removed(project_id, item['group_name'], True)
 
     def get_projects_by_username(self, username: str) -> List[str]:
         if Utils.is_empty(username):
@@ -233,7 +293,8 @@ class UserProjectsDAO:
         for project_id in project_ids:
             self.create_user_project(
                 project_id=project_id,
-                username=username
+                username=username,
+                by_ldaps=[group_name]
             )
 
     def group_member_removed(self, group_name: str, username: str):
@@ -245,7 +306,8 @@ class UserProjectsDAO:
         for project_id in project_ids:
             self.delete_user_project(
                 project_id=project_id,
-                username=username
+                username=username,
+                by_ldaps=[group_name]
             )
 
     def project_disabled(self, project_id: str):
@@ -254,9 +316,16 @@ class UserProjectsDAO:
 
         project = self.projects_dao.get_project_by_id(project_id)
         ldap_groups = project['ldap_groups']
+        usernames = project['users']
 
         for ldap_group in ldap_groups:
             self.ldap_group_removed(project_id=project_id, group_name=ldap_group)
+        for username in usernames:
+            self.delete_user_project(
+                project_id=project_id,
+                username=username,
+                by_ldaps=["SELF"]               
+            )
 
     def project_enabled(self, project_id: str):
         if Utils.are_empty(project_id):
@@ -264,9 +333,17 @@ class UserProjectsDAO:
 
         project = self.projects_dao.get_project_by_id(project_id)
         ldap_groups = project['ldap_groups']
+        users = project.get('users', [])
 
         for ldap_group in ldap_groups:
             self.ldap_group_added(project_id=project_id, group_name=ldap_group)
+
+        for user in users:
+            self.create_user_project(
+                project_id=project_id,
+                username=user,
+                by_ldaps=['SELF']
+            )
 
     def is_user_in_project(self, username: str, project_id: str):
         if Utils.is_empty(username):
@@ -281,7 +358,7 @@ class UserProjectsDAO:
             }
         )
         return Utils.get_value_as_dict('Item', result) is not None
-
+    
     def has_projects_in_group(self, group_name: str) -> bool:
         query_result = self.project_groups_table.query(
             Limit=1,
@@ -294,3 +371,17 @@ class UserProjectsDAO:
         )
         memberships = query_result['Items'] if 'Items' in query_result else []
         return len(memberships) > 0
+    
+    def is_group_in_project(self, group_name: str, project_id: str):
+        if Utils.is_empty(group_name):
+            raise exceptions.invalid_params('group_name is required')
+        if Utils.is_empty(project_id):
+            raise exceptions.invalid_params('project_id is required')
+
+        result = self.project_groups_table.get_item(
+            Key={
+                'username': group_name,
+                'project_id': project_id
+            }
+        )
+        return Utils.get_value_as_dict('Item', result) is not None  

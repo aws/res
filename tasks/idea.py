@@ -136,10 +136,14 @@ class SocaDevelopmentProps:
     @property
     def administrator_project_dir(self) -> str:
         return os.path.join(self.project_source_dir, 'idea-administrator')
-    
+
     @property
     def administrator_integ_tests_dir(self) -> str:
         return os.path.join(self.administrator_project_dir, 'src', 'ideaadministrator', 'integration_tests')
+
+    @property
+    def end_to_end_integ_tests_dir(self) -> str:
+        return os.path.join(self.project_root_dir, 'source', 'tests', 'integration', 'tests')
 
     @property
     def deployment_ecr_dir(self) -> str:

@@ -16,6 +16,7 @@ Test Cases for ProjectsService
 from typing import List, Optional
 
 import pytest
+from _pytest.monkeypatch import MonkeyPatch
 from ideaclustermanager import AppContext
 from ideaclustermanager.app.accounts.account_tasks import GroupMembershipUpdatedTask
 from ideaclustermanager.app.projects.project_tasks import (
@@ -25,6 +26,7 @@ from ideaclustermanager.app.projects.project_tasks import (
 
 from ideadatamodel import (
     CreateProjectRequest,
+    DeleteProjectRequest,
     DisableProjectRequest,
     EnableProjectRequest,
     GetProjectRequest,
@@ -35,6 +37,8 @@ from ideadatamodel import (
     SocaAnyPayload,
     SocaKeyValue,
     User,
+    VirtualDesktopSession,
+    VirtualDesktopSoftwareStack,
     constants,
     errorcodes,
     exceptions,
@@ -99,7 +103,19 @@ def remove_member(context: AppContext, user: User, project: Project):
 
 
 @pytest.fixture(scope="module")
-def membership(context: AppContext):
+def monkey_session(request):
+    mp = MonkeyPatch()
+    yield mp
+    mp.undo()
+
+
+@pytest.fixture(scope="module")
+def membership(context: AppContext, monkey_session):
+    monkey_session.setattr(
+        context.accounts.sssd, "get_uid_and_gid_for_user", lambda x: (1000, 1000)
+    )
+    monkey_session.setattr(context.accounts.sssd, "get_gid_for_group", lambda x: 1000)
+
     def create_group(group_name: str) -> Group:
         group = context.accounts.create_group(
             Group(
@@ -112,13 +128,16 @@ def membership(context: AppContext):
         return group
 
     def create_project(
-        project_name: str, project_title: str, group_names: List[str]
+        project_name: str, project_title: str, group_names: List[str], users=[]
     ) -> Project:
         # create project
         result = context.projects.create_project(
             CreateProjectRequest(
                 project=Project(
-                    name=project_name, title=project_title, ldap_groups=group_names
+                    name=project_name,
+                    title=project_title,
+                    ldap_groups=group_names,
+                    users=users,
                 )
             )
         )
@@ -135,6 +154,7 @@ def membership(context: AppContext):
 
         assert result.project is not None
         assert result.project.enabled is True
+        ProjectsTestContext.project = result.project
 
         return result.project
 
@@ -356,6 +376,53 @@ def test_projects_crud_list_projects(context):
     assert found is not None
 
 
+def test_projects_crud_delete_project(context, membership):
+    assert ProjectsTestContext.crud_project is not None
+    add_member(context, membership.user_1, ProjectsTestContext.crud_project)
+    enable_project(context, ProjectsTestContext.crud_project)
+    assert is_memberof(context, membership.user_1, ProjectsTestContext.crud_project)
+
+    # First delete a project which are still used by sessions or software stacks
+    context.projects.vdc_client.sessions = [VirtualDesktopSession()]
+    context.projects.vdc_client.software_stacks = [VirtualDesktopSoftwareStack()]
+    with pytest.raises(exceptions.SocaException) as excinfo:
+        context.projects.delete_project(
+            DeleteProjectRequest(project_id=ProjectsTestContext.crud_project.project_id)
+        )
+    assert excinfo.value.error_code == "GENERAL_ERROR"
+
+    result = context.projects.get_project(
+        GetProjectRequest(project_id=ProjectsTestContext.crud_project.project_id)
+    )
+    assert result.project is not None
+    for group in ProjectsTestContext.crud_project.ldap_groups:
+        projects = context.projects.user_projects_dao.get_projects_by_group_name(group)
+        assert len(projects) > 0
+
+    # Next delete a project which is not in use by any session or software stack
+    context.projects.vdc_client.sessions = []
+    context.projects.vdc_client.software_stacks = []
+    context.projects.delete_project(
+        DeleteProjectRequest(project_id=ProjectsTestContext.crud_project.project_id)
+    )
+    with pytest.raises(exceptions.SocaException) as excinfo:
+        context.projects.get_project(
+            GetProjectRequest(project_id=ProjectsTestContext.crud_project.project_id)
+        )
+    assert excinfo.value.error_code == "PROJECT_NOT_FOUND"
+
+    # Project should have been removed from the project-groups table
+    for group in ProjectsTestContext.crud_project.ldap_groups:
+        projects = context.projects.user_projects_dao.get_projects_by_group_name(group)
+        assert len(projects) == 0
+
+    # Project should have been removed from the user-project table
+    projects = context.projects.user_projects_dao.get_projects_by_username(
+        membership.user_1.username
+    )
+    assert len(projects) == 0
+
+
 def test_projects_membership_setup(context, membership):
     """
     check if membership setup data is valid and tests are starting with a clean slate.
@@ -394,6 +461,7 @@ def test_projects_membership_member_removed(context, membership, monkeypatch):
     """
 
     monkeypatch.setattr(context.ldap_client, "is_readonly", lambda: True)
+
     remove_member(context, membership.user_1, membership.project_a)
     assert is_memberof(context, membership.user_1, membership.project_a) is False
 
@@ -444,6 +512,7 @@ def test_projects_membership_multiple_projects(context, membership, monkeypatch)
     """
 
     monkeypatch.setattr(context.ldap_client, "is_readonly", lambda: True)
+
     # pre-requisites
     clear_memberships(context, membership, membership.user_1)
     clear_memberships(context, membership, membership.user_2)

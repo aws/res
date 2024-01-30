@@ -68,8 +68,17 @@ class ProjectGroupsUpdatedTask(BaseTask):
         project_id = payload['project_id']
         project = self.context.projects.projects_dao.get_project_by_id(project_id)
         if project['enabled']:
-            groups_added = Utils.get_value_as_list('groups_added', payload, [])
-            groups_removed = Utils.get_value_as_list('groups_removed', payload, [])
+            groups_added = payload.get('groups_added', [])
+            groups_removed = payload.get('groups_removed', [])
+            users_added = payload.get('users_added', [])
+            users_removed = payload.get('users_removed', [])
+
+            for username in users_removed:
+                self.context.projects.user_projects_dao.delete_user_project(
+                    project_id=project_id,
+                    username=username,
+                    by_ldaps=["SELF"]
+                ) 
 
             for ldap_group_name in groups_removed:
                 self.context.projects.user_projects_dao.ldap_group_removed(
@@ -81,6 +90,13 @@ class ProjectGroupsUpdatedTask(BaseTask):
                 self.context.projects.user_projects_dao.project_enabled(
                     project_id=project_id
                 )
+
+            for username in users_added:
+                self.context.projects.user_projects_dao.create_user_project(
+                    project_id=project_id,
+                    username=username,
+                    by_ldaps=["SELF"]
+                ) 
 
             for ldap_group_name in groups_added:
                 self.context.projects.user_projects_dao.ldap_group_added(

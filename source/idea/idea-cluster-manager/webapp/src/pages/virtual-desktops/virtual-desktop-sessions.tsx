@@ -601,7 +601,7 @@ class VirtualDesktopSessions extends Component<VirtualDesktopSessionsProps, Virt
                 ref={this.createSessionForm}
                 maxRootVolumeMemory={this.virtualDesktopSettings?.dcv_session.max_root_volume_memory}
                 isAdminView={true}
-                onSubmit={(session_name, username, project_id, base_os, software_stack_id, session_type, instance_type, storage_size, hibernation_enabled, vpc_subnet_id) => {
+                onSubmit={(session_name, username, project_id, base_os, software_stack_id, session_type, instance_type, storage_size, hibernation_enabled, vpc_subnet_id, tags) => {
                     return this.getVirtualDesktopAdminClient()
                         .createSession({
                             session: {
@@ -624,6 +624,7 @@ class VirtualDesktopSessions extends Component<VirtualDesktopSessionsProps, Virt
                                     project_id: project_id,
                                 },
                                 type: session_type,
+                                tags: tags
                             },
                         })
                         .then((_) => {

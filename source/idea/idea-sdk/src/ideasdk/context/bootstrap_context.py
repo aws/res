@@ -124,9 +124,6 @@ class BootstrapContext:
             if 'project' not in context_vars:
                 return False
             projects = Utils.get_value_as_list('projects', shared_storage, [])
-            # empty list = allow all
-            if Utils.is_empty(projects):
-                return True
             return self.vars.project in projects
 
         def eval_module() -> bool:

@@ -12,102 +12,34 @@
  */
 
 import { Box } from "@cloudscape-design/components";
-import { AppContext } from "../../../common";
 import VirtualDesktopBaseChart from "./virtual-desktop-base-chart";
 import PieOrDonutChart from "../../../components/charts/pie-or-donut-chart";
+import { VirtualDesktopSession } from '../../../client/data-model'
 
 export interface VirtualDesktopInstanceTypesChartProps {
-    indexName: string;
+    loading: boolean
+    sessions: VirtualDesktopSession[];
 }
 
-interface VirtualDesktopInstanceTypesChartState {
-    chartData: any;
-    total: string;
-    statusType: "loading" | "finished" | "error";
-}
-
-class VirtualDesktopInstanceTypesChart extends VirtualDesktopBaseChart<VirtualDesktopInstanceTypesChartProps, VirtualDesktopInstanceTypesChartState> {
-    constructor(props: VirtualDesktopInstanceTypesChartProps) {
-        super(props);
-        this.state = {
-            chartData: [],
-            total: "-",
-            statusType: "loading",
-        };
-    }
-
-    componentDidMount() {
-        this.loadChartData();
-    }
-
-    reload() {
-        this.loadChartData();
-    }
-
-    loadChartData() {
-        this.setState(
-            {
-                statusType: "loading",
-            },
-            () => {
-                AppContext.get()
-                    .client()
-                    .analytics()
-                    .queryOpenSearch({
-                        data: {
-                            index: this.props.indexName,
-                            body: {
-                                size: 0,
-                                aggs: {
-                                    instance_type: {
-                                        terms: {
-                                            field: "server.instance_type.raw",
-                                        },
-                                    },
-                                },
-                            },
-                        },
-                    })
-                    .then((result) => {
-                        let chartData: any = [];
-                        let total: number = 0;
-                        if (result.data?.aggregations) {
-                            const aggregations: any = result.data.aggregations;
-                            let instance_type = aggregations.instance_type;
-                            let buckets: any[] = instance_type.buckets;
-                            buckets.forEach((bucket) => {
-                                total += bucket.doc_count;
-                                chartData.push({
-                                    title: bucket.key,
-                                    value: bucket.doc_count,
-                                });
-                            });
-                        }
-                        this.setState({
-                            chartData: chartData,
-                            total: `${total}`,
-                            statusType: "finished",
-                        });
-                    })
-                    .catch((error) => {
-                        console.error(error);
-                        this.setState({
-                            statusType: "error",
-                        });
-                    });
-            }
-        );
-    }
-
+class VirtualDesktopInstanceTypesChart extends VirtualDesktopBaseChart<VirtualDesktopInstanceTypesChartProps> {
     render() {
+        const states = this.props.sessions.reduce((eax: {[key: string]: number}, item: any) => {
+            eax[item.server.instance_type] = (eax[item.server.instance_type] || 0) + 1;
+            return eax;
+        }, {})
+ 
+        let chartData: {title: string, value: number}[] = Object.entries(states).map(([key, value]) => {return {title: key, value: value}});
+
+        const statusType = this.props.loading ? 'loading' : 'finished'
+
         return (
             <PieOrDonutChart
                 headerDescription={"Summary of all virtual desktop sessions by instance types."}
                 headerText={"Instance Types"}
-                statusType={this.state.statusType}
+                statusType={statusType}
                 enableSelection={false}
                 defaultChartMode={"donutchart"}
-                data={this.state.chartData}
+                data={chartData}
                 i18nStrings={{
                     detailsValue: "Value",
                     detailsPercentage: "Percentage",
@@ -126,7 +58,7 @@ class VirtualDesktopInstanceTypesChart extends VirtualDesktopBaseChart<VirtualDe
                 loadingText="Loading chart"
                 recoveryText="Retry"
                 innerMetricDescription="sessions"
-                innerMetricValue={this.state.total}
+                innerMetricValue={this.props.sessions.length.toString()}
                 empty={
                     <Box textAlign="center" color="inherit">
                         <b>No sessions available</b>

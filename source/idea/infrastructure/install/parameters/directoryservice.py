@@ -1,6 +1,8 @@
 #  Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 #  SPDX-License-Identifier: Apache-2.0
 
+# Code changes made to this file must be replicated in 'source/idea/batteries_included/parameters' too
+
 from dataclasses import dataclass
 from typing import Any, Optional
 
@@ -20,6 +22,7 @@ class DirectoryServiceKey(Key):
     ROOT_USERNAME = "ServiceAccountUsername"
     ROOT_PASSWORD = "ServiceAccountPassword"
     DOMAIN_TLS_CERTIFICATE_SECRET_ARN = "DomainTLSCertificateSecretArn"
+    ENABLE_LDAP_ID_MAPPING = "EnableLdapIDMapping"
 
 
 @dataclass
@@ -119,7 +122,15 @@ class DirectoryServiceParameters(Base):
         Attributes(
             id=DirectoryServiceKey.DOMAIN_TLS_CERTIFICATE_SECRET_ARN,
             type="String",
-            description="Domain TLS Certificate Secret ARN",
+            description="(Optional) Domain TLS Certificate Secret ARN",
+        )
+    )
+    enable_ldap_id_mapping: str = Base.parameter(
+        Attributes(
+            id=DirectoryServiceKey.ENABLE_LDAP_ID_MAPPING,
+            type="String",
+            description="Set to False to use the uidNumbers and gidNumbers for users and group from the provided AD. Otherwise set to True.",
+            allowed_values=["True", "False"],
         )
     )
 
@@ -144,5 +155,6 @@ class DirectoryServiceParameterGroups:
             DirectoryServiceKey.SUDOERS_GROUP_NAME,
             DirectoryServiceKey.COMPUTERS_OU,
             DirectoryServiceKey.DOMAIN_TLS_CERTIFICATE_SECRET_ARN,
+            DirectoryServiceKey.ENABLE_LDAP_ID_MAPPING,
         ],
     }

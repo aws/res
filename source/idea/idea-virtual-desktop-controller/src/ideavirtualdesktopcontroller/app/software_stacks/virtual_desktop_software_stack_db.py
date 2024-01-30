@@ -8,7 +8,7 @@
 #  or in the 'license' file accompanying this file. This file is distributed on an 'AS IS' BASIS, WITHOUT WARRANTIES
 #  OR CONDITIONS OF ANY KIND, express or implied. See the License for the specific language governing permissions
 #  and limitations under the License.
-from typing import List, Optional, Dict
+from typing import Optional, Dict
 
 import yaml
 
@@ -22,22 +22,18 @@ from ideadatamodel import (
     SocaMemoryUnit,
     Project,
     GetProjectRequest,
-    SocaSortBy,
-    SocaSortOrder,
     ListSoftwareStackRequest,
     ListSoftwareStackResponse,
-    SocaFilter,
     SocaListingPayload,
     SocaPaginator
 )
 from ideadatamodel.virtual_desktop.virtual_desktop_model import VirtualDesktopGPU
-from ideasdk.aws.opensearch.opensearchable_db import OpenSearchableDB
-from ideasdk.utils import Utils
+from ideasdk.utils import Utils, scan_db_records
 from ideavirtualdesktopcontroller.app.virtual_desktop_notifiable_db import VirtualDesktopNotifiableDB
 from ideavirtualdesktopcontroller.app.software_stacks import constants as software_stacks_constants
 
 
-class VirtualDesktopSoftwareStackDB(VirtualDesktopNotifiableDB, OpenSearchableDB):
+class VirtualDesktopSoftwareStackDB(VirtualDesktopNotifiableDB):
     DEFAULT_PAGE_SIZE = 10
 
     def __init__(self, context: ideavirtualdesktopcontroller.AppContext):
@@ -48,20 +44,6 @@ class VirtualDesktopSoftwareStackDB(VirtualDesktopNotifiableDB, OpenSearchableDB
         self._ddb_client = self.context.aws().dynamodb_table()
 
         VirtualDesktopNotifiableDB.__init__(self, context=self.context, table_name=self.table_name, logger=self._logger)
-        OpenSearchableDB.__init__(
-            self, context=self.context, logger=self._logger,
-            term_filter_map={
-                software_stacks_constants.SOFTWARE_STACK_DB_STACK_ID_KEY: 'stack_id.raw',
-                software_stacks_constants.SOFTWARE_STACK_DB_FILTER_BASE_OS_KEY: 'base_os.raw',
-                software_stacks_constants.SOFTWARE_STACK_DB_FILTER_PROJECT_ID_KEY: 'projects.project_id.raw',
-                '$all': '$all'
-            },
-            date_range_filter_map={
-                software_stacks_constants.SOFTWARE_STACK_DB_FILTER_CREATED_ON_KEY: 'created_on',
-                software_stacks_constants.SOFTWARE_STACK_DB_FILTER_UPDATED_ON_KEY: 'updated_on'
-            },
-            default_page_size=self.DEFAULT_PAGE_SIZE
-        )
 
     def initialize(self):
         exists = self.context.aws_util().dynamodb_check_table_exists(self.table_name, True)
@@ -249,33 +231,6 @@ class VirtualDesktopSoftwareStackDB(VirtualDesktopNotifiableDB, OpenSearchableDB
 
         return software_stack
 
-    def convert_software_stack_object_to_index_dict(self, software_stack: VirtualDesktopSoftwareStack) -> Dict:
-        index_dict = self.convert_software_stack_object_to_db_dict(software_stack)
-
-        project_ids = Utils.get_value_as_list(software_stacks_constants.SOFTWARE_STACK_DB_PROJECTS_KEY, index_dict, [])
-        index_dict[software_stacks_constants.SOFTWARE_STACK_DB_PROJECTS_KEY] = []
-
-        for project_id in project_ids:
-            project = self.context.projects_client.get_project(GetProjectRequest(project_id=project_id)).project
-            index_dict[software_stacks_constants.SOFTWARE_STACK_DB_PROJECTS_KEY].append({
-                software_stacks_constants.SOFTWARE_STACK_DB_PROJECT_ID_KEY: project_id,
-                software_stacks_constants.SOFTWARE_STACK_DB_PROJECT_NAME_KEY: project.name,
-                software_stacks_constants.SOFTWARE_STACK_DB_PROJECT_TITLE_KEY: project.title
-            })
-        return index_dict
-
-    def convert_index_dict_to_software_stack_object(self, index_dict: Dict):
-        ss_projects = Utils.get_value_as_list(software_stacks_constants.SOFTWARE_STACK_DB_PROJECTS_KEY, index_dict, [])
-        index_dict[software_stacks_constants.SOFTWARE_STACK_DB_PROJECTS_KEY] = []
-        software_stack = self.convert_db_dict_to_software_stack_object(index_dict)
-        for project in ss_projects:
-            software_stack.projects.append(Project(
-                project_id=Utils.get_value_as_string(software_stacks_constants.SOFTWARE_STACK_DB_PROJECT_ID_KEY, project, None),
-                name=Utils.get_value_as_string(software_stacks_constants.SOFTWARE_STACK_DB_PROJECT_NAME_KEY, project, None),
-                title=Utils.get_value_as_string(software_stacks_constants.SOFTWARE_STACK_DB_PROJECT_TITLE_KEY, project, None),
-            ))
-        return software_stack
-
     @staticmethod
     def convert_software_stack_object_to_db_dict(software_stack: VirtualDesktopSoftwareStack) -> Dict:
         if Utils.is_empty(software_stack):
@@ -306,15 +261,6 @@ class VirtualDesktopSoftwareStackDB(VirtualDesktopNotifiableDB, OpenSearchableDB
         db_dict[software_stacks_constants.SOFTWARE_STACK_DB_PROJECTS_KEY] = project_ids
         return db_dict
 
-    def get_index_name(self) -> str:
-        return f"{self.context.config().get_string('virtual-desktop-controller.opensearch.software_stack.alias', required=True)}-{self.context.software_stack_template_version}"
-
-    def get_default_sort(self) -> SocaSortBy:
-        return SocaSortBy(
-            key='created_on',
-            order=SocaSortOrder.ASC
-        )
-
     def create(self, software_stack: VirtualDesktopSoftwareStack) -> VirtualDesktopSoftwareStack:
         db_entry = self.convert_software_stack_object_to_db_dict(software_stack)
         db_entry[software_stacks_constants.SOFTWARE_STACK_DB_CREATED_ON_KEY] = Utils.current_time_ms()
@@ -325,16 +271,39 @@ class VirtualDesktopSoftwareStackDB(VirtualDesktopNotifiableDB, OpenSearchableDB
         self.trigger_create_event(db_entry[software_stacks_constants.SOFTWARE_STACK_DB_HASH_KEY], db_entry[software_stacks_constants.SOFTWARE_STACK_DB_RANGE_KEY], new_entry=db_entry)
         return self.convert_db_dict_to_software_stack_object(db_entry)
 
-    def get_from_index(self, stack_id: str) -> Optional[VirtualDesktopSoftwareStack]:
-        request = ListSoftwareStackRequest()
-        request.add_filter(SocaFilter(
-            key=software_stacks_constants.SOFTWARE_STACK_DB_STACK_ID_KEY,
-            value=stack_id
-        ))
-        response = self.list_from_index(request)
-        if Utils.is_empty(response.listing):
-            return None
-        return response.listing[0]
+    def get_with_project_info(self, stack_id: str, base_os: str) -> Optional[VirtualDesktopSoftwareStack]:
+        software_stack_db_entry = None
+        if Utils.is_empty(stack_id) or Utils.is_empty(base_os):
+            self._logger.error(f'invalid values for stack_id: {stack_id} and/or base_os: {base_os}')
+        else:
+            try:
+                result = self._table.get_item(
+                    Key={
+                        software_stacks_constants.SOFTWARE_STACK_DB_HASH_KEY: base_os,
+                        software_stacks_constants.SOFTWARE_STACK_DB_RANGE_KEY: stack_id
+                    }
+                )
+                software_stack_db_entry = result.get('Item')
+            except self._ddb_client.exceptions.ResourceNotFoundException as _:
+                # in this case we simply need to return None since the resource was not found
+                return None
+            except Exception as e:
+                self._logger.exception(e)
+                raise e
+
+        software_stack_entry = self.convert_db_dict_to_software_stack_object(software_stack_db_entry)
+
+        def _get_project(project_id):
+            project = self.context.projects_client.get_project(GetProjectRequest(project_id=project_id)).project
+            return {
+                software_stacks_constants.SOFTWARE_STACK_DB_PROJECT_ID_KEY: project_id,
+                software_stacks_constants.SOFTWARE_STACK_DB_PROJECT_NAME_KEY: project.name,
+                software_stacks_constants.SOFTWARE_STACK_DB_PROJECT_TITLE_KEY: project.title
+            }
+
+        software_stack_projects = [_get_project(project_entry.project_id) for project_entry in software_stack_entry.projects]
+        software_stack_entry.projects = software_stack_projects
+        return software_stack_entry
 
     def get(self, stack_id: str, base_os: str) -> Optional[VirtualDesktopSoftwareStack]:
         software_stack_db_entry = None
@@ -348,7 +317,7 @@ class VirtualDesktopSoftwareStackDB(VirtualDesktopNotifiableDB, OpenSearchableDB
                         software_stacks_constants.SOFTWARE_STACK_DB_RANGE_KEY: stack_id
                     }
                 )
-                software_stack_db_entry = Utils.get_value_as_dict('Item', result)
+                software_stack_db_entry = result.get('Item')
             except self._ddb_client.exceptions.ResourceNotFoundException as _:
                 # in this case we simply need to return None since the resource was not found
                 return None
@@ -396,63 +365,23 @@ class VirtualDesktopSoftwareStackDB(VirtualDesktopNotifiableDB, OpenSearchableDB
                 software_stacks_constants.SOFTWARE_STACK_DB_HASH_KEY: software_stack.base_os,
                 software_stacks_constants.SOFTWARE_STACK_DB_RANGE_KEY: software_stack.stack_id
             },
-            ReturnValue='ALL_OLD'
+            ReturnValues='ALL_OLD'
         )
         old_db_entry = result['Attributes']
         self.trigger_delete_event(old_db_entry[software_stacks_constants.SOFTWARE_STACK_DB_HASH_KEY], old_db_entry[software_stacks_constants.SOFTWARE_STACK_DB_RANGE_KEY], deleted_entry=old_db_entry)
 
-    def list_from_index(self, options: ListSoftwareStackRequest) -> ListSoftwareStackResponse:
-        if Utils.is_not_empty(options.filters):
-            new_filters: List[SocaFilter] = []
-            for listing_filter in options.filters:
-                if listing_filter.key == software_stacks_constants.SOFTWARE_STACK_DB_FILTER_BASE_OS_KEY and listing_filter.value == '$all':
-                    # needs to see all OS's no point adding a filter for OS at this point
-                    continue
-                new_filters.append(listing_filter)
+    def list_all_from_db(self, request: ListSoftwareStackRequest) -> ListSoftwareStackResponse:
+        list_result = scan_db_records(request, self._table)
 
-            options.filters = new_filters
+        session_entries = list_result.get('Items', [])
+        result = [self.convert_db_dict_to_software_stack_object(session) for session in session_entries]
 
-        response = self.list_from_opensearch(options)
-        software_stacks: List[VirtualDesktopSoftwareStack] = []
-        software_stacks_responses = Utils.get_value_as_list('hits', Utils.get_value_as_dict('hits', response, default={}), default=[])
-        for software_stacks_response in software_stacks_responses:
-            index_object = Utils.get_value_as_dict('_source', software_stacks_response, default={})
-            software_stacks.append(self.convert_index_dict_to_software_stack_object(index_object))
-
-        return ListSoftwareStackResponse(
-            listing=software_stacks,
-            paginator={},
-            filters=options.filters,
-            date_range=options.date_range,
-            sort_by=options.sort_by
-        )
-
-    def list_all_from_db(self, request: ListSoftwareStackRequest) -> SocaListingPayload:
-        list_request = {}
-
-        exclusive_start_key = None
-        if Utils.is_not_empty(request.cursor):
-            exclusive_start_key = Utils.from_json(Utils.base64_decode(request.cursor))
-
-        if exclusive_start_key is not None:
-            list_request['ExclusiveStartKey'] = exclusive_start_key
-
-        list_result = self._table.scan(**list_request)
-
-        session_entries = Utils.get_value_as_list('Items', list_result, [])
-        result = []
-        for session in session_entries:
-            result.append(self.convert_db_dict_to_software_stack_object(session))
-
-        response_cursor = None
-        exclusive_start_key = Utils.get_any_value('LastEvaluatedKey', list_result)
-        if exclusive_start_key is not None:
-            response_cursor = Utils.base64_encode(Utils.to_json(exclusive_start_key))
+        exclusive_start_key = list_result.get("LastEvaluatedKey")
+        response_cursor = Utils.base64_encode(Utils.to_json(exclusive_start_key)) if exclusive_start_key else None
 
         return SocaListingPayload(
             listing=result,
             paginator=SocaPaginator(
-                page_size=request.page_size,
                 cursor=response_cursor
             )
         )

@@ -20,7 +20,10 @@ __all__ = (
     'general_exception',
     'app_not_found',
     'invalid_session',
-    'cluster_config_error'
+    'cluster_config_error',
+    'table_import_failed',
+    'table_merge_failed',
+    'table_rollback_failed'
 )
 
 from ideadatamodel.exceptions import SocaException
@@ -131,5 +134,23 @@ def general_exception(message: str) -> SocaException:
 def app_not_found(message: str) -> SocaException:
     return SocaException(
         error_code=errorcodes.APP_NOT_FOUND,
+        message=message
+    )
+    
+def table_import_failed(message: str) -> SocaException:
+    return SocaException(
+        error_code=errorcodes.TABLE_IMPORT_FAILED,
+        message=message
+    )
+
+def table_merge_failed(message: str) -> SocaException:
+    return SocaException(
+        error_code=errorcodes.TABLE_MERGE_FAILED,
+        message=message
+    )
+
+def table_rollback_failed(message: str) -> SocaException:
+    return SocaException(
+        error_code=errorcodes.TABLE_ROLLBACK_FAILED,
         message=message
     )

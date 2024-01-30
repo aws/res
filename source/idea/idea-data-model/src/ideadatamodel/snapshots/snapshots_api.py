@@ -13,11 +13,15 @@ __all__ = (
     'CreateSnapshotResult',
     'ListSnapshotsRequest',
     'ListSnapshotsResult',
+    'ApplySnapshotRequest',
+    'ApplySnapshotResult',
+    'ListApplySnapshotRecordsRequest',
+    'ListApplySnapshotRecordsResult',
     'OPEN_API_SPEC_ENTRIES_SNAPSHOTS'
 )
 
 from ideadatamodel.api import SocaPayload, IdeaOpenAPISpecEntry, SocaListingPayload
-from ideadatamodel.snapshots.snapshot_model import Snapshot
+from ideadatamodel.snapshots.snapshot_model import Snapshot, ApplySnapshot
 
 from typing import List, Optional
 
@@ -28,6 +32,7 @@ class CreateSnapshotRequest(SocaPayload):
 
 class CreateSnapshotResult(SocaPayload):
     snapshot: Optional[Snapshot]
+    message: Optional[str]
 
 class ListSnapshotsRequest(SocaListingPayload):
     pass
@@ -35,6 +40,23 @@ class ListSnapshotsRequest(SocaListingPayload):
 
 class ListSnapshotsResult(SocaListingPayload):
     listing: Optional[List[Snapshot]]
+    
+    
+class ApplySnapshotRequest(SocaPayload):
+    snapshot: Optional[Snapshot]
+    
+    
+class ApplySnapshotResult(SocaPayload):
+    snapshot: Optional[Snapshot]
+    message: Optional[str]
+    
+    
+class ListApplySnapshotRecordsRequest(SocaListingPayload):
+    pass
+
+
+class ListApplySnapshotRecordsResult(SocaListingPayload):
+    listing: Optional[List[ApplySnapshot]]
 
 
 OPEN_API_SPEC_ENTRIES_SNAPSHOTS = [
@@ -50,6 +72,13 @@ OPEN_API_SPEC_ENTRIES_SNAPSHOTS = [
         request=ListSnapshotsRequest,
         result=ListSnapshotsResult,
         is_listing=True,
+        is_public=False
+    ),
+    IdeaOpenAPISpecEntry(
+        namespace='Snapshots.ApplySnapshot',
+        request=ApplySnapshotRequest,
+        result=ApplySnapshotResult,
+        is_listing=False,
         is_public=False
     ),
 ]

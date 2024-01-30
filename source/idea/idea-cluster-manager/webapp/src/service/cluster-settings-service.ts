@@ -13,7 +13,9 @@
 
 import { ClusterSettingsClient } from "../client";
 import { Constants, ErrorCodes } from "../common/constants";
+import { UNAUTHORIZED_ACCESS } from "../common/error-codes";
 import IdeaException from "../common/exceptions";
+import Utils from "../common/utils";
 
 export interface ClusterSettingsServiceProps {
     clusterSettings: ClusterSettingsClient;
@@ -66,6 +68,14 @@ class ClusterSettingsService {
             })
             .catch((error) => {
                 console.error(error);
+                //This is the first API call which happens from the client side
+                //If the user is disable and gets unauthorized access,
+                //Redirect it to /sso which will invoke sign out for user
+                if (error.errorCode == UNAUTHORIZED_ACCESS) {
+                    if (Utils.isSsoEnabled()) {
+                        window.location.href = "/sso"
+                    }
+                }
                 return false;
             });
     }
@@ -96,12 +106,15 @@ class ClusterSettingsService {
     }
 
     getModuleSet(): any {
-        return this.globalSettings.module_sets[this.getModuleSetId()];
+        if (this.globalSettings != null){
+            return this.globalSettings.module_sets[this.getModuleSetId()];
+        }
+        return null;
     }
 
     getModuleId(name: string): string | null {
         const moduleSet = this.getModuleSet();
-        if (name in moduleSet) {
+        if (moduleSet!= null && name in moduleSet) {
             return moduleSet[name].module_id;
         }
         return null;
@@ -223,14 +236,6 @@ class ClusterSettingsService {
         return this.isModuleDeployed(Constants.MODULE_BASTION_HOST);
     }
 
-    isAnalyticsEnabled(): boolean {
-        return this.isModuleEnabled(Constants.MODULE_ANALYTICS);
-    }
-
-    isAnalyticsDeployed(): boolean {
-        return this.isModuleDeployed(Constants.MODULE_ANALYTICS);
-    }
-
     isMetricsEnabled(): boolean {
         return this.isModuleEnabled(Constants.MODULE_METRICS);
     }
@@ -262,10 +267,6 @@ class ClusterSettingsService {
 
     getSharedStorageSettings(): Promise<any> {
         return this.getModuleSettings(Constants.MODULE_SHARED_STORAGE);
-    }
-
-    getAnalyticsSettings(): Promise<any> {
-        return this.getModuleSettings(Constants.MODULE_ANALYTICS);
     }
 
     getMetricsSettings(): Promise<any> {

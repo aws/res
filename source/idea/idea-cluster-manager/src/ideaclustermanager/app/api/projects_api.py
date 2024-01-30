@@ -12,11 +12,11 @@ from typing import List
 
 import ideaclustermanager
 from ideadatamodel.shared_filesystem import FileSystem
-from ideaclustermanager.app.api.filesystem_api import FileSystemAPI
 
 from ideasdk.api import ApiInvocationContext, BaseAPI
 from ideadatamodel.projects import (
     CreateProjectRequest,
+    DeleteProjectRequest,
     GetProjectRequest,
     UpdateProjectRequest,
     ListProjectsRequest,
@@ -27,14 +27,13 @@ from ideadatamodel.projects import (
     ListFileSystemsForProjectResult
 )
 from ideadatamodel import exceptions, constants, errorcodes
-from ideasdk.utils import Utils
+from ideasdk.utils import Utils, ApiUtils
 
 
 class ProjectsAPI(BaseAPI):
 
     def __init__(self, context: ideaclustermanager.AppContext):
         self.context = context
-        self.file_system_api = FileSystemAPI(context=self.context)
         self.logger = context.logger('projects')
         self.SCOPE_WRITE = f'{self.context.module_id()}/write'
         self.SCOPE_READ = f'{self.context.module_id()}/read'
@@ -43,6 +42,10 @@ class ProjectsAPI(BaseAPI):
             'Projects.CreateProject': {
                 'scope': self.SCOPE_WRITE,
                 'method': self.create_project
+            },
+            'Projects.DeleteProject': {
+                'scope': self.SCOPE_WRITE,
+                'method': self.delete_project
             },
             'Projects.GetProject': {
                 'scope': self.SCOPE_READ,
@@ -76,10 +79,18 @@ class ProjectsAPI(BaseAPI):
 
     def create_project(self, context: ApiInvocationContext):
         request = context.get_request_payload_as(CreateProjectRequest)
+        ApiUtils.validate_input(request.project.name,
+                                constants.PROJECT_ID_REGEX,
+                                constants.PROJECT_ID_ERROR_MESSAGE)
         result = self.context.projects.create_project(request)
         if not Utils.is_empty(request.filesystem_names):
             for fs_name in request.filesystem_names:
-                self.file_system_api.update_filesystem_to_project_mapping(fs_name, request.project.name)
+                self.context.shared_filesystem.update_filesystem_to_project_mapping(fs_name, request.project.name)
+        context.success(result)
+
+    def delete_project(self, context: ApiInvocationContext):
+        request = context.get_request_payload_as(DeleteProjectRequest)
+        result = self.context.projects.delete_project(request)
         context.success(result)
 
     def get_project(self, context: ApiInvocationContext):
@@ -153,17 +164,17 @@ class ProjectsAPI(BaseAPI):
         acl_entry = Utils.get_value_as_dict(namespace, self.acl)
         if acl_entry is None:
             raise exceptions.unauthorized_access()
-
+        
         acl_entry_scope = Utils.get_value_as_string('scope', acl_entry)
         is_authorized = context.is_authorized(elevated_access=True, scopes=[acl_entry_scope])
         is_authenticated_user = context.is_authenticated_user()
-
+        
         if is_authorized:
             acl_entry['method'](context)
             return
-
+        
         if is_authenticated_user and namespace in ('Projects.GetUserProjects', 'Projects.GetProject'):
             acl_entry['method'](context)
             return
-
+        
         raise exceptions.unauthorized_access()

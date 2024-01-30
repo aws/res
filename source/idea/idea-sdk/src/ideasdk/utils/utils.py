@@ -665,6 +665,17 @@ class Utils:
         return result
 
     @staticmethod
+    def convert_tags_list_of_dict_to_tags_dict(list: list[dict]) -> dict:
+        result = {}
+        if (not Utils.is_empty(list)):
+            for tag_pair in list:
+                key = tag_pair.get("session_tags_keys")
+                value = tag_pair.get("session_tags_values")
+                if key and value is not None:
+                    result[key] = value
+        return result
+
+    @staticmethod
     def create_boto_session(aws_region: str, aws_profile: Optional[str] = None):
         """
         creates a botocore session
@@ -734,3 +745,7 @@ class Utils:
             else:
                 items.append((new_key, value))
         return dict(items)
+
+    @staticmethod
+    def is_test_mode() -> bool:
+        return Utils.get_as_bool(EnvironmentUtils.res_test_mode(), False)

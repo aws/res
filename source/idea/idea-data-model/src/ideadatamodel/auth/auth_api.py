@@ -13,6 +13,8 @@ __all__ = (
     'CreateUserResult',
     'GetUserRequest',
     'GetUserResult',
+    'GetUserByEmailRequest',
+    'GetUserByEmailResult',
     'ModifyUserRequest',
     'ModifyUserResult',
     'DeleteUserRequest',
@@ -99,6 +101,15 @@ class GetUserResult(SocaPayload):
     user: Optional[User]
 
 
+#GetUserByEmail
+
+class GetUserByEmailRequest(SocaPayload):
+    email: Optional[str]
+
+class GetUserByEmailResult(SocaPayload):
+    user: Optional[User]
+
+
 # ModifyUser
 
 class ModifyUserRequest(SocaPayload):
@@ -155,7 +166,7 @@ class ListUsersResult(SocaListingPayload):
 class InitiateAuthRequest(SocaPayload):
     client_id: Optional[str]
     auth_flow: Optional[str]
-    username: Optional[str]
+    cognito_username: Optional[str]
     password: Optional[str]
     refresh_token: Optional[str]
     authorization_code: Optional[str]
@@ -166,6 +177,8 @@ class InitiateAuthResult(SocaPayload):
     session: Optional[str]
     challenge_params: Optional[Dict]
     auth: Optional[AuthResult]
+    db_username: Optional[str]
+    role: Optional[str]
 
 
 # RespondToAuthChallenge
@@ -425,6 +438,13 @@ OPEN_API_SPEC_ENTRIES_AUTH = [
         result=GetUserResult,
         is_listing=False,
         is_public=False
+    ),
+    IdeaOpenAPISpecEntry(
+        namespace='Accounts.GetUserByEmail',
+        request=GetUserByEmailRequest,
+        result=GetUserByEmailResult,
+        is_listing=False,
+        is_public=False,
     ),
     IdeaOpenAPISpecEntry(
         namespace='Accounts.ModifyUser',

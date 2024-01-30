@@ -12,7 +12,7 @@ from idea.infrastructure.install.parameters import (
 
 
 @dataclass
-class Parameters(
+class RESParameters(
     common.CommonParameters,
     customdomain.CustomDomainParameters,
     directoryservice.DirectoryServiceParameters,
@@ -26,7 +26,7 @@ class Parameters(
     pass
 
 
-class AllParameterGroups(
+class AllRESParameterGroups(
     common.CommonParameterGroups,
     customdomain.CustomDomainParameterGroups,
     directoryservice.DirectoryServiceParameterGroups,

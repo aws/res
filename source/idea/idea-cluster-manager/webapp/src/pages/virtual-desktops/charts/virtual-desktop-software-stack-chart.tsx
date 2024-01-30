@@ -11,88 +11,25 @@
  * and limitations under the License.
  */
 import VirtualDesktopBaseChart from "./virtual-desktop-base-chart";
-import { AppContext } from "../../../common";
 import { BarChart, Box, Container, Header } from "@cloudscape-design/components";
+import { VirtualDesktopSession } from '../../../client/data-model'
 
 export interface VirtualDesktopSoftwareStackChartProps {
-    indexName: string;
+    loading: boolean
+    sessions: VirtualDesktopSession[];
 }
 
-interface VirtualDesktopSoftwareStackChartState {
-    series: any;
-    statusType: "loading" | "finished" | "error";
-}
-
-class VirtualDesktopSoftwareStackChart extends VirtualDesktopBaseChart<VirtualDesktopSoftwareStackChartProps, VirtualDesktopSoftwareStackChartState> {
-    constructor(props: VirtualDesktopSoftwareStackChartProps) {
-        super(props);
-        this.state = {
-            series: [],
-            statusType: "loading",
-        };
-    }
-
-    componentDidMount() {
-        this.loadChartData();
-    }
-
-    reload() {
-        this.loadChartData();
-    }
-
-    loadChartData() {
-        this.setState(
-            {
-                statusType: "loading",
-            },
-            () => {
-                AppContext.get()
-                    .client()
-                    .analytics()
-                    .queryOpenSearch({
-                        data: {
-                            index: this.props.indexName,
-                            body: {
-                                size: 0,
-                                aggs: {
-                                    software_stack: {
-                                        terms: {
-                                            field: "software_stack.name.raw",
-                                        },
-                                    },
-                                },
-                            },
-                        },
-                    })
-                    .then((result) => {
-                        let series: any[] = [];
-                        if (result.data?.aggregations) {
-                            const aggregations: any = result.data.aggregations;
-                            let software_stacks = aggregations.software_stack;
-                            let buckets: any[] = software_stacks.buckets;
-                            buckets.forEach((bucket) => {
-                                series.push({
-                                    x: bucket.key,
-                                    y: bucket.doc_count,
-                                });
-                            });
-                        }
-                        this.setState({
-                            series: series,
-                            statusType: "finished",
-                        });
-                    })
-                    .catch((error) => {
-                        console.error(error);
-                        this.setState({
-                            statusType: "error",
-                        });
-                    });
-            }
-        );
-    }
-
+class VirtualDesktopSoftwareStackChart extends VirtualDesktopBaseChart<VirtualDesktopSoftwareStackChartProps> {
     render() {
+        const states = this.props.sessions.reduce((eax: {[key: string]: number}, item: any) => {
+            eax[item.software_stack.name] = (eax[item.software_stack.name] || 0) + 1;
+            return eax;
+        }, {})
+ 
+        let chartData: {x: string, y: number}[] = Object.entries(states).map(([key, value]) => {return {x: key, y: value}});
+
+        const statusType = this.props.loading ? 'loading' : 'finished'
+
         return (
             <Container
                 header={
@@ -106,7 +43,7 @@ class VirtualDesktopSoftwareStackChart extends VirtualDesktopBaseChart<VirtualDe
                         {
                             title: "Sessions",
                             type: "bar",
-                            data: this.state.series,
+                            data: chartData,
                         },
                     ]}
                     i18nStrings={{
@@ -121,7 +58,7 @@ class VirtualDesktopSoftwareStackChart extends VirtualDesktopBaseChart<VirtualDe
                     ariaLabel="Single data series line chart"
                     errorText="Error loading data."
                     height={300}
-                    statusType={this.state.statusType}
+                    statusType={statusType}
                     loadingText="Loading chart"
                     recoveryText="Retry"
                     xScaleType="categorical"

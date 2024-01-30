@@ -8,7 +8,7 @@
 #  or in the 'license' file accompanying this file. This file is distributed on an 'AS IS' BASIS, WITHOUT WARRANTIES
 #  OR CONDITIONS OF ANY KIND, express or implied. See the License for the specific language governing permissions
 #  and limitations under the License.
-from typing import Union, Dict, List, Optional
+from typing import Dict, Optional
 
 import ideavirtualdesktopcontroller
 from ideadatamodel import (
@@ -16,21 +16,19 @@ from ideadatamodel import (
     VirtualDesktopBaseOS,
     VirtualDesktopSessionType,
     VirtualDesktopSessionState,
+    VirtualDesktopSoftwareStack,
     VirtualDesktopWeekSchedule,
     Project,
     ListSessionsRequest,
     SocaFilter,
     ListSessionsResponse,
     SocaPaginator,
-    SocaSortBy,
     SocaListingPayload,
     DayOfWeek
 )
 from ideadatamodel import exceptions
-from ideadatamodel.common.common_model import SocaSortOrder
-from ideasdk.aws.opensearch.opensearchable_db import OpenSearchableDB
 
-from ideasdk.utils import Utils, DateTimeUtils
+from ideasdk.utils import Utils, scan_db_records
 from ideavirtualdesktopcontroller.app.schedules.virtual_desktop_schedule_db import VirtualDesktopScheduleDB
 from ideavirtualdesktopcontroller.app.servers.virtual_desktop_server_db import VirtualDesktopServerDB
 from ideavirtualdesktopcontroller.app.software_stacks.virtual_desktop_software_stack_db import VirtualDesktopSoftwareStackDB
@@ -39,7 +37,7 @@ from ideavirtualdesktopcontroller.app.virtual_desktop_notifiable_db import Virtu
 from ideavirtualdesktopcontroller.app.sessions import constants as sessions_constants
 
 
-class VirtualDesktopSessionDB(VirtualDesktopNotifiableDB, OpenSearchableDB):
+class VirtualDesktopSessionDB(VirtualDesktopNotifiableDB):
     DEFAULT_PAGE_SIZE = 10
 
     def __init__(self, context: ideavirtualdesktopcontroller.AppContext, server_db: VirtualDesktopServerDB, software_stack_db: VirtualDesktopSoftwareStackDB, schedule_db: VirtualDesktopScheduleDB):
@@ -54,23 +52,6 @@ class VirtualDesktopSessionDB(VirtualDesktopNotifiableDB, OpenSearchableDB):
         self._controller_utils = VirtualDesktopControllerUtils(self.context)
         self._ddb_client = self.context.aws().dynamodb_table()
         VirtualDesktopNotifiableDB.__init__(self, context=context, table_name=self.table_name, logger=self._logger)
-        OpenSearchableDB.__init__(
-            self, context=context, logger=self._logger,
-            term_filter_map={
-                sessions_constants.USER_SESSION_DB_FILTER_SOFTWARE_STACK_ID_KEY: 'software_stack.stack_id.raw',
-                sessions_constants.USER_SESSION_DB_FILTER_BASE_OS_KEY: 'base_os.raw',
-                sessions_constants.USER_SESSION_DB_FILTER_OWNER_KEY: 'owner.raw',
-                sessions_constants.USER_SESSION_DB_FILTER_IDEA_SESSION_ID_KEY: 'idea_session_id.raw',
-                sessions_constants.USER_SESSION_DB_FILTER_STATE_KEY: 'state.raw',
-                sessions_constants.USER_SESSION_DB_FILTER_SESSION_TYPE_KEY: 'session_type.raw',
-                sessions_constants.USER_SESSION_DB_FILTER_INSTANCE_TYPE_KEY: 'server.instance_type.raw'
-            },
-            date_range_filter_map={
-                sessions_constants.USER_SESSION_DB_FILTER_CREATED_ON_KEY: 'created_on',
-                sessions_constants.USER_SESSION_DB_FILTER_UPDATED_ON_KEY: 'updated_on'
-            },
-            default_page_size=self.DEFAULT_PAGE_SIZE
-        )
 
     @property
     def _table(self):
@@ -154,7 +135,8 @@ class VirtualDesktopSessionDB(VirtualDesktopNotifiableDB, OpenSearchableDB):
                 project_id=Utils.get_value_as_string(sessions_constants.USER_SESSION_DB_PROJECT_ID_KEY, Utils.get_value_as_dict(sessions_constants.USER_SESSION_DB_PROJECT_KEY, db_entry, {}), None),
                 name=Utils.get_value_as_string(sessions_constants.USER_SESSION_DB_PROJECT_NAME_KEY, Utils.get_value_as_dict(sessions_constants.USER_SESSION_DB_PROJECT_KEY, db_entry, {}), None),
                 title=Utils.get_value_as_string(sessions_constants.USER_SESSION_DB_PROJECT_TITLE_KEY, Utils.get_value_as_dict(sessions_constants.USER_SESSION_DB_PROJECT_KEY, db_entry, {}), None)
-            )
+            ),
+            tags=Utils.get_value_as_list(sessions_constants.USER_SESSION_DB_SESSION_TAGS_KEY, db_entry)
         )
 
     def convert_session_object_to_db_dict(self, session: VirtualDesktopSession) -> Dict:
@@ -191,65 +173,11 @@ class VirtualDesktopSessionDB(VirtualDesktopNotifiableDB, OpenSearchableDB):
             sessions_constants.USER_SESSION_DB_SCHEDULE_KEYS[DayOfWeek.THURSDAY]: self._schedule_db.convert_schedule_object_to_db_dict(session.schedule.thursday),
             sessions_constants.USER_SESSION_DB_SCHEDULE_KEYS[DayOfWeek.FRIDAY]: self._schedule_db.convert_schedule_object_to_db_dict(session.schedule.friday),
             sessions_constants.USER_SESSION_DB_SCHEDULE_KEYS[DayOfWeek.SATURDAY]: self._schedule_db.convert_schedule_object_to_db_dict(session.schedule.saturday),
-            sessions_constants.USER_SESSION_DB_SCHEDULE_KEYS[DayOfWeek.SUNDAY]: self._schedule_db.convert_schedule_object_to_db_dict(session.schedule.sunday)
+            sessions_constants.USER_SESSION_DB_SCHEDULE_KEYS[DayOfWeek.SUNDAY]: self._schedule_db.convert_schedule_object_to_db_dict(session.schedule.sunday),
+            sessions_constants.USER_SESSION_DB_SESSION_TAGS_KEY: session.tags
         }
 
         return db_dict
-
-    def convert_session_object_to_index_dict(self, session: VirtualDesktopSession) -> Dict:
-        db_dict = self.convert_session_object_to_db_dict(session)
-        response = self._ec2_client.describe_instances(
-            InstanceIds=[session.server.instance_id]
-        )
-        reservation = Utils.get_value_as_list('Reservations', response, default=[])
-        if Utils.is_empty(reservation):
-            return db_dict
-
-        db_dict["server"]["reservation_id"] = Utils.get_value_as_string('ReservationId', reservation[0], 'N/A')
-        instances = Utils.get_value_as_list('Instances', reservation[0], default=[])
-
-        if Utils.is_empty(instances):
-            return db_dict
-        instance = instances[0]
-        db_dict["server"]["private_ip"] = Utils.get_value_as_string('PrivateIpAddress', instance, default=None)
-        db_dict["server"]["public_ip"] = Utils.get_value_as_string('PublicIpAddress', instance, default=None)
-
-        launch_time = Utils.get_value_as_string('LaunchTime', instance, default=None)
-        if Utils.is_not_empty(launch_time):
-            launch_time = Utils.to_milliseconds(DateTimeUtils.to_utc_datetime_from_iso_format(launch_time))
-            db_dict["server"]["launch_time"] = launch_time
-
-        db_dict["server"]["tags"] = []
-        tags = Utils.get_value_as_list('Tags', instance, default=[])
-        for tag in tags:
-            db_dict["server"]["tags"].append({
-                "key": Utils.get_value_as_string("Key", tag, default=None),
-                "value": Utils.get_value_as_string("Value", tag, default=None)
-            })
-
-        placement = Utils.get_value_as_dict('Placement', instance, default={})
-        db_dict["server"]["availability_zone"] = Utils.get_value_as_string('AvailabilityZone', placement, default=None)
-        db_dict["server"]["tenancy"] = Utils.get_value_as_string('Tenancy', placement, default=None)
-
-        instance_type = Utils.get_value_as_string('InstanceType', instance, default=None)
-        db_dict["server"]["instance_type"] = instance_type
-
-        instance_type_info = self._controller_utils.get_instance_type_info(instance_type)
-        default_vcpus = Utils.get_value_as_int("DefaultVCpus", Utils.get_value_as_dict("VCpuInfo", instance_type_info, default={}), default=0)
-        memory_size_in_mb = Utils.get_value_as_int("SizeInMiB", Utils.get_value_as_dict("MemoryInfo", instance_type_info, default={}), default=0)
-        total_gpu_memory_in_mb = Utils.get_value_as_int("TotalGpuMemoryInMiB", Utils.get_value_as_dict("GpuInfo", instance_type_info, default={}), default=0)
-
-        db_dict["server"]["default_vcpus"] = default_vcpus
-        db_dict["server"]["memory_size_in_mb"] = memory_size_in_mb
-        db_dict["server"]["total_gpu_memory_in_mb"] = total_gpu_memory_in_mb
-        return db_dict
-
-    def convert_index_dict_to_session_object(self, index_entry: Dict) -> VirtualDesktopSession:
-        session = self.convert_db_dict_to_session_object(index_entry)
-        server_dict = Utils.get_value_as_dict('server', index_entry, {})
-        session.server.private_ip = Utils.get_value_as_string('private_ip', server_dict, None)
-        session.server.public_ip = Utils.get_value_as_string('public_ip', server_dict, None)
-        return session
 
     def create(self, session: VirtualDesktopSession) -> VirtualDesktopSession:
         db_entry = self.convert_session_object_to_db_dict(session)
@@ -326,43 +254,6 @@ class VirtualDesktopSessionDB(VirtualDesktopNotifiableDB, OpenSearchableDB):
                 raise e
         return self.convert_db_dict_to_session_object(session_db_entry)
 
-    def get_from_index(self, idea_session_id: str) -> Union[VirtualDesktopSession, None]:
-        request = ListSessionsRequest()
-        request.add_filter(SocaFilter(
-            key=sessions_constants.USER_SESSION_DB_FILTER_IDEA_SESSION_ID_KEY,
-            value=idea_session_id
-        ))
-        response = self.list_from_index(request)
-        if Utils.is_empty(response.listing):
-            return None
-        return response.listing[0]
-
-    def list_from_index(self, options: ListSessionsRequest) -> ListSessionsResponse:
-        response = self._list_from_index(options)
-
-        sessions: List[VirtualDesktopSession] = []
-        session_responses = Utils.get_value_as_list('hits', Utils.get_value_as_dict('hits', response, default={}), default=[])
-        for session_response in session_responses:
-            index_object = Utils.get_value_as_dict('_source', session_response, default={})
-            sessions.append(self.convert_index_dict_to_session_object(index_object))
-
-        return ListSessionsResponse(
-            listing=sessions,
-            paginator={},
-            filters=options.filters,
-            date_range=options.date_range,
-            sort_by=options.sort_by
-        )
-
-    def get_default_sort(self) -> SocaSortBy:
-        return SocaSortBy(
-            key='created_on',
-            order=SocaSortOrder.ASC
-        )
-
-    def get_index_name(self) -> str:
-        return f"{self.context.config().get_string('virtual-desktop-controller.opensearch.dcv_session.alias', required=True)}-{self.context.sessions_template_version}"
-
     def get_session_count_for_user(self, username: str) -> int:
         count_request = {
             'Select': 'COUNT',
@@ -379,25 +270,12 @@ class VirtualDesktopSessionDB(VirtualDesktopNotifiableDB, OpenSearchableDB):
         return Utils.get_value_as_int('Count', response)
 
     def list_all_from_db(self, request: ListSessionsRequest) -> SocaListingPayload:
-        list_request = {}
+        list_result = scan_db_records(request, self._table)
+        session_entries = list_result.get('Items', [])
+        result = [self.convert_db_dict_to_session_object(session) for session in session_entries]
 
-        exclusive_start_key = None
-        if Utils.is_not_empty(request.cursor):
-            exclusive_start_key = Utils.from_json(Utils.base64_decode(request.cursor))
-
-        if exclusive_start_key is not None:
-            list_request['ExclusiveStartKey'] = exclusive_start_key
-
-        list_result = self._table.scan(**list_request)
-        session_entries = Utils.get_value_as_list('Items', list_result, [])
-        result = []
-        for session_entry in session_entries:
-            result.append(self.convert_db_dict_to_session_object(session_entry))
-
-        response_cursor = None
-        exclusive_start_key = Utils.get_any_value('LastEvaluatedKey', list_result)
-        if exclusive_start_key is not None:
-            response_cursor = Utils.base64_encode(Utils.to_json(exclusive_start_key))
+        exclusive_start_key = list_result.get("LastEvaluatedKey")
+        response_cursor = Utils.base64_encode(Utils.to_json(exclusive_start_key)) if exclusive_start_key else None
 
         return SocaListingPayload(
             listing=result,
@@ -418,20 +296,17 @@ class VirtualDesktopSessionDB(VirtualDesktopNotifiableDB, OpenSearchableDB):
             key=sessions_constants.USER_SESSION_DB_FILTER_OWNER_KEY,
             value=username
         ))
-        return self.list_from_index(request)
+        return self.list_all_from_db(request)
 
-    def _list_from_index(self, options: ListSessionsRequest) -> Dict:
-        if Utils.is_not_empty(options.filters):
-            new_filters: List[SocaFilter] = []
-            for listing_filter in options.filters:
-                if listing_filter.key == sessions_constants.USER_SESSION_DB_FILTER_BASE_OS_KEY and listing_filter.value == '$all':
-                    # needs to see all OS's no point adding a filter for OS at this point
-                    continue
-                elif listing_filter.key == sessions_constants.USER_SESSION_DB_FILTER_BASE_OS_KEY and listing_filter.value == 'linux':
-                    listing_filter.value = [VirtualDesktopBaseOS.AMAZON_LINUX2.value, VirtualDesktopBaseOS.RHEL7.value, VirtualDesktopBaseOS.RHEL8.value, VirtualDesktopBaseOS.RHEL9.value, VirtualDesktopBaseOS.CENTOS7.value]
+    def list_all_for_software_stack(self, request: ListSessionsRequest, software_stack: VirtualDesktopSoftwareStack) -> ListSessionsResponse:
+        if Utils.is_empty(request):
+            request = ListSessionsRequest()
 
-                new_filters.append(listing_filter)
+        if Utils.is_empty(request.filters):
+            request.filters = []
 
-            options.filters = new_filters
-
-        return self.list_from_opensearch(options)
+        request.filters.append(SocaFilter(
+            key=sessions_constants.USER_SESSION_DB_SOFTWARE_STACK_KEY,
+            eq=self._software_stack_db.convert_software_stack_object_to_db_dict(software_stack)
+        ))
+        return self.list_all_from_db(request)

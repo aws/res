@@ -32,6 +32,7 @@ controller:
     min_capacity: 1
     max_capacity: 3
     cooldown_minutes: 5
+    default_instance_warmup: 15
     new_instances_protected_from_scale_in: false
     elb_healthcheck:
       # Specifies the time in minutes Auto Scaling waits before checking the health status of an EC2 instance that has come into service.
@@ -67,6 +68,7 @@ dcv_broker:
     min_capacity: 1
     max_capacity: 3
     cooldown_minutes: 5
+    default_instance_warmup: 15
     new_instances_protected_from_scale_in: false
     elb_healthcheck:
       # Specifies the time in minutes Auto Scaling waits before checking the health status of an EC2 instance that has come into service.
@@ -85,7 +87,7 @@ dcv_broker:
   gateway_communication_port: 8446 # DO NOT CHANGE
   # SSL/TLS Policy on VDC HTTPS listeners
   # For a list of policies - consult the documentation at https://docs.aws.amazon.com/elasticloadbalancing/latest/application/create-https-listener.html#describe-ssl-policies
-  ssl_policy: ELBSecurityPolicy-FS-1-2-Res-2020-10
+  ssl_policy: ELBSecurityPolicy-TLS13-1-2-2021-06
   session_token_validity: 1440 # in minutes
   dynamodb_table:
     autoscaling:
@@ -114,6 +116,7 @@ dcv_connection_gateway:
     min_capacity: 1
     max_capacity: 3
     cooldown_minutes: 5
+    default_instance_warmup: 15
     new_instances_protected_from_scale_in: false
     elb_healthcheck:
       # Specifies the time in minutes Auto Scaling waits before checking the health status of an EC2 instance that has come into service.
@@ -137,14 +140,6 @@ external_nlb:
   # external NLB access logs are enabled by default
   access_logs: true
 
-opensearch:
-  dcv_session:
-    alias: {{cluster_name}}_{{module_id}}_user_sessions
-  software_stack:
-    alias: {{cluster_name}}_{{module_id}}_software_stacks
-  session_permission:
-    alias: {{cluster_name}}_{{module_id}}_session_permission
-
 dcv_session:
   idle_timeout: 1440 # in minutes
   idle_timeout_warning: 300 # in seconds
@@ -163,12 +158,12 @@ dcv_session:
   quic_support: {{ dcv_session_quic_support | lower }}
 
   #
-  # By default, the eVDI subnets match the cluster private subnets.
+  # eVDI subnets will match the provided dcv_session_private_subnet_ids, if not provided it will default to the cluster private subnets.
   # Here you can specify eVDI-specific subnets as an alternative to using the cluster.network.private_subnets
   #
   network:
     private_subnets:
-      {{ utils.to_yaml(private_subnet_ids) | indent(6) }}
+      {{ utils.to_yaml(dcv_session_private_subnet_ids) | indent(6) if dcv_session_private_subnet_ids else utils.to_yaml(private_subnet_ids) | indent(6) }}
 
     # Supported eVDI randomize_subnets settings:
     # True - Randomize the subnets (dcv_session.network.private_subnets or cluster.network.private_subnets) for deployment

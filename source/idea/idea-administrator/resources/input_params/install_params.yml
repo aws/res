@@ -89,6 +89,9 @@ SocaInputParamSpec:
             - name: existing_resources
             - name: public_subnet_ids
             - name: private_subnet_ids
+            - name: load_balancer_subnet_ids
+            - name: infrastructure_host_subnet_ids
+            - name: dcv_session_private_subnet_ids
             - name: directory_id
             - name: directory_service_root_username_secret_arn
             - name: directory_service_root_password_secret_arn
@@ -96,7 +99,6 @@ SocaInputParamSpec:
             - name: existing_internal_fs_id
             - name: storage_home_provider
             - name: existing_home_fs_id
-            - name: opensearch_domain_endpoint
         - name: module-settings
           title: "Module Settings"
           required: yes
@@ -499,6 +501,51 @@ SocaInputParamSpec:
         param: existing_resources
         contains: 'subnets:public'
 
+    - name: load_balancer_subnet_ids
+      title: "Existing External Load Balancer Subnets"
+      description: "Select existing external load balancer subnets"
+      param_type: checkbox
+      data_type: str
+      multiple: true
+      help_text: ~
+      tag: default
+      markdown: ~
+      validate:
+        required: yes
+      when:
+        param: existing_resources
+        contains: 'subnets:external_load_balancer'
+
+    - name: infrastructure_host_subnet_ids
+      title: "Existing Infrastructure Hosts Subnets"
+      description: "Select existing infrastructure hosts subnets"
+      param_type: checkbox
+      data_type: str
+      multiple: true
+      help_text: ~
+      tag: default
+      markdown: ~
+      validate:
+        required: yes
+      when:
+        param: existing_resources
+        contains: 'subnets:infrastructure_hosts'
+
+    - name: dcv_session_private_subnet_ids
+      title: "Existing DCV Session Private Subnets"
+      description: "Select existing dcv session private subnets"
+      param_type: checkbox
+      data_type: str
+      multiple: true
+      help_text: ~
+      tag: default
+      markdown: ~
+      validate:
+        required: yes
+      when:
+        param: existing_resources
+        contains: 'subnets:dcv_session'
+
     - name: storage_internal_provider
       title: "Storage Provider: Internal"
       description: "Select internal storage provider"
@@ -564,20 +611,6 @@ SocaInputParamSpec:
       when:
         param: existing_resources
         contains: 'shared-storage:home'
-
-    - name: opensearch_domain_endpoint
-      title: "Existing OpenSearch Service Domain"
-      description: "Select existing OpenSearch Service Domain"
-      param_type: select
-      data_type: str
-      help_text: ~
-      tag: default
-      markdown: ~
-      validate:
-        required: yes
-      when:
-        param: existing_resources
-        contains: 'analytics:opensearch'
 
     - name: directory_id
       title: "Existing Directory"

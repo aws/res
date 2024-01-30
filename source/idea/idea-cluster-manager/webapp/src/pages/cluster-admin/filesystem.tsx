@@ -387,13 +387,13 @@ class FileSystems extends Component<FileSystemProps, FileSystemState> {
                 name: `${Constants.SHARED_STORAGE_PROVIDER_EFS}.mount_directory`,
                 title: "Mount Directory",
                 description: "Enter directory to mount the file system",
-                help_text: "Mount directory cannot contain white spaces or special characters. Only use lowercase alphabets, numbers, and hyphens (-). Must be between 3 and 18 characters long. Eg. /efs-01",
+                help_text: "Mount directory cannot contain white spaces or special characters. Only use lowercase alphabets, numbers, and hyphens (-). Must be between 3 and 18 characters long starting with '/'. Eg. /efs-01",
                 data_type: "str",
                 param_type: "text",
                 validate: {
                     required: true,
                     regex: "^/([a-z0-9-]+){3,18}$",
-                    message: "Only use lowercase alphabets, numbers, and hyphens (-). Must be between 3 and 18 characters long."
+                    message: "Only use lowercase alphabets, numbers, and hyphens (-). Must be between 3 and 18 characters long starting with '/'."
                 }
             }
         ];
@@ -443,12 +443,12 @@ class FileSystems extends Component<FileSystemProps, FileSystemState> {
                 name: `${Constants.SHARED_STORAGE_PROVIDER_FSX_NETAPP_ONTAP}.mount_directory`,
                 title: "Mount Directory",
                 description: "Enter directory to mount the file system",
-                help_text: "Mount directory cannot contain white spaces or special characters. Only use lowercase alphabets, numbers, and hyphens (-). Must be between 3 and 18 characters long. Eg. /efs-01",
+                help_text: "Mount directory cannot contain white spaces or special characters. Only use lowercase alphabets, numbers, and hyphens (-). Must be between 3 and 18 characters long starting with '/'. Eg. /efs-01",
                 data_type: "str",
                 param_type: "text",
                 validate: {
                     regex: "(^.{0}$)|(^/([a-z0-9-]+){3,18}$)",
-                    message: "Only use lowercase alphabets, numbers, and hyphens (-). Must be between 3 and 18 characters long."
+                    message: "Only use lowercase alphabets, numbers, and hyphens (-). Must be between 3 and 18 characters long starting with '/'."
                 },
                 when: {
                     param: "onboard_filesystem",
@@ -730,7 +730,7 @@ class FileSystems extends Component<FileSystemProps, FileSystemState> {
                                     items: [
                                         {
                                             type: "error",
-                                            content: `EFS File System ${values.filesystem_name} create failed ${error.message}.`,
+                                            content: `EFS File System ${values.filesystem_name} create failed. Error: ${error.message}.`,
                                             dismissible: true,
                                         },
                                     ],
@@ -756,7 +756,7 @@ class FileSystems extends Component<FileSystemProps, FileSystemState> {
                                     items: [
                                         {
                                             type: "error",
-                                            content: `FSx for NetApp ONTAP File System ${values.filesystem_name} create failed - ${error.message}`,
+                                            content: `FSx for NetApp ONTAP File System ${values.filesystem_name} create failed. Error: ${error.message}`,
                                             dismissible: true,
                                         },
                                     ],
@@ -945,7 +945,7 @@ class FileSystems extends Component<FileSystemProps, FileSystemState> {
                         title: "Storage Capacity",
                         description: "Enter storage capacity for your file system",
                         help_text: "SSD storage capacity in GiB",
-                        data_type: "str",
+                        data_type: "int",
                         param_type: "text",
                         validate: {
                             required: true,
@@ -991,12 +991,12 @@ class FileSystems extends Component<FileSystemProps, FileSystemState> {
                         name: "mount_directory",
                         title: "Mount Directory",
                         description: "Enter directory to mount the file system",
-                        help_text: "Mount target cannot contain white spaces or special characters. Only use lowercase alphabets, numbers, and hyphens (-). Must be between 3 and 18 characters long. Eg. /efs-01",
+                        help_text: "Mount target cannot contain white spaces or special characters. Only use lowercase alphabets, numbers, and hyphens (-). Must be between 3 and 18 characters long  starting with '/'. Eg. /efs-01",
                         data_type: "str",
                         param_type: "text",
                         validate: {
                             regex: "(^.{0}$)|(^/([a-z0-9-]+){3,18}$)",
-                            message: "Only use lowercase alphabets, numbers, and hyphens (-). Must be between 3 and 18 characters long.",
+                            message: "Only use lowercase alphabets, numbers, and hyphens (-). Must be between 3 and 18 characters long starting with '/'.",
                         },
                     },
                     {
@@ -1008,7 +1008,7 @@ class FileSystems extends Component<FileSystemProps, FileSystemState> {
                         param_type: "text",
                         validate: {
                             regex: "(^.{0}$)|(^[ABD-Z]$)",
-                            message: "Mount drive should be in uppercase",
+                            message: "Mount drive should be an uppercase alphabet except 'C'",
                         },
                         when: {
                             param: "filesystem_provider", eq: Constants.SHARED_STORAGE_PROVIDER_FSX_NETAPP_ONTAP

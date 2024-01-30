@@ -87,6 +87,22 @@ def test_create_or_update_identity_provider_missing_provider_name(context: AppCo
         assert "provider_name is required" in exc_info.value.message
 
 
+@patch.object(saml_payload, "provider_name", "Cognito")
+def test_create_or_update_identity_provider_invalid_provider_name(context: AppContext):
+    """
+    create_or_update_user_pool_client with missing provider name
+    """
+    with pytest.raises(exceptions.SocaException) as exc_info:
+        context.accounts.single_sign_on_helper.create_or_update_identity_provider(
+            saml_payload
+        )
+
+        assert exc_info.value.error_code == errorcodes.INVALID_PARAMS
+        assert (
+            constants.SSO_SOURCE_PROVIDER_NAME_ERROR_MESSAGE == exc_info.value.message
+        )
+
+
 @patch.object(saml_payload, "provider_type", "")
 def test_create_or_update_identity_provider_missing_provider_type(context: AppContext):
     """

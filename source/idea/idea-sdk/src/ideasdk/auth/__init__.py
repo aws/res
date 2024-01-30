@@ -10,3 +10,4 @@
 #  and limitations under the License.
 
 from ideasdk.auth.token_service import *
+from ideasdk.auth.api_authorization_service_base import *

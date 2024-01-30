@@ -11,7 +11,6 @@
 
 import ideavirtualdesktopcontroller
 from ideadatamodel import VirtualDesktopSoftwareStack, VirtualDesktopSession
-from ideasdk.analytics.analytics_service import AnalyticsEntry, EntryAction, EntryContent
 from ideasdk.utils import Utils
 from ideavirtualdesktopcontroller.app.events.events_utils import EventsUtils
 from ideavirtualdesktopcontroller.app.software_stacks.virtual_desktop_software_stack_db import VirtualDesktopSoftwareStackDB
@@ -33,38 +32,8 @@ class VirtualDesktopSoftwareStackUtils:
         software_stack.stack_id = Utils.uuid()
         return self._software_stack_db.create(software_stack)
 
+    def delete_software_stack(self, software_stack: VirtualDesktopSoftwareStack):
+        self._software_stack_db.delete(software_stack)
+
     def create_software_stack_from_session_when_ready(self, session: VirtualDesktopSession, new_software_stack: VirtualDesktopSoftwareStack) -> VirtualDesktopSoftwareStack:
         pass
-
-    def delete_software_stack_entry_from_opensearch(self, software_stack_id: str):
-        index_name = f"{self.context.config().get_string('virtual-desktop-controller.opensearch.software_stack.alias', required=True)}-{self.context.software_stack_template_version}"
-        self.context.analytics_service().post_entry(AnalyticsEntry(
-            entry_id=software_stack_id,
-            entry_action=EntryAction.DELETE_ENTRY,
-            entry_content=EntryContent(
-                index_id=index_name
-            )
-        ))
-
-    def update_software_stack_entry_to_opensearch(self, software_stack: VirtualDesktopSoftwareStack):
-        index_name = f"{self.context.config().get_string('virtual-desktop-controller.opensearch.software_stack.alias', required=True)}-{self.context.software_stack_template_version}"
-        self.context.analytics_service().post_entry(AnalyticsEntry(
-            entry_id=software_stack.stack_id,
-            entry_action=EntryAction.UPDATE_ENTRY,
-            entry_content=EntryContent(
-                index_id=index_name,
-                entry_record=self._software_stack_db.convert_software_stack_object_to_index_dict(software_stack)
-            )
-        ))
-
-    def index_software_stack_entry_to_opensearch(self, software_stack: VirtualDesktopSoftwareStack):
-        index_name = f"{self.context.config().get_string('virtual-desktop-controller.opensearch.software_stack.alias', required=True)}-{self.context.software_stack_template_version}"
-        index_dict = self._software_stack_db.convert_software_stack_object_to_index_dict(software_stack)
-        self.context.analytics_service().post_entry(AnalyticsEntry(
-            entry_id=software_stack.stack_id,
-            entry_action=EntryAction.CREATE_ENTRY,
-            entry_content=EntryContent(
-                index_id=index_name,
-                entry_record=index_dict
-            )
-        ))

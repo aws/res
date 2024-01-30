@@ -774,9 +774,6 @@ def delete_config(cluster_name: str, aws_profile: str, aws_region: str, config_k
     """
     delete all configuration entries for a given config key prefix.
 
-    to delete all configuration entries for module id: analytics, run:
-    res-admin config delete analytics.
-
     to delete all configuration entries for alb.listener_rules.*, run:
     res-admin config delete alb.listener_rules.
     """
@@ -1053,14 +1050,7 @@ def check_cluster_status(cluster_name: str, aws_region: str, aws_profile: str, w
         module_id = cluster_module['module_id']
         module_name = cluster_module['name']
         module_type = cluster_module['type']
-        if module_name == constants.MODULE_ANALYTICS:
-            url = f'{cluster_endpoint}/_dashboards/'
-            endpoints.append({
-                'name': 'OpenSearch Service Dashboard',
-                'endpoint': url,
-                'check_status': check_status(url)
-            })
-        elif module_type == constants.MODULE_TYPE_APP:
+        if module_type == constants.MODULE_TYPE_APP:
             url = f'{cluster_endpoint}/{module_id}/healthcheck'
             endpoints.append({
                 'name': module_metadata.get_module_title(module_name),
@@ -1212,12 +1202,6 @@ def show_connection_info(cluster_name: str, aws_region: str, aws_profile: str, m
                     'key': 'Web Portal',
                     'value': cluster_endpoint,
                     'weight': 0
-                })
-            elif module_name == constants.MODULE_ANALYTICS:
-                connection_info_entries.append({
-                    'key': 'Analytics Dashboard',
-                    'value': f'{cluster_endpoint}/_dashboards',
-                    'weight': 3
                 })
             elif module_name == constants.MODULE_BASTION_HOST:
                 key_pair_name = cluster_config.get_string('cluster.network.ssh_key_pair')

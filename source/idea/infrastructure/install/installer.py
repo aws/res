@@ -3,7 +3,7 @@
 import inspect
 import pathlib
 from datetime import datetime
-from typing import Any, Callable, Dict, TypedDict
+from typing import Any, Callable, Dict, TypedDict, Union
 
 import aws_cdk
 from aws_cdk import aws_lambda as lambda_
@@ -11,8 +11,9 @@ from aws_cdk import aws_stepfunctions as sfn
 from aws_cdk import aws_stepfunctions_tasks as sfn_tasks
 from constructs import Construct, DependencyGroup
 
+from idea.batteries_included.parameters.parameters import BIParameters
 from idea.infrastructure.install import handlers, tasks
-from idea.infrastructure.install.parameters.parameters import Parameters
+from idea.infrastructure.install.parameters.parameters import RESParameters
 
 
 class LambdaCodeParams(TypedDict):
@@ -26,7 +27,7 @@ class Installer(Construct):
         scope: Construct,
         id: str,
         registry_name: str,
-        params: Parameters,
+        params: Union[RESParameters, BIParameters],
         dependency_group: DependencyGroup,
     ):
         super().__init__(scope, id)

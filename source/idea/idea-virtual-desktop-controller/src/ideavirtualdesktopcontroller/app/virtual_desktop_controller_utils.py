@@ -160,9 +160,11 @@ class VirtualDesktopControllerUtils:
 
         custom_tags = self.context.config().get_list('global-settings.custom_tags', [])
         custom_tags_dict = Utils.convert_custom_tags_to_key_value_pairs(custom_tags)
+        session_tags = Utils.convert_tags_list_of_dict_to_tags_dict(session.tags)
         tags = {
             **custom_tags_dict,
-            **tags
+            **tags,
+            **session_tags
         }
 
         aws_tags = []
@@ -541,8 +543,3 @@ class VirtualDesktopControllerUtils:
             return repr(e), False
         return '', True
 
-    def get_virtual_desktop_users_group(self) -> str:
-        return self.group_name_helper.get_module_users_group(self.context.module_id())
-
-    def get_virtual_desktop_admin_group(self) -> str:
-        return self.group_name_helper.get_module_administrators_group(module_id=self.context.module_id())

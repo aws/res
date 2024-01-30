@@ -30,14 +30,22 @@ export class JwtTokenUtils {
 export class JwtTokenClaimsProvider {
     private readonly accessToken: any;
     private readonly idToken: any;
+    private readonly dbUsername: any;
+    private readonly role: any;
 
-    constructor(accessToken: string, idToken: string) {
+    constructor(accessToken: string, idToken: string, dbUsername: string, role: string) {
         this.accessToken = JwtTokenUtils.parseJwtToken(accessToken);
         this.idToken = JwtTokenUtils.parseJwtToken(idToken);
+        this.dbUsername = dbUsername
+        this.role = role
     }
 
-    getUsername(): string {
-        return this.accessToken.username;
+    getRole(): string {
+        return this.role;
+    }
+
+    getDbUsername(): string {
+        return this.dbUsername;
     }
 
     getClientId(): string {
@@ -45,15 +53,7 @@ export class JwtTokenClaimsProvider {
     }
 
     getCognitoUsername(): string {
-        return this.idToken["cognito:username"];
-    }
-
-    getGroups(): string[] {
-        let groups = this.accessToken["cognito:groups"];
-        if (groups == null) {
-            return [];
-        }
-        return groups;
+        return this.accessToken.username;
     }
 
     getIssuedAt(): number {
@@ -102,8 +102,9 @@ export class JwtTokenClaimsProvider {
 
     getClaims(): JwtTokenClaims {
         return {
-            username: this.getUsername(),
-            groups: this.getGroups(),
+            cognito_username: this.getCognitoUsername(),
+            db_username: this.getDbUsername(),
+            role: this.getRole(),
             issued_at: this.getIssuedAt(),
             expires_at: this.getExpiresAt(),
             auth_time: this.getAuthTime(),
@@ -117,8 +118,9 @@ export class JwtTokenClaimsProvider {
 }
 
 export interface JwtTokenClaims {
-    username: string;
-    groups: string[];
+    cognito_username: string;
+    db_username: string;
+    role: string;
     issued_at: number;
     expires_at: number;
     auth_time: number;

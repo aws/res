@@ -25,7 +25,7 @@ export interface VirtualDesktopCreateSessionFormProps {
     defaultName?: string;
     maxRootVolumeMemory: number;
     isAdminView?: boolean;
-    onSubmit: (session_name: string, username: string, project_id: string, base_os: VirtualDesktopBaseOS, software_stack_id: string, session_type: VirtualDesktopSessionType, instance_type: string, storage_size: number, hibernation_enabled: boolean, vpc_subnet_id: string) => Promise<boolean>;
+    onSubmit: (session_name: string, username: string, project_id: string, base_os: VirtualDesktopBaseOS, software_stack_id: string, session_type: VirtualDesktopSessionType, instance_type: string, storage_size: number, hibernation_enabled: boolean, vpc_subnet_id: string, session_tags: Record<string,string>[]) => Promise<boolean>;
     onDismiss: () => void;
 }
 
@@ -575,6 +575,36 @@ class VirtualDesktopCreateSessionForm extends Component<VirtualDesktopCreateSess
                 eq: true,
             },
         });
+        const sessionTagKeys: SocaUserInputParamMetadata = {
+            name: "session_tags_keys",
+            description: "Key",
+            param_type: "text",
+            data_type: "str"
+        };
+        const sessionTagValues: SocaUserInputParamMetadata = {
+            name: "session_tags_values",
+            description: "Value",
+            param_type: "text",
+            data_type: "str"
+        };
+        formParams.push({
+            name: "session_tags",
+            title: "Session Tags",
+            description: "Add tags for your virtual desktop. Provided tags will be added to the EC2 Instance.",
+            param_type: "container",
+            data_type: "record",
+            container_items: [sessionTagKeys, sessionTagValues],
+            multiple: true,
+            default: [],
+            when: {
+                param: "advanced_options",
+                eq: true,
+            },
+            validate: {
+                required: true
+            },
+            custom_error_message: "Keys and Values cannot be empty."
+        })
 
         return formParams;
     }
@@ -679,9 +709,10 @@ class VirtualDesktopCreateSessionForm extends Component<VirtualDesktopCreateSess
                         const project_id = values.project_id;
                         const session_type = values.dcv_session_type;
                         const instance_type = values.instance_type;
+                        const session_tags = values.session_tags
                         let username = values.user_name;
                         if (this.props.onSubmit) {
-                            return this.props.onSubmit(session_name, username, project_id, base_os, software_stack_id, session_type, instance_type, storage_size, hibernation_enabled, vpc_subnet_id);
+                            return this.props.onSubmit(session_name, username, project_id, base_os, software_stack_id, session_type, instance_type, storage_size, hibernation_enabled, vpc_subnet_id, session_tags);
                         } else {
                             return Promise.resolve(true);
                         }

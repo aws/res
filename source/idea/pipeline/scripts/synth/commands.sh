@@ -9,7 +9,7 @@ COMMIT_ID=$(echo $CODEBUILD_RESOLVED_SOURCE_VERSION | cut -b -8)
 RELEASE_VERSION=$(echo "$(<RES_VERSION.txt )" | xargs)
 
 # Run tests as defined by `env_list` in tox.ini
-tox --parallel-no-spinner -- --junitxml=pytest-report.xml
+tox -- --junitxml=pytest-report.xml
 
 # Set the CDK context based on the environment variables
 python -c "import os; import json; print(json.dumps(dict(os.environ)))" | tee cdk.context.json
@@ -31,4 +31,4 @@ echo Pushing the Docker image...
 docker push $ECR_REPOSITORY_URI:$RELEASE_VERSION-$COMMIT_ID
 
 # Synthesize the template
-npx cdk synth -c repository_name=$REPOSITORY_NAME -c branch_name=$BRANCH -c deploy=$DEPLOY -c destroy=$DESTROY -c registry_name=$ECR_REPOSITORY_URI:$RELEASE_VERSION-$COMMIT_ID -c publish_templates=$PUBLISH_TEMPLATES -c file_asset_prefix="releases/$RELEASE_VERSION/" -c ecr_public_repository_name=$ECR_PUBLIC_REPOSITORY_NAME
+npx cdk synth -c repository_name=$REPOSITORY_NAME -c branch_name=$BRANCH -c deploy=$DEPLOY -c batteries_included=$BATTERIES_INCLUDED -c integration_tests=$INTEGRATION_TESTS -c destroy=$DESTROY -c registry_name=$ECR_REPOSITORY_URI:$RELEASE_VERSION-$COMMIT_ID -c publish_templates=$PUBLISH_TEMPLATES -c file_asset_prefix="releases/$RELEASE_VERSION/" -c ecr_public_repository_name=$ECR_PUBLIC_REPOSITORY_NAME

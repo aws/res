@@ -12,13 +12,13 @@
 import ideavirtualdesktopcontroller
 from ideasdk.api import ApiInvocationContext
 from ideasdk.app import SocaAppAPI
-from ideasdk.auth import TokenService
+from ideasdk.auth import TokenService, ApiAuthorizationServiceBase
 from ideasdk.protocols import ApiInvokerProtocol
 from ideavirtualdesktopcontroller.app.api.virtual_desktop_admin_api import VirtualDesktopAdminAPI
 from ideavirtualdesktopcontroller.app.api.virtual_desktop_dcv_api import VirtualDesktopDCVAPI
 from ideavirtualdesktopcontroller.app.api.virtual_desktop_user_api import VirtualDesktopUserAPI
 from ideavirtualdesktopcontroller.app.api.virtual_desktop_utils_api import VirtualDesktopUtilsAPI
-
+from typing import Optional
 
 class VirtualDesktopApiInvoker(ApiInvokerProtocol):
 
@@ -32,8 +32,11 @@ class VirtualDesktopApiInvoker(ApiInvokerProtocol):
             'App': SocaAppAPI(context)
         }
 
-    def get_token_service(self) -> TokenService:
+    def get_token_service(self) -> Optional[TokenService]:
         return self._context.token_service
+    
+    def get_api_authorization_service(self) -> Optional[ApiAuthorizationServiceBase]:
+        return self._context.api_authorization_service
 
     def invoke(self, context: ApiInvocationContext):
         namespace = context.namespace

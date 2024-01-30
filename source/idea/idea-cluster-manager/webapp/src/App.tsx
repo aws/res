@@ -50,7 +50,7 @@ import { IdeaAppNavigationProps, withRouter } from "./navigation/navigation-util
 import { Routes, Route, Navigate } from "react-router-dom";
 import IdeaLogTail from "./pages/home/log-tail";
 import Utils from "./common/utils";
-import Snapshots from "./pages/snapshots/snapshots";
+import SnapshotManagement from "./pages/snapshots/snapshot-management"
 
 export interface IdeaWebPortalAppProps extends IdeaAppNavigationProps {}
 
@@ -562,7 +562,7 @@ class IdeaWebPortalApp extends Component<IdeaWebPortalAppProps, IdeaWebPortalApp
                         }
                     />
                     <Route
-                        path="/virtual-desktop/software-stacks/:software_stack_id"
+                        path="/virtual-desktop/software-stacks/:software_stack_id/:software_stack_base_os"
                         element={
                             <IdeaAuthenticatedRoute isLoggedIn={this.state.isLoggedIn}>
                                 <VirtualDesktopSoftwareStackDetail
@@ -772,11 +772,11 @@ class IdeaWebPortalApp extends Component<IdeaWebPortalAppProps, IdeaWebPortalApp
                     {/*    }*/}
                     {/*/>*/}
                     <Route
-                        path="/cluster/snapshots"
+                        path="/cluster/snapshot-management"
                         element={
                             <IdeaAuthenticatedRoute isLoggedIn={this.state.isLoggedIn}>
-                                <Snapshots
-                                    ideaPageId="snapshots"
+                                <SnapshotManagement
+                                    ideaPageId="snapshot-management"
                                     toolsOpen={this.state.toolsOpen}
                                     tools={this.state.tools}
                                     onToolsChange={this.onToolsChange}

@@ -44,6 +44,10 @@ network:
     {{ utils.to_yaml(private_subnet_ids) | indent(4) }}
   public_subnets:
     {{ utils.to_yaml(public_subnet_ids) | indent(4) }}
+  load_balancer_subnets:
+    {{ utils.to_yaml(load_balancer_subnet_ids) | indent(4) }}
+  infrastructure_host_subnets: 
+    {{ utils.to_yaml(infrastructure_host_subnet_ids) | indent(4) }}
   {%- else %}
   max_azs: 3
   nat_gateways: 1
@@ -143,12 +147,12 @@ load_balancers:
       custom_dns_name: {{alb_custom_dns_name if alb_custom_dns_name else '~'}}
     # SSL/TLS Policy on External Load Balancer
     # For a list of policies - consult the documentation at https://docs.aws.amazon.com/elasticloadbalancing/latest/application/create-https-listener.html#describe-ssl-policies
-    ssl_policy: ELBSecurityPolicy-FS-1-2-Res-2020-10
+    ssl_policy: ELBSecurityPolicy-TLS13-1-2-2021-06
   internal_alb:
     access_logs: true
     # SSL/TLS Policy on Internal Load Balancer
     # For a list of policies - consult the documentation at https://docs.aws.amazon.com/elasticloadbalancing/latest/application/create-https-listener.html#describe-ssl-policies
-    ssl_policy: ELBSecurityPolicy-FS-1-2-Res-2020-10
+    ssl_policy: ELBSecurityPolicy-TLS13-1-2-2021-06
 
 cloudwatch_logs:
   # enable or disable publishing logs to cloudwatch across the cluster.

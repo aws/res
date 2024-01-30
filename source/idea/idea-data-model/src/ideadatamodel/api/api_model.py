@@ -11,6 +11,7 @@
 
 __all__ = (
     'SocaPayload',
+    'SocaPayloadType',
     'get_payload_as',
     'SocaListingPayload',
     'SocaHeader',
@@ -18,7 +19,9 @@ __all__ = (
     'SocaEnvelope',
     'SocaAnyPayload',
     'SocaBatchResponsePayload',
-    'IdeaOpenAPISpecEntry'
+    'IdeaOpenAPISpecEntry',
+    'ApiAuthorizationType',
+    'ApiAuthorization'
 )
 
 from ideadatamodel import (SocaBaseModel, SocaDateRange, SocaSortBy, SocaPaginator, SocaFilter)
@@ -27,6 +30,7 @@ from ideadatamodel.model_utils import ModelUtils
 from typing import Optional, Union, TypeVar, Type, List, Any
 from types import SimpleNamespace
 from pydantic import Field
+from enum import Enum
 
 SocaBaseModelType = TypeVar('SocaBaseModelType', bound='SocaBaseModel')
 
@@ -134,3 +138,15 @@ class IdeaOpenAPISpecEntry(SocaBaseModel):
     result: Type[SocaBaseModel]
     is_listing: bool
     is_public: bool
+
+class ApiAuthorizationType(str, Enum):
+    ADMINISTRATOR = 'admin'
+    USER = 'user'
+    APP = 'app'
+
+class ApiAuthorization(SocaBaseModel):
+    type: ApiAuthorizationType
+    username: Optional[str]  # will not exist for APP authorizations
+    client_id: Optional[str]
+    scopes: Optional[List[str]]  # list of allowed oauth scopes
+    invocation_source: Optional[str]

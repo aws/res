@@ -13,12 +13,6 @@ modules:
       - settings.yml
       - logging.yml
 
-  - name: analytics
-    id: analytics
-    type: stack
-    config_files:
-      - settings.yml
-
   - name: identity-provider
     id: identity-provider
     type: stack

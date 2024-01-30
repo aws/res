@@ -1001,6 +1001,84 @@ class AWSUtil(AWSUtilProtocol):
             )
 
         return True
+    
+    def dynamodb_import_table(self, import_table_request: Dict, wait: bool = False): 
+        """
+        Import table data from S3 to DynamoDB table
+        
+        :param import_table_request:
+        """
+        
+        table_creation_parameters = import_table_request.get('TableCreationParameters')
+        if not table_creation_parameters:
+            raise exceptions.invalid_params("import_table_request must include 'TableCreationParameters'")
+        
+        table_name = table_creation_parameters.get("TableName")
+        if not table_name:
+            raise exceptions.invalid_params("import_table_request must include 'TableCreationParameters.TableName'")
+        
+        s3_bucket_source = import_table_request.get('S3BucketSource')
+        if not s3_bucket_source:
+            raise exceptions.invalid_params("import_table_request must include 'S3BucketSource'")
+        
+        s3_bucket_name = s3_bucket_source.get('S3Bucket')
+        s3_key_prefix = s3_bucket_source.get('S3KeyPrefix')
+        
+        if not s3_bucket_name or not s3_key_prefix:
+            raise exceptions.invalid_params("import_table_request must include 'S3BucketSource.S3Bucket' and 'S3BucketSource.S3KeyPrefix'. One or both were not provided")
+        
+        dynamodb_kms_key_id = self._context.config().get_string('cluster.dynamodb.kms_key_id')
+        if dynamodb_kms_key_id is not None:
+            import_table_request['TableCreationParameters']['SSESpecification'] = {
+                'Enabled': True,
+                'SSEType': 'KMS',
+                'KMSMasterKeyId': dynamodb_kms_key_id
+                }
+            
+        self._logger.info(f'importing table {table_name} from S3 bucket {s3_bucket_name} and path {s3_key_prefix} to dynamodb table: {table_name} ...')
+        
+        # Response for the query takes about 5 seconds. The response ensures that the table creation process has started.
+        res = self.aws().dynamodb().import_table(**import_table_request)
+              
+        return res
+    
+    def dynamodb_check_import_completed_successfully(self, import_arn: str) -> bool:
+        while True:
+            describe_import_result = self.aws().dynamodb().describe_import(ImportArn=import_arn)
+
+            result = describe_import_result['ImportTableDescription']
+            if result['ImportStatus'] == 'COMPLETED':
+                return True
+            
+            elif result['ImportStatus'] == 'CANCELLED':
+                self._logger.error(f'Import attempt {import_arn} was CANCELLED')
+                return False
+            
+            elif result['ImportStatus'] == 'FAILED':
+                self._logger.error(f"Import attempt {import_arn} FAILED with code: {result['FailureCode']} and message: {result['FailureMessage']}")
+                return False
+
+            time.sleep(10)
+
+    
+    def dynamodb_delete_table(self, table_name: str, wait: bool = True) -> bool:
+        """
+        Deletes a DynamoDB table if exists. Most likely used for deletion of temp tables created during ApplySnapshot process
+
+        :param table_name: Name of the DDB table that should be deleted
+        :param wait: wait for table creation and status to become active
+        """
+        
+        if wait:
+            try:
+                self.dynamodb_check_table_exists(table_name, wait)
+            except botocore.exceptions.ClientError as e:
+                if e.response['Error']['Code'] == 'ResourceNotFoundException':
+                    return True
+            
+        self.aws().dynamodb().delete_table(TableName=table_name)
+        
+        return True
 
     def create_s3_presigned_url(self, key: str, expires_in=3600) -> str:
         return self.aws().s3().generate_presigned_url(

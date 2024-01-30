@@ -37,16 +37,41 @@ class VirtualDesktopUtilsAPI(VirtualDesktopAPI):
         super().__init__(context)
         self.context = context
         self._logger = context.logger('virtual-desktop-utils-api')
+        self.SCOPE_READ = f'{self.context.module_id()}/read'
 
-        self.namespace_handler_map = {
-            'VirtualDesktopUtils.ListSupportedOS': self.list_supported_os,
-            'VirtualDesktopUtils.ListSupportedGPU': self.list_supported_gpu,
-            'VirtualDesktopUtils.ListScheduleTypes': self.list_schedule_types,
-            'VirtualDesktopUtils.ListAllowedInstanceTypes': self.list_allowed_instance_types,
-            'VirtualDesktopUtils.ListAllowedInstanceTypesForSession': self.list_allowed_instance_types_for_session,
-            'VirtualDesktopUtils.GetBasePermissions': self.get_base_permissions,
-            'VirtualDesktopUtils.ListPermissionProfiles': self.list_permission_profiles,
-            'VirtualDesktopUtils.GetPermissionProfile': self.get_permission_profile
+        self.acl = {
+            'VirtualDesktopUtils.ListSupportedOS': {
+                'scope': self.SCOPE_READ,
+                'method': self.list_supported_os,
+            },
+            'VirtualDesktopUtils.ListSupportedGPU': {
+                'scope': self.SCOPE_READ,
+                'method': self.list_supported_gpu,
+            },
+            'VirtualDesktopUtils.ListScheduleTypes': {
+                'scope': self.SCOPE_READ,
+                'method': self.list_schedule_types,
+            },
+            'VirtualDesktopUtils.ListAllowedInstanceTypes': {
+                'scope': self.SCOPE_READ,
+                'method': self.list_allowed_instance_types,
+            },
+            'VirtualDesktopUtils.ListAllowedInstanceTypesForSession': {
+                'scope': self.SCOPE_READ,
+                'method': self.list_allowed_instance_types_for_session,
+            },
+            'VirtualDesktopUtils.GetBasePermissions': {
+                'scope': self.SCOPE_READ,
+                'method': self.get_base_permissions,
+            },
+            'VirtualDesktopUtils.ListPermissionProfiles': {
+                'scope': self.SCOPE_READ,
+                'method': self.list_permission_profiles,
+            },
+            'VirtualDesktopUtils.GetPermissionProfile': {
+                'scope': self.SCOPE_READ,
+                'method': self.get_permission_profile,
+            },
         }
 
     def get_base_permissions(self, context: ApiInvocationContext):
@@ -166,10 +191,16 @@ class VirtualDesktopUtilsAPI(VirtualDesktopAPI):
         ))
 
     def invoke(self, context: ApiInvocationContext):
+        namespace = context.namespace
 
-        if not context.is_authorized_user():
+        acl_entry = self.acl.get(namespace)
+        if acl_entry is None:
             raise exceptions.unauthorized_access()
 
-        namespace = context.namespace
-        if namespace in self.namespace_handler_map:
-            self.namespace_handler_map[namespace](context)
+        acl_entry_scope = acl_entry.get('scope')
+        is_authorized = context.is_authorized(elevated_access=False, scopes=[acl_entry_scope])
+
+        if is_authorized:
+            acl_entry['method'](context)
+        else:
+            raise exceptions.unauthorized_access()

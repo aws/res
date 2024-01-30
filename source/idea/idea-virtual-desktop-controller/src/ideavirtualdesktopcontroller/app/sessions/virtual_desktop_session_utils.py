@@ -12,7 +12,6 @@ from typing import List, Dict
 
 import ideavirtualdesktopcontroller
 from ideadatamodel import VirtualDesktopSession, VirtualDesktopServer, VirtualDesktopSessionState
-from ideasdk.analytics.analytics_service import AnalyticsEntry, EntryAction, EntryContent
 from ideasdk.utils import Utils, DateTimeUtils
 from ideavirtualdesktopcontroller.app.events.events_utils import EventsUtils
 from ideavirtualdesktopcontroller.app.permission_profiles.virtual_desktop_permission_profile_db import VirtualDesktopPermissionProfileDB
@@ -259,36 +258,3 @@ class VirtualDesktopSessionUtils:
             fail_response_list.append(session_map[session.dcv_session_id])
 
         return success_response_list, fail_response_list
-
-    def delete_session_entry_from_opensearch(self, idea_session_id: str):
-        index_name = f"{self.context.config().get_string('virtual-desktop-controller.opensearch.dcv_session.alias', required=True)}-{self.context.sessions_template_version}"
-        self.context.analytics_service().post_entry(AnalyticsEntry(
-            entry_id=idea_session_id,
-            entry_action=EntryAction.DELETE_ENTRY,
-            entry_content=EntryContent(
-                index_id=index_name
-            )
-        ))
-
-    def update_session_entry_to_opensearch(self, session: VirtualDesktopSession):
-        index_name = f"{self.context.config().get_string('virtual-desktop-controller.opensearch.dcv_session.alias', required=True)}-{self.context.sessions_template_version}"
-        self.context.analytics_service().post_entry(AnalyticsEntry(
-            entry_id=session.idea_session_id,
-            entry_action=EntryAction.UPDATE_ENTRY,
-            entry_content=EntryContent(
-                index_id=index_name,
-                entry_record=self._session_db.convert_session_object_to_db_dict(session)
-            )
-        ))
-
-    def index_session_entry_to_opensearch(self, session: VirtualDesktopSession):
-        index_name = f"{self.context.config().get_string('virtual-desktop-controller.opensearch.dcv_session.alias', required=True)}-{self.context.sessions_template_version}"
-        index_dict = self._session_db.convert_session_object_to_index_dict(session)
-        self.context.analytics_service().post_entry(AnalyticsEntry(
-            entry_id=session.idea_session_id,
-            entry_action=EntryAction.CREATE_ENTRY,
-            entry_content=EntryContent(
-                index_id=index_name,
-                entry_record=index_dict
-            )
-        ))

@@ -14,7 +14,6 @@ from ideasdk.protocols import SocaContextProtocol
 from ideadatamodel.cluster_resources import (
     SocaVPC,
     SocaCloudFormationStack,
-    SocaOpenSearchDomain,
     SocaDirectory,
     SocaSubnet,
     SocaFileSystem,
@@ -60,12 +59,6 @@ class AwsResourcesInMemoryDB:
 
     def set_subnets(self, subnets: List[SocaSubnet]):
         return self._db.set('aws.ec2.subnets', subnets)
-
-    def get_opensearch_domains(self) -> Optional[List[SocaOpenSearchDomain]]:
-        return self._db.get('aws.opensearch.domains')
-
-    def set_opensearch_domains(self, domains: List[SocaOpenSearchDomain]):
-        return self._db.set('aws.opensearch.domains', domains)
 
     def get_directories(self) -> Optional[List[SocaDirectory]]:
         return self._db.get('aws.directories')
@@ -214,39 +207,6 @@ class AwsResources:
             )
             self._db.set_vpcs(vpcs)
             return vpcs
-        except Exception as e:
-            self.aws_util.handle_aws_exception(e)
-
-    def get_opensearch_clusters(self, vpc_id: str, refresh: bool = False) -> List[SocaOpenSearchDomain]:
-        try:
-            if not refresh:
-                domains = self._db.get_opensearch_domains()
-                if domains is not None:
-                    return domains
-
-            domains = []
-            list_domain_names_result = self.aws.es().list_domain_names()
-            domain_names = Utils.get_value_as_list('DomainNames', list_domain_names_result, [])
-            for entry in domain_names:
-                domain_name = Utils.get_value_as_string('DomainName', entry)
-                describe_domain_result = self.aws.es().describe_elasticsearch_domain(DomainName=domain_name)
-                domain_status = describe_domain_result['DomainStatus']
-                vpc_options = Utils.get_value_as_dict('VPCOptions', domain_status)
-                if vpc_options is None:
-                    continue
-                domain_vpc_id = vpc_options['VPCId']
-                if domain_vpc_id != vpc_id:
-                    continue
-                elasticsearch_version = domain_status['ElasticsearchVersion']
-                title = f'{domain_name} ({elasticsearch_version})'
-                domains.append(SocaOpenSearchDomain(
-                    type='aws.opensearch.domain',
-                    title=title,
-                    ref=describe_domain_result
-                ))
-
-            self._db.set_opensearch_domains(domains)
-            return domains
         except Exception as e:
             self.aws_util.handle_aws_exception(e)
 

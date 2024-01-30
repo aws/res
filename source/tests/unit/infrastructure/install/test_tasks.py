@@ -68,7 +68,7 @@ def test_create_task_creation(
                 "TaskRoleArn": {
                     "Fn::GetAtt": [
                         util.get_logical_id(
-                            stack, ["Installer", "Tasks", "Permissions", "InstallRole"]
+                            stack, ["Installer", "Tasks", "Permissions", "PipelineRole"]
                         ),
                         "Arn",
                     ]
@@ -104,7 +104,7 @@ def test_update_task_creation(
                 "TaskRoleArn": {
                     "Fn::GetAtt": [
                         util.get_logical_id(
-                            stack, ["Installer", "Tasks", "Permissions", "UpdateRole"]
+                            stack, ["Installer", "Tasks", "Permissions", "PipelineRole"]
                         ),
                         "Arn",
                     ]
@@ -140,7 +140,7 @@ def test_delete_task_creation(
                 "TaskRoleArn": {
                     "Fn::GetAtt": [
                         util.get_logical_id(
-                            stack, ["Installer", "Tasks", "Permissions", "DeleteRole"]
+                            stack, ["Installer", "Tasks", "Permissions", "PipelineRole"]
                         ),
                         "Arn",
                     ]

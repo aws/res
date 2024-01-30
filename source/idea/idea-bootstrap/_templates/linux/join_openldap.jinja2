@@ -23,8 +23,14 @@ if [ -e /etc/sssd/sssd.conf ]; then
     cp /etc/sssd/sssd.conf /etc/sssd/sssd.conf.orig
 fi
 
+if [[ ${IDEA_MODULE_NAME} == "cluster-manager" ]]; then
+  enumerate_value=True
+else
+  enumerate_value=False
+fi
+
 echo -e "[domain/default]
-enumerate = True
+enumerate = "${enumerate_value}"
 autofs_provider = ldap
 cache_credentials = True
 ldap_search_base = ${IDEA_DS_LDAP_BASE}

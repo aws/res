@@ -1,4 +1,4 @@
-aiofiles==0.8.0
+aiofiles==23.2.1
 alembic==1.8.0
 arrow==1.2.1
 attrs==21.4.0
@@ -27,7 +27,7 @@ decorator==5.1.1
 defusedxml==0.7.1
 exceptiongroup==1.0.0rc8
 fastcounter==1.1.0
-greenlet==1.1.2
+greenlet>=1.1.2
 httptools==0.4.0
 idna==3.3
 ipaddress==1.0.23
@@ -39,7 +39,6 @@ markupsafe==2.1.1
 multidict==6.0.2
 mypy==0.950
 mypy-extensions==0.4.3
-opensearch-py==2.3.1
 orjson==3.6.5
 prettytable==3.3.0
 prometheus-client==0.14.1

@@ -32,8 +32,7 @@ class DbEntryDeletedEventHandler(BaseDBEventHandler):
         }
 
     def _handle_software_stack_deleted(self, _: str, __: str, deleted_value: dict, ___: str):
-        software_stack = self.software_stack_db.convert_db_dict_to_software_stack_object(deleted_value)
-        self.software_stack_utils.delete_software_stack_entry_from_opensearch(software_stack.stack_id)
+        self._logger.debug(f'deleted entry for {deleted_value}. No=OP. Returning')
 
     def _handle_permission_profile_deleted(self, _: str, __: str, ___: dict, table_name: str):
         self._logger.debug(f'deleted entry for {table_name} not handled. No=OP. Returning')
@@ -44,14 +43,12 @@ class DbEntryDeletedEventHandler(BaseDBEventHandler):
     def _handle_user_session_deleted(self, _: str, __: str, deleted_value: dict, ___: str):
         session = self.session_db.convert_db_dict_to_session_object(deleted_value)
         self._notify_session_owner_of_state_update(session, deleted=True)
-        self.session_utils.delete_session_entry_from_opensearch(session.idea_session_id)
 
     def _handle_dcv_host_deleted(self, _: str, __: str, ___: dict, table_name: str):
         self._logger.debug(f'deleted entry for {table_name} not handled. No=OP. Returning')
 
     def _handle_session_permission_deleted(self, _: str, __: str, deleted_value: dict, ___: str):
         deleted_session_permission = self.session_permissions_db.convert_db_dict_to_session_permission_object(deleted_value)
-        self.session_permission_utils.delete_session_entry_from_opensearch(deleted_session_permission)
 
         notifications_enabled = self.context.config().get_bool('virtual-desktop-controller.dcv_session.notifications.session-permission-expired.enabled', required=True)
         if not notifications_enabled:

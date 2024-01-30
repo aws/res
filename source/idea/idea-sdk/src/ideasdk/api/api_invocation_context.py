@@ -10,11 +10,12 @@
 #  and limitations under the License.
 
 from ideasdk.protocols import SocaContextProtocol, ApiInvocationContextProtocol, SocaContextProtocolType
-from ideasdk.auth import TokenService, ApiAuthorization, ApiAuthorizationType
+from ideasdk.auth import TokenService, ApiAuthorizationServiceBase
+from ideadatamodel.api.api_model import ApiAuthorization, ApiAuthorizationType
 from ideasdk.utils import Utils, GroupNameHelper
 from ideadatamodel import constants, get_payload_as, SocaEnvelope, SocaPayload, exceptions, errorcodes
 
-from typing import Optional, Dict, Type, TypeVar, Union, List
+from typing import Optional, Dict, Mapping, Type, TypeVar, Union, List
 import logging
 import re
 
@@ -36,18 +37,22 @@ class ApiInvocationContext(ApiInvocationContextProtocol):
 
     def __init__(self, context: SocaContextProtocol,
                  request: Union[Dict, SocaEnvelope],
+                 http_headers: Optional[Mapping],
                  invocation_source: str,
                  group_name_helper: GroupNameHelper,
                  logger: logging.Logger,
                  token: Optional[Dict] = None,
-                 token_service: Optional[TokenService] = None):
+                 token_service: Optional[TokenService] = None,
+                 api_authorization_service: Optional[ApiAuthorizationServiceBase] = None):
         self._context = context
         self._request = request
+        self._http_headers = http_headers
         self._invocation_source = invocation_source
         self._group_name_helper = group_name_helper
         self._logger = logger
         self._token = token
         self._token_service = token_service
+        self._api_authorization_service = api_authorization_service
 
         self._start_time = Utils.current_time_ms()
         self._total_time: Optional[int] = None
@@ -97,9 +102,10 @@ class ApiInvocationContext(ApiInvocationContextProtocol):
         access_token = self.access_token
         if Utils.is_empty(access_token):
             return False
-        if self._token_service is None:
+        if not self._api_authorization_service or not self._token_service:
             return False
-        return self._token_service.is_scope_authorized(access_token=access_token, scope=scope)
+        decoded_token = self._token_service.decode_token(token=access_token)
+        return self._api_authorization_service.is_scope_authorized(decoded_token=decoded_token, scope=scope)
 
     def is_unix_domain_socket_invocation(self) -> bool:
         """
@@ -110,49 +116,33 @@ class ApiInvocationContext(ApiInvocationContextProtocol):
         """
         return self._invocation_source == 'unix-socket'
 
-    def is_administrator(self) -> bool:
+    def is_administrator(self, authorization: ApiAuthorization = None) -> bool:
         """
-        check if user has "cluster administrator" access
-        cluster administrator == sudo user.
-
-        a "module administrator" does not imply sudo access, and is equivalent to having a "cluster manager" access scoped to the current module.
+        check if user has "administrator" access
         """
-        authorization = self.get_authorization()
+        if not authorization:
+            authorization = self.get_authorization()
         return authorization.type == ApiAuthorizationType.ADMINISTRATOR
 
-    def is_manager(self) -> bool:
-        """
-        check if user has "cluster manager" access or "module administrator" access
-        """
-        authorization = self.get_authorization()
-
-        if authorization.type == ApiAuthorizationType.MANAGER:
-            return True
-
-        if authorization.type == ApiAuthorizationType.USER:
-            module_administrators_group = self._group_name_helper.get_module_administrators_group(module_id=self._context.module_id())
-            return module_administrators_group in authorization.groups
-
-        return False
-
-    def is_authenticated_user(self) -> bool:
+    def is_authenticated_user(self, authorization: ApiAuthorization = None) -> bool:
         """
         allow any request as long as the token is issued to a valid user
         verify the token, but don't check for any scope access
         """
-        authorization = self.get_authorization()
+        if not authorization:
+            authorization = self.get_authorization()
         return authorization.type in (
             ApiAuthorizationType.USER,
-            ApiAuthorizationType.ADMINISTRATOR,
-            ApiAuthorizationType.MANAGER
+            ApiAuthorizationType.ADMINISTRATOR
         )
 
-    def is_authenticated_app(self) -> bool:
+    def is_authenticated_app(self, authorization: ApiAuthorization = None) -> bool:
         """
         allow any request as long as the token is issued to a valid app
         verify the token, but don't check for any scope access
         """
-        authorization = self.get_authorization()
+        if not authorization:
+            authorization = self.get_authorization()
         return authorization.type == ApiAuthorizationType.APP
 
     def is_authenticated(self) -> bool:
@@ -160,32 +150,26 @@ class ApiInvocationContext(ApiInvocationContextProtocol):
         allow any request as long as the token is valid
         verify the token, but don't check for any groups or scope access
         """
-        self.get_authorization()
+        authorization = self.get_authorization()
         return True
 
-    def is_authorized_user(self) -> bool:
+    def is_authorized_user(self, authorization: ApiAuthorization = None) -> bool:
         """
-        lock down API access such that only if a user is added to the <MODULE_ID>-users-module-group, then grant access
-        administrators and managers get access implicitly
+        check if a user is authorized
+        admins are implicitly authorized
         """
+
+        if not authorization:
+            authorization = self.get_authorization()
+        
         # administrator with sudo access
-        if self.is_administrator():
+        if self.is_administrator(authorization=authorization):
             return True
+        return authorization.type == ApiAuthorizationType.USER
 
-        # cluster manager or module administrator
-        if self.is_manager():
-            return True
-
-        # regular user with module access
-        authorization = self.get_authorization()
-        if authorization.type == ApiAuthorizationType.USER:
-            module_users_group = self._group_name_helper.get_module_users_group(module_id=self._context.module_id())
-            return module_users_group in authorization.groups
-
-        return False
-
-    def is_authorized_app(self) -> bool:
-        authorization = self.get_authorization()
+    def is_authorized_app(self, authorization: ApiAuthorization = None) -> bool:
+        if not authorization:
+            authorization = self.get_authorization()
         if authorization.type != ApiAuthorizationType.APP:
             return False
         if authorization.scopes is None or len(authorization.scopes) == 0:
@@ -215,14 +199,15 @@ class ApiInvocationContext(ApiInvocationContextProtocol):
         :param List[str] scopes: the applicable scopes to be checked
         :return:
         """
+        authorization = self.get_authorization()
         if elevated_access:
-            authorized_user = self.is_administrator() or self.is_manager()
+            authorized_user = self.is_administrator(authorization=authorization)
         else:
-            authorized_user = self.is_authorized_user()
+            authorized_user = self.is_authorized_user(authorization=authorization)
 
         authorized_scopes = False
         if Utils.is_not_empty(scopes):
-            authorized_app = self.is_authorized_app()
+            authorized_app = self.is_authorized_app(authorization=authorization)
             if authorized_app:
                 all_scopes_authorized = True
                 for scope in scopes:
@@ -238,7 +223,7 @@ class ApiInvocationContext(ApiInvocationContextProtocol):
         get username from the JWT access token
         should be used for all authenticated APIs to ensure username cannot be spoofed via any payload parameters
         """
-        if self._token_service is None:
+        if not self._api_authorization_service :
             return None
         authorization = self.get_authorization()
         return authorization.username
@@ -360,12 +345,26 @@ class ApiInvocationContext(ApiInvocationContextProtocol):
                 type=ApiAuthorizationType.ADMINISTRATOR,
                 invocation_source=constants.API_INVOCATION_SOURCE_UNIX_SOCKET
             )
-        else:
-            if not self.has_access_token():
-                raise exceptions.unauthorized_access()
+        elif self.has_access_token():
             decoded_token = self.get_decoded_token()
-            result = self._token_service.get_authorization(decoded_token)
+            result = self._api_authorization_service.get_authorization(decoded_token)
             result.invocation_source = constants.API_INVOCATION_SOURCE_HTTP
+        elif Utils.is_test_mode():
+            username = Utils.get_value_as_string('X_RES_TEST_USERNAME', self._http_headers)
+            self._logger.warning(f'User {username} is accessing API without a valid token; '
+                                 'This is only possible because the environment variable RES_TEST_MODE is set to True.  '
+                                 'If this is not intended, remove the environment variable RES_TEST_MODE and restart the server.')
+
+            if not username:
+                raise exceptions.unauthorized_access()
+            user = self._api_authorization_service.get_user_from_token_username(token_username=username)
+            result = ApiAuthorization(
+                username=username,
+                type=self._api_authorization_service.get_authorization_type(role=user.role),
+                invocation_source=constants.API_INVOCATION_SOURCE_HTTP
+            )
+        else:
+            raise exceptions.unauthorized_access()
 
         self._authorization = result
         return self._authorization

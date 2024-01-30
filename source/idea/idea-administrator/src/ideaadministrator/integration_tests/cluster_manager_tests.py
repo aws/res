@@ -302,6 +302,31 @@ def test_admin_disable_project(context: TestContext):
         assert e.error_code == 'SCHEDULER_HPC_PROJECT_NOT_FOUND'
 
 
+def test_admin_delete_project(context: TestContext):
+    assert context.is_test_case_passed(test_constants.PROJECTS_CREATE_PROJECT)
+
+    context.get_cluster_manager_client().invoke_alt(
+        namespace='Projects.DeleteProject',
+        payload=DeleteProjectRequest(
+            project_id=TEST_PROJECT_ID
+        ),
+        result_as=DeleteProjectResult,
+        access_token=context.get_admin_access_token()
+    )
+
+    try:
+        context.get_cluster_manager_client().invoke_alt(
+            namespace='Projects.GetProject',
+            payload=GetProjectRequest(
+                project_id=TEST_PROJECT_ID
+            ),
+            result_as=GetProjectResult,
+            access_token=context.get_admin_access_token()
+        )
+    except exceptions.SocaException as e:
+        assert e.error_code == 'PROJECT_NOT_FOUND'
+
+
 def test_admin_disable_user(context: TestContext):
     context.get_cluster_manager_client().invoke_alt(
         namespace='Accounts.DisableUser',

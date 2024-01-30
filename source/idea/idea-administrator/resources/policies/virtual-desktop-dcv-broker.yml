@@ -66,7 +66,6 @@ Statement:
       - tag:GetResources
       - tag:GetTagValues
       - tag:GetTagKeys
-      - iam:PassRole
       - ssm:ListDocuments
       - ssm:ListDocumentVersions
       - ssm:DescribeDocument
@@ -84,6 +83,11 @@ Statement:
   - Action:
       - logs:PutRetentionPolicy
     Resource: '*'
+    Effect: Allow
+  - Action:
+    - iam:PassRole
+    Resource:
+      - '{{ context.arns.get_iam_arn("vdc-broker-role")}}'
     Effect: Allow
 
 {% include '_templates/custom-kms-key.yml' %}

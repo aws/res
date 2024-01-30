@@ -8,7 +8,7 @@ COMMIT_ID=$(echo $CODEBUILD_RESOLVED_SOURCE_VERSION | cut -b -8)
 RELEASE_VERSION=$(echo "$(<RES_VERSION.txt )" | xargs)
 
 # Run tests as defined by `env_list` in tox.ini
-tox --parallel-no-spinner -- --junitxml=pytest-report.xml
+tox -- --junitxml=pytest-report.xml
 
 # Set the CDK context based on the environment variables
 python -c "import os; import json; print(json.dumps(dict(os.environ)))" | tee cdk.context.json

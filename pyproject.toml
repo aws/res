@@ -39,12 +39,13 @@ cdk-app = "idea.app:main"
 
 [project.optional-dependencies]
 dev = [
-    "black",
+    "black~=24.1.0",
     "tox",
     "pytest",
     "pytest-cov",
     "boto3-stubs-lite[essential]",
     "boto3-stubs-lite[cloudformation]",
+    "types-requests",
 ]
 
 [tool.black]

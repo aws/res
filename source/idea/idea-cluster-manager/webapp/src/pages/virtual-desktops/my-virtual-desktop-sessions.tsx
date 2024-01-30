@@ -922,7 +922,7 @@ class MyVirtualDesktopSessions extends Component<MyVirtualDesktopSessionsProps, 
                 defaultName={`MyDesktop${this.state.sessions.size + 1}`}
                 maxRootVolumeMemory={this.virtualDesktopSettings?.dcv_session.max_root_volume_memory}
                 userProjects={this.state.userProjects}
-                onSubmit={(session_name, username, project_id, base_os, software_stack_id, session_type, instance_type, storage_size, hibernation_enabled, vpc_subnet_id) => {
+                onSubmit={(session_name, username, project_id, base_os, software_stack_id, session_type, instance_type, storage_size, hibernation_enabled, vpc_subnet_id, tags) => {
                     return this.getVirtualDesktopClient()
                         .createSession({
                             session: {
@@ -945,6 +945,7 @@ class MyVirtualDesktopSessions extends Component<MyVirtualDesktopSessionsProps, 
                                     project_id: project_id,
                                 },
                                 type: session_type,
+                                tags: tags,
                             },
                         })
                         .then((result) => {

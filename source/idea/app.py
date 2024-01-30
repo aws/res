@@ -4,8 +4,11 @@
 import aws_cdk as cdk
 from cdk_bootstrapless_synthesizer import BootstraplessStackSynthesizer
 
+from idea.batteries_included.parameters.parameters import BIParameters
+from idea.batteries_included.stack import BiStack
 from idea.constants import (
     ARTIFACTS_BUCKET_PREFIX_NAME,
+    BATTERIES_INCLUDED_STACK_NAME,
     INSTALL_STACK_NAME,
     PIPELINE_STACK_NAME,
 )
@@ -46,5 +49,14 @@ def main() -> None:
         registry_name=registry_name,
         synthesizer=install_synthesizer,
     )
+    context_bi = app.node.try_get_context("batteries_included")
+    if context_bi and context_bi.lower() == "true":
+        bi_stack_template_url = app.node.try_get_context("BIStackTemplateURL")
+        BiStack(
+            app,
+            BATTERIES_INCLUDED_STACK_NAME,
+            template_url=bi_stack_template_url,
+            parameters=BIParameters.from_context(app),
+        )
 
     app.synth()

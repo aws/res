@@ -12,102 +12,34 @@
  */
 
 import { Box } from "@cloudscape-design/components";
-import { AppContext } from "../../../common";
 import VirtualDesktopBaseChart from "./virtual-desktop-base-chart";
-import Utils from "../../../common/utils";
 import PieOrDonutChart from "../../../components/charts/pie-or-donut-chart";
+import { VirtualDesktopSession } from '../../../client/data-model'
 
 export interface VirtualDesktopBaseOSChartProps {
-    indexName: string;
+    loading: boolean
+    sessions: VirtualDesktopSession[];
 }
 
-interface VirtualDesktopBaseOSChartState {
-    chartData: any;
-    total: string;
-    statusType: "loading" | "finished" | "error";
-}
-
-class VirtualDesktopBaseOSChart extends VirtualDesktopBaseChart<VirtualDesktopBaseOSChartProps, VirtualDesktopBaseOSChartState> {
-    constructor(props: VirtualDesktopBaseOSChartProps) {
-        super(props);
-        this.state = {
-            chartData: [],
-            total: "-",
-            statusType: "loading",
-        };
-    }
-
-    componentDidMount() {
-        this.loadChartData();
-    }
-
-    reload() {
-        this.loadChartData();
-    }
-
-    loadChartData() {
-        this.setState(
-            {
-                statusType: "loading",
-            },
-            () => {
-                AppContext.get()
-                    .client()
-                    .analytics()
-                    .queryOpenSearch({
-                        data: {
-                            index: this.props.indexName,
-                            body: {
-                                size: 0,
-                                aggs: {
-                                    base_os: {
-                                        terms: {
-                                            field: "base_os.raw",
-                                        },
-                                    },
-                                },
-                            },
-                        },
-                    })
-                    .then((result) => {
-                        let chartData: any = [];
-                        if (result.data?.aggregations) {
-                            const aggregations: any = result.data.aggregations;
-                            let base_os = aggregations.base_os;
-                            let buckets: any[] = base_os.buckets;
-                            buckets.forEach((bucket) => {
-                                chartData.push({
-                                    title: Utils.getOsTitle(bucket.key),
-                                    value: bucket.doc_count,
-                                });
-                            });
-                        }
-                        let hits: any = result.data?.hits;
-                        this.setState({
-                            chartData: chartData,
-                            total: `${hits.total.value}`,
-                            statusType: "finished",
-                        });
-                    })
-                    .catch((error) => {
-                        console.error(error);
-                        this.setState({
-                            statusType: "error",
-                        });
-                    });
-            }
-        );
-    }
-
+class VirtualDesktopBaseOSChart extends VirtualDesktopBaseChart<VirtualDesktopBaseOSChartProps> {
     render() {
+        const states = this.props.sessions.reduce((eax: {[key: string]: number}, item: any) => {
+            eax[item.base_os] = (eax[item.base_os] || 0) + 1;
+            return eax;
+        }, {})
+ 
+        let chartData: {title: string, value: number}[] = Object.entries(states).map(([key, value]) => {return {title: key, value: value}});
+
+        const statusType = this.props.loading ? 'loading' : 'finished'
+
         return (
             <PieOrDonutChart
                 headerDescription={"Summary of all virtual desktop sessions by Base OS."}
                 headerText={"Base OS"}
                 enableSelection={false}
-                statusType={this.state.statusType}
+                statusType={statusType}
                 defaultChartMode={"piechart"}
-                data={this.state.chartData}
+                data={chartData}
                 i18nStrings={{
                     detailsValue: "Value",
                     detailsPercentage: "Percentage",
@@ -126,7 +58,7 @@ class VirtualDesktopBaseOSChart extends VirtualDesktopBaseChart<VirtualDesktopBa
                 loadingText="Loading chart"
                 recoveryText="Retry"
                 innerMetricDescription="sessions"
-                innerMetricValue={this.state.total}
+                innerMetricValue={this.props.sessions.length.toString()}
                 empty={
                     <Box textAlign="center" color="inherit">
                         <b>No sessions available</b>

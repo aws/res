@@ -11,3 +11,7 @@
 
 SNAPSHOT_S3_BUCKET_NAME_REGEX = r'^[a-z0-9]+[\.\-\w]*[a-z0-9]+$'
 SNAPSHOT_PATH_REGEX = r'^([\w\.\-\!\*\'\(\)]+[\/]*)+$'
+
+METADATA_FILE_NAME_AND_EXTENSION = "metadata.json"
+TABLE_EXPORT_DESCRIPTION_KEY = "table_export_descriptions"
+VERSION_KEY = "version"

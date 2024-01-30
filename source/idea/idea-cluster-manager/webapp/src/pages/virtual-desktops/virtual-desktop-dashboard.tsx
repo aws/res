@@ -20,19 +20,16 @@ import { AppContext } from "../../common";
 import VirtualDesktopBaseChart from "./charts/virtual-desktop-base-chart";
 import VirtualDesktopStateChart from "./charts/virtual-desktop-state-chart";
 import VirtualDesktopBaseOSChart from "./charts/virtual-desktop-baseos-chart";
-import VirtualDesktopAZDistributionChart from "./charts/virtual-desktop-az-distribution";
 import VirtualDesktopSoftwareStackChart from "./charts/virtual-desktop-software-stack-chart";
-import { Constants } from "../../common/constants";
-import dot from "dot-object";
 import VirtualDesktopProjectChart from "./charts/virtual-desktop-project-chart";
 import { withRouter } from "../../navigation/navigation-utils";
+import { VirtualDesktopSession } from '../../client/data-model'
 
 export interface VirtualDesktopDashboardProps extends IdeaAppLayoutProps, IdeaSideNavigationProps {}
 
 export interface VirtualDesktopDashboardState {
-    moduleInfo: any;
-    settings: any;
-    settingsLoaded: boolean;
+    sessions: VirtualDesktopSession[];
+    loading: boolean
 }
 
 class VirtualDesktopDashboard extends Component<VirtualDesktopDashboardProps, VirtualDesktopDashboardState> {
@@ -41,7 +38,6 @@ class VirtualDesktopDashboard extends Component<VirtualDesktopDashboardProps, Vi
     stateChart: RefObject<VirtualDesktopInstanceTypesChart>;
     baseOsChart: RefObject<VirtualDesktopBaseOSChart>;
     projectChart: RefObject<VirtualDesktopProjectChart>;
-    azDistributionChart: RefObject<VirtualDesktopBaseOSChart>;
     softwareStackChart: RefObject<VirtualDesktopSoftwareStackChart>;
 
     constructor(props: VirtualDesktopDashboardProps) {
@@ -49,35 +45,44 @@ class VirtualDesktopDashboard extends Component<VirtualDesktopDashboardProps, Vi
         this.instanceTypesChart = React.createRef();
         this.stateChart = React.createRef();
         this.baseOsChart = React.createRef();
-        this.azDistributionChart = React.createRef();
         this.softwareStackChart = React.createRef();
         this.projectChart = React.createRef();
-        this.allCharts = [this.instanceTypesChart, this.stateChart, this.baseOsChart, this.azDistributionChart];
+        this.allCharts = [this.instanceTypesChart, this.stateChart, this.baseOsChart];
         this.state = {
-            moduleInfo: {},
-            settings: {},
-            settingsLoaded: false,
+            sessions: [],
+            loading: false
         };
     }
 
     componentDidMount() {
-        AppContext.get()
-            .getClusterSettingsService()
-            .getVirtualDesktopSettings()
-            .then((settings) => {
-                let moduleInfo = AppContext.get().getClusterSettingsService().getModuleInfo(Constants.MODULE_VIRTUAL_DESKTOP_CONTROLLER);
-                this.setState({
-                    moduleInfo: moduleInfo,
-                    settings: settings,
-                    settingsLoaded: true,
-                });
-            });
+        this.loadSessionsData()
     }
 
     reloadAllCharts() {
-        this.allCharts.forEach((chartRef) => {
-            chartRef.current!.reload();
-        });
+        this.loadSessionsData()
+    }
+
+    loadSessionsData() {
+        this.setState({loading: true})
+        AppContext.get().client().virtualDesktopAdmin()
+            .listSessions({
+                paginator: { page_size: 100 }
+            })
+            .then((sessions) => {
+                this.setState({sessions: sessions.listing ?? [], loading: false})
+            })
+            .catch((error) => {
+                this.props.onFlashbarChange({
+                    items: [
+                        {
+                            content: error.message,
+                            type: "error",
+                            dismissible: true,
+                        },
+                    ],
+                });
+                throw error;
+            });
     }
 
     render() {
@@ -136,12 +141,11 @@ class VirtualDesktopDashboard extends Component<VirtualDesktopDashboardProps, Vi
                 contentType={"default"}
                 content={
                     <Grid gridDefinition={[{ colspan: { xxs: 12, xs: 6 } }, { colspan: { xxs: 12, xs: 6 } }, { colspan: { xxs: 12, xs: 6 } }, { colspan: { xxs: 12, xs: 6 } }, { colspan: { xxs: 12, xs: 6 } }, { colspan: { xxs: 12, xs: 6 } }]}>
-                        {this.state.settingsLoaded && <VirtualDesktopInstanceTypesChart ref={this.instanceTypesChart} indexName={dot.pick("opensearch.dcv_session.alias", this.state.settings)} />}
-                        {this.state.settingsLoaded && <VirtualDesktopStateChart ref={this.stateChart} indexName={dot.pick("opensearch.dcv_session.alias", this.state.settings)} />}
-                        {this.state.settingsLoaded && <VirtualDesktopBaseOSChart ref={this.baseOsChart} indexName={dot.pick("opensearch.dcv_session.alias", this.state.settings)} />}
-                        {this.state.settingsLoaded && <VirtualDesktopProjectChart ref={this.projectChart} indexName={dot.pick("opensearch.dcv_session.alias", this.state.settings)} />}
-                        {this.state.settingsLoaded && <VirtualDesktopAZDistributionChart ref={this.azDistributionChart} indexName={dot.pick("opensearch.dcv_session.alias", this.state.settings)} />}
-                        {this.state.settingsLoaded && <VirtualDesktopSoftwareStackChart ref={this.softwareStackChart} indexName={dot.pick("opensearch.dcv_session.alias", this.state.settings)} />}
+                        <VirtualDesktopInstanceTypesChart ref={this.instanceTypesChart} loading={this.state.loading} sessions={this.state.sessions}/>
+                        <VirtualDesktopStateChart ref={this.stateChart} loading={this.state.loading} sessions={this.state.sessions}/>
+                        <VirtualDesktopBaseOSChart ref={this.baseOsChart} loading={this.state.loading} sessions={this.state.sessions}/>
+                        <VirtualDesktopProjectChart ref={this.projectChart} loading={this.state.loading} sessions={this.state.sessions}/>
+                        <VirtualDesktopSoftwareStackChart ref={this.softwareStackChart} loading={this.state.loading} sessions={this.state.sessions}/>
                     </Grid>
                 }
             />

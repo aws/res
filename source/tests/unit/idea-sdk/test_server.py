@@ -15,7 +15,11 @@ import pytest
 from ideasdk.api import ApiInvocationContext, BaseAPI
 from ideasdk.client import SocaClient, SocaClientOptions
 from ideasdk.context import SocaContext, SocaContextOptions
-from ideasdk.protocols import ApiInvokerProtocol, TokenServiceProtocol
+from ideasdk.protocols import (
+    ApiAuthorizationServiceProtocol,
+    ApiInvokerProtocol,
+    TokenServiceProtocol,
+)
 from ideasdk.server import SocaServer, SocaServerOptions
 from ideasdk.utils import Utils
 from ideatestutils import MockConfig
@@ -132,6 +136,11 @@ class ApiInvoker(ApiInvokerProtocol):
         self.calculator_api = CalculatorAPI()
 
     def get_token_service(self) -> Optional[TokenServiceProtocol]:
+        return None
+
+    def get_api_authorization_service(
+        self,
+    ) -> Optional[ApiAuthorizationServiceProtocol]:
         return None
 
     def invoke(self, context: ApiInvocationContext):

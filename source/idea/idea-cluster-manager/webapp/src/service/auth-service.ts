@@ -17,6 +17,7 @@ import IdeaException from "../common/exceptions";
 import { AUTH_LOGIN_CHALLENGE, AUTH_PASSWORD_RESET_REQUIRED, UNAUTHORIZED_ACCESS } from "../common/error-codes";
 import Utils from "../common/utils";
 import { JwtTokenClaims } from "../common/token-utils";
+import { Constants } from "../common/constants";
 import { IdeaClients } from "../client";
 
 export interface AuthServiceProps {
@@ -58,12 +59,12 @@ class AuthService {
      * @param username
      * @param password
      */
-    login(username: string, password: string): Promise<boolean> {
+    login(cognito_username: string, password: string): Promise<boolean> {
         return this.props.clients
             .auth()
             .initiateAuth({
                 auth_flow: "USER_PASSWORD_AUTH",
-                username: username,
+                cognito_username: cognito_username,
                 password: password,
             })
             .then((result) => {
@@ -88,7 +89,7 @@ class AuthService {
             })
             .catch((error) => {
                 if (error.errorCode === AUTH_PASSWORD_RESET_REQUIRED) {
-                    this.props.localStorage.setItem(KEY_FORGOT_PASSWORD_USERNAME, username);
+                    this.props.localStorage.setItem(KEY_FORGOT_PASSWORD_USERNAME, cognito_username);
                 }
                 throw error;
             });
@@ -134,6 +135,13 @@ class AuthService {
             });
     }
 
+    getCognitoUsername(): string {
+        if (this.claims == null) {
+            return "";
+        }
+        return this.claims.cognito_username;
+    }
+
     /**
      * get user name from the JWT token.
      * the JWT token is not validated or verified.
@@ -147,7 +155,7 @@ class AuthService {
         if (this.claims == null) {
             return "";
         }
-        return this.claims.username;
+        return this.claims.db_username;
     }
 
     getEmail(): string {
@@ -195,16 +203,6 @@ class AuthService {
         return expiresIn;
     }
 
-    getGroups(): string[] {
-        if (this.claims == null) {
-            return [];
-        }
-        if (this.claims.groups == null) {
-            return [];
-        }
-        return this.claims.groups;
-    }
-
     getAccessToken(): Promise<string> {
         return this.props.clients.auth().getAccessToken();
     }
@@ -214,26 +212,9 @@ class AuthService {
     }
 
     isAdmin(): boolean {
-        const groups = this.getGroups();
-        return groups.includes("administrators-cluster-group") || groups.includes("managers-cluster-group");
-    }
-
-    hasModuleAccess(moduleName: string): boolean {
-        if (this.isAdmin()) {
-            return true;
-        }
-        const moduleId = Utils.getModuleId(moduleName);
-        const groups = this.getGroups();
-        return groups.includes(Utils.getUserGroupName(moduleId)) || groups.includes(Utils.getAdministratorGroup(moduleId));
-    }
-
-    isModuleAdmin(moduleName: string): boolean {
-        if (this.isAdmin()) {
-            return true;
-        }
-        const moduleId = Utils.getModuleId(moduleName);
-        const groups = this.getGroups();
-        return groups.includes(`${moduleId}-administrators-module-group`);
+        if (this.claims == null)
+            return false
+        return this.claims.role == Constants.ADMIN_ROLE
     }
 
     /**

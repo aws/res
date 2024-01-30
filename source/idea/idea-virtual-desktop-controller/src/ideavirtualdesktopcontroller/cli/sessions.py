@@ -10,8 +10,6 @@
 #  and limitations under the License.
 
 from ideadatamodel import (
-    ReIndexUserSessionsRequest,
-    ReIndexUserSessionsResponse,
     VirtualDesktopSession,
     VirtualDesktopSoftwareStack,
     VirtualDesktopBaseOS,
@@ -38,23 +36,6 @@ import click
 import csv
 from typing import List
 from rich.table import Table
-
-
-@click.command(context_settings=constants.CLICK_SETTINGS, short_help='Re Index all user-sessions to Open Search')
-@click.argument('tokens', nargs=-1)
-def reindex_user_sessions(tokens, **kwargs):
-    context = build_cli_context(unix_socket_timeout=360000)
-
-    request = ReIndexUserSessionsRequest()
-    response = context.unix_socket_client.invoke_alt(
-        namespace='VirtualDesktopAdmin.ReIndexUserSessions',
-        payload=request,
-        result_as=ReIndexUserSessionsResponse
-    )
-    # TODO: PrettyPrint response.
-    # TODO: handle flag --destroy-and-recreate-index
-    print(response)
-
 
 @click.command(context_settings=constants.CLICK_SETTINGS, short_help='Creates a session')
 @click.option('--name', required=True, help='virtual session name')

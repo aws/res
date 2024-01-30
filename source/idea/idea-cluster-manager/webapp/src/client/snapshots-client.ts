@@ -12,12 +12,16 @@
  */
 
 import {
+    ApplySnapshotRequest,
+    ApplySnapshotResult,
     GetModuleInfoRequest,
     GetModuleInfoResult,
     CreateSnapshotRequest,
     CreateSnapshotResult,
     ListSnapshotsRequest,
-    ListSnapshotsResult
+    ListSnapshotsResult,
+    ListApplySnapshotRecordsRequest,
+    ListApplySnapshotRecordsResult
 } from "./data-model";
 import IdeaBaseClient, { IdeaBaseClientProps } from "./base-client";
 
@@ -33,6 +37,12 @@ class SnapshotsClient extends IdeaBaseClient<SnapshotsClientProps> {
 
     listSnapshots(req?: ListSnapshotsRequest): Promise<ListSnapshotsResult> {
         return this.apiInvoker.invoke_alt<ListSnapshotsRequest, ListSnapshotsResult>("Snapshots.ListSnapshots", req);
+    }
+    applySnapshot(req: ApplySnapshotRequest): Promise<ApplySnapshotResult> {
+        return this.apiInvoker.invoke_alt<ApplySnapshotRequest, ApplySnapshotResult>("Snapshots.ApplySnapshot", req)
+    }
+    listAppliedSnapshots(req?: ListApplySnapshotRecordsRequest): Promise<ListApplySnapshotRecordsResult>{
+        return this.apiInvoker.invoke_alt<ListApplySnapshotRecordsRequest,ListApplySnapshotRecordsResult>("Snapshots.ListAppliedSnapshots", req)
     }
 }
 

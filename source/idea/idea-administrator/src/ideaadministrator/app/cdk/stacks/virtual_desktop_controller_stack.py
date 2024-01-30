@@ -13,6 +13,7 @@ import ideaadministrator
 from ideaadministrator.app.cdk.idea_code_asset import IdeaCodeAsset, SupportedLambdaPlatforms
 from ideaadministrator.app.cdk.constructs import (
     ExistingSocaCluster,
+    SubnetFilterKeys,
     OAuthClientIdAndSecret,
     Role,
     InstanceProfile,
@@ -138,8 +139,9 @@ class VirtualDesktopControllerStack(IdeaBaseStack):
 
         self.user_pool = self.lookup_user_pool()
 
+        self.resource_server = None
         self.build_oauth2_client()
-        self.build_access_control_groups(user_pool=self.user_pool)
+        self.update_cluster_manager_client_scopes()
 
         self.build_sqs_queues()
         self.build_scheduled_event_notification_infra()
@@ -187,12 +189,12 @@ class VirtualDesktopControllerStack(IdeaBaseStack):
                     resources=["*"]),
             ]
         )
-        
+
         self.sqs_kms_key = kms.Key(self.stack, "res-sqs-kms",
             enable_key_rotation=True,
             policy=sqs_kms_key_policy
         )
-        
+
         self.sqs_kms_key.add_alias(f'{self.cluster_name}/sqs')
 
         self.event_sqs_queue = SQSQueue(
@@ -334,7 +336,7 @@ class VirtualDesktopControllerStack(IdeaBaseStack):
     def build_oauth2_client(self):
 
         # add resource server
-        resource_server = self.user_pool.add_resource_server(
+        self.resource_server = self.user_pool.add_resource_server(
             id='resource-server',
             identifier=self.module_id,
             scopes=[
@@ -374,7 +376,7 @@ class VirtualDesktopControllerStack(IdeaBaseStack):
             user_pool_client_name=self.module_id
         )
         client.node.add_dependency(session_manager_resource_server)
-        client.node.add_dependency(resource_server)
+        client.node.add_dependency(self.resource_server)
 
         # read secret value by invoking custom resource
         oauth_credentials_lambda_arn = self.context.config().get_string('identity-provider.cognito.oauth_credentials_lambda_arn', required=True)
@@ -397,6 +399,56 @@ class VirtualDesktopControllerStack(IdeaBaseStack):
             scope=self.stack,
             client_id=client.user_pool_client_id,
             client_secret=client_secret.get_att_string('ClientSecret')
+        )
+
+    def update_cluster_manager_client_scopes(self):
+        """
+        Allow the cluster manager client to access VDC APIs via the VDC scopes
+        :return:
+        """
+        lambda_name = f'{self.module_id}-update-cluster-manager-client-scope'
+        update_cluster_manager_client_scope_lambda_role = Role(
+            context=self.context,
+            name=f'{lambda_name}-role',
+            scope=self.stack,
+            assumed_by=['lambda'],
+            description=f'{lambda_name}-role'
+        )
+
+        update_cluster_manager_client_scope_lambda_role.attach_inline_policy(Policy(
+            context=self.context,
+            name=f'{lambda_name}-policy',
+            scope=self.stack,
+            policy_template_name='add-to-user-pool-client-scopes.yml'
+        ))
+        update_cluster_manager_client_scope_lambda = LambdaFunction(
+            context=self.context,
+            name=lambda_name,
+            scope=self.stack,
+            idea_code_asset=IdeaCodeAsset(
+                lambda_package_name='add_to_user_pool_client_scopes',
+                lambda_platform=SupportedLambdaPlatforms.PYTHON
+            ),
+            description='Update cluster manager client scope for accessing vdc',
+            timeout_seconds=180,
+            role=update_cluster_manager_client_scope_lambda_role,
+        )
+        update_cluster_manager_client_scope_lambda.node.add_dependency(self.resource_server)
+
+        cdk.CustomResource(
+            self.stack,
+            f'{self.cluster_name}-update-client-scope',
+            service_token=update_cluster_manager_client_scope_lambda.function_arn,
+            properties={
+                'cluster_name': self.cluster_name,
+                'module_id': self.context.config().get_module_id(constants.MODULE_CLUSTER_MANAGER),
+                'user_pool_id': self.user_pool.user_pool_id,
+                'o_auth_scopes_to_add': [
+                    f'{self.context.config().get_module_id(constants.MODULE_VIRTUAL_DESKTOP_CONTROLLER)}/read',
+                    f'{self.context.config().get_module_id(constants.MODULE_VIRTUAL_DESKTOP_CONTROLLER)}/write',
+                ]
+            },
+            resource_type='Custom::UpdateClusterManagerClient'
         )
 
     def build_dcv_host_infra(self):
@@ -835,6 +887,7 @@ class VirtualDesktopControllerStack(IdeaBaseStack):
             max_capacity=self.context.config().get_int(f'virtual-desktop-controller.{self.CONFIG_MAPPING[component_name]}.autoscaling.max_capacity', default=3),
             new_instances_protected_from_scale_in=self.context.config().get_bool(f'virtual-desktop-controller.{self.CONFIG_MAPPING[component_name]}.autoscaling.new_instances_protected_from_scale_in', default=True),
             cooldown=cdk.Duration.minutes(self.context.config().get_int(f'virtual-desktop-controller.{self.CONFIG_MAPPING[component_name]}.autoscaling.cooldown_minutes', default=5)),
+            default_instance_warmup=cdk.Duration.minutes(self.context.config().get_int(f'virtual-desktop-controller.{self.CONFIG_MAPPING[component_name]}.autoscaling.default_instance_warmup', default=15)),
             health_check=asg.HealthCheck.elb(
                 grace=cdk.Duration.minutes(self.context.config().get_int(f'virtual-desktop-controller.{self.CONFIG_MAPPING[component_name]}.autoscaling.elb_healthcheck.grace_time_minutes', default=15))
             ),
@@ -940,7 +993,7 @@ class VirtualDesktopControllerStack(IdeaBaseStack):
     def _build_dcv_connection_gateway_network_infrastructure(self):
 
         is_public = self.context.config().get_bool('cluster.load_balancers.external_alb.public', default=True)
-        external_nlb_subnets = self.cluster.public_subnets if is_public is True else self.cluster.private_subnets
+        external_nlb_subnets = self.cluster.existing_vpc.get_public_subnets(SubnetFilterKeys.LOAD_BALANCER_SUBNETS) if is_public is True else self.cluster.existing_vpc.get_private_subnets(SubnetFilterKeys.LOAD_BALANCER_SUBNETS)
         self.external_nlb = elbv2.NetworkLoadBalancer(
             self.stack,
             f'{self.cluster_name}-{self.module_id}-external-nlb',
