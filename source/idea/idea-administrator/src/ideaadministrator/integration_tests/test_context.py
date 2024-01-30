@@ -135,7 +135,7 @@ class TestContext:
             self.idea_context.info('Initializing Admin Authentication ...')
             result = self._admin_http_client.invoke_alt('Auth.InitiateAuth', InitiateAuthRequest(
                 auth_flow='USER_PASSWORD_AUTH',
-                username=self.admin_username,
+                cognito_username=self.admin_username,
                 password=self.admin_password
             ), result_as=InitiateAuthResult)
             admin_auth = result.auth
@@ -147,7 +147,7 @@ class TestContext:
             self.idea_context.info('Renewing Admin Authentication Access Token ...')
             result = self._admin_http_client.invoke_alt('Auth.InitiateAuth', InitiateAuthRequest(
                 auth_flow='REFRESH_TOKEN_AUTH',
-                username=self.admin_username,
+                cognito_username=self.admin_username,
                 refresh_token=self.admin_auth.refresh_token
             ), result_as=InitiateAuthResult)
 
@@ -165,7 +165,7 @@ class TestContext:
             self.idea_context.info('Initializing Non-Admin Authentication ...')
             result = self._admin_http_client.invoke_alt('Auth.InitiateAuth', InitiateAuthRequest(
                 auth_flow='USER_PASSWORD_AUTH',
-                username=self.non_admin_username,
+                cognito_username=self.non_admin_username,
                 password=self.non_admin_password
             ), result_as=InitiateAuthResult)
             non_admin_auth = result.auth
@@ -177,7 +177,7 @@ class TestContext:
             self.idea_context.info('Renewing Non-Admin Authentication Access Token ...')
             result = self._admin_http_client.invoke_alt('Auth.InitiateAuth', InitiateAuthRequest(
                 auth_flow='REFRESH_TOKEN_AUTH',
-                username=self.non_admin_username,
+                cognito_username=self.non_admin_username,
                 refresh_token=self.non_admin_auth.refresh_token
             ), result_as=InitiateAuthResult)
 

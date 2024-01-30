@@ -432,7 +432,8 @@ class ApiInvocationHandler:
     def get_username(self, http_request) -> Optional[str]:
         try:
             token_service = self.api_invoker.get_token_service()
-            if token_service is None:
+            api_authorization_service = self.api_invoker.get_api_authorization_service()
+            if not token_service or not api_authorization_service:
                 return None
             token = self.get_token(http_request)
             token_type = Utils.get_value_as_string('token_type', token)
@@ -441,7 +442,8 @@ class ApiInvocationHandler:
             if token_type != 'Bearer':
                 return None
             access_token = Utils.get_value_as_string('token', token)
-            return token_service.get_username(access_token)
+            decoded_token = token_service.decode_token(access_token)
+            return api_authorization_service.get_username(decoded_token)
         except Exception:  # noqa
             return None
 
@@ -462,11 +464,13 @@ class ApiInvocationHandler:
             invocation_context = ApiInvocationContext(
                 context=self.context,
                 request=request,
+                http_headers=http_request.headers,
                 invocation_source=invocation_source,
                 group_name_helper=self.group_name_helper,
                 logger=self.logger,
                 token=self.get_token(http_request),
                 token_service=self.api_invoker.get_token_service(),
+                api_authorization_service = self.api_invoker.get_api_authorization_service(),
             )
 
             # validate request prior to logging

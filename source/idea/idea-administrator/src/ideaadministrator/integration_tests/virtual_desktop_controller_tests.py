@@ -242,58 +242,6 @@ def test_admin_get_session_connection_info(context: TestContext):
     finally:
         vdc_test_helper.after_test(test_case_name, test_results_map, test_case_id)
 
-
-def test_admin_reindex_user_sessions(context: TestContext):
-    test_case_name = 'Test Admin Reindex User Sessions'
-    test_case_id = test_constants.VIRTUAL_DESKTOP_TEST_ADMIN_REINDEX_USER_SESSIONS
-    admin_access_token = context.get_admin_access_token()
-    test_results_map = SessionsTestResultMap(test_case_name)
-    vdc_api_helper = VirtualDesktopApiHelper(context, admin_access_token, context.admin_username)
-    vdc_test_helper = VirtualDesktopTestHelper(context)
-
-    try:
-        vdc_test_helper.before_test(test_case_name)
-
-        response = vdc_api_helper.reindex_user_session()
-
-        if response is not None:
-            vdc_test_helper.on_test_pass(test_case_name, test_results_map)
-
-        else:
-            vdc_test_helper.on_test_fail(test_case_name, response, test_results_map)
-
-    except exceptions.SocaException as error:
-        vdc_test_helper.on_test_exception(test_case_name, error, test_results_map)
-
-    finally:
-        vdc_test_helper.after_test(test_case_name, test_results_map, test_case_id)
-
-
-def test_admin_reindex_software_stacks(context: TestContext):
-    test_case_name = 'Test Admin Reindex Software Stacks'
-    test_case_id = test_constants.VIRTUAL_DESKTOP_TEST_ADMIN_REINDEX_SOFTWARE_STACKS
-    admin_access_token = context.get_admin_access_token()
-    test_results_map = SessionsTestResultMap(test_case_name)
-    vdc_api_helper = VirtualDesktopApiHelper(context, admin_access_token, context.admin_username)
-    vdc_test_helper = VirtualDesktopTestHelper(context)
-    try:
-        vdc_test_helper.before_test(test_case_name)
-
-        response = vdc_api_helper.reindex_software_stacks()
-
-        if response is not None:
-            vdc_test_helper.on_test_pass(test_case_name, test_results_map)
-
-        else:
-            vdc_test_helper.on_test_fail(test_case_name, response, test_results_map)
-
-    except exceptions.SocaException as error:
-        vdc_test_helper.on_test_exception(test_case_name, error, test_results_map)
-
-    finally:
-        vdc_test_helper.after_test(test_case_name, test_results_map, test_case_id)
-
-
 def test_admin_create_permission_profile(context: TestContext):
     test_case_name = 'Test Admin Create Permission Profile'
     test_case_id = test_constants.VIRTUAL_DESKTOP_TEST_ADMIN_CREATE_PERMISSION_PROFILE
@@ -850,6 +798,33 @@ def test_describe_sessions(context: TestContext):
         vdc_test_helper.after_test(test_case_name, test_results_map, test_case_id)
 
 
+def test_admin_delete_software_stack(context: TestContext):
+    test_case_name = 'Test Admin Delete Software Stack'
+    test_case_id = test_constants.VIRTUAL_DESKTOP_TEST_ADMIN_DELETE_SOFTWARE_STACK
+    admin_access_token = context.get_admin_access_token()
+    test_results_map = SessionsTestResultMap(test_case_name)
+    vdc_test_helper = VirtualDesktopTestHelper(context)
+    try:
+        vdc_test_helper.before_test(test_case_name)
+
+        if vdc_test_helper.is_new_session_created():
+            session_helper = SessionsTestHelper(context, vdc_test_helper.get_new_session(), context.admin_username, admin_access_token)
+            response = session_helper.delete_software_stack(vdc_test_helper.get_new_software_stack())
+
+            vdc_test_helper.on_test_pass(test_case_name, test_results_map)
+
+        else:
+            testcase_error_message = f'Created session is None. Skipping {test_case_name}. '
+            test_results_map.update_test_result_map(VirtualDesktopSessionTestResults.FAILED, testcase_error_message)
+            context.error(testcase_error_message)
+
+    except exceptions.SocaException as error:
+        vdc_test_helper.on_test_exception(test_case_name, error, test_results_map)
+
+    finally:
+        vdc_test_helper.after_test(test_case_name, test_results_map, test_case_id)
+
+
 def test_admin_delete_sessions(context: TestContext):
     test_case_name = 'Test Admin Delete Sessions'
     test_case_id = test_constants.VIRTUAL_DESKTOP_TEST_ADMIN_DELETE_SESSIONS
@@ -1267,14 +1242,6 @@ TEST_CASES = [
         'test_case': test_admin_get_session_connection_info
     },
     {
-        'test_case_id': test_constants.VIRTUAL_DESKTOP_TEST_ADMIN_REINDEX_USER_SESSIONS,
-        'test_case': test_admin_reindex_user_sessions
-    },
-    {
-        'test_case_id': test_constants.VIRTUAL_DESKTOP_TEST_ADMIN_REINDEX_SOFTWARE_STACKS,
-        'test_case': test_admin_reindex_software_stacks
-    },
-    {
         'test_case_id': test_constants.VIRTUAL_DESKTOP_TEST_ADMIN_CREATE_PERMISSION_PROFILE,
         'test_case': test_admin_create_permission_profile
     },
@@ -1394,5 +1361,9 @@ TEST_CASES = [
     {
         'test_case_id': test_constants.VIRTUAL_DESKTOP_TEST_ADMIN_DELETE_SESSIONS,
         'test_case': test_admin_delete_sessions
+    },
+    {
+        'test_case_id': test_constants.VIRTUAL_DESKTOP_TEST_ADMIN_DELETE_SOFTWARE_STACK,
+        'test_case': test_admin_delete_software_stack
     }
 ]

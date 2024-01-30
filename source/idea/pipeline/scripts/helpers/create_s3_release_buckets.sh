@@ -30,12 +30,12 @@ function run(){
     done
     echo -e "${CYAN}Attaching role with permission to buckets"
     aws iam put-role-policy --role-name $codeBuildRoleName --policy-name $BUCKET_PREFIX-policy \
-        --policy-document "{ \"Statement\": 
+        --policy-document "{ \"Statement\":
             [{
-                    \"Effect\": \"Allow\", 
-                    \"Action\": [\"s3:PutObject\", \"s3:getBucketLocation\", \"s3:ListBucket\", \"s3:GetObject\", \"s3:DeleteObject\"], 
-                    \"Resource\": [\"arn:aws:s3:::$BUCKET_PREFIX-*\"] 
-                } 
+                    \"Effect\": \"Allow\",
+                    \"Action\": [\"s3:PutObject\", \"s3:getBucketLocation\", \"s3:ListBucket\", \"s3:GetObject\", \"s3:DeleteObject\"],
+                    \"Resource\": [\"arn:aws:s3:::$BUCKET_PREFIX-*\"]
+                }
             ]}"
 }
 

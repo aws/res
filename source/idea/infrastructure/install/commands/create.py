@@ -1,14 +1,15 @@
 #  Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 #  SPDX-License-Identifier: Apache-2.0
 
-from typing import Any
+from typing import Any, Union
 
 import aws_cdk
 
+from idea.batteries_included.parameters.parameters import BIParameters
 from idea.infrastructure.install.parameters.common import CommonKey
 from idea.infrastructure.install.parameters.customdomain import CustomDomainKey
 from idea.infrastructure.install.parameters.directoryservice import DirectoryServiceKey
-from idea.infrastructure.install.parameters.parameters import Parameters
+from idea.infrastructure.install.parameters.parameters import RESParameters
 from idea.infrastructure.install.parameters.shared_storage import SharedStorageKey
 
 VALUES_FILE_PATH = "values.yml"
@@ -21,7 +22,7 @@ class Create:
     automagically
     """
 
-    def __init__(self, params: Parameters):
+    def __init__(self, params: Union[RESParameters, BIParameters]):
         self.params = params
 
     def get_commands(self) -> list[str]:
@@ -40,12 +41,13 @@ class Create:
         1. Generate values.yml using parameters
         2. Render settings files from generated values.yml
         3. Write rendered settings to dynamo
-        4. Update the dynamo settings table for AD
+        4. Update the dynamo settings table for infrastructure host AMIs, AD, and custom domain
         5. Remove the local copy of config, and replace with what's in dynamo
         """
         return [
             *self._create_values_file(),
             *self._render_settings_from_values_and_write_to_dynamo(),
+            *self._update_infrastructure_host_ami_config(),
             *self._update_directory_service_config(),
             *self._update_custom_domain_config(),
             f"rm -rf /root/.idea/clusters/{self.params.get_str(CommonKey.CLUSTER_NAME)}/{aws_cdk.Aws.REGION}/config",
@@ -77,6 +79,28 @@ class Create:
             f"{EXE} config generate --values-file {VALUES_FILE_PATH} --force --existing-resources --regenerate",
             f"{EXE} config update --overwrite --force {self._get_suffix()}",
         ]
+
+    def _update_infrastructure_host_ami_config(self) -> list[str]:
+        """
+        Generate commands to update each of the settings for the custom infrastructure host amis
+        """
+
+        # Construct none_null to check none of the custom values are null
+        vals = ""
+        nvals = len(self._get_infrastructure_host_ami_settings().keys())
+        for key, value in self._get_infrastructure_host_ami_settings().items():
+            vals += f" {value} "
+        quote = r'"'
+        vals = f"{quote} {vals} {quote}"
+
+        # Update only if none of the custom values are null
+        config_update_commands: list[str] = []
+        for key, value in self._get_infrastructure_host_ami_settings().items():
+            cmd = f" if [ $(echo {vals}|wc -w) -eq {nvals} ] ; then "
+            cmd += f" {EXE} config set Key={key},Type=str,Value={value} --force {self._get_suffix()}; fi"
+            config_update_commands.append(cmd)
+
+        return config_update_commands
 
     def _update_custom_domain_config(self) -> list[str]:
         """
@@ -133,6 +157,28 @@ class Create:
         )
         return config_update_commands
 
+    def _get_infrastructure_host_ami_settings(self) -> dict[str, Any]:
+        """
+        Returns a mapping of RES settings key to parameters for updating the infrastructure host ami config
+        """
+        return {
+            "vdc.dcv_broker.autoscaling.instance_ami": self.params.get_str(
+                CommonKey.INFRASTRUCTURE_HOST_AMI
+            ),
+            "vdc.dcv_connection_gateway.autoscaling.instance_ami": self.params.get_str(
+                CommonKey.INFRASTRUCTURE_HOST_AMI
+            ),
+            "bastion-host.instance_ami": self.params.get_str(
+                CommonKey.INFRASTRUCTURE_HOST_AMI
+            ),
+            "vdc.controller.autoscaling.instance_ami": self.params.get_str(
+                CommonKey.INFRASTRUCTURE_HOST_AMI
+            ),
+            "cluster-manager.ec2.autoscaling.instance_ami": self.params.get_str(
+                CommonKey.INFRASTRUCTURE_HOST_AMI
+            ),
+        }
+
     def _get_directory_service_settings(self) -> dict[str, Any]:
         """
         Returns a mapping of RES settings key to parameters for updating the directoryservice config
@@ -167,6 +213,9 @@ class Create:
             ),
             "directoryservice.tls_certificate_secret_arn": self.params.get_str(
                 DirectoryServiceKey.DOMAIN_TLS_CERTIFICATE_SECRET_ARN
+            ),
+            "directoryservice.sssd.ldap_id_mapping": self.params.get_str(
+                DirectoryServiceKey.ENABLE_LDAP_ID_MAPPING
             ),
         }
 
@@ -210,8 +259,8 @@ client_ip:
 - {self.params.get_str(CommonKey.CLIENT_IP)}
 prefix_list_ids:
 - {self.params.get_str(CommonKey.CLIENT_PREFIX_LIST)}
-alb_public: true
-use_vpc_endpoints: false
+alb_public: {self.params.get_str(CommonKey.IS_LOAD_BALANCER_INTERNET_FACING)}
+use_vpc_endpoints: true
 directory_service_provider: activedirectory
 enable_aws_backup: false
 kms_key_type: aws-managed
@@ -223,22 +272,24 @@ vpc_id: {self.params.get_str(CommonKey.VPC_ID)}
 existing_resources:
 - subnets:public
 - subnets:private
+- subnets:external_load_balancer
+- subnets:infrastructure_hosts
+- subnets:dcv_session
 - shared-storage:home
-public_subnet_ids:
+load_balancer_subnet_ids:
 $(echo "{
     aws_cdk.Stack.of(
-        self.params.get(CommonKey.PUBLIC_SUBNETS).stack
+        self.params.get(CommonKey.LOAD_BALANCER_SUBNETS).stack
     ).to_json_string(
-        self.params.get(CommonKey.PUBLIC_SUBNETS).value_as_list
-    )
+        self.params.get(CommonKey.LOAD_BALANCER_SUBNETS).value_as_list)
 }" | tr -d '[]" ' | tr ',' '\n' | sed 's/^/- /')
-private_subnet_ids:
+infrastructure_host_subnet_ids:
 $(echo "{
-    aws_cdk.Stack.of(
-        self.params.get(CommonKey.PRIVATE_SUBNETS).stack
-    ).to_json_string(
-        self.params.get(CommonKey.PRIVATE_SUBNETS).value_as_list
-    )
+    aws_cdk.Stack.of(self.params.get(CommonKey.INFRASTRUCTURE_HOST_SUBNETS).stack).to_json_string(self.params.get(CommonKey.INFRASTRUCTURE_HOST_SUBNETS).value_as_list)
+}" | tr -d '[]" ' | tr ',' '\n' | sed 's/^/- /')
+dcv_session_private_subnet_ids:
+$(echo "{
+    aws_cdk.Stack.of(self.params.get(CommonKey.VDI_SUBNETS).stack).to_json_string(self.params.get(CommonKey.VDI_SUBNETS).value_as_list)
 }" | tr -d '[]" ' | tr ',' '\n' | sed 's/^/- /')
 enabled_modules:
 - metrics

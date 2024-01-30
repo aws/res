@@ -52,7 +52,7 @@ base_os: ~
 instance_ami: ~
 volume_size: 200
 
-# Provide a list of module names to be enabled. cluster, directoryservice, cluster-manager and analytics are mandatory modules for IDEA to operate and will always be deployed
+# Provide a list of module names to be enabled. cluster, directoryservice and cluster-manager are mandatory modules for RES to operate and will always be deployed
 enabled_modules: [ ]
 
 # metrics
@@ -89,20 +89,22 @@ dcv_connection_gateway_custom_certificate_certificate_secret_arn: ~
 dcv_connection_gateway_custom_certificate_private_key_secret_arn: ~
 dcv_connection_gateway_custom_dns_hostname: ~
 
+# Virtual Desktop Controller - DCV Session Subnets
+dcv_session_private_subnet_ids: []
+
 # Build cluster using existing resources
 use_existing_vpc: false
 vpc_id: ~ # value is required when use_existing_vpc == true
 private_subnet_ids: [ ] # value is required when use_existing_vpc == true
 public_subnet_ids: [ ] # value is required when use_existing_vpc == true
+load_balancer_subnet_ids: [] # value is required when use_existing_vpc == true
+infrastructure_host_subnet_ids: [] # value is required when use_existing_vpc == true
 
 use_existing_internal_fs: false # use_existing_vpc should be true when use_existing_internal_fs == true
 existing_internal_fs_id: ~ # value is required when use_existing_internal_fs == true
 
 use_existing_home_fs: false # use_existing_vpc should be true when use_existing_home_fs == true
 existing_home_fs_id: ~ # value is required when use_existing_home_fs == true
-
-use_existing_opensearch_cluster: false # use_existing_vpc should be true when use_existing_opensearch_cluster == true
-opensearch_domain_endpoint: ~ # value is required when use_existing_opensearch_cluster == true
 
 use_existing_directory_service: false # use_existing_vpc should be true when use_existing_directory_service == true
 directory_id: ~ # value is required when use_existing_directory_service == true

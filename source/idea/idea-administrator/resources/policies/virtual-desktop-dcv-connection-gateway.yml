@@ -18,10 +18,12 @@ Statement:
       - tag:GetResources
       - tag:GetTagValues
       - tag:GetTagKeys
-      - iam:PassRole
     Resource: '*'
     Effect: Allow
-
+  - Action:
+      - iam:PassRole
+    Resource: '{{ context.arns.get_iam_arn("vdc-gateway-role")}}'
+    Effect: Allow
   - Action:
       - s3:GetObject
       - s3:ListBucket

@@ -231,83 +231,6 @@ class CognitoUserPool:
         )
         self._context.cache().short_term().delete(self.build_user_cache_key(username))
 
-    def admin_add_user_as_admin(self, username: str):
-        self.admin_add_user_to_group(username=username, group_name=self.admin_group_name)
-
-        # todo: Remove once use of RES specific groups is removed
-        for admin_group in constants.RES_ADMIN_GROUPS:
-            try:
-                self._logger.info(f'Adding username {username} to RES_ADMIN_GROUP: {admin_group}')
-                self._context.accounts.add_users_to_group([username], admin_group, bypass_active_user_check=True)
-            except Exception as e:
-                self._logger.debug(f"Could not add user {username} to RES_ADMIN_GROUP: {admin_group}")
-
-    def admin_add_user_to_group(self, username: str, group_name: str):
-        if Utils.is_empty(username):
-            raise exceptions.invalid_params('username is required')
-        if Utils.is_empty(group_name):
-            raise exceptions.invalid_params('username is required')
-
-        self._context.aws().cognito_idp().admin_add_user_to_group(
-            UserPoolId=self.user_pool_id,
-            Username=username,
-            GroupName=group_name
-        )
-
-    def admin_link_idp_for_user(self, username: str, email: str):
-
-        if Utils.is_empty(username):
-            raise exceptions.invalid_params('username is required')
-
-        cluster_administrator = self._context.config().get_string('cluster.administrator_username', required=True)
-        if username in cluster_administrator or username.startswith('clusteradmin'):
-            self._logger.info(f'system administration user found: {username}. skip linking with IDP.')
-            return
-
-        provider_name = self._context.config().get_string('identity-provider.cognito.sso_idp_provider_name', required=True)
-        provider_type = self._context.config().get_string('identity-provider.cognito.sso_idp_provider_type', required=True)
-        if provider_type == constants.SSO_IDP_PROVIDER_OIDC:
-            provider_email_attribute = 'email'
-        else:
-            provider_email_attribute = self._context.config().get_string('identity-provider.cognito.sso_idp_provider_email_attribute', required=True)
-
-        self._context.aws().cognito_idp().admin_link_provider_for_user(
-            UserPoolId=self.user_pool_id,
-            DestinationUser={
-                'ProviderName': 'Cognito',
-                'ProviderAttributeName': 'cognito:username',
-                'ProviderAttributeValue': username
-            },
-            SourceUser={
-                'ProviderName': provider_name,
-                'ProviderAttributeName': provider_email_attribute,
-                'ProviderAttributeValue': email
-            }
-        )
-
-    def admin_remove_user_as_admin(self, username: str):
-        self.admin_remove_user_from_group(username=username, group_name=self.admin_group_name)
-
-        # todo: Remove once use of RES specific groups is removed
-        for admin_group in constants.RES_ADMIN_GROUPS:
-            try:
-                self._logger.info(f'Removing username {username} from RES_ADMIN_GROUP: {admin_group}')
-                self._context.accounts.remove_users_from_group([username], admin_group)
-            except Exception as e:
-                self._logger.debug(f"Could not add user {username} to RES_ADMIN_GROUP: {admin_group}")
-
-    def admin_remove_user_from_group(self, username: str, group_name: str):
-        if Utils.is_empty(username):
-            raise exceptions.invalid_params('username is required')
-        if Utils.is_empty(group_name):
-            raise exceptions.invalid_params('group_name is required')
-
-        self._context.aws().cognito_idp().admin_remove_user_from_group(
-            UserPoolId=self.user_pool_id,
-            Username=username,
-            GroupName=group_name
-        )
-
     def password_updated(self, username: str):
         if not self.is_activedirectory():
             return
@@ -396,27 +319,27 @@ class CognitoUserPool:
 
     def initiate_username_password_auth(self, request: InitiateAuthRequest) -> InitiateAuthResult:
 
-        username = request.username
-        if Utils.is_empty(username):
-            raise exceptions.invalid_params('username is required.')
+        cognito_username = request.cognito_username
+        if not cognito_username:
+            raise exceptions.invalid_params('cognito username is required.')
 
         password = request.password
-        if Utils.is_empty(password):
+        if not password:
             raise exceptions.invalid_params('password is required.')
 
         # In SSO-enabled mode - local auth is not allowed except for clusteradmin
         cluster_admin_username = self._context.config().get_string('cluster.administrator_username', required=True)
         sso_enabled = self._context.config().get_bool('identity-provider.cognito.sso_enabled', required=True)
-        if sso_enabled and (username != cluster_admin_username):
-            self._logger.error(f"Ignoring local authentication request with SSO enabled. Username: {username}")
-            raise exceptions.unauthorized_access(f"Ignoring local authentication request with SSO enabled. Username: {username}")
+        if sso_enabled and (cognito_username != cluster_admin_username):
+            self._logger.error(f"Ignoring local authentication request with SSO enabled. Username: {cognito_username}")
+            raise exceptions.unauthorized_access(f"Ignoring local authentication request with SSO enabled. Username: {cognito_username}")
         try:
             cognito_result = self._context.aws().cognito_idp().admin_initiate_auth(
                 AuthFlow='ADMIN_USER_PASSWORD_AUTH',
                 AuthParameters={
-                    'USERNAME': username,
+                    'USERNAME': cognito_username,
                     'PASSWORD': password,
-                    'SECRET_HASH': self.get_secret_hash(username)
+                    'SECRET_HASH': self.get_secret_hash(cognito_username)
                 },
                 UserPoolId=self.user_pool_id,
                 ClientId=self.get_client_id()
@@ -489,7 +412,7 @@ class CognitoUserPool:
             auth=auth_result
         )
 
-    def initiate_refresh_token_auth(self, username: str, refresh_token: str, sso: bool = False):
+    def initiate_refresh_token_auth(self, username: str, refresh_token: str, sso: bool = False) -> InitiateAuthResult:
 
         if Utils.is_empty(username):
             raise exceptions.invalid_params('username is required.')
@@ -516,7 +439,7 @@ class CognitoUserPool:
 
         cognito_auth_result = Utils.get_value_as_dict('AuthenticationResult', cognito_result)
         auth_result = self.build_auth_result(cognito_auth_result)
-        return RespondToAuthChallengeResult(
+        return InitiateAuthResult(
             auth=auth_result
         )
 

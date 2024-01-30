@@ -16,9 +16,8 @@ from ideasdk.context import SocaContext
 
 from ideaclustermanager.app.accounts.auth_utils import AuthUtils
 from ideaclustermanager.app.accounts.cognito_user_pool import CognitoUserPool
-
-from typing import Optional, Dict
-from boto3.dynamodb.conditions import Attr
+from typing import Optional, Dict, List
+from boto3.dynamodb.conditions import Attr, Key
 
 
 class UserDAO:
@@ -47,6 +46,10 @@ class UserDAO:
                     {
                         'AttributeName': 'role',
                         'AttributeType': 'S'
+                    },
+                    {
+                        'AttributeName': 'email',
+                        'AttributeType': 'S'
                     }
                 ],
                 'KeySchema': [
@@ -71,6 +74,24 @@ class UserDAO:
                                 "username"
                             ]
                         },
+                    },
+                    {
+                        "IndexName": "email-index",
+                        "KeySchema": [
+                            {
+                                "AttributeName": "email",
+                                "KeyType": "HASH"
+                            }
+                        ],
+                        "Projection": {
+                            "ProjectionType": "INCLUDE",
+                            "NonKeyAttributes": [
+                                "role",
+                                "username",
+                                "is_active",
+                                "enabled"
+                            ]
+                        },
                     }
                 ],
                 'BillingMode': 'PAY_PER_REQUEST'
@@ -79,7 +100,8 @@ class UserDAO:
         )
         self.table = self.context.aws().dynamodb_table().Table(self.get_table_name())
 
-    def convert_from_db(self, user: Dict) -> User:
+    @staticmethod
+    def convert_from_db(user: Dict) -> User:
         user_entry = User(
             **{
                 'username': Utils.get_value_as_string('username', user),
@@ -174,6 +196,16 @@ class UserDAO:
             self.logger.debug(f"user_lookup: {result} - {_lu_stop - _lu_start}ms")
         return Utils.get_value_as_dict('Item', result)
 
+    def get_user_by_email(self, email: str) -> Optional[List[Dict]]:
+        email = AuthUtils.sanitize_email(email)
+        result = self.table.query(
+            IndexName = "email-index",
+            KeyConditionExpression = Key('email').eq(email),
+        )
+        if not result:
+            return None
+
+        return result["Items"]
 
     def update_user(self, user: Dict) -> Dict:
         username = Utils.get_value_as_string('username', user)

@@ -17,6 +17,7 @@ from ideaclustermanager.cli.accounts import accounts
 from ideaclustermanager.cli.groups import groups
 from ideaclustermanager.cli.ldap_commands import ldap_commands
 from ideaclustermanager.cli.module import app_module_clean_up
+from ideaclustermanager.cli.snapshots import snapshots
 
 import sys
 import click
@@ -34,6 +35,7 @@ def main():
 main.add_command(logs)
 main.add_command(accounts)
 main.add_command(groups)
+main.add_command(snapshots)
 main.add_command(ldap_commands)
 main.add_command(app_module_clean_up)
 

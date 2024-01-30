@@ -241,6 +241,11 @@ class ArnBuilder:
 
     def get_route53_hostedzone_arn(self) -> str:
         return f'arn:{self.config.get_string("cluster.aws.partition", required=True)}:route53:::hostedzone/*'
+    
+    def get_iam_arn(self, role_name_suffix: str) -> str:
+        return self.get_arn(service='iam',
+                            resource=f'role/{self.config.get_string("cluster.cluster_name")}-{role_name_suffix}-{self.config.get_string("cluster.aws.region")}',
+                            aws_region='')
 
     @property
     def kms_secretsmanager_key_arn(self) -> str:
@@ -278,18 +283,6 @@ class ArnBuilder:
                         aws_region=self.config.get_string("cluster.aws.region")))
 
     @property
-    def kms_opensearch_key_arn(self) -> str:
-        return(self.get_arn(service='kms',
-                        resource=f'key/{self.config.get_string("analytics.opensearch.kms_key_id")}',
-                        aws_region=self.config.get_string("cluster.aws.region")))
-
-    @property
-    def kms_kinesis_key_arn(self) -> str:
-        return(self.get_arn(service='kms',
-                        resource=f'key/{self.config.get_string("analytics.kinesis.kms_key_id")}',
-                        aws_region=self.config.get_string("cluster.aws.region")))
-
-    @property
     def kms_key_arn(self) -> List[str]:
         kms_key_arns = []
         service_kms_key_ids = {
@@ -299,8 +292,6 @@ class ArnBuilder:
                 'dynamodb': 'cluster.dynamodb.kms_key_id',
                 'ebs': 'cluster.ebs.kms_key_id',
                 'backup': 'cluster.backups.backup_vault.kms_key_id',
-                'opensearch': 'analytics.opensearch.kms_key_id',
-                'kinesis': 'analytics.kinesis.kms_key_id'
                 }
         service_kms_key_arns = {
                 'secretsmanager': self.kms_secretsmanager_key_arn,
@@ -309,8 +300,6 @@ class ArnBuilder:
                 'dynamodb': self.kms_dynamodb_key_arn,
                 'ebs': self.kms_ebs_key_arn,
                 'backup': self.kms_backup_key_arn,
-                'opensearch': self.kms_opensearch_key_arn,
-                'kinesis': self.kms_kinesis_key_arn
                 }
         for service in service_kms_key_arns.keys():
             if self.config.get_string(service_kms_key_ids[service]) is not None:

@@ -23,7 +23,6 @@ fastcounter
 psutil
 blinker
 troposphere
-opensearch-py
 Jinja2
 cryptography
 PyJWT

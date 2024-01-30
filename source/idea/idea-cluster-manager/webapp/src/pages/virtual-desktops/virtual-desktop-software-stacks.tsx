@@ -42,7 +42,7 @@ const VIRTUAL_DESKTOP_SOFTWARE_STACKS_TABLE_COLUMN_DEFINITIONS: TableProps.Colum
     {
         id: "name",
         header: "Name",
-        cell: (e) => <Link href={`/#/virtual-desktop/software-stacks/${e.stack_id}`}>{e.name}</Link>,
+        cell: (e) => <Link href={`/#/virtual-desktop/software-stacks/${e.stack_id}/${e.base_os}`}>{e.name}</Link>,
     },
     {
         id: "description",

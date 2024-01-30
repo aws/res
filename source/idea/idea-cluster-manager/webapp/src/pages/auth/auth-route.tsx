@@ -36,9 +36,9 @@ class IdeaAuthenticatedRoute extends Component<IdeaAuthRouteProps> {
         if (this.props.isLoggedIn) {
             if (isAuthRoute) {
                 return <Navigate to="/" />;
-            } else if (isVirtualDesktopAdminRoute && !(context.getClusterSettingsService().isVirtualDesktopDeployed() && context.auth().isModuleAdmin(Constants.MODULE_VIRTUAL_DESKTOP_CONTROLLER))) {
+            } else if (isVirtualDesktopAdminRoute && (!context.getClusterSettingsService().isVirtualDesktopDeployed() || !context.auth().isAdmin())) {
                 return <Navigate to="/" />;
-            } else if (isClusterAdminRoute && !context.auth().isModuleAdmin(Constants.MODULE_CLUSTER_MANAGER)) {
+            } else if (isClusterAdminRoute && !context.auth().isAdmin()) {
                 return <Navigate to="/" />;
             } else {
                 return this.props.children;

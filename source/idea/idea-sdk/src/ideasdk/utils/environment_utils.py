@@ -86,3 +86,11 @@ class EnvironmentUtils:
             required=required,
             default=default
         )
+
+    @staticmethod
+    def res_test_mode(required=False, default=None):
+        return EnvironmentUtils.get_environment_variable(
+            key='RES_TEST_MODE',
+            required=required,
+            default=default
+        )

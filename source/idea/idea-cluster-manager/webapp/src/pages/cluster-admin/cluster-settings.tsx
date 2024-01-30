@@ -33,7 +33,6 @@ export interface ClusterSettingsState {
     identityProvider: any;
     directoryservice: any;
     clusterManager: any;
-    analytics: any;
     metrics: any;
     activeTabId: string;
 }
@@ -52,7 +51,6 @@ class ClusterSettings extends Component<ClusterSettingsProps, ClusterSettingsSta
             identityProvider: {},
             directoryservice: {},
             clusterManager: {},
-            analytics: {},
             metrics: {},
             activeTabId: DEFAULT_ACTIVE_TAB_ID,
         };
@@ -150,8 +148,6 @@ class ClusterSettings extends Component<ClusterSettingsProps, ClusterSettingsSta
         // 3
         promises.push(clusterSettingsService.getClusterManagerSettings(false));
         // 4
-        promises.push(clusterSettingsService.getAnalyticsSettings());
-        // 5
         if (clusterSettingsService.isMetricsEnabled()) {
             promises.push(clusterSettingsService.getMetricsSettings());
         }
@@ -163,7 +159,6 @@ class ClusterSettings extends Component<ClusterSettingsProps, ClusterSettingsSta
                 identityProvider: result[1],
                 directoryservice: result[2],
                 clusterManager: result[3],
-                analytics: result[4],
                 metrics: clusterSettingsService.isMetricsEnabled() ? result[5] : {},
                 activeTabId: activeTabId,
             }, () => {
@@ -502,11 +497,6 @@ class ClusterSettings extends Component<ClusterSettingsProps, ClusterSettingsSta
             return provider === "activedirectory" || provider === "aws_managed_activedirectory";
         };
 
-        const getOpenSearchDashboardUrl = () => {
-            let externalAlbUrl = ConfigUtils.getExternalAlbUrl(this.state.cluster);
-            return `${externalAlbUrl}/_dashboards`;
-        };
-
         const isMetricsEnabled = () => {
             return AppContext.get().getClusterSettingsService().isMetricsEnabled();
         };
@@ -731,8 +721,6 @@ class ClusterSettings extends Component<ClusterSettingsProps, ClusterSettingsSta
                                                 <ColumnLayout variant={"text-grid"} columns={3}>
                                                     <KeyValue title="Provider Name" value={dot.pick("provider", this.state.identityProvider)} />
                                                     <KeyValue title="User Pool Id" value={dot.pick("cognito.user_pool_id", this.state.identityProvider)} clipboard={true} type={"cognito:user-pool-id"} />
-                                                    <KeyValue title="Administrators Group Name" value={dot.pick("cognito.administrators_group_name", this.state.identityProvider)} clipboard={true} />
-                                                    <KeyValue title="Managers Group Name" value={dot.pick("cognito.managers_group_name", this.state.identityProvider)} clipboard={true} />
                                                     <KeyValue title="Domain URL" value={dot.pick("cognito.domain_url", this.state.identityProvider)} clipboard={true} />
                                                     <KeyValue title="Provider URL" value={dot.pick("cognito.provider_url", this.state.identityProvider)} clipboard={true} />
                                                 </ColumnLayout>
@@ -804,31 +792,6 @@ class ClusterSettings extends Component<ClusterSettingsProps, ClusterSettingsSta
                                                     </ColumnLayout>
                                                 </Container>
                                             )}
-                                        </SpaceBetween>
-                                    ),
-                                },
-                                {
-                                    label: "Analytics",
-                                    id: "analytics",
-                                    content: (
-                                        <SpaceBetween size={"l"}>
-                                            <Container header={<Header variant={"h2"}>OpenSearch Settings</Header>}>
-                                                <ColumnLayout variant={"text-grid"} columns={2}>
-                                                    <KeyValue title="Domain Name" value={dot.pick("opensearch.domain_name", this.state.analytics)} clipboard={true} />
-                                                    <KeyValue title="Domain ARN" value={dot.pick("opensearch.domain_arn", this.state.analytics)} clipboard={true} />
-                                                    <KeyValue title="Domain Endpoint" value={dot.pick("opensearch.domain_endpoint", this.state.analytics)} clipboard={true} />
-                                                    <KeyValue title="Dashboard URL" value={getOpenSearchDashboardUrl()} type={"external-link"} clipboard={true} />
-                                                    <KeyValue title="Existing OpenSearch Service Domain?" value={dot.pick("opensearch.use_existing", this.state.analytics)} type={"boolean"} />
-                                                </ColumnLayout>
-                                            </Container>
-                                            <Container header={<Header variant={"h2"}>Kinesis Settings</Header>}>
-                                                <ColumnLayout variant={"text-grid"} columns={2}>
-                                                    <KeyValue title="Stream Name" value={dot.pick("kinesis.stream_name", this.state.analytics)} clipboard={true} />
-                                                    <KeyValue title="Stream ARN" value={dot.pick("kinesis.stream_arn", this.state.analytics)} clipboard={true} />
-                                                    <KeyValue title="Stream Mode" value={dot.pick("kinesis.stream_mode", this.state.analytics)} />
-                                                    <KeyValue title="Shard Count" value={dot.pick("kinesis.shard_count", this.state.analytics)} />
-                                                </ColumnLayout>
-                                            </Container>
                                         </SpaceBetween>
                                     ),
                                 },

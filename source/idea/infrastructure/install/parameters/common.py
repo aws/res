@@ -9,12 +9,15 @@ from idea.infrastructure.install.parameters.base import Attributes, Base, Key
 class CommonKey(Key):
     CLUSTER_NAME = "EnvironmentName"
     ADMIN_EMAIL = "AdministratorEmail"
+    INFRASTRUCTURE_HOST_AMI = "InfrastructureHostAMI"
     SSH_KEY_PAIR = "SSHKeyPair"
     CLIENT_IP = "ClientIp"
     CLIENT_PREFIX_LIST = "ClientPrefixList"
     VPC_ID = "VpcId"
-    PUBLIC_SUBNETS = "PublicSubnets"
-    PRIVATE_SUBNETS = "PrivateSubnets"
+    LOAD_BALANCER_SUBNETS = "LoadBalancerSubnets"
+    INFRASTRUCTURE_HOST_SUBNETS = "InfrastructureHostSubnets"
+    VDI_SUBNETS = "VdiSubnets"
+    IS_LOAD_BALANCER_INTERNET_FACING = "IsLoadBalancerInternetFacing"
 
 
 @dataclass
@@ -55,7 +58,7 @@ class CommonParameters(Base):
             id=CommonKey.CLIENT_PREFIX_LIST,
             type="String",
             description=(
-                "A prefix list that covers IPs allowed to directly access the Web UI and SSH "
+                "(Optional) A prefix list that covers IPs allowed to directly access the Web UI and SSH "
                 "into the bastion host."
             ),
             allowed_pattern="^(pl-[a-z0-9]{8,20})?$",
@@ -84,6 +87,16 @@ class CommonParameters(Base):
         )
     )
 
+    infrastructure_host_ami: str = Base.parameter(
+        Attributes(
+            id=CommonKey.INFRASTRUCTURE_HOST_AMI,
+            type="String",
+            allowed_pattern="^(ami-[0-9a-f]{8,17})?$",
+            description="(Optional) You may provide a custom AMI id to use for all the infrastructure hosts. The current supported base OS is Amazon Linux 2.",
+            constraint_description="The AMI id must begin with 'ami-' followed by only letters (a-f) or numbers(0-9).",
+        )
+    )
+
     vpc_id: str = Base.parameter(
         Attributes(
             id=CommonKey.VPC_ID,
@@ -94,21 +107,39 @@ class CommonParameters(Base):
         )
     )
 
-    public_subnets: list[str] = Base.parameter(
+    load_balancer_subnets: list[str] = Base.parameter(
         Attributes(
-            id=CommonKey.PUBLIC_SUBNETS,
+            id=CommonKey.LOAD_BALANCER_SUBNETS,
             type="List<AWS::EC2::Subnet::Id>",
-            description="Pick at least 2 public subnets from 2 different Availability Zones",
+            description="Select at least 2 subnets from different Availability Zones. For deployments that need restricted internet access, select private subnets. For deployments that need internet access, select public subnets.",
             allowed_pattern=".+",
         )
     )
 
-    private_subnets: list[str] = Base.parameter(
+    infrastructure_host_subnets: list[str] = Base.parameter(
         Attributes(
-            id=CommonKey.PRIVATE_SUBNETS,
+            id=CommonKey.INFRASTRUCTURE_HOST_SUBNETS,
             type="List<AWS::EC2::Subnet::Id>",
-            description="Pick at least 2 private subnets from 2 different Availability Zones",
+            description="Select at least 2 private subnets from different Availability Zones.",
             allowed_pattern=".+",
+        )
+    )
+
+    vdi_subnets: list[str] = Base.parameter(
+        Attributes(
+            id=CommonKey.VDI_SUBNETS,
+            type="List<AWS::EC2::Subnet::Id>",
+            description="Select at least 2 subnets from different Availability Zones. For deployments that need restricted internet access, select private subnets. For deployments that need internet access, select public subnets.",
+            allowed_pattern=".+",
+        )
+    )
+
+    is_load_balancer_internet_facing: list[str] = Base.parameter(
+        Attributes(
+            id=CommonKey.IS_LOAD_BALANCER_INTERNET_FACING,
+            type="String",
+            description="Select true to deploy internet facing load balancer (Requires public subnets for load balancer). For deployments that need restricted internet access, select false.",
+            allowed_values=["true", "false"],
         )
     )
 
@@ -119,6 +150,7 @@ class CommonParameterGroups:
         "Parameters": [
             CommonKey.CLUSTER_NAME,
             CommonKey.ADMIN_EMAIL,
+            CommonKey.INFRASTRUCTURE_HOST_AMI,
             CommonKey.SSH_KEY_PAIR,
             CommonKey.CLIENT_IP,
             CommonKey.CLIENT_PREFIX_LIST,
@@ -129,7 +161,9 @@ class CommonParameterGroups:
         "Label": {"default": "Network configuration for the RES environment"},
         "Parameters": [
             CommonKey.VPC_ID,
-            CommonKey.PRIVATE_SUBNETS,
-            CommonKey.PUBLIC_SUBNETS,
+            CommonKey.IS_LOAD_BALANCER_INTERNET_FACING,
+            CommonKey.LOAD_BALANCER_SUBNETS,
+            CommonKey.INFRASTRUCTURE_HOST_SUBNETS,
+            CommonKey.VDI_SUBNETS,
         ],
     }

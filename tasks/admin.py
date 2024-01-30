@@ -55,12 +55,6 @@ def test_iam_policies(c, cluster_name, aws_region, aws_profile=None):
             ]
         },
         {
-            'module_name': constants.MODULE_ANALYTICS,
-            'templates': [
-                'analytics-stream-processing-lambda.yml'
-            ]
-        },
-        {
             'module_name': constants.MODULE_DIRECTORYSERVICE,
             'templates': [
                 'openldap-server.yml'

@@ -14,6 +14,8 @@ from ideadatamodel import exceptions, errorcodes, constants
 from ideadatamodel.projects import (
     CreateProjectRequest,
     CreateProjectResult,
+    DeleteProjectRequest,
+    DeleteProjectResult,
     GetProjectRequest,
     GetProjectResult,
     UpdateProjectRequest,
@@ -28,23 +30,26 @@ from ideadatamodel.projects import (
     GetUserProjectsResult,
     Project
 )
+from ideadatamodel.api.api_model import ApiAuthorization
 from ideasdk.utils import Utils, GroupNameHelper
 from ideasdk.context import SocaContext
+from ideasdk.client.vdc_client import AbstractVirtualDesktopControllerClient
 
 from ideaclustermanager.app.projects.db.projects_dao import ProjectsDAO
 from ideaclustermanager.app.projects.db.user_projects_dao import UserProjectsDAO
 from ideaclustermanager.app.accounts.accounts_service import AccountsService
 from ideaclustermanager.app.tasks.task_manager import TaskManager
 
-from typing import List
+from typing import List, Optional
 
 
 class ProjectsService:
 
-    def __init__(self, context: SocaContext, accounts_service: AccountsService, task_manager: TaskManager):
+    def __init__(self, context: SocaContext, accounts_service: AccountsService, task_manager: TaskManager, vdc_client: AbstractVirtualDesktopControllerClient):
         self.context = context
         self.accounts_service = accounts_service
         self.task_manager = task_manager
+        self.vdc_client = vdc_client
         self.logger = context.logger('projects')
 
         self.projects_dao = ProjectsDAO(context)
@@ -81,8 +86,6 @@ class ProjectsService:
         if existing is not None:
             raise exceptions.invalid_params(f'project with name: {project.name} already exists')
 
-        if Utils.is_empty(project.ldap_groups):
-            raise exceptions.invalid_params('ldap_groups[] is required')
         for ldap_group_name in project.ldap_groups:
             # check if group exists
             # Active Directory mode checks the back-end LDAP
@@ -118,6 +121,43 @@ class ProjectsService:
         return CreateProjectResult(
             project=enabled_project.project
         )
+
+    def delete_project(self, request: DeleteProjectRequest) -> DeleteProjectResult:
+        """
+        Delete a Project
+        validate required fields, remove the project from DynamoDB and Cache.
+        :param request: DeleteProjectRequest
+        :param access_token: access token used for this request
+        :param api_authorization: authorization for this request
+        :return: DeleteProjectResult
+        """
+        if Utils.is_empty(request):
+            raise exceptions.invalid_params('request is required')
+
+        project_id = request.project_id
+        project_name = request.project_name
+        if Utils.is_empty(project_id) and Utils.is_empty(project_name):
+            raise exceptions.invalid_params('either project id or project name is required')
+
+        project = self.projects_dao.get_project_by_id(project_id) if project_id else self.projects_dao.get_project_by_name(project_name)
+        if project is not None:
+            project_id = self.projects_dao.convert_from_db(project).project_id
+            sessions_by_project_id = self.vdc_client.list_sessions_by_project_id(project_id)
+            if sessions_by_project_id:
+                session_ids_by_project_id = [session.dcv_session_id for session in sessions_by_project_id]
+                raise exceptions.general_exception(f'project is still used by virtual desktop sessions. '
+                                                   f'Project ID: {project_id}, Session IDs: {session_ids_by_project_id}')
+
+            software_stacks_by_project_id = self.vdc_client.list_software_stacks_by_project_id(project_id)
+            if software_stacks_by_project_id:
+                stack_ids_by_project_id = [software_stack.stack_id for software_stack in software_stacks_by_project_id]
+                raise exceptions.general_exception(f'project is still used by software stacks. '
+                                                   f'Project ID: {project_id}, Stack IDs: {stack_ids_by_project_id}')
+
+            self.user_projects_dao.delete_project(project_id)
+            self.projects_dao.delete_project(project_id)
+
+        return DeleteProjectResult()
 
     def get_project(self, request: GetProjectRequest) -> GetProjectResult:
         """
@@ -203,7 +243,14 @@ class ProjectsService:
                 for ldap_group_name in groups_added:
                     # check if group exists
                     self.accounts_service.get_group(ldap_group_name)
+        users_added = None
+        users_removed = None
 
+        existing_users = set(existing.get('users', []))
+        updated_users = set(project.users)
+
+        users_added = updated_users - existing_users
+        users_removed = existing_users - updated_users
         # none values will be skipped by db update. ensure enabled/disabled cannot be called via update project.
         project.enabled = None
 
@@ -211,13 +258,15 @@ class ProjectsService:
         updated_project = self.projects_dao.convert_from_db(db_updated)
 
         if updated_project.enabled:
-            if groups_added is not None or groups_removed is not None:
+            if groups_added or groups_removed or users_added or users_removed:
                 self.task_manager.send(
                     task_name='projects.project-groups-updated',
                     payload={
                         'project_id': updated_project.project_id,
                         'groups_added': list(groups_added),
-                        'groups_removed': list(groups_removed)
+                        'groups_removed': list(groups_removed),
+                        'users_added': list(users_added),
+                        'users_removed': list(users_removed)
                     },
                     message_group_id=updated_project.project_id
                 )

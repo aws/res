@@ -135,7 +135,24 @@ class VirtualDesktopSoftwareStack(SocaBaseModel):
     min_ram: Optional[SocaMemory]
     architecture: Optional[VirtualDesktopArchitecture]
     gpu: Optional[VirtualDesktopGPU]
-    projects: Optional[List[Project]]
+    projects: Optional[List[Project]] = []
+
+    def __eq__(self, other):
+        eq = True
+        eq = eq and self.base_os == other.base_os
+        eq = eq and self.name == other.name
+        eq = eq and self.description == other.description
+        eq = eq and self.ami_id == other.ami_id
+        eq = eq and self.min_storage == other.min_storage
+        eq = eq and self.min_ram == other.min_ram
+        eq = eq and self.gpu == other.gpu
+
+        self_project_ids = [project.project_id for project in self.projects] if self.projects else []
+        other_project_ids = [project.project_id for project in other.projects] if other.projects else []
+        eq = eq and len(self_project_ids) == len(other_project_ids)
+        eq = eq and all(project_id in self_project_ids for project_id in other_project_ids)
+
+        return eq
 
 
 class VirtualDesktopServer(SocaBaseModel):
@@ -201,6 +218,19 @@ class VirtualDesktopPermissionProfile(SocaBaseModel):
     created_on: Optional[datetime]
     updated_on: Optional[datetime]
 
+    def __eq__(self, other):
+        eq = True
+        eq = eq and self.profile_id == other.profile_id
+        eq = eq and self.title == other.title
+        eq = eq and self.description == other.description
+
+        self_permissions = self.permissions if self.permissions else []
+        other_permissions = other.permissions if other.permissions else []
+        eq = eq and len(self_permissions) == len(other_permissions)
+        eq = eq and all(permission in self_permissions for permission in other_permissions)
+
+        return eq
+
     def get_permission(self, permission_key: str) -> Optional[VirtualDesktopPermission]:
         if self.permissions is None:
             return None
@@ -251,6 +281,7 @@ class VirtualDesktopSession(SocaBaseModel):
     hibernation_enabled: Optional[bool]
     is_launched_by_admin: Optional[bool]
     locked: Optional[bool]
+    tags: Optional[list[dict]]
 
     # Transient field, to be used for API responses only.
     failure_reason: Optional[str]

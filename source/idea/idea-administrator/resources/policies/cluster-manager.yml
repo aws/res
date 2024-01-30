@@ -100,6 +100,16 @@ Statement:
       - '{{ context.arns.get_ddb_table_arn("ad-automation") }}'
       - '{{ context.arns.get_ddb_table_arn(context.module_id + ".distributed-lock") }}'
       - '{{ context.arns.get_ddb_table_arn("snapshots") }}'
+      - '{{ context.arns.get_ddb_table_arn("apply-snapshot") }}'
+    Effect: Allow
+
+  - Action:
+      - dynamodb:ImportTable
+      - dynamodb:DescribeImport
+      - dynamodb:DeleteTable
+      - dynamodb:Scan
+    Resource: 
+      - '{{ context.arns.get_ddb_table_arn("temp-*") }}'
     Effect: Allow
 
   - Action:

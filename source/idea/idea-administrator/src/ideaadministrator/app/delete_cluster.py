@@ -14,7 +14,7 @@ from ideasdk.config.cluster_config_db import ClusterConfigDB
 from ideasdk.utils import Utils
 from ideadatamodel import constants, exceptions, errorcodes, EC2Instance, SocaMemory, SocaMemoryUnit
 
-from typing import Optional, List
+from typing import Optional, List, Mapping
 from prettytable import PrettyTable
 import time
 import botocore.exceptions
@@ -98,6 +98,9 @@ class DeleteCluster:
         )
         for ec2_instance in ec2_instances:
             if ec2_instance.state == 'terminated':
+                continue
+
+            if ec2_instance.get_tag(constants.BI_TAG_DEPLOYMENT) == "true":
                 continue
 
             # check termination protection instances
@@ -280,6 +283,9 @@ class DeleteCluster:
                     if self.is_bootstrap_stack(stack_name):
                         continue
 
+                    if self.is_batteries_included_stack(stack):
+                        continue
+
                     if self.is_cluster_stack(stack_name):
                         cluster_stacks.append(stack)
                     elif self.is_identity_provider_stack(stack_name):
@@ -366,6 +372,14 @@ class DeleteCluster:
     def is_bootstrap_stack(self, stack_name: str) -> bool:
         return stack_name == self.get_bootstrap_stack_name()
 
+    def is_batteries_included_stack(self, stack: Mapping) -> bool:
+        stack_tags = Utils.get_value_as_list("Tags", stack)
+        for tag in stack_tags:
+            tag_dict = Utils.get_as_dict(tag, default={})
+            if tag_dict["Key"] == constants.BI_TAG_DEPLOYMENT and tag_dict["Value"] == "true":
+                return True
+        return False
+
     def is_cluster_stack(self, stack_name: str) -> bool:
         for module in self.cluster_modules:
             module_name = module['name']
@@ -374,17 +388,6 @@ class DeleteCluster:
                 if cluster_stack_name == stack_name:
                     return True
         if stack_name == f'{self.cluster_name}-cluster':
-            return True
-        return False
-
-    def is_analytics_stack(self, stack_name: str) -> bool:
-        for module in self.cluster_modules:
-            module_name = module['name']
-            if module_name == constants.MODULE_ANALYTICS:
-                analytics_stack_name = module['stack_name']
-                if analytics_stack_name == stack_name:
-                    return True
-        if stack_name == f'{self.cluster_name}-analytics':
             return True
         return False
 
@@ -450,8 +453,6 @@ class DeleteCluster:
                         stacks_deleted.append(stack_name)
                     elif stack_status == 'DELETE_FAILED':
                         if self.delete_failed_attempt < self.delete_failed_max_attempts:
-                            if self.is_analytics_stack(stack_name):
-                                self.try_delete_vpc_lambda_enis()
                             self.context.warning(f'stack: {stack_name}, status: {stack_status}, submitting a new delete_cloud_formation_stack request. [Loop {self.delete_failed_attempt}/{self.delete_failed_max_attempts}]')
                             self.delete_cloud_formation_stack(stack_name)
                             self.delete_failed_attempt += 1
@@ -461,8 +462,6 @@ class DeleteCluster:
                             delete_failed += 1
                     else:
                         print(f'stack: {stack_name}, status: {stack_status}')
-                        if self.is_analytics_stack(stack_name):
-                            self.try_delete_vpc_lambda_enis()
 
                 except botocore.exceptions.ClientError as e:
                     if e.response['Error']['Code'] == 'ValidationError':

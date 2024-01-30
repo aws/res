@@ -138,6 +138,25 @@ class Utils {
         return def;
     }
 
+    static isListOfRecordStrings(value?: any): boolean {
+        let result = true;
+        if (value == null) {
+            result = false
+        } else {
+            for (let item of value) {
+                if (item == null || typeof item != "object") {
+                    result = false;
+                }
+                Object.keys(item).map((key) => {
+                    if (typeof item[key] != "string") {
+                        result = false;
+                    }
+                });
+            }
+        }
+        return result;
+    }
+
     static isEmpty(value?: any): boolean {
         if (value == null) {
             return true;
@@ -836,13 +855,6 @@ class Utils {
 
     static getDefaultModuleSettings() {
         return [
-            {
-                deployment_priority: 3,
-                module_id: "analytics",
-                name: "analytics",
-                title: "Analytics",
-                type: "stack",
-            },
             {
                 deployment_priority: 7,
                 module_id: "bastion-host",

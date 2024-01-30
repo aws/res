@@ -74,6 +74,7 @@ ec2:
     min_capacity: 1
     max_capacity: 3
     cooldown_minutes: 5
+    default_instance_warmup: 15
     new_instances_protected_from_scale_in: false
     elb_healthcheck:
       # Specifies the time in minutes Auto Scaling waits before checking the health status of an EC2 instance that has come into service.

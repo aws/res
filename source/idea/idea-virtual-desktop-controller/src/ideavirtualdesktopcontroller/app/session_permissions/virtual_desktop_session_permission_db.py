@@ -15,7 +15,6 @@ from boto3.dynamodb.conditions import Key
 import ideavirtualdesktopcontroller
 from ideadatamodel import (
     exceptions,
-    SocaSortBy,
     VirtualDesktopSessionPermission,
     VirtualDesktopBaseOS,
     VirtualDesktopSessionState,
@@ -26,15 +25,13 @@ from ideadatamodel import (
     ListPermissionsResponse,
     SocaPaginator
 )
-from ideadatamodel.common.common_model import SocaSortOrder
-from ideasdk.aws.opensearch.opensearchable_db import OpenSearchableDB
 
 from ideasdk.utils import Utils
 from ideavirtualdesktopcontroller.app.session_permissions import constants as session_permissions_constants
 from ideavirtualdesktopcontroller.app.virtual_desktop_notifiable_db import VirtualDesktopNotifiableDB
 
 
-class VirtualDesktopSessionPermissionDB(VirtualDesktopNotifiableDB, OpenSearchableDB):
+class VirtualDesktopSessionPermissionDB(VirtualDesktopNotifiableDB):
     DEFAULT_PAGE_SIZE = 10
 
     def __init__(self, context: ideavirtualdesktopcontroller.AppContext):
@@ -43,23 +40,6 @@ class VirtualDesktopSessionPermissionDB(VirtualDesktopNotifiableDB, OpenSearchab
         self._table_obj = None
         self._ddb_client = self.context.aws().dynamodb_table()
         VirtualDesktopNotifiableDB.__init__(self, context=context, table_name=self.table_name, logger=self._logger)
-        OpenSearchableDB.__init__(
-            self, context=context, logger=self._logger,
-            term_filter_map={
-                session_permissions_constants.SESSION_PERMISSIONS_FILTER_ACTOR_KEY: 'actor_name.raw',
-                session_permissions_constants.SESSION_PERMISSIONS_FILTER_SESSION_ID_KEY: 'idea_session_id.raw',
-                session_permissions_constants.SESSION_PERMISSIONS_FILTER_SESSION_NAME_KEY: 'idea_session_name.raw',
-                session_permissions_constants.SESSION_PERMISSIONS_FILTER_SESSION_BASE_OS_KEY: 'idea_session_base_os.raw',
-                session_permissions_constants.SESSION_PERMISSIONS_FILTER_SESSION_INSTANCE_TYPE_KEY: 'idea_session_instance_type.raw',
-                session_permissions_constants.SESSION_PERMISSIONS_FILTER_SESSION_STATE_KEY: 'idea_session_state.raw',
-                session_permissions_constants.SESSION_PERMISSIONS_FILTER_SESSION_TYPE_KEY: 'idea_session_type.raw',
-                session_permissions_constants.SESSION_PERMISSIONS_FILTER_PERMISSION_PROFILE_ID_KEY: 'permission_profile_id.raw'
-            },
-            date_range_filter_map={
-                session_permissions_constants.SESSION_PERMISSIONS_DB_IDEA_SESSION_CREATED_ON_KEY: 'idea_session_created_on'
-            },
-            default_page_size=self.DEFAULT_PAGE_SIZE
-        )
 
     @property
     def _table(self):
@@ -101,15 +81,6 @@ class VirtualDesktopSessionPermissionDB(VirtualDesktopNotifiableDB, OpenSearchab
                 },
                 wait=True
             )
-
-    def get_index_name(self) -> str:
-        return f"{self.context.config().get_string('virtual-desktop-controller.opensearch.session_permission.alias', required=True)}-{self.context.session_permission_template_version}"
-
-    def get_default_sort(self) -> SocaSortBy:
-        return SocaSortBy(
-            key=session_permissions_constants.SESSION_PERMISSIONS_FILTER_SESSION_CREATED_ON_KEY,
-            order=SocaSortOrder.ASC
-        )
 
     @staticmethod
     def convert_db_dict_to_session_permission_object(db_entry: Dict) -> Optional[VirtualDesktopSessionPermission]:
@@ -273,19 +244,49 @@ class VirtualDesktopSessionPermissionDB(VirtualDesktopNotifiableDB, OpenSearchab
             self._logger.error(e)
         finally:
             return permissions, response_cursor
-
-    def list_from_index(self, options: ListPermissionsRequest) -> ListPermissionsResponse:
-        response = self.list_from_opensearch(options)
-        permissions: List[VirtualDesktopSessionPermission] = []
-        permissions_response = Utils.get_value_as_list('hits', Utils.get_value_as_dict('hits', response, default={}), default=[])
-        for permission in permissions_response:
-            index_object = Utils.get_value_as_dict('_source', permission, default={})
-            permissions.append(self.convert_db_dict_to_session_permission_object(index_object))
-
+        
+    def list_session_permissions(self, request: ListPermissionsRequest) -> ListPermissionsResponse:
+        list_request = {}
+  
+        exclusive_start_key = None
+        if Utils.is_not_empty(request.cursor):
+            exclusive_start_key = Utils.from_json(Utils.base64_decode(request.cursor))
+        if exclusive_start_key is not None:
+             list_request['ExclusiveStartKey'] = exclusive_start_key
+             
+        scan_filter = None
+        if Utils.is_not_empty(request.filters):
+            scan_filter = {}
+            for filter_ in request.filters:
+                if filter_.eq is not None:
+                    scan_filter[filter_.key] = {
+                        'AttributeValueList': [filter_.eq],
+                        'ComparisonOperator': 'EQ'
+                    }
+                if filter_.value is not None:
+                    scan_filter[filter_.key] = {
+                        'AttributeValueList': [filter_.value],
+                        'ComparisonOperator': 'CONTAINS'
+                    }
+                if filter_.like is not None:
+                    scan_filter[filter_.key] = {
+                        'AttributeValueList': [filter_.like],
+                        'ComparisonOperator': 'CONTAINS'
+                    }
+        if scan_filter is not None:
+            list_request['ScanFilter'] = scan_filter
+             
+        list_result = self._table.scan(**list_request)
+        
+        session_permissions_entries = list_result.get('Items', [])
+        result = [self.convert_db_dict_to_session_permission_object(session_permission) for session_permission in session_permissions_entries]
+        
+        exclusive_start_key = list_result.get("LastEvaluatedKey")
+        response_cursor = Utils.base64_encode(Utils.to_json(exclusive_start_key)) if exclusive_start_key else None
+  
         return ListPermissionsResponse(
-            listing=permissions,
-            paginator={},
-            filters=options.filters,
-            date_range=options.date_range,
-            sort_by=options.sort_by
+            listing=result,
+            paginator=SocaPaginator(
+                cursor=response_cursor
+            )
         )

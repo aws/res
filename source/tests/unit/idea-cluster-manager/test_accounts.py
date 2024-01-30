@@ -36,7 +36,9 @@ from ideadatamodel import (
     exceptions,
 )
 from ideadatamodel.auth import (
+    AuthResult,
     InitiateAuthRequest,
+    InitiateAuthResult,
     RespondToAuthChallengeRequest,
     RespondToAuthChallengeResult,
 )
@@ -117,56 +119,49 @@ def test_accounts_create_user_invalid_email_should_fail(context: AppContext):
     assert "invalid email:" in exc_info.value.message
 
 
-def test_accounts_create_user_with_verified_email_missing_password_should_fail(
+def test_accounts_create_user_with_verified_email_missing_uid_should_fail(
     context: AppContext,
 ):
     """
-    create valid account with email verified and no password
+    create valid account with email verified and no uid
     """
     with pytest.raises(exceptions.SocaException) as exc_info:
         context.accounts.create_user(
             user=User(username="mockuser1", email="mockuser1@example.com"),
             email_verified=True,
         )
-    assert exc_info.value.error_code == errorcodes.INVALID_PARAMS
-    assert "Password is required" in exc_info.value.message
+    assert exc_info.value.error_code == errorcodes.UID_AND_GID_NOT_FOUND
+    assert (
+        "Unable to retrieve UID and GID for User: mockuser1" in exc_info.value.message
+    )
 
 
-def test_accounts_create_user_with_verified_email_invalid_password_should_fail(
+def test_accounts_create_user_with_verified_email_missing_gid_should_fail(
     context: AppContext,
 ):
     """
-    Create a valid account with email verified and invalid password
+    Create valid account with email verified and no gid
     """
 
-    # Cover all the ways a password will be considered invalid.
-    too_long_password = Utils.generate_password(257, 2, 2, 2, 2)
-    invalid_passwords = [
-        "2short",
-        too_long_password,
-        "No_Numbers",
-        "no_upper_case_0",
-        "NO_LOWER_CASE_0",
-        "NoSpecialCharacters0",
-    ]
-
-    for invalid_password in invalid_passwords:
-        with pytest.raises(exceptions.SocaException) as exc_info:
-            context.accounts.create_user(
-                user=User(
-                    username="mockuser1",
-                    email="mockuser1@example.com",
-                    password=invalid_password,
-                ),
-                email_verified=True,
-            )
-        assert exc_info.value.error_code == errorcodes.INVALID_PARAMS
+    with pytest.raises(exceptions.SocaException) as exc_info:
+        context.accounts.create_user(
+            user=User(username="mockuser1", email="mockuser1@example.com", uid=1234),
+            email_verified=True,
+        )
+    assert exc_info.value.error_code == errorcodes.UID_AND_GID_NOT_FOUND
+    assert (
+        "Unable to retrieve UID and GID for User: mockuser1" in exc_info.value.message
+    )
 
 
-def test_accounts_crud_create_user(context: AppContext):
+def test_accounts_crud_create_user(context: AppContext, monkeypatch):
     """
     create user
     """
+    monkeypatch.setattr(
+        context.accounts.sssd, "get_uid_and_gid_for_user", lambda x: (1000, 1000)
+    )
+
     created_user = context.accounts.create_user(
         user=User(
             username="accounts_user1",
@@ -204,6 +199,37 @@ def test_accounts_crud_create_user(context: AppContext):
     AccountsTestContext.crud_user = user
 
 
+def test_accounts_crud_create_user_ad_uid_and_gid(context: AppContext, monkeypatch):
+    """
+    create user with AD provided uid and gid
+    """
+    monkeypatch.setattr(context.accounts.sssd, "ldap_id_mapping", lambda x: "False")
+    monkeypatch.setattr(
+        context.accounts.sssd, "get_uid_and_gid_for_user", lambda x: (100, 100)
+    )
+    created_user = context.accounts.create_user(
+        user=User(
+            username="accounts_user2",
+            email="accounts_user2@example.com",
+            password="MockPassword_123!%",
+            uid=100,
+            gid=100,
+            login_shell="/bin/bash",
+            home_dir="home/account_user2",
+            additional_groups=[],
+        ),
+        email_verified=True,
+    )
+
+    assert created_user.username is not None
+    assert created_user.email is not None
+
+    user = context.accounts.get_user(username=created_user.username)
+
+    assert user.uid == 100
+    assert user.gid == 100
+
+
 def test_accounts_crud_get_user(context: AppContext):
     """
     get user
@@ -217,6 +243,34 @@ def test_accounts_crud_get_user(context: AppContext):
     assert user.username == crud_user.username
     assert user.uid == crud_user.uid
     assert user.gid == crud_user.gid
+
+
+def test_accounts_crud_get_user_by_email(context: AppContext):
+    """
+    get user by email
+    """
+    assert AccountsTestContext.crud_user is not None
+    crud_user = AccountsTestContext.crud_user
+
+    user = context.accounts.get_user_by_email(email=crud_user.email)
+
+    assert user is not None
+    assert user.username == crud_user.username
+    assert user.email == crud_user.email
+
+
+def test_accounts_crud_get_user_by_email(context: AppContext):
+    """
+    get user by email
+    """
+    assert AccountsTestContext.crud_user is not None
+    crud_user = AccountsTestContext.crud_user
+
+    user = context.accounts.get_user_by_email(email=crud_user.email)
+
+    assert user is not None
+    assert user.username == crud_user.username
+    assert user.email == crud_user.email
 
 
 def test_accounts_crud_modify_user(context: AppContext):
@@ -363,8 +417,33 @@ def test_accounts_create_internal_group(context: AppContext):
     )
     assert group is not None
 
+    assert group.gid is None
     assert group.name == "dummy-internal-group"
     assert group.type == constants.GROUP_TYPE_INTERNAL
+
+
+def test_accounts_create_internal_group_ad_gid(context: AppContext, monkeypatch):
+    """
+    internal group with AD provided gid
+    """
+    monkeypatch.setattr(context.accounts.sssd, "ldap_id_mapping", lambda: "False")
+    group = context.accounts.create_group(
+        Group(
+            title="Dummy Internal Group2",
+            name="dummy-internal-group-2",
+            ds_name="dummy-internal-group-2",
+            gid=100,
+            group_type=constants.GROUP_TYPE_PROJECT,
+            type=constants.GROUP_TYPE_INTERNAL,
+        )
+    )
+    returned_group = context.accounts.get_group(group.name)
+
+    assert returned_group is not None
+
+    assert returned_group.gid == 100
+    assert returned_group.name == "dummy-internal-group-2"
+    assert returned_group.type == constants.GROUP_TYPE_INTERNAL
 
 
 def test_accounts_create_group_with_no_type_param_must_attemp_an_external_group_creation(
@@ -521,15 +600,18 @@ def test_accounts_create_group_in_ad_none_should_fail(context: AppContext, monke
     )
 
 
-def test_accounts_create_group_in_ad_gid_none_should_fail(
+def test_accounts_create_group_in_ad_gid_none_should_fail_ad_gid(
     context: AppContext, monkeypatch
 ):
     """
     group with gid none
     """
     monkeypatch.setattr(context.ldap_client, "is_readonly", lambda: True)
-    response = {"gid": None}
+    monkeypatch.setattr(context.accounts.sssd, "get_gid_for_group", lambda x: None)
+
+    response = {"gid": None, "name": "pqr"}
     monkeypatch.setattr(context.ldap_client, "get_group", lambda x: response)
+    monkeypatch.setattr(context.accounts.sssd, "ldap_id_mapping", lambda: "False")
     with pytest.raises(exceptions.SocaException) as exc_info:
         group = context.accounts.create_group(
             Group(
@@ -540,11 +622,8 @@ def test_accounts_create_group_in_ad_gid_none_should_fail(
                 type="external",
             )
         )
-    assert exc_info.value.error_code == errorcodes.INVALID_PARAMS
-    assert (
-        f"Group id is not found in Directory Service: activedirectory"
-        in exc_info.value.message
-    )
+    assert exc_info.value.error_code == errorcodes.GID_NOT_FOUND
+    assert f"Unable to retrieve GID for Group: pqr" in exc_info.value.message
 
 
 def test_accounts_create_group_in_ad_with_valid_but_name_none_should_fail(
@@ -1529,38 +1608,54 @@ def test_accounts_initiate_auth_user_password_auth_flow(
     """
     initiate auth normal workflow
     """
-    try:
-        context.accounts.initiate_auth(
-            request=InitiateAuthRequest(
-                auth_flow="USER_PASSWORD_AUTH",
-                username="xyz",
-                password="abc123",
-            ),
-        )
-    except Exception as e:
-        print("failed to user_password_auth in initiate_auth {e}")
-    monkeypatch.setattr(Utils, "is_empty", lambda x: bool(x == "xyz"))
+    username = "clusteradmin"
+    decoded_token = {
+        "username": username,
+    }
+    mock_auth_result = InitiateAuthResult(
+        auth=AuthResult(access_token=""),
+    )
+
+    monkeypatch.setattr(
+        context.user_pool, "initiate_username_password_auth", lambda a: mock_auth_result
+    )
+    monkeypatch.setattr(
+        context.token_service, "decode_token", lambda token: decoded_token
+    )
+    result = context.accounts.initiate_auth(
+        request=InitiateAuthRequest(
+            auth_flow="USER_PASSWORD_AUTH",
+            cognito_username=username,
+            password="abc123",
+        ),
+    )
+    assert result.role == "admin"
+    assert result.db_username == "clusteradmin"
+
+
+def test_accounts_initiate_auth_user_password_auth_flow_fail(context: AppContext):
+    username = "clusteradmin"
     with pytest.raises(exceptions.SocaException) as exc_info:
         context.accounts.initiate_auth(
             request=InitiateAuthRequest(
                 auth_flow="USER_PASSWORD_AUTH",
-                username="xyz",
+                cognito_username="random",
                 password="abc123",
             ),
         )
-    assert exc_info.value.error_code == errorcodes.INVALID_PARAMS
-    assert "username is required" in exc_info.value.message
-    monkeypatch.setattr(Utils, "is_empty", lambda x: bool(x == "abc123"))
+    assert exc_info.value.error_code == errorcodes.UNAUTHORIZED_ACCESS
+    assert "Unauthorized Access" in exc_info.value.message
+
     with pytest.raises(exceptions.SocaException) as exc_info:
         context.accounts.initiate_auth(
             request=InitiateAuthRequest(
                 auth_flow="USER_PASSWORD_AUTH",
-                username="xyz",
-                password="abc123",
+                cognito_username=username,
+                password="",
             ),
         )
     assert exc_info.value.error_code == errorcodes.INVALID_PARAMS
-    assert "password is required" in exc_info.value.message
+    assert "Invalid params: password is required" in exc_info.value.message
 
 
 def test_accounts_initiate_auth_refresh_token_auth_flow(
@@ -1573,18 +1668,18 @@ def test_accounts_initiate_auth_refresh_token_auth_flow(
         context.accounts.initiate_auth(
             request=InitiateAuthRequest(
                 auth_flow="REFRESH_TOKEN_AUTH",
-                username="xyz",
+                cognito_username="clusteradmin",
                 refresh_token="abc123",
             ),
         )
     except Exception as e:
         print("failed to refresh_token_auth in initiate_auth {e}")
-    monkeypatch.setattr(Utils, "is_empty", lambda x: bool(x == "xyz"))
+    monkeypatch.setattr(Utils, "is_empty", lambda x: bool(x == "clusteradmin"))
     with pytest.raises(exceptions.SocaException) as exc_info:
         context.accounts.initiate_auth(
             request=InitiateAuthRequest(
                 auth_flow="REFRESH_TOKEN_AUTH",
-                username="xyz",
+                cognito_username="clusteradmin",
                 refresh_token="abc123",
             ),
         )
@@ -1595,7 +1690,7 @@ def test_accounts_initiate_auth_refresh_token_auth_flow(
         context.accounts.initiate_auth(
             request=InitiateAuthRequest(
                 auth_flow="REFRESH_TOKEN_AUTH",
-                username="xyz",
+                cognito_username="clusteradmin",
                 refresh_token="abc123",
             ),
         )
@@ -1611,7 +1706,7 @@ def test_accounts_initiate_sso_auth_flow(context: AppContext, monkeypatch):
         context.accounts.initiate_auth(
             request=InitiateAuthRequest(
                 auth_flow="SSO_AUTH",
-                username="xyz",
+                cognito_username="xyz",
                 authorization_code="abc123",
             ),
         )
@@ -1622,7 +1717,7 @@ def test_accounts_initiate_sso_auth_flow(context: AppContext, monkeypatch):
         context.accounts.initiate_auth(
             request=InitiateAuthRequest(
                 auth_flow="SSO_AUTH",
-                username="xyz",
+                cognito_username="xyz",
                 authorization_code="def123",
             ),
         )
@@ -1634,7 +1729,7 @@ def test_accounts_initiate_sso_auth_flow(context: AppContext, monkeypatch):
         context.accounts.initiate_auth(
             request=InitiateAuthRequest(
                 auth_flow="SSO_AUTH",
-                username="xyz",
+                cognito_username="xyz",
                 authorization_code="def123",
             ),
         )
@@ -1646,7 +1741,7 @@ def test_accounts_initiate_sso_auth_flow(context: AppContext, monkeypatch):
         context.accounts.initiate_auth(
             request=InitiateAuthRequest(
                 auth_flow="SSO_AUTH",
-                username="xyz",
+                cognito_username="xyz",
                 authorization_code="def123",
             ),
         )
@@ -1656,7 +1751,7 @@ def test_accounts_initiate_sso_auth_flow(context: AppContext, monkeypatch):
         context.accounts.initiate_auth(
             request=InitiateAuthRequest(
                 auth_flow="SSO_AUTH",
-                username="xyz",
+                cognito_username="xyz",
                 authorization_code="def123",
             ),
         )
@@ -1673,7 +1768,7 @@ def test_accounts_initiate_sso_refresh_auth_flow(context: AppContext, monkeypatc
         context.accounts.initiate_auth(
             request=InitiateAuthRequest(
                 auth_flow="SSO_REFRESH_TOKEN_AUTH",
-                username="xyz1",
+                cognito_username="xyz1",
                 authorization_code="abc456",
             ),
         )
@@ -1684,7 +1779,7 @@ def test_accounts_initiate_sso_refresh_auth_flow(context: AppContext, monkeypatc
         context.accounts.initiate_auth(
             request=InitiateAuthRequest(
                 auth_flow="SSO_REFRESH_TOKEN_AUTH",
-                username="xyz1",
+                cognito_username="xyz1",
                 refresh_token="abc456",
             ),
         )
@@ -1695,7 +1790,7 @@ def test_accounts_initiate_sso_refresh_auth_flow(context: AppContext, monkeypatc
         context.accounts.initiate_auth(
             request=InitiateAuthRequest(
                 auth_flow="SSO_REFRESH_TOKEN_AUTH",
-                username="xyz1",
+                cognito_username="xyz1",
                 refresh_token="abc456",
             ),
         )
@@ -1706,7 +1801,7 @@ def test_accounts_initiate_sso_refresh_auth_flow(context: AppContext, monkeypatc
         context.accounts.initiate_auth(
             request=InitiateAuthRequest(
                 auth_flow="SSO_REFRESH_TOKEN_AUTH",
-                username="xyz1",
+                cognito_username="xyz1",
                 refresh_token="abc456",
             ),
         )

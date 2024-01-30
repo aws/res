@@ -19,7 +19,7 @@ import IdeaListView from "../../components/list-view";
 import { Snapshot } from "../../client/data-model";
 import Utils from "../../common/utils";
 import { IdeaSideNavigationProps } from "../../components/side-navigation";
-import IdeaAppLayout, { IdeaAppLayoutProps } from "../../components/app-layout";
+import { IdeaAppLayoutProps } from "../../components/app-layout";
 import { withRouter } from "../../navigation/navigation-utils";
 import SnapshotsClient from "../../client/snapshots-client";
 import { StatusIndicator } from "@cloudscape-design/components";
@@ -50,19 +50,19 @@ export const SNAPSHOT_TABLE_COLUMN_DEFINITIONS: TableProps.ColumnDefinition<Snap
                 case "COMPLETED":
                     return (
                         <StatusIndicator type="success" aria-label="Completed">
-                            Completed
+                            {e.status}
                         </StatusIndicator>
                     );
                 case "FAILED":
                     return (
                         <StatusIndicator type="error" aria-label="Failed">
-                            Failed
+                            {e.status}
                         </StatusIndicator>
                     );
                 default:
                     return (
                         <StatusIndicator type="in-progress" aria-label="In Progress">
-                            In Progress
+                            {e.status}
                         </StatusIndicator>
                     );
             }
@@ -154,7 +154,7 @@ class Snapshots extends Component<SnapshotsProps, SnapshotsState> {
                     {
                         name: "s3_bucket_name",
                         title: "S3 Bucket Name",
-                        description: "Enter the name of the S3 bucket where the snapshot will be stored in.",
+                        description: "Enter the name of an existing S3 bucket where the snapshot should be stored.",
                         help_text: "S3 bucket name can only contain lowercase alphabets, numbers, dots (.), and hyphens (-).",
                         data_type: "str",
                         param_type: "text",
@@ -167,7 +167,7 @@ class Snapshots extends Component<SnapshotsProps, SnapshotsState> {
                     {
                         name: "snapshot_path",
                         title: "Snapshot Path",
-                        description: "Enter the path at which the snapshot should be stored in the provided S3 bucket.",
+                        description: "Enter a path at which the snapshot should be stored in the provided S3 bucket.",
                         help_text: "Snapshot path can only contain forward slashes, dots (.), exclamations (!), asterisks (*), single quotes ('), parentheses (), and hyphens (-).",
                         data_type: "str",
                         param_type: "text",
@@ -192,8 +192,9 @@ class Snapshots extends Component<SnapshotsProps, SnapshotsState> {
                 ref={this.listing}
                 preferencesKey={"snapshots"}
                 showPreferences={false}
-                title="Snapshots"
-                description="Environment snapshot management"
+                title="Created Snapshots"
+                variant="container"
+                description="Snapshots created from the environment"
                 primaryAction={{
                     id: "create-snapshot",
                     text: "Create Snapshot",
@@ -236,11 +237,13 @@ class Snapshots extends Component<SnapshotsProps, SnapshotsState> {
                         snapshotSelected: true,
                     });
                 }}
-                onFetchRecords={() => {
-                    return this.snapshotsClient().listSnapshots({
+                onFetchRecords={async () => {
+                    let result = await this.snapshotsClient().listSnapshots({
                         filters: this.getListing().getFilters(),
                         paginator: this.getListing().getPaginator(),
                     });
+                    result.listing?.sort((a,b) =>  new Date(b.created_on!).getTime() - new Date(a.created_on!).getTime())
+                    return result
                 }}
                 columnDefinitions={SNAPSHOT_TABLE_COLUMN_DEFINITIONS}
             />
@@ -249,38 +252,10 @@ class Snapshots extends Component<SnapshotsProps, SnapshotsState> {
 
     render() {
         return (
-            <IdeaAppLayout
-                ideaPageId={this.props.ideaPageId}
-                toolsOpen={this.props.toolsOpen}
-                tools={this.props.tools}
-                onToolsChange={this.props.onToolsChange}
-                onPageChange={this.props.onPageChange}
-                sideNavHeader={this.props.sideNavHeader}
-                sideNavItems={this.props.sideNavItems}
-                onSideNavChange={this.props.onSideNavChange}
-                onFlashbarChange={this.props.onFlashbarChange}
-                flashbarItems={this.props.flashbarItems}
-                breadcrumbItems={[
-                    {
-                        text: "RES",
-                        href: "#/",
-                    },
-                    {
-                        text: "Environment Management",
-                        href: "#/cluster/status",
-                    },
-                    {
-                        text: "Snapshots",
-                        href: "",
-                    },
-                ]}
-                content={
-                    <div>
-                        {this.buildCreateSnapshotForm()}
-                        {this.buildListing()}
-                    </div>
-                }
-            />
+            <React.Fragment>
+                {this.buildCreateSnapshotForm()}
+                {this.buildListing()}
+            </React.Fragment>
         );
     }
 }

@@ -11,7 +11,8 @@
 
 __all__ = (
     'ExistingVpc',
-    'ExistingSocaCluster'
+    'ExistingSocaCluster',
+    'SubnetFilterKeys'
 )
 
 from ideasdk.utils import Utils
@@ -21,6 +22,7 @@ from ideaadministrator.app_context import AdministratorContext
 from ideaadministrator.app.cdk.constructs import (
     SocaBaseConstruct
 )
+from enum import Enum
 
 from typing import List, Optional, Dict
 
@@ -29,6 +31,11 @@ from aws_cdk import (
     aws_ec2 as ec2,
     aws_iam as iam
 )
+
+class SubnetFilterKeys(str, Enum):
+    LOAD_BALANCER_SUBNETS = "load_balancer_subnets"
+    INFRASTRUCTURE_HOST_SUBNETS = "infrastructure_host_subnets"
+    CLUSTER = "cluster"
 
 
 class ExistingVpc(SocaBaseConstruct):
@@ -43,8 +50,8 @@ class ExistingVpc(SocaBaseConstruct):
         self.scope = scope
         self.vpc_id = self.context.config().get_string('cluster.network.vpc_id', required=True)
         self.vpc = ec2.Vpc.from_lookup(self.scope, 'vpc', vpc_id=self.vpc_id)
-        self._private_subnets: Optional[List[ec2.ISubnet]] = None
-        self._public_subnets: Optional[List[ec2.ISubnet]] = None
+        self._private_subnets: Dict[SubnetFilterKeys, List[ec2.ISubnet]] = {}
+        self._public_subnets: Dict[SubnetFilterKeys, List[ec2.ISubnet]] = {}
 
     def lookup_vpc(self):
         self.vpc = ec2.Vpc.from_lookup(self.scope, 'vpc', vpc_id=self.vpc_id)
@@ -54,19 +61,27 @@ class ExistingVpc(SocaBaseConstruct):
 
     def get_private_subnet_ids(self) -> List[str]:
         return self.context.config().get_list('cluster.network.private_subnets', [])
+    
+    def get_filter_subnets_ids(self, subnet_filter_key: SubnetFilterKeys) -> List[str]:
+        return self.context.config().get_list(f'cluster.network.{subnet_filter_key}', [])
 
-    def get_public_subnets(self) -> List[ec2.ISubnet]:
+    def get_public_subnets(self, subnet_filter_key: Optional[SubnetFilterKeys] = None ) -> List[ec2.ISubnet]:
         """
+        Filter subnets by providing a subnet filter key. For an example, this can be used to get public subnets specific to the external load balancers or 
         filter subnets from Vpc based on subnet ids configured in `cluster.network.public_subnets`
         the result is sorted based on the order of subnet ids provided in the configuration.
         """
-        if self._public_subnets is not None:
-            return self._public_subnets
 
-        public_subnet_ids = self.get_public_subnet_ids()
+        # default is to get external load balancer public subnets
+        subnet_filter_key =  subnet_filter_key if subnet_filter_key else SubnetFilterKeys.LOAD_BALANCER_SUBNETS 
+        result = self._public_subnets.get(subnet_filter_key)
+        if result is not None:
+            return result
+
+        public_subnet_ids = self.get_public_subnet_ids() if subnet_filter_key == SubnetFilterKeys.CLUSTER else self.get_filter_subnets_ids(subnet_filter_key)
         if Utils.is_empty(public_subnet_ids):
-            self._public_subnets = []
-            return self._public_subnets
+            self._public_subnets[subnet_filter_key] = []
+            return self._public_subnets[subnet_filter_key]
 
         result = []
         if self.vpc.public_subnets is not None:
@@ -77,11 +92,12 @@ class ExistingVpc(SocaBaseConstruct):
         # sort based on index in public_subnets[] configuration
         result.sort(key=lambda x: public_subnet_ids.index(x.subnet_id))
 
-        self._public_subnets = result
-        return self._public_subnets
+        self._public_subnets[subnet_filter_key] = result
+        return self._public_subnets[subnet_filter_key]
 
-    def get_private_subnets(self) -> List[ec2.ISubnet]:
+    def get_private_subnets(self, subnet_filter_key: Optional[SubnetFilterKeys] = None) -> List[ec2.ISubnet]:
         """
+        filter subnets by providing a subnet filter key. For an example, this can be used to get private subnets specific to the external load balancers or 
         filter subnets from Vpc based on subnet ids configured in `cluster.network.private_subnets`
         the result is sorted based on the order of subnet ids provided in the configuration.
 
@@ -96,13 +112,17 @@ class ExistingVpc(SocaBaseConstruct):
         * After lookup, ec2.IVpc buckets the subnets under public_subnets, private_subnets and isolated_subnets.
         * To ensure all configured subnets are selected, both vpc.private_subnets and vpc.isolated_subnets are checked to resolve ec2.ISubnet
         """
-        if self._private_subnets is not None:
-            return self._private_subnets
 
-        private_subnet_ids = self.get_private_subnet_ids()
+        # default to get infrastructure hosts subnets
+        subnet_filter_key = subnet_filter_key if subnet_filter_key else SubnetFilterKeys.INFRASTRUCTURE_HOST_SUBNETS
+        result = self._private_subnets.get(subnet_filter_key)
+        if result is not None:
+            return result
+
+        private_subnet_ids = self.get_private_subnet_ids() if subnet_filter_key == SubnetFilterKeys.CLUSTER else self.get_filter_subnets_ids(subnet_filter_key)
         if Utils.is_empty(private_subnet_ids):
-            self._private_subnets = []
-            return self._private_subnets
+            self._private_subnets[subnet_filter_key] = []
+            return self._private_subnets[subnet_filter_key]
 
         result = []
         if self.vpc.private_subnets is not None:
@@ -116,9 +136,8 @@ class ExistingVpc(SocaBaseConstruct):
         # sort based on index in private_subnets[] configuration
         result.sort(key=lambda x: private_subnet_ids.index(x.subnet_id))
 
-        self._private_subnets = result
-        return self._private_subnets
-
+        self._private_subnets[subnet_filter_key] = result
+        return self._private_subnets[subnet_filter_key]
 
 class ExistingSocaCluster(SocaBaseConstruct):
 

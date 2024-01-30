@@ -24,7 +24,6 @@ __all__ = (
     'VpcEndpointSecurityGroup',
     'VpcGatewayEndpoint',
     'VpcInterfaceEndpoint',
-    'OpenSearchSecurityGroup',
     'DefaultClusterSecurityGroup',
     'VirtualDesktopPublicLoadBalancerAccessSecurityGroup',
     'VirtualDesktopBastionAccessSecurityGroup'
@@ -635,25 +634,6 @@ class VpcInterfaceEndpoint(SocaBaseConstruct):
         return f'https://{dns}'
 
 
-class OpenSearchSecurityGroup(SecurityGroup):
-
-    def __init__(self, context: AdministratorContext, name: str, scope: constructs.Construct,
-                 vpc: ec2.IVpc):
-        super().__init__(context, name, scope, vpc, description='OpenSearch security group')
-        self.setup_ingress()
-        self.setup_egress()
-
-    def setup_ingress(self):
-        self.add_ingress_rule(
-            ec2.Peer.ipv4(self.vpc.vpc_cidr_block),
-            ec2.Port.tcp(443),
-            description='Allow HTTPS traffic from all VPC nodes to OpenSearch'
-        )
-
-    def setup_egress(self):
-        self.add_outbound_traffic_rule()
-
-
 class DefaultClusterSecurityGroup(SecurityGroup):
     """
     Default Cluster Security Group with no inbound or outbound rules.
@@ -679,7 +659,7 @@ class InternalLoadBalancerSecurityGroup(SecurityGroup):
         self.add_ingress_rule(
             ec2.Peer.ipv4(self.vpc.vpc_cidr_block),
             ec2.Port.tcp(443),
-            description='Allow HTTPS traffic from all VPC nodes to OpenSearch'
+            description='Allow HTTPS traffic from all VPC nodes'
         )
 
     def setup_egress(self):

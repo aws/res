@@ -134,24 +134,3 @@ class IdeaBaseStack(SocaBaseConstruct):
             f'{self.cluster_name}-user-pool',
             self.context.config().get_string('identity-provider.cognito.user_pool_id', required=True)
         )
-
-    def build_access_control_groups(self, user_pool: cognito.IUserPool):
-        group_name_helper = GroupNameHelper(self.context)
-        # module administrators group
-        cognito.CfnUserPoolGroup(
-            scope=self.stack,
-            id=f'{self.module_id}-administrators-group',
-            description=f'Module administrators group for module id: {self.module_id}, cluster: {self.cluster_name}',
-            group_name=group_name_helper.get_module_administrators_group(self.module_id),
-            precedence=3,
-            user_pool_id=user_pool.user_pool_id
-        )
-        # module users group
-        cognito.CfnUserPoolGroup(
-            scope=self.stack,
-            id=f'{self.module_id}-users-group',
-            description=f'Module user group for module id: {self.module_id}, cluster: {self.cluster_name}',
-            group_name=group_name_helper.get_module_users_group(self.module_id),
-            precedence=4,
-            user_pool_id=user_pool.user_pool_id
-        )

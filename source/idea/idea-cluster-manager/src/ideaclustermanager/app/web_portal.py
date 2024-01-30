@@ -241,46 +241,58 @@ class WebPortal:
             claims = self.context.token_service.decode_token(auth_result.access_token)
             self.logger.info(f'sso token claims: {Utils.to_json(claims)}')
 
-            username = Utils.get_value_as_string('username', claims)
-            self.logger.debug(f'Cognito SSO claims - Username: {username}')
+            cognito_username = Utils.get_value_as_string('username', claims)
+            self.logger.debug(f'Cognito SSO claims - Username: {cognito_username}')
 
-            if Utils.is_empty(username):
-                self.logger.exception(f'Error - Unable to read IdP username from claims: {claims}')
+            if not cognito_username:
+                self.logger.exception(f'Error - Unable to read cognito username from claims: {claims}')
                 return sanic.response.redirect(f'{self.web_resources_context_path}?sso_auth_status=FAIL',
                                                headers=DEFAULT_HTTP_HEADERS)
 
-            self.logger.debug(f'SSO auth: Looking up user: {username}')
-            existing_user = self.context.accounts.user_dao.get_user(username=username)
-
-            if existing_user is None:
-                self.logger.warning(f'SSO auth: {username} is not previously known. User must be synced before first SSO attempt')
-                # TODO auto-enrollment would go here
-                self.logger.info(f'SSO auth: Unable to process {username}')
-                self.logger.info(f'disabling federated user in user pool: {username}')
-                self.context.user_pool.admin_disable_user(username=username)
-                self.logger.info(f'deleting federated user in user pool: {username}')
-                self.context.user_pool.admin_delete_user(username=username)
+            email = self.context.token_service.get_email_from_token_username(token_username=cognito_username)
+            if not email:
+                self.logger.exception(f'Error: No email defined for cognito user {cognito_username}')
+            
+            existing_user = self.context.accounts.get_user_by_email(email=email)
+            if not existing_user:
+                self.logger.info(f'SSO auth: Unable to process user with email {email}')
+                self.logger.info(f'Disabling federated user in user pool: {cognito_username}')
+                self.context.user_pool.admin_disable_user(username=cognito_username)
+                self.logger.info(f'Deleting federated user in user pool: {cognito_username}')
+                self.context.user_pool.admin_delete_user(username=cognito_username)
                 try:
                     self.logger.info(f'Deleting state {state}')
                     self.context.accounts.sso_state_dao.delete_sso_state(state)
                 except:
                     self.logger.info(f'Could not delete state {state}')
                 return sanic.response.redirect(f'{self.web_resources_context_path}?sso_auth_status=FAIL&error_msg=UserNotFound',
-                                               headers=DEFAULT_HTTP_HEADERS)
-
-            self.logger.debug(f'Updating SSO State for user {username}: {state}')
+                                headers=DEFAULT_HTTP_HEADERS)
+                
+            if not existing_user.enabled:
+                self.logger.error(f'User {existing_user.username} is disabled. Login Denied.')
+                cognito_domain_url = self.context.config().get_string('identity-provider.cognito.domain_url')
+                _, logout_urls = self.context.accounts.single_sign_on_helper.get_callback_logout_urls()
+                client_id = claims.get('client_id')
+                if logout_urls and client_id and cognito_domain_url:
+                    logout_url = logout_urls[-1]
+                    self.context.accounts.sign_out(auth_result.refresh_token, sso_enabled)
+                    return sanic.response.redirect(f'{cognito_domain_url}/logout?client_id={client_id}&logout_uri={logout_url}')
+                return sanic.response.redirect(f'{self.web_resources_context_path}?sso_auth_status=FAIL&error_msg=UserNotFound',
+                                headers=DEFAULT_HTTP_HEADERS)
+                
+            self.logger.debug(f'Updating SSO State for user {cognito_username}: {state}')
             self.context.accounts.sso_state_dao.update_sso_state({
                 'state': state,
                 'access_token': auth_result.access_token,
                 'refresh_token': auth_result.refresh_token,
                 'expires_in': auth_result.expires_in,
                 'id_token': auth_result.id_token,
-                'token_type': auth_result.token_type
+                'token_type': auth_result.token_type,
             })
 
-            if not existing_user["is_active"]:
-                user = self.context.accounts.user_dao.convert_from_db(existing_user)
-                self.context.accounts.activate_user(user)
+            if not existing_user.is_active:
+                user = self.context.accounts.get_user(existing_user.username)
+                self.context.accounts.activate_user(existing_user=user)
 
             return sanic.response.redirect(f'{self.web_resources_context_path}?sso_auth_status=SUCCESS&sso_auth_code={state}',
                                            headers=DEFAULT_HTTP_HEADERS)

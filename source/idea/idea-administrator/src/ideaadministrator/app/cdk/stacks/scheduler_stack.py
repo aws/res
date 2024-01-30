@@ -97,7 +97,6 @@ class SchedulerStack(IdeaBaseStack):
         self.user_pool = self.lookup_user_pool()
 
         self.build_oauth2_client()
-        self.build_access_control_groups(user_pool=self.user_pool)
         self.build_sqs_queue()
         self.build_iam_roles()
         self.build_security_groups()

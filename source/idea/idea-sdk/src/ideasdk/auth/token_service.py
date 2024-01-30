@@ -11,14 +11,14 @@
 
 __all__ = (
     'TokenServiceOptions',
-    'ApiAuthorization',
-    'ApiAuthorizationType',
     'TokenService'
 )
 
 from ideasdk.protocols import SocaContextProtocol, TokenServiceProtocol
-from ideadatamodel import SocaBaseModel, AuthResult, exceptions, errorcodes
+from ideadatamodel import SocaBaseModel, AuthResult, exceptions, errorcodes, constants
 from ideasdk.utils import Utils
+from ideadatamodel.auth import User
+from ideadatamodel.auth import GetUserByEmailRequest, GetUserRequest
 
 from typing import Optional, Dict, List
 import jwt
@@ -53,22 +53,6 @@ class TokenServiceOptions(SocaBaseModel):
 
     administrators_group_name: Optional[str]
     managers_group_name: Optional[str]
-
-
-class ApiAuthorizationType(str, Enum):
-    ADMINISTRATOR = 'admin'
-    MANAGER = 'manager'
-    USER = 'user'
-    APP = 'app'
-
-
-class ApiAuthorization(SocaBaseModel):
-    type: ApiAuthorizationType
-    username: Optional[str]  # will not exist for APP authorizations
-    client_id: Optional[str]
-    groups: Optional[List[str]]  # list of all groups user is part of
-    scopes: Optional[List[str]]  # list of allowed oauth scopes
-    invocation_source: Optional[str]
 
 
 class TokenService(TokenServiceProtocol):
@@ -313,6 +297,29 @@ class TokenService(TokenServiceProtocol):
             self._logger.error(f'Invalid Token: {e}')
             raise exceptions.unauthorized_access(f'Invalid Token - {e}')
 
+
+    
+    def get_email_from_token_username(self, token_username: str) -> Optional[str]:
+        """
+            For a user with 
+            1. email = a@email.com
+            2. SSO enabled with identity-provider-name = idp
+            Cognito creates a user as idp_a@gmail.com and that name is passed as username in access token. 
+            This method  gets the identity-provider-name prefix from database and removes that from the username
+            to get the user email back.
+            
+            :param token_username
+            :return email
+        """
+        
+        if self._context.config().get_bool('identity-provider.cognito.sso_enabled', required=True):
+            identity_provider_name = self._context.config().get_string('identity-provider.cognito.sso_idp_provider_name', required=True)
+            identity_provider_prefix = identity_provider_name + "_"
+            email = None
+            if token_username.startswith(identity_provider_prefix):
+                email = token_username.replace(identity_provider_prefix, "", 1)
+            return email
+
     def is_token_expired(self, token: str) -> bool:
         """
         check if the token is expired
@@ -324,77 +331,6 @@ class TokenService(TokenServiceProtocol):
             return False
         except jwt.ExpiredSignatureError:
             return True
-
-    def get_authorization(self, decoded_token: Optional[Dict]) -> ApiAuthorization:
-        username = Utils.get_value_as_string('username', decoded_token)
-        groups = Utils.get_value_as_list('cognito:groups', decoded_token, [])
-        token_scope = Utils.get_value_as_string('scope', decoded_token)
-        client_id = Utils.get_value_as_string('client_id', decoded_token)
-        scopes = None
-        if Utils.is_not_empty(token_scope):
-            scopes = token_scope.split(' ')
-
-        authorization_type = None
-        if Utils.is_not_empty(self.options.administrators_group_name) and self.options.administrators_group_name in groups:
-            authorization_type = ApiAuthorizationType.ADMINISTRATOR
-        elif Utils.is_not_empty(self.options.administrators_group_name) and self.options.managers_group_name in groups:
-            authorization_type = ApiAuthorizationType.MANAGER
-
-        if Utils.is_empty(username):
-            authorization_type = ApiAuthorizationType.APP
-
-        if authorization_type is None:
-            authorization_type = ApiAuthorizationType.USER
-
-        return ApiAuthorization(
-            type=authorization_type,
-            username=username,
-            scopes=scopes,
-            groups=groups,
-            client_id=client_id
-        )
-
-    def is_scope_authorized(self, access_token: str, scope: str, verify_exp=True) -> bool:
-        access_token = access_token
-        if Utils.is_empty(access_token):
-            return False
-        if Utils.is_empty(scope):
-            return False
-
-        decoded_token = self.decode_token(access_token, verify_exp=verify_exp)
-        authorization = self.get_authorization(decoded_token)
-        if authorization.type != ApiAuthorizationType.APP:
-            return False
-        return Utils.is_not_empty(authorization.scopes) and scope in authorization.scopes
-
-    def is_administrator(self, access_token: str, verify_exp=True) -> bool:
-        access_token = access_token
-        if Utils.is_empty(access_token):
-            return False
-        administrators_group_name = self.options.administrators_group_name
-        if Utils.is_empty(administrators_group_name):
-            return False
-        decoded_token = self.decode_token(access_token, verify_exp=verify_exp)
-        authorization = self.get_authorization(decoded_token)
-        return authorization.type == ApiAuthorizationType.ADMINISTRATOR
-
-    def is_manager(self, access_token: str, verify_exp=True) -> bool:
-        access_token = access_token
-        if Utils.is_empty(access_token):
-            return False
-        managers_group_name = self.options.managers_group_name
-        if Utils.is_empty(managers_group_name):
-            return False
-
-        decoded_token = self.decode_token(access_token, verify_exp=verify_exp)
-        authorization = self.get_authorization(decoded_token)
-        return authorization.type == ApiAuthorizationType.MANAGER
-
-    def get_username(self, access_token: str, verify_exp=True) -> Optional[str]:
-        if Utils.is_empty(access_token):
-            return None
-        decoded_token = self.decode_token(access_token, verify_exp=verify_exp)
-        return Utils.get_value_as_string('username', decoded_token)
 
     def get_access_token(self, force_renewal=True) -> Optional[str]:
         auth_result = None

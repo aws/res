@@ -81,6 +81,7 @@ class ProjectsDAO:
         title = Utils.get_value_as_string('title', project)
         description = Utils.get_value_as_string('description', project)
         ldap_groups = Utils.get_value_as_list('ldap_groups', project, [])
+        users = project.get('users', [])
         enabled = Utils.get_value_as_bool('enabled', project, False)
         enable_budgets = Utils.get_value_as_bool('enable_budgets', project, False)
         budget_name = Utils.get_value_as_string('budget_name', project)
@@ -96,8 +97,8 @@ class ProjectsDAO:
             for key, value in db_tags.items():
                 tags.append(SocaKeyValue(key=key, value=value))
 
-        created_on = Utils.get_value_as_int('created_on', project)
-        updated_on = Utils.get_value_as_int('updated_on', project)
+        created_on = Utils.get_value_as_int('created_on', project, 0)
+        updated_on = Utils.get_value_as_int('updated_on', project, 0)
 
         return Project(
             project_id=project_id,
@@ -105,6 +106,7 @@ class ProjectsDAO:
             name=name,
             description=description,
             ldap_groups=ldap_groups,
+            users=users,
             tags=tags,
             enabled=enabled,
             enable_budgets=enable_budgets,
@@ -137,6 +139,9 @@ class ProjectsDAO:
         if project.ldap_groups is not None:
             db_project['ldap_groups'] = project.ldap_groups
 
+        if project.users is not None:
+            db_project['users'] = project.users
+
         if project.tags is not None:
             tags = {}
             for tag in project.tags:
@@ -168,7 +173,6 @@ class ProjectsDAO:
 
         if Utils.is_empty(project_id):
             raise exceptions.invalid_params('project_id is required')
-
         result = self.table.get_item(
             Key={
                 'project_id': project_id

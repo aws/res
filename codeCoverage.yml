@@ -5,7 +5,6 @@ source/idea/idea-data-model/src/ideadatamodel/aws:                    0.8
 source/idea/idea-data-model/src/ideadatamodel/cluster_resources:      0.8
 source/idea/idea-data-model/src/ideadatamodel/common:                 0.8
 source/idea/idea-data-model/src/ideadatamodel:                        0.8
-source/idea/idea-sdk/src/ideasdk/analytics:                           0.8
 source/idea/idea-sdk/src/ideasdk/auth:                                0.8
 source/idea/idea-sdk/src/ideasdk/aws:                                 0.8
 source/idea/idea-sdk/src/ideasdk/utils:                               0.8

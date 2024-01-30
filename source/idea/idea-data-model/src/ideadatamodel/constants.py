@@ -105,6 +105,10 @@ IDEA_TAG_MODULE_VERSION =  IDEA_TAG_PREFIX + 'ModuleVersion'
 IDEA_TAG_PROJECT =  IDEA_TAG_PREFIX + 'Project'
 IDEA_TAG_AMI_BUILDER =  IDEA_TAG_PREFIX + 'AmiBuilder'
 
+BI_TAG_PREFIX = 'bi:'
+
+BI_TAG_DEPLOYMENT =  BI_TAG_PREFIX + 'Deployment'
+
 IDEA_TAG_NAME = 'Name'
 
 IDEA_TAG_JOB_ID =  IDEA_TAG_PREFIX + 'JobId'
@@ -135,7 +139,6 @@ NODE_TYPE_UNKNOWN = 'unknown'
 
 STACK_TYPE_BOOTSTRAP = 'bootstrap'
 STACK_TYPE_CLUSTER = 'cluster'
-STACK_TYPE_ANALYTICS = 'analytics'
 STACK_TYPE_APP = 'app'
 STACK_TYPE_ALB = 'alb'
 STACK_TYPE_JOB = 'job'
@@ -262,7 +265,6 @@ MODULE_CLUSTER = 'cluster'
 MODULE_IDENTITY_PROVIDER = 'identity-provider'
 MODULE_DIRECTORYSERVICE = 'directoryservice'
 MODULE_SHARED_STORAGE = 'shared-storage'
-MODULE_ANALYTICS = 'analytics'
 MODULE_SCHEDULER = 'scheduler'
 MODULE_CLUSTER_MANAGER = 'cluster-manager'
 MODULE_VIRTUAL_DESKTOP_CONTROLLER = 'virtual-desktop-controller'
@@ -275,7 +277,6 @@ ALL_MODULES = [
     MODULE_IDENTITY_PROVIDER,
     MODULE_DIRECTORYSERVICE,
     MODULE_SHARED_STORAGE,
-    MODULE_ANALYTICS,
     MODULE_SCHEDULER,
     MODULE_CLUSTER_MANAGER,
     MODULE_VIRTUAL_DESKTOP_CONTROLLER,
@@ -302,14 +303,6 @@ ALL_GROUP_TYPES = [
 GROUP_TYPE_EXTERNAL = "external"
 GROUP_TYPE_INTERNAL = "internal"
 
-RES_ADMIN_GROUPS = [
-    "cluster-manager-administrators-module-group",
-    "scheduler-administrators-module-group",
-    "vdc-administrators-module-group",
-    "managers-cluster-group",
-]
-
-RES_USER_GROUPS = ["cluster-manager-users-module-group", "vdc-users-module-group", "scheduler-users-module-group"]
 
 ADMIN_ROLE = 'admin'
 USER_ROLE = 'user'
@@ -328,7 +321,6 @@ METRICS_PROVIDER_AMAZON_MANAGED_PROMETHEUS = 'amazon_managed_prometheus'
 SERVICE_ID_LEADER_ELECTION = 'leader-election'
 SERVICE_ID_DISTRIBUTED_LOCK = 'distributed-lock'
 SERVICE_ID_METRICS = 'metrics-service'
-SERVICE_ID_ANALYTICS = 'analytics-service'
 
 # idea service account
 IDEA_SERVICE_ACCOUNT = 'ideaserviceaccount'
@@ -414,3 +406,30 @@ API_INVOCATION_SOURCE_HTTP = 'http'
 # SSO
 SSO_IDP_PROVIDER_OIDC = 'OIDC'
 SSO_IDP_PROVIDER_SAML = 'SAML'
+SSO_SOURCE_PROVIDER_NAME_REGEX = "^(?!^Cognito$)[\\w._:/-]{1,128}$"
+SSO_SOURCE_PROVIDER_NAME_ERROR_MESSAGE = "Only use word character or a single character in the list [\".\", \"_\", \":\", \"/\", \"-\"] for SSO source provider name. " +\
+    "Must be between 1 and 128 characters long." +\
+    "SourceProviderName may not be Cognito"
+
+# API Validation Regex and ErrorMessages
+FILE_SYSTEM_NAME_REGEX = "^[a-z0-9_]{3,18}$"
+FILE_SYSTEM_NAME_ERROR_MESSAGE = "Only use lowercase alphabets, numbers and underscore (_) for file system name. " +\
+            "Must be between 3 and 18 characters long."
+
+MOUNT_DIRECTORY_REGEX = "^/[a-z0-9-]{3,18}$"
+MOUNT_DIRECTORY_ERROR_MESSAGE = "Only use lowercase alphabets, numbers, " +\
+    "and hyphens (-) for mount directory. Must be between 3 and 18 characters long."
+
+MOUNT_DRIVE_REGEX = "^[ABD-Z]{1}$"
+MOUNT_DRIVE_ERROR_MESSAGE = "Only use an uppercase alphabet for mount drive"
+ONTAP_STORAGE_CAPACITY_RANGE = (1024, 196608)
+
+PROJECT_ID_REGEX = "^[a-z0-9-]{3,18}$"
+PROJECT_ID_ERROR_MESSAGE = "Only use lowercase alphabets, numbers, and hyphens (-) for project id. " +\
+    "Must be between 3 and 18 characters long."
+
+SOFTWARE_STACK_NAME_REGEX = SESSION_NAME_REGEX = "^.{3,50}$"
+SOFTWARE_STACK_NAME_ERROR_MESSAGE = SESSION_NAME_ERROR_MESSAGE = "Use any characters " +\
+    "and form a name of length between 3 and 50 characters, inclusive for software stack name."
+
+INVALID_RANGE_ERROR_MESSAGE = "Input out of permitted range"

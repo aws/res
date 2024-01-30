@@ -49,16 +49,19 @@ cp -r ${PACKAGE_DIR}/resources ${IDEA_APP_DEPLOY_DIR}/${APP_NAME}
 
 {% include '_templates/linux/supervisord.jinja2' %}
 
+ENVIRONMENT="
+    res_test_mode=\"%(ENV_RES_TEST_MODE)s\",
+    RES_TEST_MODE=\"%(ENV_RES_TEST_MODE)s\""
 if [[ ! -z "${IDEA_HTTPS_PROXY}" ]]; then
-  echo "[program:${APP_NAME}]
-environment=
+    ENVIRONMENT+=",
     https_proxy=\"%(ENV_IDEA_HTTPS_PROXY)s\",
     HTTPS_PROXY=\"%(ENV_IDEA_HTTPS_PROXY)s\",
     no_proxy=\"%(ENV_IDEA_NO_PROXY)s\",
-    NO_PROXY=\"%(ENV_IDEA_NO_PROXY)s\"" > /etc/supervisord.d/${APP_NAME}.ini
-else
-  echo "[program:${APP_NAME}]" > /etc/supervisord.d/${APP_NAME}.ini
+    NO_PROXY=\"%(ENV_IDEA_NO_PROXY)s\""
 fi
+
+echo "[program:${APP_NAME}]
+environment=${ENVIRONMENT}" > /etc/supervisord.d/${APP_NAME}.ini
 echo "command=/opt/idea/python/latest/bin/resserver
 process_name=${APP_NAME}
 redirect_stderr=true

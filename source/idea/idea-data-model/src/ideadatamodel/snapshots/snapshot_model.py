@@ -10,8 +10,13 @@
 #  and limitations under the License.
 
 __all__ = (
+    'ApplySnapshot',
+    'ApplySnapshotStatus',
     'Snapshot',
-    'SnapshotStatus'
+    'SnapshotStatus',
+    'TableKeys',
+    'TableName',
+    'RESVersion'
 )
 
 from ideadatamodel import SocaBaseModel
@@ -25,8 +30,46 @@ class SnapshotStatus(str, Enum):
     COMPLETED = 'COMPLETED'
     FAILED = 'FAILED'
 
+
 class Snapshot(SocaBaseModel):
     s3_bucket_name: Optional[str]
     snapshot_path: Optional[str]
     status: Optional[SnapshotStatus]
     created_on: Optional[datetime]
+    failure_reason: Optional[str]
+    
+    
+class ApplySnapshotStatus(str, Enum):
+    IN_PROGRESS = 'IN_PROGRESS'
+    COMPLETED = 'COMPLETED'
+    FAILED = 'FAILED'
+    ROLLBACK_IN_PROGRESS = "ROLLBACK_IN_PROGRESS"
+    ROLLBACK_COMPLETE = "ROLLBACK_COMPLETE"
+    ROLLBACE_FAILED = "ROLLBACK_FAILED"
+    
+    
+class ApplySnapshot(SocaBaseModel):
+    apply_snapshot_identifier: Optional[str]
+    s3_bucket_name: Optional[str]
+    snapshot_path: Optional[str]
+    status: Optional[ApplySnapshotStatus]
+    created_on: Optional[datetime]
+    failure_reason: Optional[str]
+    
+
+class TableKeys(SocaBaseModel):
+    partition_key: str
+    sort_key: Optional[str]
+
+
+class TableName(str, Enum):
+    CLUSTER_SETTINGS_TABLE_NAME = "cluster-settings"
+    USERS_TABLE_NAME = "accounts.users"
+    PROJECTS_TABLE_NAME = "projects"
+    PERMISSION_PROFILES_TABLE_NAME = "vdc.controller.permission-profiles"
+    SOFTWARE_STACKS_TABLE_NAME = "vdc.controller.software-stacks"
+
+
+class RESVersion(str, Enum):
+    v_2023_11 = "2023.11"
+    v_2024_01 = "2024.01"

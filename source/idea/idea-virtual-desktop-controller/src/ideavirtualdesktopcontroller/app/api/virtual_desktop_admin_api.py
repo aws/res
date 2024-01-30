@@ -16,6 +16,8 @@ from ideadatamodel import (
     GetProjectRequest,
     CreateSessionRequest,
     CreateSessionResponse,
+    DeleteSoftwareStackRequest,
+    DeleteSoftwareStackResponse,
     BatchCreateSessionRequest,
     BatchCreateSessionResponse,
     GetSessionConnectionInfoRequest,
@@ -45,23 +47,22 @@ from ideadatamodel import (
     ListPermissionsRequest,
     CreateSoftwareStackFromSessionRequest,
     CreateSoftwareStackFromSessionResponse,
-    ReIndexUserSessionsResponse,
-    ReIndexSoftwareStacksResponse,
     CreatePermissionProfileResponse,
     CreatePermissionProfileRequest,
     UpdatePermissionProfileRequest,
     UpdatePermissionProfileResponse,
+    DeletePermissionProfileRequest,
+    DeletePermissionProfileResponse,
     UpdateSessionPermissionRequest,
     UpdateSessionPermissionResponse,
     VirtualDesktopSession,
     VirtualDesktopArchitecture,
     VirtualDesktopSoftwareStack
 )
-from ideadatamodel import errorcodes, exceptions
+from ideadatamodel import errorcodes, exceptions, constants
 from ideasdk.api import ApiInvocationContext
-from ideasdk.utils import Utils
+from ideasdk.utils import Utils, ApiUtils
 from ideavirtualdesktopcontroller.app.api.virtual_desktop_api import VirtualDesktopAPI
-
 
 class VirtualDesktopAdminAPI(VirtualDesktopAPI):
 
@@ -69,30 +70,102 @@ class VirtualDesktopAdminAPI(VirtualDesktopAPI):
         super().__init__(context)
         self.context = context
         self._logger = context.logger('virtual-desktop-admin-api')
-        self.namespace_handler_map: Dict[str, ()] = {
-            'VirtualDesktopAdmin.CreateSession': self.create_session,
-            'VirtualDesktopAdmin.BatchCreateSessions': self.batch_create_sessions,
-            'VirtualDesktopAdmin.UpdateSession': self.update_session,
-            'VirtualDesktopAdmin.DeleteSessions': self.delete_sessions,
-            'VirtualDesktopAdmin.GetSessionInfo': self.get_session_info,
-            'VirtualDesktopAdmin.ListSessions': self.list_sessions,
-            'VirtualDesktopAdmin.StopSessions': self.stop_sessions,
-            'VirtualDesktopAdmin.RebootSessions': self.reboot_sessions,
-            'VirtualDesktopAdmin.ResumeSessions': self.resume_sessions,
-            'VirtualDesktopAdmin.GetSessionScreenshot': self.get_session_screenshots,
-            'VirtualDesktopAdmin.GetSessionConnectionInfo': self.get_session_connection_info,
-            'VirtualDesktopAdmin.CreateSoftwareStack': self.create_software_stack,
-            'VirtualDesktopAdmin.UpdateSoftwareStack': self.update_software_stack,
-            'VirtualDesktopAdmin.GetSoftwareStackInfo': self.get_software_stack_info,
-            'VirtualDesktopAdmin.ListSoftwareStacks': self.list_software_stacks,
-            'VirtualDesktopAdmin.CreateSoftwareStackFromSession': self.create_software_stack_from_session,
-            'VirtualDesktopAdmin.CreatePermissionProfile': self.create_permission_profile,
-            'VirtualDesktopAdmin.UpdatePermissionProfile': self.update_permission_profile,
-            'VirtualDesktopAdmin.ListSessionPermissions': self.list_session_permissions,
-            'VirtualDesktopAdmin.ListSharedPermissions': self.list_shared_permissions,
-            'VirtualDesktopAdmin.UpdateSessionPermissions': self.update_session_permission,
-            'VirtualDesktopAdmin.ReIndexUserSessions': self.re_index_user_sessions,
-            'VirtualDesktopAdmin.ReIndexSoftwareStacks': self.re_index_software_stacks,
+        self.SCOPE_WRITE = f'{self.context.module_id()}/write'
+        self.SCOPE_READ = f'{self.context.module_id()}/read'
+
+        self.acl = {
+            'VirtualDesktopAdmin.CreateSession': {
+                'scope': self.SCOPE_WRITE,
+                'method': self.create_session,
+            },
+            'VirtualDesktopAdmin.BatchCreateSessions':  {
+                'scope': self.SCOPE_WRITE,
+                'method': self.batch_create_sessions,
+            },
+            'VirtualDesktopAdmin.UpdateSession': {
+                'scope': self.SCOPE_WRITE,
+                'method': self.update_session,
+            },
+            'VirtualDesktopAdmin.DeleteSessions': {
+                'scope': self.SCOPE_WRITE,
+                'method': self.delete_sessions,
+            },
+            'VirtualDesktopAdmin.GetSessionInfo': {
+                'scope': self.SCOPE_READ,
+                'method': self.get_session_info,
+            },
+            'VirtualDesktopAdmin.ListSessions': {
+                'scope': self.SCOPE_READ,
+                'method': self.list_sessions,
+            },
+            'VirtualDesktopAdmin.StopSessions': {
+                'scope': self.SCOPE_WRITE,
+                'method': self.stop_sessions,
+            },
+            'VirtualDesktopAdmin.RebootSessions': {
+                'scope': self.SCOPE_WRITE,
+                'method': self.reboot_sessions,
+            },
+            'VirtualDesktopAdmin.ResumeSessions': {
+                'scope': self.SCOPE_WRITE,
+                'method': self.resume_sessions,
+            },
+            'VirtualDesktopAdmin.GetSessionScreenshot': {
+                'scope': self.SCOPE_READ,
+                'method': self.get_session_screenshots,
+            },
+            'VirtualDesktopAdmin.GetSessionConnectionInfo': {
+                'scope': self.SCOPE_READ,
+                'method': self.get_session_connection_info,
+            },
+            'VirtualDesktopAdmin.CreateSoftwareStack': {
+                'scope': self.SCOPE_WRITE,
+                'method': self.create_software_stack,
+            },
+            'VirtualDesktopAdmin.UpdateSoftwareStack': {
+                'scope': self.SCOPE_WRITE,
+                'method': self.update_software_stack,
+            },
+            'VirtualDesktopAdmin.GetSoftwareStackInfo': {
+                'scope': self.SCOPE_READ,
+                'method': self.get_software_stack_info,
+            },
+            'VirtualDesktopAdmin.ListSoftwareStacks': {
+                'scope': self.SCOPE_READ,
+                'method': self.list_software_stacks,
+            },
+            'VirtualDesktopAdmin.CreateSoftwareStackFromSession': {
+                'scope': self.SCOPE_WRITE,
+                'method': self.create_software_stack_from_session,
+            },
+            'VirtualDesktopAdmin.DeleteSoftwareStack': {
+                'scope': self.SCOPE_WRITE,
+                'method': self.delete_software_stack,
+            },
+            'VirtualDesktopAdmin.CreatePermissionProfile': {
+                'scope': self.SCOPE_WRITE,
+                'method': self.create_permission_profile,
+            },
+            'VirtualDesktopAdmin.UpdatePermissionProfile': {
+                'scope': self.SCOPE_WRITE,
+                'method': self.update_permission_profile,
+            },
+            'VirtualDesktopAdmin.DeletePermissionProfile': {
+                'scope': self.SCOPE_WRITE,
+                'method': self.delete_permission_profile,
+            },
+            'VirtualDesktopAdmin.ListSessionPermissions': {
+                'scope': self.SCOPE_READ,
+                'method': self.list_session_permissions,
+            },
+            'VirtualDesktopAdmin.ListSharedPermissions': {
+                'scope': self.SCOPE_READ,
+                'method': self.list_shared_permissions,
+            },
+            'VirtualDesktopAdmin.UpdateSessionPermissions': {
+                'scope': self.SCOPE_WRITE,
+                'method': self.update_session_permission,
+            },
         }
 
     def _validate_resume_session_request(self, session: VirtualDesktopSession) -> (VirtualDesktopSession, bool):
@@ -114,18 +187,6 @@ class VirtualDesktopAdminAPI(VirtualDesktopAPI):
             session.failure_reason = 'Missing Create Session Info'
             return session, False
 
-        # validate if the user belongs within allowed group -
-        # Check is done for admin only since, virtual-desktop-user-api already enforces the group
-        # check for api-call
-        response = self.context.accounts_client.list_users_in_group(ListUsersInGroupRequest(
-            group_names=self.VDI_GROUPS
-        ))
-
-        group = next(filter(lambda user: user.username == session.owner, response.listing), None)
-        if not group:
-            session.failure_reason = f'User {session.owner} is not authorized to create sessions.'
-            return session, False
-
         return self.validate_create_session_request(session)
 
     @staticmethod
@@ -145,10 +206,6 @@ class VirtualDesktopAdminAPI(VirtualDesktopAPI):
 
         if Utils.is_empty(software_stack.base_os):
             software_stack.failure_reason = 'software_stack.base_os missing'
-            return software_stack, False
-
-        if Utils.is_empty(software_stack.projects):
-            software_stack.failure_reason = 'software_stack.projects missing'
             return software_stack, False
 
         for project in software_stack.projects:
@@ -196,6 +253,10 @@ class VirtualDesktopAdminAPI(VirtualDesktopAPI):
 
     def create_session(self, context: ApiInvocationContext):
         session = context.get_request_payload_as(CreateSessionRequest).session
+        if session.name:
+            ApiUtils.validate_input(session.name,
+                                    constants.SESSION_NAME_REGEX,
+                                    constants.SESSION_NAME_ERROR_MESSAGE)
 
         session, is_valid = self._validate_create_session_request(session)
         if not is_valid:
@@ -272,6 +333,7 @@ class VirtualDesktopAdminAPI(VirtualDesktopAPI):
 
     def get_software_stack_info(self, context: ApiInvocationContext):
         stack_id = context.get_request_payload_as(GetSoftwareStackInfoRequest).stack_id
+        base_os = context.get_request_payload_as(GetSoftwareStackInfoRequest).base_os
         if Utils.is_empty(stack_id):
             context.fail(
                 error_code=errorcodes.INVALID_PARAMS,
@@ -280,14 +342,15 @@ class VirtualDesktopAdminAPI(VirtualDesktopAPI):
             return
 
         context.success(GetSoftwareStackInfoResponse(
-            software_stack=self._get_software_stack_info(stack_id)
+            software_stack=self._get_software_stack_info(stack_id, base_os)
         ))
 
     def get_session_info(self, context: ApiInvocationContext):
-        session = context.get_request_payload_as(GetSessionInfoRequest).session
+        request = context.get_request_payload_as(GetSessionInfoRequest)
+        session = request.session
         self.validate_get_session_info_request(session)
         session = self.complete_get_session_info_request(session, context)
-        session = self._get_session_info(session)
+        session = self.session_db.get_from_db(session.owner, session.idea_session_id)
         if Utils.is_empty(session.failure_reason):
             context.success(GetSessionInfoResponse(
                 session=session
@@ -391,8 +454,7 @@ class VirtualDesktopAdminAPI(VirtualDesktopAPI):
 
     def list_sessions(self, context: ApiInvocationContext):
         request = context.get_request_payload_as(ListSessionsRequest)
-
-        result = self.session_db.list_from_index(request)
+        result = self.session_db.list_all_from_db(request)
         context.success(result)
 
     def update_session(self, context: ApiInvocationContext):
@@ -481,6 +543,12 @@ class VirtualDesktopAdminAPI(VirtualDesktopAPI):
 
     def create_software_stack(self, context: ApiInvocationContext):
         software_stack = context.get_request_payload_as(CreateSoftwareStackRequest).software_stack
+
+        if software_stack.name:
+            ApiUtils.validate_input(software_stack.name,
+                                    constants.SOFTWARE_STACK_NAME_REGEX,
+                                    constants.SOFTWARE_STACK_NAME_ERROR_MESSAGE)
+
         software_stack, is_valid = self._validate_create_software_stack_request(software_stack)
         if not is_valid:
             context.fail(
@@ -527,6 +595,27 @@ class VirtualDesktopAdminAPI(VirtualDesktopAPI):
                 error_code=errorcodes.CREATED_SOFTWARE_STACK_FROM_SESSION_FAILED
             )
 
+    def delete_software_stack(self, context: ApiInvocationContext):
+        software_stack = context.get_request_payload_as(DeleteSoftwareStackRequest).software_stack
+        if Utils.is_empty(software_stack.stack_id) or Utils.is_empty(software_stack.base_os):
+            context.fail(
+                error_code=errorcodes.INVALID_PARAMS,
+                message=f'Stack ID and base OS are required'
+            )
+
+            return
+
+        sessions = self.session_db.list_all_for_software_stack(ListSessionsRequest(), software_stack)
+        if sessions.listing:
+            session_ids_by_software_stack_id = [session.dcv_session_id for session in sessions.listing]
+            context.fail(error_code=errorcodes.GENERAL_ERROR, message=f'Software stack is still in use by virtual desktop sessions. '
+                                                                      f'Stack ID: {software_stack.stack_id}， Session IDs: {session_ids_by_software_stack_id}')
+
+            return
+
+        self._delete_software_stack(software_stack)
+        context.success(DeleteSoftwareStackResponse())
+
     def update_permission_profile(self, context: ApiInvocationContext):
         permission_profile = context.get_request_payload_as(UpdatePermissionProfileRequest).profile
         existing_profile = self.permission_profile_db.get(profile_id=permission_profile.profile_id)
@@ -556,43 +645,22 @@ class VirtualDesktopAdminAPI(VirtualDesktopAPI):
             profile=permission_profile
         ))
 
-    def re_index_software_stacks(self, context: ApiInvocationContext):
-        # got a request to reindex everything again.
-        request = ListSoftwareStackRequest()
-        request.disabled_also = True
-        response = self.software_stack_db.list_all_from_db(request)
+    def delete_permission_profile(self, context: ApiInvocationContext):
+        profile_id = context.get_request_payload_as(DeletePermissionProfileRequest).profile_id
+        if not profile_id:
+            context.fail(
+                message="permission profile ID is required",
+                error_code=errorcodes.INVALID_PARAMS,
+                payload=DeletePermissionProfileResponse(
+                ))
+            return
+        existing_profile = self.permission_profile_db.get(profile_id=profile_id)
+        if not existing_profile:
+            context.success(DeletePermissionProfileResponse())
+            return
 
-        while True:
-            for software_stack in response.listing:
-                self.software_stack_utils.index_software_stack_entry_to_opensearch(software_stack=software_stack)
-
-            if Utils.is_empty(response.cursor):
-                # this was the last page,
-                break
-
-            request.paginator = response.paginator
-            response = self.software_stack_db.list_all_from_db(request)
-
-        context.success(ReIndexSoftwareStacksResponse())
-
-    def re_index_user_sessions(self, context: ApiInvocationContext):
-        # got a request to reindex everything again.
-
-        request = ListSessionsRequest()
-        response = self.session_db.list_all_from_db(request)
-
-        while True:
-            for session in response.listing:
-                self.session_utils.index_session_entry_to_opensearch(session=session)
-
-            if Utils.is_empty(response.cursor):
-                # this was the last page,
-                break
-
-            request.paginator = response.paginator
-            response = self.session_db.list_all_from_db(request)
-
-        context.success(ReIndexUserSessionsResponse())
+        self.permission_profile_db.delete(profile_id)
+        context.success(DeletePermissionProfileResponse())
 
     def get_session_connection_info(self, context: ApiInvocationContext):
         self._logger.info(f'received get session connection info request from user: {context.get_username()}')
@@ -654,10 +722,16 @@ class VirtualDesktopAdminAPI(VirtualDesktopAPI):
         context.success(response)
 
     def invoke(self, context: ApiInvocationContext):
+        namespace = context.namespace
 
-        if not context.is_authorized(elevated_access=True):
+        acl_entry = self.acl.get(namespace)
+        if acl_entry is None:
             raise exceptions.unauthorized_access()
 
-        namespace = context.namespace
-        if namespace in self.namespace_handler_map:
-            self.namespace_handler_map[namespace](context)
+        acl_entry_scope = acl_entry.get('scope')
+        is_authorized = context.is_authorized(elevated_access=True, scopes=[acl_entry_scope])
+
+        if is_authorized:
+            acl_entry['method'](context)
+        else:
+            raise exceptions.unauthorized_access()

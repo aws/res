@@ -20,6 +20,7 @@ from ideasdk.utils import Utils
 from ideaadministrator.app.cdk.constructs import (
     Vpc,
     ExistingVpc,
+    SubnetFilterKeys,
     VpcGatewayEndpoint,
     VpcInterfaceEndpoint,
     PrivateHostedZone,
@@ -195,15 +196,15 @@ class ClusterStack(IdeaBaseStack):
         else:
             return self._vpc
 
-    def private_subnets(self) -> List[ec2.ISubnet]:
+    def private_subnets(self, subnet_filter_key: Optional[SubnetFilterKeys] = None) -> List[ec2.ISubnet]:
         if self.context.config().get_bool('cluster.network.use_existing_vpc', False):
-            return self._existing_vpc.get_private_subnets()
+            return self._existing_vpc.get_private_subnets(subnet_filter_key)
         else:
             return self.vpc.private_subnets
 
-    def public_subnets(self) -> List[ec2.ISubnet]:
+    def public_subnets(self, subnet_filter_key: Optional[SubnetFilterKeys] = None) -> List[ec2.ISubnet]:
         if self.context.config().get_bool('cluster.network.use_existing_vpc', False):
-            return self._existing_vpc.get_public_subnets()
+            return self._existing_vpc.get_public_subnets(subnet_filter_key)
         else:
             return self.vpc.public_subnets
 
@@ -858,7 +859,7 @@ class ClusterStack(IdeaBaseStack):
 
         # external ALB - can be deployed in public or private subnets
         is_public = self.context.config().get_bool('cluster.load_balancers.external_alb.public', default=True)
-        external_alb_subnets = self.public_subnets() if is_public is True else self.private_subnets()
+        external_alb_subnets = self.public_subnets(SubnetFilterKeys.LOAD_BALANCER_SUBNETS) if is_public is True else self.private_subnets(SubnetFilterKeys.LOAD_BALANCER_SUBNETS)
         self.external_alb = elbv2.ApplicationLoadBalancer(
             self.stack,
             f'{self.cluster_name}-external-alb',
@@ -934,7 +935,7 @@ class ClusterStack(IdeaBaseStack):
             self.external_alb,
             'https-listener',
             port=443,
-            ssl_policy=self.context.config().get_string('cluster.load_balancers.external_alb.ssl_policy', default='ELBSecurityPolicy-FS-1-2-Res-2020-10'),
+            ssl_policy=self.context.config().get_string('cluster.load_balancers.external_alb.ssl_policy', default='ELBSecurityPolicy-TLS13-1-2-2021-06'),
             load_balancer_arn=self.external_alb.load_balancer_arn,
             protocol='HTTPS',
             certificates=[
@@ -954,7 +955,7 @@ class ClusterStack(IdeaBaseStack):
             self.internal_alb,
             'https-listener',
             port=443,
-            ssl_policy=self.context.config().get_string('cluster.load_balancers.internal_alb.ssl_policy', default='ELBSecurityPolicy-FS-1-2-Res-2020-10'),
+            ssl_policy=self.context.config().get_string('cluster.load_balancers.internal_alb.ssl_policy', default='ELBSecurityPolicy-TLS13-1-2-2021-06'),
             load_balancer_arn=self.internal_alb.load_balancer_arn,
             protocol='HTTPS',
             certificates=[
@@ -1005,7 +1006,7 @@ class ClusterStack(IdeaBaseStack):
                 self.internal_alb,
                 'dcv-broker-client-listener',
                 port=dcv_broker_client_communication_port,
-                ssl_policy=self.context.config().get_string('virtual-desktop-controller.dcv_broker.ssl_policy', default='ELBSecurityPolicy-FS-1-2-Res-2020-10'),
+                ssl_policy=self.context.config().get_string('virtual-desktop-controller.dcv_broker.ssl_policy', default='ELBSecurityPolicy-TLS13-1-2-2021-06'),
                 load_balancer_arn=self.internal_alb.load_balancer_arn,
                 protocol='HTTPS',
                 certificates=[
@@ -1029,7 +1030,7 @@ class ClusterStack(IdeaBaseStack):
                 self.internal_alb,
                 'dcv-broker-agent-listener',
                 port=dcv_broker_agent_communication_port,
-                ssl_policy=self.context.config().get_string('virtual-desktop-controller.dcv_broker.ssl_policy', default='ELBSecurityPolicy-FS-1-2-Res-2020-10'),
+                ssl_policy=self.context.config().get_string('virtual-desktop-controller.dcv_broker.ssl_policy', default='ELBSecurityPolicy-TLS13-1-2-2021-06'),
                 load_balancer_arn=self.internal_alb.load_balancer_arn,
                 protocol='HTTPS',
                 certificates=[
@@ -1053,7 +1054,7 @@ class ClusterStack(IdeaBaseStack):
                 self.internal_alb,
                 'dcv-broker-gateway-listener',
                 port=dcv_broker_gateway_communication_port,
-                ssl_policy=self.context.config().get_string('virtual-desktop-controller.dcv_broker.ssl_policy', default='ELBSecurityPolicy-FS-1-2-Res-2020-10'),
+                ssl_policy=self.context.config().get_string('virtual-desktop-controller.dcv_broker.ssl_policy', default='ELBSecurityPolicy-TLS13-1-2-2021-06'),
                 load_balancer_arn=self.internal_alb.load_balancer_arn,
                 protocol='HTTPS',
                 certificates=[
@@ -1086,6 +1087,14 @@ class ClusterStack(IdeaBaseStack):
                 for subnet in self.vpc.public_subnets:
                     public_subnets.append(subnet.subnet_id)
         cluster_settings['network.public_subnets'] = public_subnets
+
+        load_balancer_subnets = self.context.config().get_list("cluster.network.load_balancer_subnets", [])
+        if Utils.is_not_empty(load_balancer_subnets):
+            cluster_settings['network.load_balancer_subnets'] = load_balancer_subnets
+
+        infrastructure_host_subnets = self.context.config().get_list("cluster.network.infrastructure_host_subnets", [])
+        if Utils.is_not_empty(load_balancer_subnets):
+            cluster_settings['network.infrastructure_host_subnets'] = infrastructure_host_subnets
 
         private_subnets = self.context.config().get_list('cluster.network.private_subnets', [])
         if Utils.is_empty(private_subnets):

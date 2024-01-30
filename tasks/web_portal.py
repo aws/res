@@ -58,7 +58,6 @@ def typings(c):
     add_model('virtual_desktop')
     add_model('cluster_settings')
     add_model('projects')
-    add_model('analytics')
     add_model('app')
     add_model('email_templates')
     add_model('notifications')

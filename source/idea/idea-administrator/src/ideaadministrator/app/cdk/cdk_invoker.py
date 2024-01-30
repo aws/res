@@ -165,7 +165,6 @@ class CdkInvoker:
             constants.MODULE_SCHEDULER: self.invoke_scheduler,
             constants.MODULE_BASTION_HOST: self.invoke_bastion_host,
             constants.MODULE_VIRTUAL_DESKTOP_CONTROLLER: self.invoke_virtual_desktop_controller,
-            constants.MODULE_ANALYTICS: self.invoke_analytics,
             constants.MODULE_METRICS: self.invoke_metrics
         }
 
@@ -507,16 +506,6 @@ class CdkInvoker:
         cdk_cmd = self.get_cdk_command('deploy', [
             f"--app '{cdk_app_cmd}' ",
             f'--outputs-file {outputs_file}',
-            '--require-approval never'
-        ])
-        self.exec_shell(cdk_cmd)
-
-    def invoke_analytics(self, **_):
-        outputs_file = os.path.join(self.deployment_dir, 'analytics-outputs.json')
-        cdk_app_cmd = self.get_cdk_app_cmd()
-        cdk_cmd = self.get_cdk_command('deploy', [
-            f"--app '{cdk_app_cmd}' ",
-            f'--outputs-file {outputs_file} ',
             '--require-approval never'
         ])
         self.exec_shell(cdk_cmd)

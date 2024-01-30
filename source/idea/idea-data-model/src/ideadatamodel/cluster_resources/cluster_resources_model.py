@@ -13,7 +13,6 @@ __all__ = (
     'SocaClusterResource',
     'SocaVPC',
     'SocaCloudFormationStack',
-    'SocaOpenSearchDomain',
     'SocaDirectory',
     'SocaSubnet',
     'SocaFileSystem',
@@ -101,38 +100,11 @@ class SocaCloudFormationStack(SocaClusterResource):
     def is_app(self) -> bool:
         return self.stack_type == constants.STACK_TYPE_APP
 
-    def is_analytics(self) -> bool:
-        return self.stack_type == constants.STACK_TYPE_ANALYTICS
-
     def is_alb(self) -> bool:
         return self.stack_type == constants.STACK_TYPE_ALB
 
     def is_job(self) -> bool:
         return self.stack_type == constants.STACK_TYPE_JOB
-
-
-class SocaOpenSearchDomain(SocaClusterResource):
-
-    @property
-    def _domain_status(self) -> Optional[Dict]:
-        return ModelUtils.get_value_as_dict('DomainStatus', self.ref)
-
-    @property
-    def vpc_id(self) -> Optional[str]:
-        vpc_options = ModelUtils.get_value_as_dict('VPCOptions', self._domain_status)
-        return ModelUtils.get_value_as_string('VPCId', vpc_options)
-
-    @property
-    def endpoint(self) -> str:
-        return ModelUtils.get_value_as_string('Endpoint', self.ref)
-
-    @property
-    def vpc_endpoint(self) -> Optional[str]:
-        endpoints = ModelUtils.get_value_as_dict('Endpoints', self._domain_status)
-        if endpoints is None:
-            return None
-        for key, value in endpoints.items():
-            return value
 
 
 class SocaDirectory(SocaClusterResource):

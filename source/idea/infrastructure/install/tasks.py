@@ -1,6 +1,6 @@
 #  Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 #  SPDX-License-Identifier: Apache-2.0
-from typing import Optional, TypedDict
+from typing import Optional, TypedDict, Union
 
 import aws_cdk
 from aws_cdk import aws_ecs as ecs
@@ -9,10 +9,11 @@ from aws_cdk import aws_stepfunctions as sfn
 from aws_cdk import aws_stepfunctions_tasks as sfn_tasks
 from constructs import Construct, DependencyGroup
 
+from idea.batteries_included.parameters.parameters import BIParameters
 from idea.infrastructure.install import handlers
 from idea.infrastructure.install.commands import create
 from idea.infrastructure.install.parameters.common import CommonKey
-from idea.infrastructure.install.parameters.parameters import Parameters
+from idea.infrastructure.install.parameters.parameters import RESParameters
 from idea.infrastructure.install.permissions import Permissions
 
 
@@ -28,7 +29,7 @@ class Tasks(Construct):
         scope: Construct,
         id: str,
         registry_name: str,
-        params: Parameters,
+        params: Union[RESParameters, BIParameters],
         dependency_group: DependencyGroup,
     ):
         super().__init__(scope, id)
@@ -77,7 +78,7 @@ class Tasks(Construct):
         return self.get_task(
             name="Create",
             command=create.Create(params=self.params).get_commands(),
-            task_role=self.permissions.install_role,
+            task_role=self.permissions.pipeline_role,
         )
 
     def get_update_task(self) -> sfn_tasks.EcsRunTask:
@@ -87,7 +88,7 @@ class Tasks(Construct):
                 "res-admin --version",
                 f"res-admin deploy all --upgrade --cluster-name {self.params.get_str(CommonKey.CLUSTER_NAME)} --aws-region {aws_cdk.Aws.REGION}",
             ],
-            task_role=self.permissions.update_role,
+            task_role=self.permissions.pipeline_role,
         )
 
     def get_delete_task(self) -> sfn_tasks.EcsRunTask:
@@ -100,7 +101,7 @@ class Tasks(Construct):
                     f"--cluster-name {self.params.get_str(CommonKey.CLUSTER_NAME)} --aws-region {aws_cdk.Aws.REGION}"
                 ),
             ],
-            task_role=self.permissions.delete_role,
+            task_role=self.permissions.pipeline_role,
         )
 
     def get_task(

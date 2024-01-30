@@ -48,6 +48,10 @@ class VirtualDesktopSoftwareStackDetail extends Component<VirtualDesktopSoftware
         return this.props.params.software_stack_id;
     }
 
+    getSoftwareStackBaseOS(): string {
+        return this.props.params.software_stack_base_os;
+    }
+
     getVirtualDesktopAdminClient(): VirtualDesktopAdminClient {
         return AppContext.get().client().virtualDesktopAdmin();
     }
@@ -58,6 +62,7 @@ class VirtualDesktopSoftwareStackDetail extends Component<VirtualDesktopSoftware
             .virtualDesktopAdmin()
             .getSoftwareStackInfo({
                 stack_id: this.getSoftwareStackId(),
+                base_os: this.getSoftwareStackBaseOS()
             })
             .then((result) => {
                 this.setState({

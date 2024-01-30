@@ -35,7 +35,6 @@ class DbEntryUpdatedEventHandler(BaseDBEventHandler):
 
     def _handle_software_stack_updated(self, _: str, __: str, old_value: dict, new_value: dict, ___: str):
         new_software_stack = self.software_stack_db.convert_db_dict_to_software_stack_object(new_value)
-        self.software_stack_utils.update_software_stack_entry_to_opensearch(new_software_stack)
 
         old_software_stack = self.software_stack_db.convert_db_dict_to_software_stack_object(old_value)
         if new_software_stack.name != old_software_stack.name or new_software_stack.description != old_software_stack.description:
@@ -46,7 +45,7 @@ class DbEntryUpdatedEventHandler(BaseDBEventHandler):
                 key=USER_SESSION_DB_FILTER_SOFTWARE_STACK_ID_KEY,
                 value=new_software_stack.stack_id
             ))
-            response = self.session_db.list_from_index(request)
+            response = self.session_db.list_all_from_db(request)
             for session in response.listing:
                 idea_session_info.add((session.idea_session_id, session.owner))
 
@@ -62,8 +61,6 @@ class DbEntryUpdatedEventHandler(BaseDBEventHandler):
 
     def _handle_user_session_updated(self, _: str, __: str, old_value: dict, new_value: dict, ___: str):
         new_session = self.session_db.convert_db_dict_to_session_object(new_value)
-        self.session_utils.update_session_entry_to_opensearch(new_session)
-
         old_session = self.session_db.convert_db_dict_to_session_object(old_value)
         publish_permission_update_event = False
         if old_session.state != new_session.state:
@@ -101,7 +98,7 @@ class DbEntryUpdatedEventHandler(BaseDBEventHandler):
                 break
 
         if is_permission_updated:
-            response = self.session_permissions_db.list_from_index(ListPermissionsRequest(
+            response = self.session_permissions_db.list_session_permissions(ListPermissionsRequest(
                 filters=[SocaFilter(
                     key=SESSION_PERMISSIONS_FILTER_PERMISSION_PROFILE_ID_KEY,
                     value=new_permission_profile.profile_id
@@ -119,8 +116,7 @@ class DbEntryUpdatedEventHandler(BaseDBEventHandler):
 
     def _handle_session_permission_updated(self, _: str, __: str, old_value: dict, new_value: dict, ___: str):
         new_session_permission = self.session_permissions_db.convert_db_dict_to_session_permission_object(new_value)
-        self.session_permission_utils.update_session_entry_to_opensearch(new_session_permission)
-
+        
         notifications_enabled = self.context.config().get_bool('virtual-desktop-controller.dcv_session.notifications.session-permission-updated.enabled', required=True)
         if not notifications_enabled:
             return

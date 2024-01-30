@@ -32,13 +32,11 @@ class DbEntryCreatedEventHandler(BaseDBEventHandler):
         }
 
     def _handle_software_stack_created(self, _: str, __: str, new_value: dict, ___: str):
-        software_stack = self.software_stack_db.convert_db_dict_to_software_stack_object(new_value)
-        self.software_stack_utils.index_software_stack_entry_to_opensearch(software_stack)
+        self._logger.debug(f'created entry for {new_value}. No=OP. Returning')
 
     def _handle_user_session_created(self, _: str, __: str, new_value: dict, ___: str):
         session = self.session_db.convert_db_dict_to_session_object(new_value)
         self._notify_session_owner_of_state_update(session)
-        self.session_utils.index_session_entry_to_opensearch(session=session)
 
     def _handle_permission_profile_created(self, _: str, __: str, ___: dict, table_name: str):
         self._logger.debug(f'created entry for {table_name} not handled. No=OP. Returning')
@@ -51,8 +49,7 @@ class DbEntryCreatedEventHandler(BaseDBEventHandler):
 
     def _handle_session_permission_created(self, _: str, __: str, new_value: dict, ___: str):
         session_permission = self.session_permissions_db.convert_db_dict_to_session_permission_object(new_value)
-        self.session_permission_utils.index_session_permission_to_opensearch(session_permission=session_permission)
-
+        
         notifications_enabled = self.context.config().get_bool('virtual-desktop-controller.dcv_session.notifications.session-shared.enabled', required=True)
         if not notifications_enabled:
             return

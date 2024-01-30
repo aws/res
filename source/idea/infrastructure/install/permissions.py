@@ -15,33 +15,46 @@ class Permissions(Construct):
         environment_name: str,
     ):
         super().__init__(scope, id)
-
-        self.install_role = iam.Role(
+        # TODO: Split role into separate Install/Delete/Update roles to allow for finer grained permissions
+        self.pipeline_role = iam.Role(
             self,
-            "InstallRole",
+            "PipelineRole",
             assumed_by=self.get_principal(),
-            role_name=f"Admin-{environment_name}-InstallRole",
+            role_name=f"Admin-{environment_name}-PipelineRole",
         )
-        self.install_role.add_to_policy(statement=self.get_install_policy_statement())
-        dependency_group.add(self.install_role)
 
-        self.update_role = iam.Role(
-            self,
-            "UpdateRole",
-            assumed_by=self.get_principal(),
-            role_name=f"Admin-{environment_name}-UpdateRole",
+        self.pipeline_role.add_to_policy(statement=self.get_cloudformation_access())
+        self.pipeline_role.add_to_policy(statement=self.get_directoryservice_access())
+        self.pipeline_role.add_to_policy(statement=self.get_dynamodb_access())
+        self.pipeline_role.add_to_policy(statement=self.get_ecr_access())
+        self.pipeline_role.add_to_policy(
+            statement=self.get_ecr_authorizationtoken_access()
         )
-        self.update_role.add_to_policy(statement=self.get_install_policy_statement())
-        dependency_group.add(self.update_role)
+        self.pipeline_role.add_to_policy(statement=self.get_ec2_access())
+        self.pipeline_role.add_to_policy(statement=self.get_ec2_describe_access())
+        self.pipeline_role.add_to_policy(statement=self.get_efs_access())
+        self.pipeline_role.add_to_policy(statement=self.get_elb_access())
+        self.pipeline_role.add_to_policy(statement=self.get_elb_readonly_access())
+        self.pipeline_role.add_to_policy(statement=self.get_es_access())
+        self.pipeline_role.add_to_policy(statement=self.get_cloudtrail_access())
+        self.pipeline_role.add_to_policy(statement=self.get_fsx_access())
+        self.pipeline_role.add_to_policy(statement=self.get_iam_access())
+        self.pipeline_role.add_to_policy(statement=self.get_kms_access())
+        self.pipeline_role.add_to_policy(statement=self.get_lambda_access())
+        self.pipeline_role.add_to_policy(statement=self.get_cloudwatch_logs_access())
+        self.pipeline_role.add_to_policy(statement=self.get_cloudwatch_access())
+        self.pipeline_role.add_to_policy(statement=self.get_route53_access())
+        self.pipeline_role.add_to_policy(statement=self.get_s3_access())
+        self.pipeline_role.add_to_policy(statement=self.get_secretsmanager_access())
+        self.pipeline_role.add_to_policy(statement=self.get_ssm_access())
+        self.pipeline_role.add_to_policy(statement=self.get_sns_access())
+        self.pipeline_role.add_to_policy(statement=self.get_sqs_access())
+        self.pipeline_role.add_to_policy(statement=self.get_sts_access())
+        self.pipeline_role.add_to_policy(statement=self.get_tag_access())
+        self.pipeline_role.add_to_policy(statement=self.get_cognito_idp_access())
+        self.pipeline_role.add_to_policy(statement=self.get_cognito_idp_list_access())
 
-        self.delete_role = iam.Role(
-            self,
-            "DeleteRole",
-            assumed_by=self.get_principal(),
-            role_name=f"Admin-{environment_name}-DeleteRole",
-        )
-        self.delete_role.add_to_policy(statement=self.get_install_policy_statement())
-        dependency_group.add(self.delete_role)
+        dependency_group.add(self.pipeline_role)
 
     def get_principal(self) -> iam.ServicePrincipal:
         return iam.ServicePrincipal(
@@ -54,149 +67,313 @@ class Permissions(Construct):
             },
         )
 
-    def get_install_policy_statement(self) -> iam.PolicyStatement:
+    def get_cloudformation_access(self) -> iam.PolicyStatement:
         return iam.PolicyStatement(
             effect=iam.Effect.ALLOW,
-            resources=["*"],
+            resources=[
+                f"arn:{aws_cdk.Aws.PARTITION}:cloudformation:{aws_cdk.Aws.REGION}:{aws_cdk.Aws.ACCOUNT_ID}:stack/res-*"
+            ],
             actions=[
-                "*",  # TODO: narrow the scope of these permissions
-                "backup-storage:MountCapsule",
-                "backup:CreateBackupPlan",
-                "backup:CreateBackupSelection",
-                "backup:CreateBackupVault",
-                "backup:DescribeBackupVault",
-                "backup:GetBackupPlan",
-                "backup:GetBackupSelection",
-                "backup:TagResource",
                 "cloudformation:CreateChangeSet",
                 "cloudformation:CreateStack",
                 "cloudformation:DeleteChangeSet",
+                "cloudformation:DeleteStack",
                 "cloudformation:DescribeChangeSet",
                 "cloudformation:DescribeStackEvents",
                 "cloudformation:DescribeStacks",
                 "cloudformation:ExecuteChangeSet",
                 "cloudformation:GetTemplate",
                 "cloudformation:UpdateTerminationProtection",
-                "cloudwatch:PutMetricAlarm",
-                "ds:CreateMicrosoftAD",
-                "ds:DescribeDirectories",
-                "dynamodb:*",
-                "ec2:AllocateAddress",
-                "ec2:AssociateAddress",
-                "ec2:AssociateRouteTable",
-                "ec2:AttachInternetGateway",
-                "ec2:AuthorizeSecurityGroupEgress",
-                "ec2:AuthorizeSecurityGroupIngress",
-                "ec2:CreateFlowLogs",
-                "ec2:CreateInternetGateway",
-                "ec2:CreateNatGateway",
-                "ec2:CreateNetworkInterface",
-                "ec2:CreateNetworkInterfacePermission",
-                "ec2:CreateRoute",
-                "ec2:CreateRouteTable",
-                "ec2:CreateSecurityGroup",
-                "ec2:CreateSubnet",
-                "ec2:CreateTags",
-                "ec2:CreateVpc",
-                "ec2:CreateVpcEndpoint",
-                "ec2:DescribeAddresses",
-                "ec2:DescribeAvailabilityZones",
-                "ec2:DescribeFlowLogs",
-                "ec2:DescribeImages",
-                "ec2:DescribeInstances",
-                "ec2:DescribeInternetGateways",
-                "ec2:DescribeKeyPairs",
-                "ec2:DescribeNatGateways",
-                "ec2:DescribeNetwork*",
-                "ec2:DescribeNetworkInterfaces",
-                "ec2:DescribeRegions",
-                "ec2:DescribeRouteTables",
-                "ec2:DescribeSecurityGroups",
-                "ec2:DescribeSubnets",
+            ],
+        )
+
+    def get_directoryservice_access(self) -> iam.PolicyStatement:
+        return iam.PolicyStatement(
+            effect=iam.Effect.ALLOW,
+            resources=[
+                f"arn:{aws_cdk.Aws.PARTITION}:ds:{aws_cdk.Aws.REGION}:{aws_cdk.Aws.ACCOUNT_ID}:*"
+            ],
+            actions=["ds:CreateMicrosoftAD", "ds:DescribeDirectories"],
+        )
+
+    def get_dynamodb_access(self) -> iam.PolicyStatement:
+        return iam.PolicyStatement(
+            effect=iam.Effect.ALLOW,
+            resources=[
+                f"arn:{aws_cdk.Aws.PARTITION}:dynamodb:{aws_cdk.Aws.REGION}:{aws_cdk.Aws.ACCOUNT_ID}:*"
+            ],
+            actions=["dynamodb:*"],
+        )
+
+    def get_ecr_access(self) -> iam.PolicyStatement:
+        return iam.PolicyStatement(
+            effect=iam.Effect.ALLOW,
+            resources=[
+                f"arn:{aws_cdk.Aws.PARTITION}:ecr:{aws_cdk.Aws.REGION}:{aws_cdk.Aws.ACCOUNT_ID}:*"
+            ],
+            actions=["ecr:*"],
+        )
+
+    def get_ecr_authorizationtoken_access(self) -> iam.PolicyStatement:
+        return iam.PolicyStatement(
+            effect=iam.Effect.ALLOW,
+            resources=["*"],
+            actions=["ecr:GetAuthorizationToken"],
+        )
+
+    def get_ec2_access(self) -> iam.PolicyStatement:
+        return iam.PolicyStatement(
+            effect=iam.Effect.ALLOW,
+            resources=[
+                f"arn:{aws_cdk.Aws.PARTITION}:ec2:{aws_cdk.Aws.REGION}:{aws_cdk.Aws.ACCOUNT_ID}:*"
+            ],
+            actions=["ec2:*"],
+        )
+
+    def get_ec2_describe_access(self) -> iam.PolicyStatement:
+        return iam.PolicyStatement(
+            effect=iam.Effect.ALLOW,
+            resources=["*"],
+            actions=[
                 "ec2:DescribeTags",
-                "ec2:DescribeVpcAttribute",
-                "ec2:DescribeVpcEndpointServices",
-                "ec2:DescribeVpcEndpoints",
-                "ec2:DescribeVpcs",
-                "ec2:ModifySubnetAttribute",
-                "ec2:ModifyVpcAttribute",
-                "ec2:RevokeSecurityGroupEgress",
-                "ec2:RunInstances",
+                "ec2:DescribeInstances",
+                "ec2:DescribeRegions",
+            ],
+        )
+
+    def get_efs_access(self) -> iam.PolicyStatement:
+        return iam.PolicyStatement(
+            effect=iam.Effect.ALLOW,
+            resources=[
+                f"arn:{aws_cdk.Aws.PARTITION}:elasticfilesystem:{aws_cdk.Aws.REGION}:{aws_cdk.Aws.ACCOUNT_ID}:*"
+            ],
+            actions=[
                 "elasticfilesystem:CreateFileSystem",
                 "elasticfilesystem:CreateMountTarget",
                 "elasticfilesystem:DescribeFileSystems",
                 "elasticfilesystem:DescribeMountTargets",
                 "elasticfilesystem:PutFileSystemPolicy",
                 "elasticfilesystem:PutLifecycleConfiguration",
-                "elasticloadbalancing:AddTags",
-                "elasticloadbalancing:CreateListener",
-                "elasticloadbalancing:CreateLoadBalancer",
-                "elasticloadbalancing:CreateRule",
-                "elasticloadbalancing:CreateTargetGroup",
-                "elasticloadbalancing:DeleteTargetGroup",
-                "elasticloadbalancing:DescribeListeners",
-                "elasticloadbalancing:DescribeLoadBalancers",
-                "elasticloadbalancing:DescribeRules",
-                "elasticloadbalancing:DescribeTargetGroups",
-                "elasticloadbalancing:DescribeTargetHealth",
-                "elasticloadbalancing:ModifyLoadBalancerAttributes",
-                "elasticloadbalancing:ModifyRule",
-                "elasticloadbalancing:RegisterTargets",
+            ],
+        )
+
+    def get_elb_access(self) -> iam.PolicyStatement:
+        return iam.PolicyStatement(
+            effect=iam.Effect.ALLOW,
+            resources=[
+                f"arn:{aws_cdk.Aws.PARTITION}:elasticloadbalancing:{aws_cdk.Aws.REGION}:{aws_cdk.Aws.ACCOUNT_ID}:*"
+            ],
+            actions=["elasticloadbalancing:*"],
+        )
+
+    def get_elb_readonly_access(self) -> iam.PolicyStatement:
+        return iam.PolicyStatement(
+            effect=iam.Effect.ALLOW,
+            resources=["*"],
+            actions=["elasticloadbalancing:Describe*"],
+        )
+
+    def get_es_access(self) -> iam.PolicyStatement:
+        return iam.PolicyStatement(
+            effect=iam.Effect.ALLOW,
+            resources=[
+                f"arn:{aws_cdk.Aws.PARTITION}:es:{aws_cdk.Aws.REGION}:{aws_cdk.Aws.ACCOUNT_ID}:*"
+            ],
+            actions=[
                 "es:AddTags",
                 "es:CreateElasticsearchDomain",
                 "es:DescribeElasticsearchDomain",
                 "es:ListDomainNames",
-                "events:*",
+            ],
+        )
+
+    def get_cloudtrail_access(self) -> iam.PolicyStatement:
+        return iam.PolicyStatement(
+            effect=iam.Effect.ALLOW,
+            resources=[
+                f"arn:{aws_cdk.Aws.PARTITION}:events:{aws_cdk.Aws.REGION}:{aws_cdk.Aws.ACCOUNT_ID}:*"
+            ],
+            actions=["events:*"],
+        )
+
+    def get_fsx_access(self) -> iam.PolicyStatement:
+        return iam.PolicyStatement(
+            effect=iam.Effect.ALLOW,
+            resources=[
+                f"arn:{aws_cdk.Aws.PARTITION}:fsx:{aws_cdk.Aws.REGION}:{aws_cdk.Aws.ACCOUNT_ID}:*"
+            ],
+            actions=[
                 "fsx:CreateFileSystem",
                 "fsx:DescribeFileSystems",
                 "fsx:TagResource",
+            ],
+        )
+
+    def get_iam_access(self) -> iam.PolicyStatement:
+        return iam.PolicyStatement(
+            effect=iam.Effect.ALLOW,
+            resources=[f"arn:{aws_cdk.Aws.PARTITION}:iam::{aws_cdk.Aws.ACCOUNT_ID}:*"],
+            actions=[
                 "iam:AddRoleToInstanceProfile",
                 "iam:AttachRolePolicy",
                 "iam:CreateInstanceProfile",
                 "iam:CreateRole",
+                "iam:DeleteRolePolicy",
+                "iam:DetachRolePolicy",
                 "iam:GetRole",
                 "iam:GetRolePolicy",
                 "iam:ListRoles",
                 "iam:PassRole",
                 "iam:PutRolePolicy",
                 "iam:TagRole",
+                "iam:DeleteRole",
+            ],
+        )
+
+    def get_kms_access(self) -> iam.PolicyStatement:
+        return iam.PolicyStatement(
+            effect=iam.Effect.ALLOW,
+            resources=[
+                f"arn:{aws_cdk.Aws.PARTITION}:kms:{aws_cdk.Aws.REGION}:{aws_cdk.Aws.ACCOUNT_ID}:*"
+            ],
+            actions=[
                 "kms:CreateGrant",
                 "kms:Decrypt",
                 "kms:DescribeKey",
                 "kms:GenerateDataKey",
                 "kms:RetireGrant",
+            ],
+        )
+
+    def get_lambda_access(self) -> iam.PolicyStatement:
+        return iam.PolicyStatement(
+            effect=iam.Effect.ALLOW,
+            resources=[
+                f"arn:{aws_cdk.Aws.PARTITION}:lambda:{aws_cdk.Aws.REGION}:{aws_cdk.Aws.ACCOUNT_ID}:*"
+            ],
+            actions=[
                 "lambda:AddPermission",
                 "lambda:CreateFunction",
                 "lambda:GetFunction",
                 "lambda:InvokeFunction",
+            ],
+        )
+
+    def get_cloudwatch_logs_access(self) -> iam.PolicyStatement:
+        return iam.PolicyStatement(
+            effect=iam.Effect.ALLOW,
+            resources=[
+                f"arn:{aws_cdk.Aws.PARTITION}:logs:{aws_cdk.Aws.REGION}:{aws_cdk.Aws.ACCOUNT_ID}:*"
+            ],
+            actions=[
                 "logs:CreateLogGroup",
                 "logs:CreateLogStream",
                 "logs:DescribeLogGroups",
                 "logs:PutRetentionPolicy",
-                "route53:CreateHostedZone",
-                "route53:CreateVPCAssociationAuthorization",
-                "route53:GetHostedZone",
-                "route53resolver:AssociateResolverEndpointIpAddress",
-                "route53resolver:AssociateResolverRule",
-                "route53resolver:CreateResolverEndpoint",
-                "route53resolver:CreateResolverRule",
-                "route53resolver:GetResolverEndpoint",
-                "route53resolver:GetResolverRule",
-                "route53resolver:GetResolverRuleAssociation",
-                "route53resolver:PutResolverRulePolicy",
-                "route53resolver:TagResource",
-                "s3:*Object",
-                "s3:GetBucketLocation",
-                "s3:ListBucket",
-                "secretsmanager:CreateSecret",
-                "secretsmanager:TagResource",
+            ],
+        )
+
+    def get_cloudwatch_access(self) -> iam.PolicyStatement:
+        return iam.PolicyStatement(
+            effect=iam.Effect.ALLOW,
+            resources=[
+                f"arn:{aws_cdk.Aws.PARTITION}:cloudwatch:{aws_cdk.Aws.REGION}:{aws_cdk.Aws.ACCOUNT_ID}:*"
+            ],
+            actions=["cloudwatch:*"],
+        )
+
+    def get_route53_access(self) -> iam.PolicyStatement:
+        return iam.PolicyStatement(
+            effect=iam.Effect.ALLOW,
+            resources=[f"arn:{aws_cdk.Aws.PARTITION}:route53:::*"],
+            actions=["route53:*"],
+        )
+
+    def get_s3_access(self) -> iam.PolicyStatement:
+        return iam.PolicyStatement(
+            effect=iam.Effect.ALLOW,
+            resources=[f"arn:{aws_cdk.Aws.PARTITION}:s3:::*"],
+            actions=[
+                "s3:*",
+            ],
+        )
+
+    def get_secretsmanager_access(self) -> iam.PolicyStatement:
+        return iam.PolicyStatement(
+            effect=iam.Effect.ALLOW,
+            resources=[
+                f"arn:{aws_cdk.Aws.PARTITION}:secretsmanager:{aws_cdk.Aws.REGION}:{aws_cdk.Aws.ACCOUNT_ID}:*"
+            ],
+            actions=["secretsmanager:CreateSecret", "secretsmanager:TagResource"],
+        )
+
+    def get_sns_access(self) -> iam.PolicyStatement:
+        return iam.PolicyStatement(
+            effect=iam.Effect.ALLOW,
+            resources=[
+                f"arn:{aws_cdk.Aws.PARTITION}:sns:{aws_cdk.Aws.REGION}:{aws_cdk.Aws.ACCOUNT_ID}:*"
+            ],
+            actions=[
                 "sns:CreateTopic",
                 "sns:GetTopicAttributes",
                 "sns:ListSubscriptionsByTopic",
                 "sns:SetTopicAttributes",
                 "sns:Subscribe",
                 "sns:TagResource",
-                "sqs:*",
-                "sts:DecodeAuthorizationMessage",
             ],
+        )
+
+    def get_sqs_access(self) -> iam.PolicyStatement:
+        return iam.PolicyStatement(
+            effect=iam.Effect.ALLOW,
+            resources=[
+                f"arn:{aws_cdk.Aws.PARTITION}:sqs:{aws_cdk.Aws.REGION}:{aws_cdk.Aws.ACCOUNT_ID}:*"
+            ],
+            actions=["sqs:*"],
+        )
+
+    def get_ssm_access(self) -> iam.PolicyStatement:
+        return iam.PolicyStatement(
+            effect=iam.Effect.ALLOW,
+            resources=[
+                f"arn:{aws_cdk.Aws.PARTITION}:ssm:{aws_cdk.Aws.REGION}:{aws_cdk.Aws.ACCOUNT_ID}:*",
+                f"arn:{aws_cdk.Aws.PARTITION}:ec2:{aws_cdk.Aws.REGION}:{aws_cdk.Aws.ACCOUNT_ID}:*",
+                f"arn:{aws_cdk.Aws.PARTITION}:ssm:{aws_cdk.Aws.REGION}::document/AWS-RunShellScript",
+            ],
+            actions=[
+                "ssm:*",
+            ],
+        )
+
+    def get_sts_access(self) -> iam.PolicyStatement:
+        return iam.PolicyStatement(
+            effect=iam.Effect.ALLOW,
+            resources=[
+                f"arn:{aws_cdk.Aws.PARTITION}:sts::{aws_cdk.Aws.ACCOUNT_ID}:*",
+                f"arn:{aws_cdk.Aws.PARTITION}:iam::{aws_cdk.Aws.ACCOUNT_ID}:role/*",
+            ],
+            actions=["sts:*"],
+        )
+
+    def get_tag_access(self) -> iam.PolicyStatement:
+        return iam.PolicyStatement(
+            effect=iam.Effect.ALLOW,
+            resources=["*"],
+            actions=["tag:GetResources"],
+        )
+
+    def get_cognito_idp_access(self) -> iam.PolicyStatement:
+        return iam.PolicyStatement(
+            effect=iam.Effect.ALLOW,
+            resources=[
+                f"arn:{aws_cdk.Aws.PARTITION}:cognito-idp:{aws_cdk.Aws.REGION}:{aws_cdk.Aws.ACCOUNT_ID}:*"
+            ],
+            actions=["cognito-idp:*"],
+        )
+
+    def get_cognito_idp_list_access(self) -> iam.PolicyStatement:
+        return iam.PolicyStatement(
+            effect=iam.Effect.ALLOW,
+            resources=["*"],
+            actions=["cognito-idp:ListUserPools"],
         )

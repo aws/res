@@ -10,6 +10,7 @@ __all__ = (
 from typing import Dict
 import ideaclustermanager
 from ideaclustermanager.app.tasks.base_task import BaseTask
+from ideasdk.utils import Utils
 
 import time
 
@@ -61,6 +62,5 @@ class SyncFromAD(BaseTask):
         start_time = time.time()
         ldap_groups = self.context.ad_sync.fetch_all_ldap_groups()
         group_addition_failures = self.context.ad_sync.sync_all_groups(ldap_groups)
-        if self.context.accounts.is_sso_enabled():
-            self.context.ad_sync.sync_all_users(ldap_groups, group_addition_failures)
+        self.context.ad_sync.sync_all_users(ldap_groups, group_addition_failures)
         self.logger.info(f"-------------TIME: {time.time()-start_time}------------")

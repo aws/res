@@ -16,31 +16,6 @@ import { AppContext } from "../../common";
 import { useEffect } from "react";
 
 export function JobSubmissionsWidget() {
-    useEffect(() => {
-        AppContext.get()
-            .client()
-            .analytics()
-            .queryOpenSearch({
-                data: {
-                    index: "idea-test1_jobs",
-                    body: {
-                        size: 0,
-                        aggs: {
-                            jobs: {
-                                date_histogram: {
-                                    field: "queue_time",
-                                    calendar_interval: "hour",
-                                },
-                            },
-                        },
-                    },
-                },
-            })
-            .then((result) => {
-                console.log(result);
-            });
-    });
-
     const start = new Date();
     const end = new Date();
     start.setDate(start.getDate() - 7);

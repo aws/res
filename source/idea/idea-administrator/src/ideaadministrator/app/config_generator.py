@@ -262,18 +262,48 @@ class ConfigGenerator:
         return value
 
     def get_private_subnet_ids(self) -> Optional[str]:
-        private_subnet_ids = Utils.get_value_as_list('private_subnet_ids', self.user_values, [])
-        public_subnet_ids = Utils.get_value_as_list('public_subnet_ids', self.user_values, [])
-        if self.get_use_existing_vpc() and Utils.is_empty(private_subnet_ids) and Utils.is_empty(public_subnet_ids):
+        # by default all infrastructure host subnets and dcv session subnets are private
+        dcv_session_private_subnet_ids = self.user_values.get('dcv_session_private_subnet_ids', [])
+        infrastructure_host_subnet_ids = self.user_values.get('infrastructure_host_subnet_ids', [])
+
+        private_subnet_ids = list(set([*infrastructure_host_subnet_ids, *dcv_session_private_subnet_ids]))
+        # if alb is not public, the external load balancer subnets are also considered private
+        if not self.get_alb_public:
+            load_balancer_subnet_ids = self.user_values.get('load_balancer_subnet_ids', [])
+            private_subnet_ids = list(set([*private_subnet_ids, *load_balancer_subnet_ids]))
+
+        if self.get_use_existing_vpc() and Utils.is_empty(private_subnet_ids):
             raise exceptions.invalid_params('private_subnet_ids is required when use_existing_vpc = True')
         return private_subnet_ids
 
     def get_public_subnet_ids(self) -> Optional[str]:
-        private_subnet_ids = Utils.get_value_as_list('private_subnet_ids', self.user_values, [])
-        public_subnet_ids = Utils.get_value_as_list('public_subnet_ids', self.user_values, [])
-        if self.get_use_existing_vpc() and Utils.is_empty(private_subnet_ids) and Utils.is_empty(public_subnet_ids):
+        public_subnet_ids = []
+        # if alb is public, only the load_balancer_subnet_ids are public subnets
+        if self.get_alb_public():
+            load_balancer_subnet_ids = self.user_values.get('load_balancer_subnet_ids', [])
+            public_subnet_ids = load_balancer_subnet_ids
+
+        if self.get_use_existing_vpc() and self.get_alb_public() and Utils.is_empty(public_subnet_ids):
             raise exceptions.invalid_params('public_subnet_ids is required when use_existing_vpc = True')
         return public_subnet_ids
+    
+    def get_load_balancer_subnet_ids(self) -> Optional[str]:
+        load_balancer_subnet_ids = self.user_values.get('load_balancer_subnet_ids', [])
+        if self.get_use_existing_vpc() and Utils.is_empty(load_balancer_subnet_ids):
+            raise exceptions.invalid_params('load_balancer_subnet_ids is required when use_existing_vpc = True')
+        return load_balancer_subnet_ids
+
+    def get_infrastructure_host_subnet_ids(self) -> Optional[str]:
+        infrastructure_host_subnet_ids = self.user_values.get('infrastructure_host_subnet_ids', [])
+        if self.get_use_existing_vpc() and Utils.is_empty(infrastructure_host_subnet_ids):
+            raise exceptions.invalid_params('infrastructure_host_subnet_ids is required when use_existing_vpc = True')
+        return infrastructure_host_subnet_ids
+
+    def get_dcv_session_private_subnet_ids(self) -> Optional[str]:
+        dcv_session_private_subnet_ids = self.user_values.get('dcv_session_private_subnet_ids', [])
+        if self.get_use_existing_vpc() and Utils.is_empty(dcv_session_private_subnet_ids):
+            raise exceptions.invalid_params('dcv_session_private_subnet_ids is required when use_existing_vpc = True')
+        return dcv_session_private_subnet_ids
 
     def get_use_existing_internal_fs(self) -> Optional[bool]:
         value = Utils.get_value_as_bool('use_existing_internal_fs', self.user_values, False)
@@ -297,24 +327,6 @@ class ConfigGenerator:
         value = Utils.get_value_as_string('existing_home_fs_id', self.user_values)
         if Utils.is_empty(value) and self.get_use_existing_internal_fs():
             raise exceptions.invalid_params('existing_home_fs_id is required when use_existing_home_fs = True')
-        return value
-
-    def get_use_existing_opensearch_cluster(self) -> Optional[str]:
-        value = Utils.get_value_as_bool('use_existing_opensearch_cluster', self.user_values, False)
-        if value and not self.get_use_existing_vpc():
-            raise exceptions.invalid_params('use_existing_opensearch_cluster cannot be True if use_existing_vpc = False')
-        return value
-
-    def get_opensearch_domain_arn(self) -> Optional[str]:
-        value = Utils.get_value_as_string('opensearch_domain_arn', self.user_values)
-        if Utils.is_empty(value) and self.get_use_existing_opensearch_cluster():
-            raise exceptions.invalid_params('opensearch_domain_arn is required when use_existing_opensearch_cluster = True')
-        return value
-
-    def get_opensearch_domain_endpoint(self) -> Optional[str]:
-        value = Utils.get_value_as_string('opensearch_domain_endpoint', self.user_values)
-        if Utils.is_empty(value) and self.get_use_existing_opensearch_cluster():
-            raise exceptions.invalid_params('opensearch_domain_endpoint is required when use_existing_opensearch_cluster = True')
         return value
 
     def get_alb_custom_certificate_provided(self) -> Optional[bool]:
@@ -431,12 +443,13 @@ class ConfigGenerator:
             'vpc_id': self.get_vpc_id(),
             'private_subnet_ids': self.get_private_subnet_ids(),
             'public_subnet_ids': self.get_public_subnet_ids(),
+            'load_balancer_subnet_ids': self.get_load_balancer_subnet_ids(),
+            'infrastructure_host_subnet_ids': self.get_infrastructure_host_subnet_ids(),
+            'dcv_session_private_subnet_ids': self.get_dcv_session_private_subnet_ids(),
             'use_existing_internal_fs': self.get_use_existing_internal_fs(),
             'existing_internal_fs_id': self.get_existing_internal_fs_id(),
             'use_existing_home_fs': self.get_use_existing_home_fs(),
             'existing_home_fs_id': self.get_existing_home_fs_id(),
-            'use_existing_opensearch_cluster': self.get_use_existing_opensearch_cluster(),
-            'opensearch_domain_endpoint': self.get_opensearch_domain_endpoint(),
             'alb_public': self.get_alb_public(),
             'alb_custom_certificate_provided': self.get_alb_custom_certificate_provided(),
             'alb_custom_certificate_acm_certificate_arn': self.get_alb_custom_certificate_acm_certificate_arn(),

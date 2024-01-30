@@ -13,6 +13,8 @@ from ideasdk.api import BaseAPI, ApiInvocationContext
 from ideadatamodel.auth import (
     GetUserRequest,
     GetUserResult,
+    GetUserByEmailRequest,
+    GetUserByEmailResult,
     ModifyUserRequest,
     ModifyUserResult,
     EnableUserRequest,
@@ -57,6 +59,10 @@ class AccountsAPI(BaseAPI):
             'Accounts.GetUser': {
                 'scope': self.SCOPE_READ,
                 'method': self.get_user
+            },
+            'Accounts.GetUserByEmail': {
+                'scope': self.SCOPE_READ,
+                'method': self.get_user_by_email
             },
             'Accounts.ModifyUser': {
                 'scope': self.SCOPE_WRITE,
@@ -137,6 +143,11 @@ class AccountsAPI(BaseAPI):
         request = context.get_request_payload_as(GetUserRequest)
         user = self.context.accounts.get_user(request.username)
         context.success(GetUserResult(user=user))
+
+    def get_user_by_email(self, context: ApiInvocationContext):
+        request = context.get_request_payload_as(GetUserByEmailRequest)
+        user = self.context.accounts.get_user_by_email(request.email)
+        context.success(GetUserByEmailResult(user=user))
 
     def modify_user(self, context: ApiInvocationContext):
         request = context.get_request_payload_as(ModifyUserRequest)

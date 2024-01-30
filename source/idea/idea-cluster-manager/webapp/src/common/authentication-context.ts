@@ -32,6 +32,8 @@ const KEY_REFRESH_TOKEN = "refresh-token";
 const KEY_ACCESS_TOKEN = "access-token";
 const KEY_ID_TOKEN = "id-token";
 const KEY_SSO_AUTH = "sso-auth";
+const KEY_DB_USERNAME = "db-username";
+const KEY_ROLE = "role";
 
 const HEADER_CONTENT_TYPE_JSON = "application/json;charset=UTF-8";
 const NETWORK_TIMEOUT = 30000;
@@ -72,7 +74,8 @@ export class IdeaAuthenticationContext {
     private accessToken: string | null;
     private idToken: string | null;
     private claimsProvider: JwtTokenClaimsProvider | null;
-
+    private dbUsername: string | null;
+    private role: string | null;
     private logger: AppLogger;
 
     private authContextInitialized: boolean;
@@ -96,7 +99,8 @@ export class IdeaAuthenticationContext {
         this.accessToken = null;
         this.idToken = null;
         this.claimsProvider = null;
-
+        this.dbUsername = null;
+        this.role = null;
         this.props = props;
         this.isServiceworkerInitialized = false;
 
@@ -122,13 +126,15 @@ export class IdeaAuthenticationContext {
         this.accessToken = this.localStorage.getItem(KEY_ACCESS_TOKEN);
         this.idToken = this.localStorage.getItem(KEY_ID_TOKEN);
         this.refreshToken = this.localStorage.getItem(KEY_REFRESH_TOKEN);
+        this.dbUsername = this.localStorage.getItem(KEY_DB_USERNAME);
+        this.role = this.localStorage.getItem(KEY_ROLE);
         let ssoAuth = this.localStorage.getItem(KEY_SSO_AUTH);
         if (ssoAuth != null) {
             this.ssoAuth = Utils.asBoolean(ssoAuth);
         }
 
-        if (this.accessToken != null && this.idToken != null) {
-            this.claimsProvider = new JwtTokenClaimsProvider(this.accessToken, this.idToken);
+        if (this.accessToken != null && this.idToken != null && this.dbUsername != null && this.role != null) {
+            this.claimsProvider = new JwtTokenClaimsProvider(this.accessToken, this.idToken, this.dbUsername, this.role);
         }
     }
 
@@ -174,22 +180,29 @@ export class IdeaAuthenticationContext {
      * @param ssoAuth
      * @private
      */
-    private saveAuthResult(authResult: any, ssoAuth: boolean) {
-        if (authResult.refresh_token) {
-            this.refreshToken = authResult.refresh_token;
+    private saveAuthResult(initiateAuthResult: any, ssoAuth: boolean) {
+        if (initiateAuthResult.auth.refresh_token) {
+            this.refreshToken = initiateAuthResult.auth.refresh_token;
         }
-        this.accessToken = authResult.access_token;
-        this.idToken = authResult.id_token;
-        this.claimsProvider = new JwtTokenClaimsProvider(this.accessToken!, this.idToken!);
+        this.accessToken = initiateAuthResult.auth.access_token;
+        this.idToken = initiateAuthResult.auth.id_token;
+        this.dbUsername = initiateAuthResult.db_username;
+        this.role = initiateAuthResult.role;
+        this.claimsProvider = new JwtTokenClaimsProvider(this.accessToken!, 
+            this.idToken!,
+            this.dbUsername!,
+            this.role!);
         this.ssoAuth = ssoAuth;
 
         if (this.localStorage != null) {
-            if (authResult.refresh_token) {
-                this.localStorage.setItem(KEY_REFRESH_TOKEN, authResult.refresh_token!);
+            if (initiateAuthResult.auth.refresh_token) {
+                this.localStorage.setItem(KEY_REFRESH_TOKEN, initiateAuthResult.auth.refresh_token!);
             }
             this.localStorage.setItem(KEY_SSO_AUTH, ssoAuth ? "true" : "false");
-            this.localStorage.setItem(KEY_ACCESS_TOKEN, authResult.access_token!);
-            this.localStorage.setItem(KEY_ID_TOKEN, authResult.id_token!);
+            this.localStorage.setItem(KEY_ACCESS_TOKEN, initiateAuthResult.auth.access_token!);
+            this.localStorage.setItem(KEY_ID_TOKEN, initiateAuthResult.auth.id_token!);
+            this.localStorage.setItem(KEY_DB_USERNAME, initiateAuthResult.db_username!);
+            this.localStorage.setItem(KEY_ROLE, initiateAuthResult.role!);
         }
     }
 
@@ -213,8 +226,9 @@ export class IdeaAuthenticationContext {
         if (this.localStorage != null) {
             // this is primarily to allow force token renewal in local storage mode for testing, by deleting the access token from local storage
             return this.renewAccessToken().then(() => {
-                if (this.accessToken != null && this.idToken != null) {
-                    this.claimsProvider = new JwtTokenClaimsProvider(this.accessToken, this.idToken);
+                if (this.accessToken != null && this.idToken != null && this.dbUsername != null && this.role != null) {
+                    this.claimsProvider = new JwtTokenClaimsProvider(this.accessToken,
+                        this.idToken, this.dbUsername, this.role);
                     return true;
                 } else {
                     return false;
@@ -256,11 +270,15 @@ export class IdeaAuthenticationContext {
                 this.accessToken = null;
                 this.idToken = null;
                 this.claimsProvider = null;
+                this.dbUsername = null;
+                this.role = null;
                 if (this.localStorage != null) {
                     this.localStorage.removeItem(KEY_ACCESS_TOKEN);
                     this.localStorage.removeItem(KEY_REFRESH_TOKEN);
                     this.localStorage.removeItem(KEY_SSO_AUTH);
                     this.localStorage.removeItem(KEY_ID_TOKEN);
+                    this.localStorage.removeItem(KEY_DB_USERNAME);
+                    this.localStorage.removeItem(KEY_ROLE);
                 }
                 return true;
             });
@@ -368,20 +386,20 @@ export class IdeaAuthenticationContext {
 
         this.logger.info("renewing access token ...");
 
-        let username;
+        let cognito_username;
         if (this.claimsProvider == null) {
             if (this.accessToken != null) {
                 let claims = JwtTokenUtils.parseJwtToken(this.accessToken);
-                username = claims.username;
+                cognito_username = claims.username;
             } else if (this.idToken != null) {
                 let claims = JwtTokenUtils.parseJwtToken(this.idToken);
-                username = claims["cognito:username"];
+                cognito_username = claims["cognito:username"];
             } else {
                 console.info("✗ failed to renew token.");
                 return Promise.resolve(false);
             }
         } else {
-            username = this.claimsProvider.getUsername();
+            cognito_username = this.claimsProvider.getCognitoUsername();
         }
 
         if (this.renewalInProgress != null) {
@@ -400,7 +418,7 @@ export class IdeaAuthenticationContext {
             },
             payload: {
                 auth_flow: authFlow,
-                username: username,
+                cognito_username: cognito_username,
                 refresh_token: this.refreshToken,
             },
         };
@@ -416,7 +434,7 @@ export class IdeaAuthenticationContext {
             .then((result) => {
                 if (result.success && result.payload.auth) {
                     this.logger.info("✓ access token renewed successfully");
-                    this.saveAuthResult(result.payload.auth, this.ssoAuth);
+                    this.saveAuthResult(result.payload, this.ssoAuth);
                     return true;
                 } else {
                     if (result.error_code === NETWORK_TIMEOUT || result.error_code === NETWORK_ERROR || result.error_code === SERVER_ERROR) {
@@ -486,8 +504,7 @@ export class IdeaAuthenticationContext {
                 // all subsequent API invocations will be attached with the Authorization header.
                 this.logger.debug("✓ initiate auth successful");
                 const isSsoAuth = request.payload.auth_flow === "SSO_AUTH";
-                this.saveAuthResult(result.payload.auth, isSsoAuth);
-
+                this.saveAuthResult(result.payload, isSsoAuth);
                 return {
                     success: true,
                     payload: {},

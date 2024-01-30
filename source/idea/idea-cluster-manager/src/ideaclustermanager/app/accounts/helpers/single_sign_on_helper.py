@@ -9,7 +9,7 @@
 #  OR CONDITIONS OF ANY KIND, express or implied. See the License for the specific language governing permissions
 #  and limitations under the License.
 
-from ideasdk.utils import Utils
+from ideasdk.utils import ApiUtils, Utils
 from ideadatamodel import exceptions, constants
 from ideasdk.config.cluster_config import ClusterConfig
 from ideasdk.context import SocaContext
@@ -74,7 +74,7 @@ class SingleSignOnHelper:
         callback_urls = [
             f'https://{load_balancer_dns_name}{sso_auth_callback_path}'
         ]
-        
+
         if len(cluster_manager_web_context_path) > 0 and cluster_manager_web_context_path[-1] == '/':
             cluster_manager_web_context_path = cluster_manager_web_context_path[:-1]
 
@@ -83,7 +83,7 @@ class SingleSignOnHelper:
 
         logout_urls = [
             f'https://{load_balancer_dns_name}{cluster_manager_web_context_path}'
-        ]       
+        ]
         if Utils.is_not_empty(custom_dns_name):
             callback_urls.append(f'https://{custom_dns_name}{sso_auth_callback_path}')
             logout_urls.append(f'https://{custom_dns_name}{cluster_manager_web_context_path}')
@@ -235,7 +235,7 @@ class SingleSignOnHelper:
             provider_details['MetadataFile'] = decoded_saml_metadata_file
         else:
             provider_details['MetadataURL'] = saml_metadata_url
-        
+
         provider_details['IDPSignout'] = "true"
         return provider_details
 
@@ -317,6 +317,9 @@ class SingleSignOnHelper:
 
         if Utils.is_empty(request.provider_name):
             raise exceptions.invalid_params('provider_name is required')
+        ApiUtils.validate_input(request.provider_name,
+                                constants.SSO_SOURCE_PROVIDER_NAME_REGEX,
+                                constants.SSO_SOURCE_PROVIDER_NAME_ERROR_MESSAGE)
         if Utils.is_empty(request.provider_type):
             raise exceptions.invalid_params('provider_type is required')
         if Utils.is_empty(request.provider_email_attribute):

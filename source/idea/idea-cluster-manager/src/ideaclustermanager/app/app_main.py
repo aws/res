@@ -52,7 +52,6 @@ def main(**kwargs):
                     enable_distributed_lock=True,
                     enable_leader_election=True,
                     enable_metrics=True,
-                    enable_analytics=True
                 )
             ),
             **kwargs

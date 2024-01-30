@@ -17,4 +17,3 @@ from .network import *
 from .dns import *
 from .directory_service import *
 from .storage import *
-from .analytics import OpenSearch

@@ -1,0 +1,35 @@
+# Ignore
+^source/dist/
+^.idea/
+^deployment/idea/
+Config
+^.tox/
+^venv/
+
+CODE_OF_CONDUCT.md:4
+CONTRIBUTING.md:50
+README.md:44
+region_elb_account_id.yml
+source/idea/idea-cluster-manager/resources/api/api_doc.yml:122
+source/idea/idea-cluster-manager/webapp/src/docs/_footer.md:3
+source/idea/idea-cluster-manager/webapp/src/docs/_footer.md:3
+source/idea/idea-administrator/src/ideaadministrator/app/support_helper.py:195
+source/idea/idea-administrator/src/ideaadministrator/integration_tests/cluster_manager_tests.py:63
+source/idea/idea-administrator/resources/lambda_functions/custom_resource_self_signed_certificate.py
+source/idea/idea-cluster-manager/webapp/src/components/password-strength-check/password-strength-check.tsx
+source/idea/idea-cluster-manager/webapp/src/pages/auth/auth-confirm-forgot-password.tsx
+source/idea/idea-cluster-manager/webapp/src/pages/auth/auth-forgot-password.tsx
+
+# False Positive
+tests/generate_ami_list.py:90
+tests/generate_ami_list.py:91
+tests/generate_ami_list.py:92
+tests/generate_ami_list.py:93
+tests/generate_ami_list.py:94
+tests/generate_ami_list.py:95
+tests/generate_ami_list.py:98
+tests/generate_ami_list.py:99
+tests/generate_ami_list.py:100
+
+[python-pipoutdated]
+pip_audit=2.4.12

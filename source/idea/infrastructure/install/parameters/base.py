@@ -5,7 +5,7 @@ import json
 import typing
 from dataclasses import asdict, dataclass, field, fields
 from enum import Enum
-from typing import Any, ClassVar, Generator, Optional, Type, TypeVar, Union
+from typing import Any, ClassVar, Generator, List, Optional, Type, TypeVar, Union
 
 import aws_cdk
 from constructs import Construct
@@ -33,6 +33,7 @@ class Attributes:
     description: Optional[str] = None
     type: Optional[str] = None
     allowed_pattern: Optional[str] = None
+    allowed_values: Optional[list[str]] = None
     constraint_description: Optional[str] = None
     no_echo: Optional[bool] = None
 

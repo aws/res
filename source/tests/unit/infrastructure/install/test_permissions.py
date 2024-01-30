@@ -42,17 +42,15 @@ def assume_role_policy_document() -> dict[str, Any]:
     }
 
 
-@pytest.mark.parametrize("role", ("InstallRole", "UpdateRole", "DeleteRole"))
 def test_role_creation(
     stack: InstallStack,
     template: Template,
     assume_role_policy_document: dict[str, Any],
-    role: str,
 ) -> None:
     util.assert_resource_name_has_correct_type_and_props(
         stack,
         template,
-        resources=["Installer", "Tasks", "Permissions", role],
+        resources=["Installer", "Tasks", "Permissions", "PipelineRole"],
         cfn_type="AWS::IAM::Role",
         props={
             "Properties": {
@@ -60,7 +58,7 @@ def test_role_creation(
                 "RoleName": {
                     "Fn::Join": [
                         "",
-                        ["Admin-", {"Ref": CommonKey.CLUSTER_NAME}, f"-{role}"],
+                        ["Admin-", {"Ref": CommonKey.CLUSTER_NAME}, f"-PipelineRole"],
                     ]
                 },
             },
@@ -69,14 +67,20 @@ def test_role_creation(
     util.assert_resource_name_has_correct_type_and_props(
         stack,
         template,
-        resources=["Installer", "Tasks", "Permissions", role, "DefaultPolicy"],
+        resources=[
+            "Installer",
+            "Tasks",
+            "Permissions",
+            "PipelineRole",
+            "DefaultPolicy",
+        ],
         cfn_type="AWS::IAM::Policy",
         props={
             "Properties": {
                 "Roles": [
                     {
                         "Ref": util.get_logical_id(
-                            stack, ["Installer", "Tasks", "Permissions", role]
+                            stack, ["Installer", "Tasks", "Permissions", "PipelineRole"]
                         )
                     }
                 ]

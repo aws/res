@@ -23,7 +23,6 @@ __all__ = (
     'ExistingResourcesPrompt',
     'SubnetIdsPrompt',
     'FileSystemIdPrompt',
-    'OpenSearchDomainEndpointPrompt',
     'DirectoryServiceIdPrompt',
     'PrefixListIdPrompt',
     'EnabledModulesPrompt',
@@ -379,7 +378,6 @@ class ExistingResourcesPrompt(DefaultPrompt[str]):
                          param=factory.args.get_meta('existing_resources'),
                          default=self.get_default)
         self.existing_file_systems = False
-        self.existing_opensearch = False
         self.existing_subnets = False
         self.existing_directories = False
 
@@ -393,8 +391,6 @@ class ExistingResourcesPrompt(DefaultPrompt[str]):
         if self.existing_file_systems:
             result.append('shared-storage:internal')
             result.append('shared-storage:home')
-        if self.existing_opensearch:
-            result.append('analytics:opensearch')
         if self.existing_directories:
             result.append('directoryservice:aws_managed_activedirectory')
         return result
@@ -429,9 +425,6 @@ class ExistingResourcesPrompt(DefaultPrompt[str]):
         with self.context.spinner('search for existing file systems ...'):
             file_systems = self.context.get_aws_resources().get_file_systems(vpc_id=vpc_id, refresh=refresh)
             self.existing_file_systems = len(file_systems) > 0
-        with self.context.spinner('search for existing opensearch clusters ...'):
-            opensearch_clusters = self.context.get_aws_resources().get_opensearch_clusters(vpc_id=vpc_id, refresh=refresh)
-            self.existing_opensearch = len(opensearch_clusters) > 0
         with self.context.spinner('search for existing directories ...'):
             directories = self.context.get_aws_resources().get_directories(vpc_id=vpc_id, refresh=refresh)
             directory_service_provider = self.args.get('directory_service_provider')
@@ -456,11 +449,6 @@ class ExistingResourcesPrompt(DefaultPrompt[str]):
             choices.append(SocaUserInputChoice(
                 title='Shared Storage: Home',
                 value='shared-storage:home'
-            ))
-        if self.existing_opensearch:
-            choices.append(SocaUserInputChoice(
-                title='Analytics: OpenSearch Clusters',
-                value='analytics:opensearch'
             ))
         if self.existing_directories:
             choices.append(SocaUserInputChoice(
@@ -681,39 +669,6 @@ class SharedStorageVolumeIdPrompt(DefaultPrompt[str]):
 
         return choices
 
-
-class OpenSearchDomainEndpointPrompt(DefaultPrompt[str]):
-
-    def __init__(self, factory: 'InstallerPromptFactory'):
-        super().__init__(factory=factory,
-                         param=factory.args.get_meta('opensearch_domain_endpoint'))
-
-    def get_choices(self, refresh: bool = False) -> List[SocaUserInputChoice]:
-
-        vpc_id = self.args.get('vpc_id')
-        if Utils.is_empty(vpc_id):
-            raise exceptions.general_exception('vpc_id is required to find existing resources')
-
-        opensearch_clusters = self.context.get_aws_resources().get_opensearch_clusters(vpc_id=vpc_id, refresh=refresh)
-
-        if len(opensearch_clusters) == 0:
-            raise exceptions.general_exception('Unable to find any existing opensearch clusters')
-
-        choices = []
-
-        for opensearch_cluster in opensearch_clusters:
-            choices.append(SocaUserInputChoice(
-                title=opensearch_cluster.title,
-                value=opensearch_cluster.vpc_endpoint
-            ))
-
-        return choices
-
-    def filter(self, value) -> Optional[T]:
-        self.args.set('use_existing_opensearch_cluster', True)
-        return super().filter(value)
-
-
 class DirectoryServiceIdPrompt(DefaultPrompt[str]):
 
     def __init__(self, factory: 'InstallerPromptFactory'):
@@ -792,12 +747,6 @@ class EnabledModulesPrompt(DefaultPrompt[str]):
             SocaUserInputChoice(
                 title='Cluster (required)',
                 value=constants.MODULE_CLUSTER,
-                checked=True,
-                disabled=True
-            ),
-            SocaUserInputChoice(
-                title='Analytics (required)',
-                value=constants.MODULE_ANALYTICS,
                 checked=True,
                 disabled=True
             ),
@@ -1141,7 +1090,6 @@ class QuickSetupPromptFactory(InstallerPromptFactory):
             existing_storage_flag_key='use_existing_home_fs',
             storage_provider_key='storage_home_provider'
         ))
-        self.register(OpenSearchDomainEndpointPrompt(factory=self))
         self.register(DirectoryServiceIdPrompt(factory=self))
 
 

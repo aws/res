@@ -12,7 +12,6 @@ from typing import List, Union
 
 import ideavirtualdesktopcontroller
 from ideadatamodel import VirtualDesktopSessionPermission, VirtualDesktopSession, VirtualDesktopBaseOS, UpdateSessionPermissionRequest, UpdateSessionPermissionResponse
-from ideasdk.analytics.analytics_service import AnalyticsEntry, EntryAction, EntryContent
 from ideasdk.utils import Utils
 from ideavirtualdesktopcontroller.app.events.events_utils import EventsUtils
 from ideavirtualdesktopcontroller.app.permission_profiles.virtual_desktop_permission_profile_db import VirtualDesktopPermissionProfileDB
@@ -35,38 +34,6 @@ class VirtualDesktopSessionPermissionUtils:
     @staticmethod
     def _generate_entry_id(session_permission: VirtualDesktopSessionPermission) -> str:
         return f'permission-{session_permission.idea_session_id}-{session_permission.actor_name}'
-
-    def index_session_permission_to_opensearch(self, session_permission: VirtualDesktopSessionPermission):
-        index_name = f"{self.context.config().get_string('virtual-desktop-controller.opensearch.session_permission.alias', required=True)}-{self.context.session_permission_template_version}"
-        self.context.analytics_service().post_entry(AnalyticsEntry(
-            entry_id=self._generate_entry_id(session_permission),
-            entry_action=EntryAction.CREATE_ENTRY,
-            entry_content=EntryContent(
-                index_id=index_name,
-                entry_record=self._session_permission_db.convert_session_permission_object_to_db_dict(session_permission)
-            )
-        ))
-
-    def delete_session_entry_from_opensearch(self, session_permission: VirtualDesktopSessionPermission):
-        index_name = f"{self.context.config().get_string('virtual-desktop-controller.opensearch.session_permission.alias', required=True)}-{self.context.session_permission_template_version}"
-        self.context.analytics_service().post_entry(AnalyticsEntry(
-            entry_id=self._generate_entry_id(session_permission),
-            entry_action=EntryAction.DELETE_ENTRY,
-            entry_content=EntryContent(
-                index_id=index_name
-            )
-        ))
-
-    def update_session_entry_to_opensearch(self, session_permission: VirtualDesktopSessionPermission):
-        index_name = f"{self.context.config().get_string('virtual-desktop-controller.opensearch.session_permission.alias', required=True)}-{self.context.session_permission_template_version}"
-        self.context.analytics_service().post_entry(AnalyticsEntry(
-            entry_id=self._generate_entry_id(session_permission),
-            entry_action=EntryAction.UPDATE_ENTRY,
-            entry_content=EntryContent(
-                index_id=index_name,
-                entry_record=self._session_permission_db.convert_session_permission_object_to_db_dict(session_permission)
-            )
-        ))
 
     def _retrieve_permission_profile_values(self, profile_id) -> (List[str], List[str]):
         allow_permissions: List[str] = []
@@ -96,10 +63,7 @@ class VirtualDesktopSessionPermissionUtils:
             new_line_char = self.WINDOWS_POWERSHELL_NEW_LINE
 
         permission = f'[groups]{new_line_char}'
-        if session.software_stack.base_os == VirtualDesktopBaseOS.WINDOWS:
-            permission += f'group:ideaadmin=user:{admin_username}{new_line_char}'
-        else:
-            permission += f'group:ideaadmin=user:{admin_username}, osgroup:{self.controller_utils.get_virtual_desktop_admin_group()}{new_line_char}'
+        permission += f'group:ideaadmin=user:{admin_username}{new_line_char}'
         permission += f'[aliases]{new_line_char}'
 
         permission_profiles = set()

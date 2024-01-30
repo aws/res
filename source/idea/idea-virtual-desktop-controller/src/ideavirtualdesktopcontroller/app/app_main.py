@@ -55,7 +55,6 @@ def main(**kwargs):
                     enable_leader_election=True,
                     enable_metrics=True,
                     metrics_namespace=f'{cluster_name}/{module_id}/controller',
-                    enable_analytics=True
                 )
             ),
             **kwargs

@@ -1,4 +1,4 @@
-aiofiles==0.8.0
+aiofiles==23.2.1
 alembic==1.7.7
 arrow==1.2.1
 astroid==2.12.11
@@ -33,10 +33,10 @@ dill==0.3.5.1
 exceptiongroup==1.0.0rc8
 fastcounter==1.1.0
 ghp-import==2.1.0
-greenlet==1.1.2
+greenlet>=1.1.2
 httptools==0.4.0
 idna==3.3
-importlib-metadata==4.11.3
+importlib-metadata>=4.11.3
 iniconfig==1.1.1
 invoke==1.7.1
 ipaddress==1.0.23
@@ -59,7 +59,6 @@ multidict==6.0.2
 mypy==0.950
 mypy-extensions==0.4.3
 openapi-schema-pydantic==1.2.4
-opensearch-py==2.3.1
 orjson==3.6.5
 packaging==21.3
 pep517==0.12.0
@@ -102,6 +101,7 @@ rich==12.4.1
 s3transfer==0.6.0
 sanic==23.6.0
 sanic-routing==23.6.0
+selenium==4.16.0
 semver==2.13.0
 sh==1.14.2
 shortuuid==1.0.9

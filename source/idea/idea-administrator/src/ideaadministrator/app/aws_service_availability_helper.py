@@ -100,10 +100,6 @@ class AwsServiceAvailabilityHelper:
                 'title': 'Amazon Elastic Load Balancing (ELB)',
                 'required': True
             },
-            'es': {
-                'title': 'Amazon OpenSearch Service',
-                'required': True
-            },
             'eventbridge': {
                 'title': 'Amazon EventBridge',
                 'required': True

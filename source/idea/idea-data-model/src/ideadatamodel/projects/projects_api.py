@@ -181,4 +181,11 @@ OPEN_API_SPEC_ENTRIES_PROJECTS = [
         is_listing=True,
         is_public=False
     ),
+    IdeaOpenAPISpecEntry(
+        namespace='Projects.DeleteProject',
+        request=DeleteProjectRequest,
+        result=DeleteProjectResult,
+        is_listing=False,
+        is_public=False
+    )
 ]

@@ -21,17 +21,24 @@ from ideaclustermanager.app.accounts.cognito_user_pool import (
     CognitoUserPool,
     CognitoUserPoolOptions,
 )
+from ideaclustermanager.app.auth.api_authorization_service import (
+    ClusterManagerApiAuthorizationService,
+)
 from ideaclustermanager.app.projects.projects_service import ProjectsService
+from ideaclustermanager.app.shared_filesystem.shared_filesystem_service import (
+    SharedFilesystemService,
+)
 from ideaclustermanager.app.snapshots.snapshots_service import SnapshotsService
 from ideaclustermanager.app.tasks.task_manager import TaskManager
 from ideasdk.auth import TokenService, TokenServiceOptions
 from ideasdk.aws import AwsClientProvider, AWSUtil, EC2InstanceTypesDB
 from ideasdk.client.evdi_client import EvdiClient
 from ideasdk.context import SocaContextOptions
-from ideasdk.utils import Utils
+from ideasdk.utils import GroupNameHelper, Utils
 from ideatestutils import IdeaTestProps, MockConfig, MockInstanceTypes
 from ideatestutils.dynamodb.dynamodb_local import DynamoDBLocal
 from mock_ldap_client import MockLdapClient
+from mock_vdc_client import MockVirtualDesktopControllerClient
 
 from ideadatamodel import SocaAnyPayload
 
@@ -81,6 +88,7 @@ def context(ddb_local):
 
     mock_cognito_idp = SocaAnyPayload()
     mock_cognito_idp.admin_create_user = mock_function
+    mock_cognito_idp.admin_remove_user_from_group = mock_function
     mock_cognito_idp.admin_delete_user = mock_function
     mock_cognito_idp.admin_add_user_to_group = mock_function
     mock_cognito_idp.admin_get_user = mock_function
@@ -208,7 +216,7 @@ def context(ddb_local):
     )
 
     context.ldap_client = MockLdapClient(context=context)
-    user_pool = CognitoUserPool(
+    context.user_pool = CognitoUserPool(
         context=context,
         options=CognitoUserPoolOptions(
             user_pool_id=context.config().get_string(
@@ -221,16 +229,6 @@ def context(ddb_local):
             client_secret="mock-client-secret",
         ),
     )
-
-    context.accounts = AccountsService(
-        context=context,
-        ldap_client=context.ldap_client,
-        user_pool=user_pool,
-        evdi_client=EvdiClient(context=context),
-        task_manager=context.task_manager,
-        token_service=None,
-    )
-    context.accounts.create_defaults()
 
     context.token_service = TokenService(
         context=context,
@@ -247,13 +245,33 @@ def context(ddb_local):
         ),
     )
 
+    context.accounts = AccountsService(
+        context=context,
+        ldap_client=context.ldap_client,
+        user_pool=context.user_pool,
+        evdi_client=EvdiClient(context=context),
+        task_manager=context.task_manager,
+        token_service=context.token_service,
+    )
+    context.accounts.create_defaults()
+
+    # api authorization service
+    context.api_authorization_service = ClusterManagerApiAuthorizationService(
+        accounts=context.accounts
+    )
+
+    context.vdc_client = MockVirtualDesktopControllerClient()
+
     context.projects = ProjectsService(
         context=context,
         accounts_service=context.accounts,
         task_manager=context.task_manager,
+        vdc_client=context.vdc_client,
     )
 
     context.snapshots = SnapshotsService(context=context)
+
+    context.shared_filesystem = SharedFilesystemService(context=context)
 
     yield context
 

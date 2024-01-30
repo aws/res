@@ -54,18 +54,6 @@ class SingleSignOnStateDAO:
         )
         self.table = self.context.aws().dynamodb_table().Table(self.get_table_name())
 
-    @staticmethod
-    def convert_from_db(sso_state: Dict) -> AuthResult:
-        return AuthResult(
-            **{
-                'access_token': Utils.get_value_as_string('access_token', sso_state),
-                'refresh_token': Utils.get_value_as_string('refresh_token', sso_state),
-                'id_token': Utils.get_value_as_string('id_token', sso_state),
-                'expires_in': Utils.get_value_as_int('expires_in', sso_state),
-                'token_type': Utils.get_value_as_string('token_type', sso_state)
-            }
-        )
-
     def create_sso_state(self, sso_state: Dict) -> Dict:
 
         state = Utils.get_value_as_string('state', sso_state)
@@ -76,7 +64,7 @@ class SingleSignOnStateDAO:
             **sso_state,
             'ttl': Utils.current_time_ms() + (10 * 60 * 1000),  # 10 minutes
             'created_on': Utils.current_time_ms(),
-            'updated_on': Utils.current_time_ms()
+            'updated_on': Utils.current_time_ms(),
         }
         self.table.put_item(
             Item=created_state,

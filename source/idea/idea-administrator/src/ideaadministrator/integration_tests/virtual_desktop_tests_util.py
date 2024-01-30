@@ -33,6 +33,8 @@ from ideadatamodel import (
     UpdateSessionPermissionResponse,
     CreateSoftwareStackFromSessionRequest,
     CreateSoftwareStackFromSessionResponse,
+    DeleteSoftwareStackRequest,
+    DeleteSoftwareStackResponse,
     UpdateSessionRequest,
     UpdateSessionResponse,
     StopSessionRequest,
@@ -62,10 +64,6 @@ from ideadatamodel import (
     ListSoftwareStackResponse,
     ListSessionsRequest,
     ListSessionsResponse,
-    ReIndexUserSessionsRequest,
-    ReIndexUserSessionsResponse,
-    ReIndexSoftwareStacksRequest,
-    ReIndexSoftwareStacksResponse,
     ListSupportedOSRequest,
     ListSupportedOSResponse,
     ListSupportedGPURequest,
@@ -330,6 +328,17 @@ class SessionsTestHelper:
             return response
         except (exceptions.SocaException, Exception) as e:
             self.context.error(f'Failed to Create Software Stack. Error : {e}')
+
+    def delete_software_stack(self, software_stack: VirtualDesktopSoftwareStack) -> DeleteSoftwareStackResponse:
+        try:
+            response = self.context.get_virtual_desktop_controller_client(timeout=7200).invoke_alt(
+                namespace='VirtualDesktopAdmin.DeleteSoftwareStack',
+                payload=DeleteSoftwareStackRequest(software_stack=software_stack),
+                result_as=DeleteSoftwareStackResponse,
+                access_token=self.access_token)
+            return response
+        except (exceptions.SocaException, Exception) as e:
+            self.context.error(f'Failed to Delete Software Stack. Error : {e}')
 
     def update_software_stack(self, software_stack: VirtualDesktopSoftwareStack) -> UpdateSoftwareStackResponse:
         try:
@@ -619,28 +628,6 @@ class VirtualDesktopApiHelper:
             return response
         except (exceptions.SocaException, Exception) as e:
             self.context.error(f'Failed to List Sessions. Error : {e}')
-
-    def reindex_user_session(self) -> ReIndexUserSessionsResponse:
-        try:
-            response = self.context.get_virtual_desktop_controller_client(timeout=7200).invoke_alt(
-                namespace='VirtualDesktopAdmin.ReIndexUserSessions',
-                payload=ReIndexUserSessionsRequest(),
-                result_as=ReIndexUserSessionsResponse,
-                access_token=self.access_token)
-            return response
-        except (exceptions.SocaException, Exception) as e:
-            self.context.error(f'Failed to Reindex User Session. Error : {e}')
-
-    def reindex_software_stacks(self) -> ReIndexSoftwareStacksResponse:
-        try:
-            response = self.context.get_virtual_desktop_controller_client(timeout=7200).invoke_alt(
-                namespace='VirtualDesktopAdmin.ReIndexSoftwareStacks',
-                payload=ReIndexSoftwareStacksRequest(),
-                result_as=ReIndexSoftwareStacksResponse,
-                access_token=self.access_token)
-            return response
-        except (exceptions.SocaException, Exception) as e:
-            self.context.error(f'Failed to Reindex Software Stacks. Error : {e}')
 
     # VDC Utils
     def list_supported_os(self) -> ListSupportedOSResponse:

@@ -30,6 +30,7 @@ from ideavirtualdesktopcontroller.app.sessions.virtual_desktop_session_counters_
 from ideavirtualdesktopcontroller.app.sessions.virtual_desktop_session_db import VirtualDesktopSessionDB
 from ideavirtualdesktopcontroller.app.software_stacks.virtual_desktop_software_stack_db import VirtualDesktopSoftwareStackDB
 from ideavirtualdesktopcontroller.app.ssm_commands.virtual_desktop_ssm_commands_db import VirtualDesktopSSMCommandsDB
+from ideavirtualdesktopcontroller.app.auth.api_authorization_service import VdcApiAuthorizationService
 
 import os
 import yaml
@@ -64,7 +65,6 @@ class VirtualDesktopControllerApp(ideasdk.app.SocaApp):
         self.context = context
 
     def app_initialize(self):
-        self._initialize_templates()
         self._initialize_clients()
         self._initialize_dbs()
         self._initialize_services()
@@ -83,68 +83,6 @@ class VirtualDesktopControllerApp(ideasdk.app.SocaApp):
         ).initialize()
         self._permission_profile_db = VirtualDesktopPermissionProfileDB(self.context).initialize()
         self._session_permissions_db = VirtualDesktopSessionPermissionDB(self.context).initialize()
-
-    def _initialize_session_template(self):
-        session_template_file = os.path.join(self.context.get_resources_dir(), 'opensearch', 'session_entry_template.yml')
-        with open(session_template_file, 'r') as f:
-            sessions_index_template = yaml.safe_load(f)
-
-        if Utils.is_empty(sessions_index_template):
-            return
-
-        sessions_index_template["index_patterns"] = [
-            f"{self.context.config().get_string('virtual-desktop-controller.opensearch.dcv_session.alias')}-*"
-        ]
-        sessions_index_template["aliases"] = {
-            f"{self.context.config().get_string('virtual-desktop-controller.opensearch.dcv_session.alias')}": {}
-        }
-        self.context.sessions_template_version = self.context.analytics_service().initialize_template(
-            template_name=f'{self.context.cluster_name()}_{self.context.module_id()}_user_sessions_template',
-            template_body=sessions_index_template
-        )
-
-    def _initialize_software_stack_template(self):
-        software_stack_template_file = os.path.join(self.context.get_resources_dir(), 'opensearch', 'software_stack_entry_template.yml')
-        with open(software_stack_template_file, 'r') as f:
-            software_stack_index_template = yaml.safe_load(f)
-
-        if Utils.is_empty(software_stack_index_template):
-            return
-
-        software_stack_index_template["index_patterns"] = [
-            f"{self.context.config().get_string('virtual-desktop-controller.opensearch.software_stack.alias')}-*"
-        ]
-        software_stack_index_template["aliases"] = {
-            f"{self.context.config().get_string('virtual-desktop-controller.opensearch.software_stack.alias')}": {}
-        }
-        self.context.software_stack_template_version = self.context.analytics_service().initialize_template(
-            template_name=f'{self.context.cluster_name()}_{self.context.module_id()}_software_stack_template',
-            template_body=software_stack_index_template
-        )
-
-    def _initialize_session_permission_template(self):
-        session_permission_template_file = os.path.join(self.context.get_resources_dir(), 'opensearch', 'session_permission_entry_template.yml')
-        with open(session_permission_template_file, 'r') as f:
-            session_permission_index_template = yaml.safe_load(f)
-
-        if Utils.is_empty(session_permission_index_template):
-            return
-
-        session_permission_index_template["index_patterns"] = [
-            f"{self.context.config().get_string('virtual-desktop-controller.opensearch.session_permission.alias')}-*"
-        ]
-        session_permission_index_template["aliases"] = {
-            f"{self.context.config().get_string('virtual-desktop-controller.opensearch.session_permission.alias')}": {}
-        }
-        self.context.session_permission_template_version = self.context.analytics_service().initialize_template(
-            template_name=f'{self.context.cluster_name()}_{self.context.module_id()}_session_permission_template',
-            template_body=session_permission_index_template
-        )
-
-    def _initialize_templates(self):
-        self._initialize_session_template()
-        self._initialize_software_stack_template()
-        self._initialize_session_permission_template()
 
     def _initialize_clients(self):
         group_name_helper = GroupNameHelper(self.context)
@@ -191,6 +129,11 @@ class VirtualDesktopControllerApp(ideasdk.app.SocaApp):
                 verify_ssl=False
             ),
             token_service=self.context.token_service
+        )
+        
+        self.context.api_authorization_service = VdcApiAuthorizationService(
+            accounts_client=self.context.accounts_client,
+            token_service= self.context.token_service
         )
 
         self.context.notification_async_client = NotificationsAsyncClient(context=self.context)

@@ -44,7 +44,7 @@ from ideadatamodel import errorcodes, exceptions
 from ideasdk.api import ApiInvocationContext
 from ideasdk.utils import Utils
 from ideavirtualdesktopcontroller.app.api.virtual_desktop_api import VirtualDesktopAPI
-from ideavirtualdesktopcontroller.app.software_stacks.constants import SOFTWARE_STACK_DB_FILTER_PROJECT_ID_KEY
+from ideavirtualdesktopcontroller.app.software_stacks.constants import SOFTWARE_STACK_DB_FILTER_PROJECT_ID_KEY, SOFTWARE_STACK_DB_PROJECTS_KEY
 
 
 class VirtualDesktopUserAPI(VirtualDesktopAPI):
@@ -53,22 +53,66 @@ class VirtualDesktopUserAPI(VirtualDesktopAPI):
         super().__init__(context)
         self.context = context
         self._logger = context.logger('virtual-desktop-user-api')
+        self.SCOPE_WRITE = f'{self.context.module_id()}/write'
+        self.SCOPE_READ = f'{self.context.module_id()}/read'
 
-        self.namespace_handler_map: Dict[str, ()] = {
-            'VirtualDesktop.CreateSession': self.create_session,
-            'VirtualDesktop.UpdateSession': self.update_session,
-            'VirtualDesktop.DeleteSessions': self.delete_sessions,
-            'VirtualDesktop.GetSessionInfo': self.get_session_info,
-            'VirtualDesktop.GetSessionScreenshot': self.get_session_screenshots,
-            'VirtualDesktop.GetSessionConnectionInfo': self.get_session_connection_info,
-            'VirtualDesktop.ListSessions': self.list_sessions,
-            'VirtualDesktop.StopSessions': self.stop_sessions,
-            'VirtualDesktop.ResumeSessions': self.resume_sessions,
-            'VirtualDesktop.RebootSessions': self.reboot_sessions,
-            'VirtualDesktop.ListSoftwareStacks': self.list_software_stacks,
-            'VirtualDesktop.ListSharedPermissions': self.list_shared_permissions,
-            'VirtualDesktop.ListSessionPermissions': self.list_session_permissions,
-            'VirtualDesktop.UpdateSessionPermissions': self.update_session_permission
+        self.acl = {
+            'VirtualDesktop.CreateSession': {
+                'scope': self.SCOPE_WRITE,
+                'method': self.create_session,
+            },
+            'VirtualDesktop.UpdateSession': {
+                'scope': self.SCOPE_WRITE,
+                'method': self.update_session,
+            },
+            'VirtualDesktop.DeleteSessions': {
+                'scope': self.SCOPE_WRITE,
+                'method': self.delete_sessions,
+            },
+            'VirtualDesktop.GetSessionInfo': {
+                'scope': self.SCOPE_READ,
+                'method': self.get_session_info,
+            },
+            'VirtualDesktop.GetSessionScreenshot': {
+                'scope': self.SCOPE_READ,
+                'method': self.get_session_screenshots,
+            },
+            'VirtualDesktop.GetSessionConnectionInfo': {
+                'scope': self.SCOPE_READ,
+                'method': self.get_session_connection_info,
+            },
+            'VirtualDesktop.ListSessions': {
+                'scope': self.SCOPE_READ,
+                'method': self.list_sessions,
+            },
+            'VirtualDesktop.StopSessions': {
+                'scope': self.SCOPE_WRITE,
+                'method': self.stop_sessions,
+            },
+            'VirtualDesktop.ResumeSessions': {
+                'scope': self.SCOPE_WRITE,
+                'method': self.resume_sessions,
+            },
+            'VirtualDesktop.RebootSessions': {
+                'scope': self.SCOPE_WRITE,
+                'method': self.reboot_sessions,
+            },
+            'VirtualDesktop.ListSoftwareStacks': {
+                'scope': self.SCOPE_READ,
+                'method': self.list_software_stacks,
+            },
+            'VirtualDesktop.ListSharedPermissions': {
+                'scope': self.SCOPE_READ,
+                'method': self.list_shared_permissions,
+            },
+            'VirtualDesktop.ListSessionPermissions': {
+                'scope': self.SCOPE_READ,
+                'method': self.list_session_permissions,
+            },
+            'VirtualDesktop.UpdateSessionPermissions': {
+                'scope': self.SCOPE_WRITE,
+                'method': self.update_session_permission
+            },
         }
 
     @staticmethod
@@ -284,7 +328,7 @@ class VirtualDesktopUserAPI(VirtualDesktopAPI):
             return
 
         session = self.complete_get_session_info_request(session, context)
-        session = self._get_session_info(session)
+        session = self.session_db.get_from_db(session.owner, session.idea_session_id)
 
         if Utils.is_empty(session.failure_reason):
             context.success(GetSessionInfoResponse(
@@ -437,7 +481,7 @@ class VirtualDesktopUserAPI(VirtualDesktopAPI):
 
         if not project_filter_found:
             request.add_filter(SocaFilter(
-                key=SOFTWARE_STACK_DB_FILTER_PROJECT_ID_KEY,
+                key=SOFTWARE_STACK_DB_PROJECTS_KEY,
                 value=project_id
             ))
 
@@ -499,10 +543,16 @@ class VirtualDesktopUserAPI(VirtualDesktopAPI):
             context.success(response)
 
     def invoke(self, context: ApiInvocationContext):
-
-        if not context.is_authorized_user():
+        namespace = context.namespace
+        
+        acl_entry = self.acl.get(namespace)
+        if acl_entry is None:
             raise exceptions.unauthorized_access()
 
-        namespace = context.namespace
-        if namespace in self.namespace_handler_map:
-            self.namespace_handler_map[namespace](context)
+        acl_entry_scope = acl_entry.get('scope')
+        is_authorized = context.is_authorized(elevated_access=False, scopes=[acl_entry_scope])
+        self._logger.info(f'Is authorized: {is_authorized}')
+        if is_authorized:
+            acl_entry['method'](context)
+        else:
+            raise exceptions.unauthorized_access()

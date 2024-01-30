@@ -81,13 +81,13 @@ def handle_custom_resource_lifecycle_event(event: Dict[str, Any], _: Any) -> Non
 def send_wait_condition_response(event: Dict[str, Any], _: Any) -> Any:
     is_wait_condition_response = event.get("RequestType") != RequestType.DELETE
 
-    response: Union[
-        WaitConditionResponse, CustomResourceResponse
-    ] = WaitConditionResponse(
-        Status=WaitConditionResponseStatus.SUCCESS,
-        UniqueId=str(uuid.uuid4()),
-        Reason=WaitConditionResponseStatus.SUCCESS,
-        Data="",
+    response: Union[WaitConditionResponse, CustomResourceResponse] = (
+        WaitConditionResponse(
+            Status=WaitConditionResponseStatus.SUCCESS,
+            UniqueId=str(uuid.uuid4()),
+            Reason=WaitConditionResponseStatus.SUCCESS,
+            Data="",
+        )
     )
     if not is_wait_condition_response:
         response = CustomResourceResponse(

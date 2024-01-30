@@ -59,10 +59,6 @@ Contains the various API files for each api. The files contain the acl to define
 
 Contains the API for creating and manipulating accounts and groups. The api functions all call the functions from the accounts service.
 
-#### analytics_api.py
-
-Contains analytics API. The only action in this API is to query OpenSearch. The analytics service it uses is set in the SocaContext which is defined in the idea sdk and is the parent class of the app_context.
-
 #### api_invoker.py
 
 Contains the entrypoint for the API. When a request is received on the api server, it calls the api invoker, which then invokes the respective API.

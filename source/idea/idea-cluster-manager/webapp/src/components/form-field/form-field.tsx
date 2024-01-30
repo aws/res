@@ -97,6 +97,8 @@ export interface IdeaFormFieldState {
     memoryVal(): string
 
     fileVal(): File[];
+
+    listOfRecordsVal(): Record<any, any>[]
 }
 
 export interface IdeaFormFieldStateChangeEvent {
@@ -261,6 +263,12 @@ class IdeaFormField extends Component<IdeaFormFieldProps, IdeaFormFieldState> {
                 }
                 return [];
             },
+            listOfRecordsVal(): Record<any, any>[] {
+                if (this.value != null) {
+                    return this.value
+                }
+                return []
+            }
         };
     }
 
@@ -315,6 +323,13 @@ class IdeaFormField extends Component<IdeaFormFieldProps, IdeaFormFieldState> {
         return this.state.value;
     }
 
+    getListOfStringRecords(): Record<string,string>[] {
+        if (Utils.isListOfRecordStrings(this.state.listOfRecordsVal())) {
+            return this.state.listOfRecordsVal()
+        }
+        return []
+    }
+
     getTypedValue(): any {
         if (this.isMultiple()) {
             const dataType = this.getDataType();
@@ -324,6 +339,8 @@ class IdeaFormField extends Component<IdeaFormFieldProps, IdeaFormFieldState> {
                     return this.state.numberArrayVal();
                 case "bool":
                     return this.state.booleanArrayVal();
+                case "record":
+                    return this.state.listOfRecordsVal()
                 default:
                     return this.state.stringArrayVal();
             }
@@ -372,7 +389,6 @@ class IdeaFormField extends Component<IdeaFormFieldProps, IdeaFormFieldState> {
             reader.readAsDataURL(file);
         })
     }
-    
 
     getErrorCode(): string | null {
         if (Utils.isEmpty(this.state.errorCode)) {
@@ -716,6 +732,18 @@ class IdeaFormField extends Component<IdeaFormFieldProps, IdeaFormFieldState> {
         this.setState({ disabled: should_disable }, this.setStateCallback);
     }
 
+    validate_empty_record(record: Record<any,any>, container_items: SocaUserInputParamMetadata[]): boolean {
+        if (Utils.isEmpty(record)) {
+            return true;
+        }
+        for (let column of container_items) {
+            if (column.name && Utils.isEmpty(record[column.name])) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     validate(): string {
         const validate = this.props.param.validate;
         if (validate == null) {
@@ -752,6 +780,18 @@ class IdeaFormField extends Component<IdeaFormFieldProps, IdeaFormFieldState> {
         }
 
         if (this.isMultiple()) {
+            if (this.props.param.param_type === "container") {
+                if (this.getListOfStringRecords().length === 0) {
+                    return "OK";
+                } else {
+                    for (let record of this.getListOfStringRecords()) {
+                        if (this.props.param.container_items && this.validate_empty_record(record, this.props.param.container_items)) {
+                            return "CUSTOM_FAILED"
+                        }
+                    }
+                    return "OK";
+                }
+            }
             if (this.state.stringArrayVal().length === 0) {
                 return "REQUIRED";
             } else {
@@ -813,9 +853,9 @@ class IdeaFormField extends Component<IdeaFormFieldProps, IdeaFormFieldState> {
                 case "REGEX":
                     errorMessage = this.props.param.validate?.message ?? `${displayTitle} must satisfy regex: ${this.props.param.validate?.regex}`;
                     break;
-                /*case 'CUSTOM_FAILED':
-                    errorMessage = this.props.param.validate?.custom?.error_message
-                    break*/
+                case 'CUSTOM_FAILED':
+                    errorMessage = this.props.param.custom_error_message
+                    break
                 default:
                     errorMessage = `${displayTitle} validation failed.`;
             }
@@ -1744,6 +1784,114 @@ class IdeaFormField extends Component<IdeaFormFieldProps, IdeaFormFieldState> {
         )
     }
 
+    onContainerArrayStateChange(event: IdeaFormFieldStateChangeEvent, index: number) {
+        const values: Record<string, string>[] = this.getListOfStringRecords();
+        if (!event.param.name || !values[index]) {
+            this.setState({
+                errorMessage: "Unable to map container state change."
+            })
+        } else {
+            values[index][event.param.name] = event.value
+            this.setState(
+                {
+                    value: values,
+                },
+                () => {
+                    if (this.triggerValidate()) {
+                        this.setState({}, this.setStateCallback);
+                    }
+                }
+            );
+        }
+    }
+
+    buildContainerArray(props: FormFieldProps): React.ReactNode {
+        return this.buildFormField(
+            <ColumnLayout columns={1}>
+                {this.getListOfStringRecords().length === 0 && (
+                    <Button
+                        variant="normal"
+                        onClick={() => {
+                            this.setState(
+                                {
+                                    value: [{}],
+                                },
+                                this.setStateCallback
+                            );
+                        }}
+                    >
+                        <FontAwesomeIcon icon={faAdd} />
+                    </Button>
+                )}
+                {
+                    this.getListOfStringRecords().length > 0 && this.getListOfStringRecords().map((value, index) => {
+                        const numOfColumns = this.props.param.container_items?.length ? this.props.param.container_items.length : 0
+                        return (
+                            <ColumnLayout columns={numOfColumns} key={`${this.props.param.name}-${index}`}>
+                                {
+                                    (() => {
+                                        let container: JSX.Element[] = [];
+                                        this.props.param.container_items?.map((form) => (
+                                            container.push(<IdeaFormField
+                                                key={`${form.name}`}
+                                                module={`${form.name}`}
+                                                param={form}
+                                                onStateChange={(event) => {
+                                                    this.onContainerArrayStateChange(event, index)
+                                                }}
+                                                onFetchOptions={this.props.onFetchOptions}
+                                                stretch={props.stretch}
+                                            />)
+                                        ))
+                                        return container;
+                                    })()
+                                }
+                            </ColumnLayout>
+
+                        );
+                    })
+                }
+                {
+                    this.getListOfStringRecords().length > 0 && (
+                        <SpaceBetween size="xs" direction="horizontal">
+                            <Button
+                                variant="normal"
+                                onClick={() => {
+                                    const values = this.getListOfStringRecords();
+                                    values.push({});
+                                    this.setState(
+                                        {
+                                            value: values,
+                                        },
+                                        this.setStateCallback
+                                    );
+                                }}
+                            >
+                                <FontAwesomeIcon icon={faAdd} />
+                            </Button>
+                            <Button
+                                variant="normal"
+                                onClick={() => {
+                                    const values = this.getListOfStringRecords();
+                                    values.pop();
+                                    this.setState(
+                                        {
+                                            value: values,
+                                        },
+                                        this.setStateCallback
+                                    );
+                                }}
+                            >
+                                <FontAwesomeIcon icon={faRemove} />
+                            </Button>
+                        </SpaceBetween>
+                    )
+                }
+            </ColumnLayout>,
+            props
+        )
+    }
+
     getRenderType(): string {
         const type = this.getNativeType();
         const param_type = this.props.param.param_type;
@@ -1760,6 +1908,8 @@ class IdeaFormField extends Component<IdeaFormFieldProps, IdeaFormFieldState> {
                 return "multi-select";
             } else if (param_type === "select_or_text") {
                 return "auto-suggest";
+            } else if (param_type === "container"){
+                return "parent_parameter_array"
             } else {
                 if (multiline) {
                     return "textarea-array";
@@ -1851,6 +2001,8 @@ class IdeaFormField extends Component<IdeaFormFieldProps, IdeaFormFieldState> {
             formFields.push(this.buildFileUpload({ stretch: stretch }));
         } else if (type === "tiles") {
             formFields.push(this.buildTilesGroup({ stretch: stretch }));
+        } else if (type === "parent_parameter_array") {
+            formFields.push(this.buildContainerArray({ stretch: stretch }));
         } else {
             formFields.push(this.buildInput({ stretch: stretch }));
         }

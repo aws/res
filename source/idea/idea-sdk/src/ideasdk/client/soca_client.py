@@ -127,7 +127,7 @@ class SocaClient:
     def timeout(self) -> float:
         return Utils.get_as_float(self.options.timeout, DEFAULT_TIMEOUT_SECONDS)
 
-    def invoke(self, request: SocaEnvelope, result_as: Optional[Type[T]] = SocaAnyPayload, access_token: str = None) -> T:
+    def invoke(self, request: SocaEnvelope, result_as: Optional[Type[T]] = SocaAnyPayload, access_token: Optional[str] = None) -> T:
         try:
             header = request.header
             request_id = header.request_id
@@ -192,7 +192,7 @@ class SocaClient:
 
     def invoke_alt(self, namespace: str, payload: Optional[Any],
                    result_as: Optional[Type[T]] = SocaAnyPayload,
-                   access_token: str = None) -> T:
+                   access_token: Optional[str] = None) -> T:
         request = SocaEnvelope(
             header=SocaHeader(
                 namespace=namespace,

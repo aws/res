@@ -10,6 +10,7 @@
 #  and limitations under the License.
 from ideasdk.client.evdi_client import EvdiClient
 from ideasdk.context import SocaContext
+from ideadatamodel import AuthResult
 from ideadatamodel.auth import (
     User,
     Group,
@@ -39,6 +40,7 @@ from ideaclustermanager.app.accounts.db.group_members_dao import GroupMembersDAO
 from ideaclustermanager.app.accounts.db.single_sign_on_state_dao import SingleSignOnStateDAO
 from ideaclustermanager.app.accounts.helpers.single_sign_on_helper import SingleSignOnHelper
 from ideaclustermanager.app.tasks.task_manager import TaskManager
+from ideaclustermanager.app.accounts.helpers.sssd_helper import SSSD
 
 from typing import Optional, List
 import os
@@ -79,6 +81,7 @@ class AccountsService:
         self.task_manager = task_manager
         self.token_service = token_service
 
+        self.sssd = SSSD(context)
         self.group_name_helper = GroupNameHelper(context)
         self.user_dao = UserDAO(context, user_pool=user_pool)
         self.group_dao = GroupDAO(context)
@@ -92,6 +95,7 @@ class AccountsService:
         self.sso_state_dao.initialize()
 
         self.ds_automation_dir = self.context.config().get_string('directoryservice.automation_dir', required=True)
+
 
     def is_cluster_administrator(self, username: str) -> bool:
         cluster_administrator = self.context.config().get_string('cluster.administrator_username', required=True)
@@ -140,7 +144,6 @@ class AccountsService:
         db_existing_group = self.group_dao.get_group(group_name)
         if db_existing_group is not None:
             raise exceptions.invalid_params(f'group: {group_name} already exists')
-
         # Perform AD validation only for groups identified as external groups. Internal grpups are RES specific groups and are not expected to be present in the AD.
         if group.type == constants.GROUP_TYPE_EXTERNAL and ds_readonly:
             if not group.ds_name:
@@ -148,15 +151,14 @@ class AccountsService:
             group_in_ad = self.ldap_client.get_group(group.ds_name)
             if group_in_ad is None:
                 raise exceptions.invalid_params(f'group with name {group.ds_name} is not found in Read-Only Directory Service: {constants.DIRECTORYSERVICE_ACTIVE_DIRECTORY}')
-            group_id_in_ad = group_in_ad['gid']
-            if group_id_in_ad is None:
-                raise exceptions.invalid_params(f'Group id is not found in Directory Service: {constants.DIRECTORYSERVICE_ACTIVE_DIRECTORY}')
-            group.gid = group_id_in_ad
             group_name_in_ad = group_in_ad['name']
             if group_name_in_ad is None:
                 raise exceptions.invalid_params(f'Group name matching the provided name {group.ds_name} is not found in Directory Service: {constants.DIRECTORYSERVICE_ACTIVE_DIRECTORY}')
             if group_name_in_ad != group.ds_name:
                 raise exceptions.invalid_params(f'group.ds_name {group.ds_name} does not match the value {group_name_in_ad} read from Directory Service: {constants.DIRECTORYSERVICE_ACTIVE_DIRECTORY}')
+            group.gid = self.sssd.get_gid_for_group(group_name_in_ad)
+            if group.gid is None:
+                raise exceptions.soca_exception(error_code=errorcodes.GID_NOT_FOUND, message=f'Unable to retrieve GID for Group: {group_name_in_ad}')
 
         group.enabled = True
 
@@ -340,12 +342,8 @@ class AccountsService:
                     'additional_groups': list(set(user.get('additional_groups', []) + [group_name]))
                 })
 
-            if bypass_active_user_check or user['is_active']:
+            if bypass_active_user_check or user['is_active'] or Utils.is_test_mode():
                 self.group_members_dao.create_membership(group_name, username)
-
-                # For group_types MODULE or CLUSTER, the user must be added to those groups in cognito too. This gives users admin/user access to various sections on the UI.
-                if group['group_type'] not in (constants.GROUP_TYPE_USER, constants.GROUP_TYPE_PROJECT):
-                    self.user_pool.admin_add_user_to_group(username=username, group_name=group_name)
 
                 self.logger.info(f'add user projects for user: {username} in group: {group_name} - DAO ...')
                 self.context.projects.user_projects_dao.group_member_added(group_name=group_name, username=username)
@@ -397,10 +395,6 @@ class AccountsService:
                 additional_groups.remove(group_name)
 
             self.group_members_dao.delete_membership(group_name, username)
-
-            # For group_types MODULE or CLUSTER, the user must be removed from those groups in cognito too. This removes user's admin/user access to various sections on the UI.
-            if group["group_type"] not in (constants.GROUP_TYPE_USER, constants.GROUP_TYPE_PROJECT):
-                self.user_pool.admin_remove_user_from_group(username=username, group_name=group_name)
 
         self.user_dao.update_user({'username': username, 'additional_groups': additional_groups})
 
@@ -455,10 +449,6 @@ class AccountsService:
 
                 self.group_members_dao.delete_membership(group_name, username)
 
-                # For group_types MODULE or CLUSTER, the user must be removed from those groups in cognito too. This removes user's admin/user access to various sections on the UI.
-                if group['group_type'] not in (constants.GROUP_TYPE_USER, constants.GROUP_TYPE_PROJECT):
-                    self.user_pool.admin_remove_user_from_group(username=username, group_name=group_name)
-
                 self.context.projects.user_projects_dao.group_member_removed(
                     group_name=group_name,
                     username=username
@@ -502,8 +492,6 @@ class AccountsService:
             'sudo': True
         })
 
-        self.user_pool.admin_add_user_as_admin(username)
-
     def remove_admin_user(self, username: str):
 
         if Utils.is_empty(username):
@@ -528,8 +516,6 @@ class AccountsService:
             'sudo': False
         })
 
-        self.user_pool.admin_remove_user_as_admin(username)
-
     # user management methods
 
     def get_user(self, username: str) -> User:
@@ -545,6 +531,24 @@ class AccountsService:
                 message=f'User not found: {username}'
             )
 
+        return self.user_dao.convert_from_db(user)
+
+    def get_user_by_email(self, email: str) -> User:
+        email = AuthUtils.sanitize_email(email=email)
+        if not email:
+            raise exceptions.invalid_params('email is required')
+
+        users = self.user_dao.get_user_by_email(email=email)
+        if len(users) > 1:
+            self.logger.warn(f'Multiple users found with email {email}')
+            raise exceptions.SocaException(error_code=errorcodes.AUTH_MULTIPLE_USERS_FOUND,
+                                           message=f'Multiple users found with email {email}')
+        user = users[0] if users else None
+        if not user:
+            raise exceptions.SocaException(
+                error_code=errorcodes.AUTH_USER_NOT_FOUND,
+                message=f'User not found with email: {email}'
+            )
         return self.user_dao.convert_from_db(user)
 
     def create_user(self, user: User, email_verified: bool = False) -> User:
@@ -577,31 +581,6 @@ class AccountsService:
         email = user.email
         email = AuthUtils.sanitize_email(email)
 
-        # password
-        password = user.password
-        if email_verified:
-            if password == None or len(password.strip()) == 0:
-                raise exceptions.invalid_params('Password is required')
-
-            user_pool_password_policy = self.user_pool.describe_password_policy()
-            # Validate password compliance versus Cognito user pool password policy
-            # Cognito: https://docs.aws.amazon.com/cognito/latest/developerguide/user-pool-settings-policies.html
-            if len(password) < user_pool_password_policy.minimum_length:
-                raise exceptions.invalid_params(f'Password should be at least {user_pool_password_policy.minimum_length} characters long')
-            elif len(password) > 256:
-                raise exceptions.invalid_params(f'Password can be up to 256 characters')
-            elif user_pool_password_policy.require_numbers and re.search('[0-9]', password) is None:
-                raise exceptions.invalid_params('Password should include at least 1 number')
-            elif user_pool_password_policy.require_uppercase and re.search('[A-Z]', password) is None:
-                raise exceptions.invalid_params('Password should include at least 1 uppercase letter')
-            elif user_pool_password_policy.require_lowercase and re.search('[a-z]', password) is None:
-                raise exceptions.invalid_params('Password should include at least 1 lowercase letter')
-            elif user_pool_password_policy.require_symbols and re.search('[\^\$\*\.\[\]{}\(\)\?"!@#%&\/\\,><\':;\|_~`=\+\-]', password) is None:
-                raise exceptions.invalid_params('Password should include at least 1 of these special characters: ^ $ * . [ ] { } ( ) ? " ! @ # % & / \ , > < \' : ; | _ ~ ` = + -')
-        else:
-            self.logger.debug('create_user() - setting password to random value')
-            password = Utils.generate_password(8, 2, 2, 2, 2)
-
         # login_shell
         login_shell = user.login_shell
         if login_shell == None or len(login_shell.strip()) == 0:
@@ -615,14 +594,12 @@ class AccountsService:
         # note: no validations on uid / gid if existing uid/gid is provided.
         # ensuring uid/gid uniqueness is administrator's responsibility.
 
-        # uid
-        uid = user.uid
-        if uid is None and not bootstrap_user:
-            raise exceptions.invalid_params('user.uid missing in AD user data')
-
-        gid = user.gid
-        if gid is None and not bootstrap_user:
-            raise exceptions.invalid_params('user.gid missing in AD user data')
+        # uid and gid
+        uid = None
+        gid = None
+        uid, gid = self.sssd.get_uid_and_gid_for_user(username)
+        if (uid is None or gid is None) and not bootstrap_user:
+            raise exceptions.soca_exception(error_code=errorcodes.UID_AND_GID_NOT_FOUND, message=f'Unable to retrieve UID and GID for User: {username}')
 
         # sudo
         sudo = bool(user.sudo)
@@ -633,14 +610,39 @@ class AccountsService:
         # is_active
         is_active = bool(user.is_active)
 
-        self.logger.info(f'creating Cognito user pool entry: {username}, Email: {email} , email_verified: {email_verified}')
+        # password
+        if bootstrap_user:
+            password = user.password
+            if email_verified:
+                if password == None or len(password.strip()) == 0:
+                    raise exceptions.invalid_params('Password is required')
 
-        self.user_pool.admin_create_user(
-            username=username,
-            email=email,
-            password=password,
-            email_verified=email_verified
-        )
+                user_pool_password_policy = self.user_pool.describe_password_policy()
+                # Validate password compliance versus Cognito user pool password policy
+                # Cognito: https://docs.aws.amazon.com/cognito/latest/developerguide/user-pool-settings-policies.html
+                if len(password) < user_pool_password_policy.minimum_length:
+                    raise exceptions.invalid_params(f'Password should be at least {user_pool_password_policy.minimum_length} characters long')
+                elif len(password) > 256:
+                    raise exceptions.invalid_params(f'Password can be up to 256 characters')
+                elif user_pool_password_policy.require_numbers and re.search('[0-9]', password) is None:
+                    raise exceptions.invalid_params('Password should include at least 1 number')
+                elif user_pool_password_policy.require_uppercase and re.search('[A-Z]', password) is None:
+                    raise exceptions.invalid_params('Password should include at least 1 uppercase letter')
+                elif user_pool_password_policy.require_lowercase and re.search('[a-z]', password) is None:
+                    raise exceptions.invalid_params('Password should include at least 1 lowercase letter')
+                elif user_pool_password_policy.require_symbols and re.search('[\^\$\*\.\[\]{}\(\)\?"!@#%&\/\\,><\':;\|_~`=\+\-]', password) is None:
+                    raise exceptions.invalid_params('Password should include at least 1 of these special characters: ^ $ * . [ ] { } ( ) ? " ! @ # % & / \ , > < \' : ; | _ ~ ` = + -')
+            else:
+                self.logger.debug('create_user() - setting password to random value')
+                password = Utils.generate_password(8, 2, 2, 2, 2)
+
+            self.logger.info(f'creating Cognito user pool entry: {username}, Email: {email} , email_verified: {email_verified}')
+            self.user_pool.admin_create_user(
+                username=username,
+                email=email,
+                password=password,
+                email_verified=email_verified
+            )
 
         # additional groups
         additional_groups = Utils.get_as_list(user.additional_groups, [])
@@ -660,21 +662,6 @@ class AccountsService:
                 'role': constants.ADMIN_ROLE if admin else constants.USER_ROLE,
                 'is_active': is_active,
             })
-
-        if self.is_sso_enabled():
-            self.logger.debug(f'Performing IDP Link for {username} / {email}')
-            self.user_pool.admin_link_idp_for_user(username, email)
-        if admin:
-            self.logger.debug(f'Performing ADMIN for {username}')
-            self.user_pool.admin_add_user_as_admin(username)
-
-        # todo: Remove once use of RES specific groups is removed
-        for user_group in constants.RES_USER_GROUPS:
-            try:
-                self.logger.info(f'Adding username {username} to RES_USER_GROUP: {user_group}')
-                self.add_users_to_group([username], user_group, bypass_active_user_check=True)
-            except Exception as e:
-                self.logger.debug(f"Could not add user {username} to RES_USER_GROUP: {user_group}")
 
         for additional_group in additional_groups:
             self.logger.info(f'Adding username {username} to additional group: {additional_group}')
@@ -696,7 +683,7 @@ class AccountsService:
         """
         Modify User
 
-        Only ``email`` updates are supported at the moment.
+        ``email``, ``login_shell``, ``sudo``, ``uid``, ``gid``, ``is_active`` updates are supported at the moment.
 
         :param user:
         :param email_verified:
@@ -723,9 +710,6 @@ class AccountsService:
             existing_email = Utils.get_value_as_string('email', existing_user)
             if existing_email != new_email:
                 user_updates['email'] = new_email
-                self.user_pool.admin_update_email(username, new_email, email_verified=email_verified)
-                if self.is_sso_enabled():
-                    self.user_pool.admin_link_idp_for_user(username, new_email)
 
         if Utils.is_not_empty(user.login_shell):
             user_updates['login_shell'] = user.login_shell
@@ -740,8 +724,13 @@ class AccountsService:
             user_updates['gid'] = user.gid
 
         updated_user = self.user_dao.update_user(user_updates)
+        updated_user = self.user_dao.convert_from_db(updated_user)
+        if user.is_active:
+            # Only handle user activation as the account servie doesn't define the deactivation workflow currently.
+            self.activate_user(updated_user)
+            updated_user.is_active = True
 
-        return self.user_dao.convert_from_db(updated_user)
+        return updated_user
 
     def activate_user(self, existing_user: User):
         if not existing_user.is_active:
@@ -753,6 +742,7 @@ class AccountsService:
                 except Exception as e:
                     self.logger.warning(f'Could not add user {username} to group {additional_group}')
             self.user_dao.update_user({'username': username, 'is_active': True})
+
 
     def enable_user(self, username: str):
         if Utils.is_empty(username):
@@ -766,9 +756,8 @@ class AccountsService:
         is_enabled = Utils.get_value_as_bool('enabled', existing_user, False)
         if is_enabled:
             return
-
-        self.user_pool.admin_enable_user(username)
         self.user_dao.update_user({'username': username, 'enabled': True})
+
 
     def disable_user(self, username: str):
         if Utils.is_empty(username):
@@ -785,10 +774,8 @@ class AccountsService:
         is_enabled = Utils.get_value_as_bool('enabled', existing_user, False)
         if not is_enabled:
             return
-
-        self.user_pool.admin_disable_user(username)
+        
         self.user_dao.update_user({'username': username, 'enabled': False})
-
         self.evdi_client.publish_user_disabled_event(username=username)
 
     def delete_user(self, username: str):
@@ -814,14 +801,6 @@ class AccountsService:
                 else:
                     raise e
 
-        # disable user from db, user pool and delete from directory service
-        self.logger.info(f'{log_tag} disabling user')
-        self.disable_user(username=username)
-
-        # delete user in user pool
-        self.logger.info(f'{log_tag} delete user from user pool')
-        self.user_pool.admin_delete_user(username=username)
-
         # delete user from db
         self.logger.info(f'{log_tag} delete user in ddb')
         self.user_dao.delete_user(username=username)
@@ -831,6 +810,9 @@ class AccountsService:
         if Utils.is_empty(username):
             raise exceptions.invalid_params('username is required')
 
+        if not self.is_cluster_administrator(username):
+            raise AuthUtils.invalid_operation('Only Cluster Administrator password can be reset.')
+
         # trigger reset password email
         self.user_pool.admin_reset_password(username)
 
@@ -839,10 +821,13 @@ class AccountsService:
 
     def change_password(self, access_token: str, username: str, old_password: str, new_password: str):
         """
-        change password for given username in user pool and ldap
+        change password for given username in user pool
         this method expects an access token from an already logged-in user, who is trying to change their password.
         :return:
         """
+
+        if not self.is_cluster_administrator(username):
+            raise AuthUtils.invalid_operation('Only Cluster Administrator password can be changed.')
 
         # change password in user pool before changing in ldap
         self.user_pool.change_password(
@@ -851,41 +836,61 @@ class AccountsService:
             old_password=old_password,
             new_password=new_password
         )
-
+        
+    def get_user_from_access_token(self, access_token: str) -> Optional[User]:
+        decoded_token = self.token_service.decode_token(token=access_token)
+        token_username = decoded_token.get('username')
+        return self.get_user_from_token_username(token_username=token_username)
+        
+    def get_user_from_token_username(self, token_username: str) -> Optional[User]:
+        if not token_username:
+            raise exceptions.unauthorized_access()
+        email = self.token_service.get_email_from_token_username(token_username=token_username)
+        user = None
+        if email:
+            user = self.get_user_by_email(email=email)
+        else:
+            # This is for clusteradmin
+            user =  self.get_user(username=token_username)
+        return user
+    
+    def add_role_dbusername_to_auth_result(self, authresult: InitiateAuthResult, ssoAuth: bool = False) -> Optional[InitiateAuthResult]:
+        access_token = authresult.auth.access_token
+        user = self.get_user_from_access_token(access_token=access_token)
+        if user.enabled:
+            authresult.role = user.role
+            authresult.db_username = user.username
+            return authresult
+        else:
+            self.sign_out(authresult.auth.refresh_token, sso_auth=ssoAuth)
+            self.logger.error(msg=f'User {user.username} is disabled. Denied login.')
+            raise exceptions.unauthorized_access()
+        
     # public API methods for user onboarding, login, forgot password flows.
-
     def initiate_auth(self, request: InitiateAuthRequest) -> InitiateAuthResult:
-
         auth_flow = request.auth_flow
         if Utils.is_empty(auth_flow):
             raise exceptions.invalid_params('auth_flow is required.')
 
         if auth_flow == 'USER_PASSWORD_AUTH':
-
-            username = request.username
-            if Utils.is_empty(username):
-                raise exceptions.invalid_params('username is required.')
-
+            cognito_username = request.cognito_username
             password = request.password
-            if Utils.is_empty(password):
-                raise exceptions.invalid_params('password is required.')
-
-            return self.user_pool.initiate_username_password_auth(request)
-
+            if not self.is_cluster_administrator(cognito_username):
+                raise exceptions.unauthorized_access()
+            authresult = self.user_pool.initiate_username_password_auth(request)
+            if not authresult.challenge_name:
+                authresult = self.add_role_dbusername_to_auth_result(authresult=authresult)
+            return authresult
         elif auth_flow == 'REFRESH_TOKEN_AUTH':
-
-            username = request.username
-            if Utils.is_empty(username):
-                raise exceptions.invalid_params('username is required.')
-
+            cognito_username = request.cognito_username
             refresh_token = request.refresh_token
-            if Utils.is_empty(refresh_token):
-                raise exceptions.invalid_params('refresh_token is required.')
-
-            return self.user_pool.initiate_refresh_token_auth(username, refresh_token)
-
+            if not self.is_cluster_administrator(cognito_username):
+                raise exceptions.unauthorized_access()
+            authresult = self.user_pool.initiate_refresh_token_auth(
+                username=cognito_username, refresh_token=refresh_token)
+            authresult = self.add_role_dbusername_to_auth_result(authresult=authresult)
+            return authresult
         elif auth_flow == 'SSO_AUTH':
-
             if not self.is_sso_enabled():
                 raise exceptions.unauthorized_access()
 
@@ -894,31 +899,30 @@ class AccountsService:
                 raise exceptions.invalid_params('authorization_code is required.')
 
             db_sso_state = self.sso_state_dao.get_sso_state(authorization_code)
-            if db_sso_state is None:
+            if not db_sso_state:
                 raise exceptions.unauthorized_access()
-
-            auth_result = self.sso_state_dao.convert_from_db(db_sso_state)
 
             self.sso_state_dao.delete_sso_state(authorization_code)
-
-            return InitiateAuthResult(
-                auth=auth_result
+            authresult = InitiateAuthResult(
+                auth=AuthResult(
+                    access_token= db_sso_state.get('access_token'),
+                    refresh_token= db_sso_state.get('refresh_token'),
+                    id_token= db_sso_state.get('id_token'),
+                    expires_in= db_sso_state.get('expires_in'),
+                    token_type= db_sso_state.get('token_type'),
+                )
             )
-
+            authresult = self.add_role_dbusername_to_auth_result(authresult=authresult, ssoAuth=True)
+            return authresult
         elif auth_flow == 'SSO_REFRESH_TOKEN_AUTH':
-
             if not self.is_sso_enabled():
                 raise exceptions.unauthorized_access()
-
-            username = request.username
-            if Utils.is_empty(username):
-                raise exceptions.invalid_params('username is required.')
-
+            cognito_username = request.cognito_username
             refresh_token = request.refresh_token
-            if Utils.is_empty(refresh_token):
-                raise exceptions.invalid_params('refresh_token is required.')
-
-            return self.user_pool.initiate_refresh_token_auth(username, refresh_token, sso=True)
+            authresult = self.user_pool.initiate_refresh_token_auth(
+                username=cognito_username, refresh_token=refresh_token, sso=True)
+            authresult = self.add_role_dbusername_to_auth_result(authresult=authresult, ssoAuth=True)
+            return authresult
 
     def respond_to_auth_challenge(self, request: RespondToAuthChallengeRequest) -> RespondToAuthChallengeResult:
 
@@ -1038,55 +1042,7 @@ class AccountsService:
         except Exception as e:
             self.logger.error(f"Error during clusteradmin user creation: {e}")
 
-        # create managers group
-        cluster_managers_group_name = self.group_name_helper.get_cluster_managers_group()
-        self.create_res_group(ds_readonly, group_name=cluster_managers_group_name,
-                              title="Managers (Administrators without sudo access)", group_type=constants.GROUP_TYPE_CLUSTER, ref=None)
-
-        # for all "app" modules in the cluster, create the module users and module administrators group to enable fine-grained access
-        # if an application module is added at a later point in time, a cluster-manager restart should fix the issue.
-        # ideally, an 'resctl initialize-defaults' command is warranted to address this scenario and will be taken up in a future release.
-        modules = self.context.get_cluster_modules()
-        for module in modules:
-            if module['type'] != constants.MODULE_TYPE_APP:
-                continue
-            module_id = module['module_id']
-            module_name = module['name']
-
-            module_administrators_group_name = self.group_name_helper.get_module_administrators_group(module_id=module_id)
-            self.create_res_group(ds_readonly, group_name=module_administrators_group_name,
-                                  title=f"Administrators for Module: {module_name}, ModuleId: {module_id}, DS: {module_administrators_group_name}", group_type=constants.GROUP_TYPE_MODULE, ref=module_id)
-
-            module_users_group_name = self.group_name_helper.get_module_users_group(module_id=module_id)
-            self.create_res_group(ds_readonly, group_name=module_users_group_name,
-                                  title=f"Users for Module: {module_name}, ModuleId: {module_id}", group_type=constants.GROUP_TYPE_MODULE, ref=module_id)
-
-    def create_res_group(self, ds_readonly: bool, group_name: Optional[str], title: Optional[str], group_type: Optional[str], ref: str = None):
-        if ds_readonly:
-            self.logger.info(f'Skipping {group_name} sync with AD')
-
-        group = self.group_dao.get_group(group_name)
-
-        if group is None:
-            self.logger.info(f'Group {group_name} not found in RES DynamoDB')
-
-        try:
-            self.create_group(
-                group=Group(
-                    title=title,
-                    name=group_name,
-                    ds_name=group_name,
-                    gid=None,
-                    group_type=group_type,
-                    ref=ref,
-                    type=constants.GROUP_TYPE_INTERNAL
-                ),
-            )
-        except Exception as e:
-            self.logger.error(f'Error {e}')
-
-        self.logger.info(f'creating group: {group_name}')
-
     def configure_sso(self, request: ConfigureSSORequest):
         self.single_sign_on_helper.configure_sso(request)
         self.context.ad_sync.sync_from_ad()  # submit ad_sync task after configuring SSO
+

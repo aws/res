@@ -16,6 +16,7 @@ __all__ = (
     'OnboardEFSFileSystemRequest',
     'OnboardONTAPFileSystemRequest',
     'OnboardFileSystemResult',
+    'OffboardFileSystemRequest',
     "OPEN_API_SPEC_ENTRIES_FILESYSTEM",
 )
 
@@ -119,6 +120,11 @@ class OnboardONTAPFileSystemRequest(CommonOnboardFileSystemRequest):
 
 class OnboardFileSystemResult(SocaPayload):
     pass
+
+
+class OffboardFileSystemRequest(SocaPayload):
+    filesystem_name: str
+
 
 OPEN_API_SPEC_ENTRIES_FILESYSTEM = [
     IdeaOpenAPISpecEntry(
