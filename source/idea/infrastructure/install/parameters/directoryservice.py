@@ -122,7 +122,7 @@ class DirectoryServiceParameters(Base):
         Attributes(
             id=DirectoryServiceKey.DOMAIN_TLS_CERTIFICATE_SECRET_ARN,
             type="String",
-            description="(Optional) Domain TLS Certificate Secret ARN",
+            description="(Optional) AD Domain TLS Certificate Secret ARN",
         )
     )
     enable_ldap_id_mapping: str = Base.parameter(

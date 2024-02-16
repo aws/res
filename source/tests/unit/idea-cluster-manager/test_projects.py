@@ -36,6 +36,7 @@ from ideadatamodel import (
     Project,
     SocaAnyPayload,
     SocaKeyValue,
+    UpdateProjectRequest,
     User,
     VirtualDesktopSession,
     VirtualDesktopSoftwareStack,
@@ -56,7 +57,9 @@ def enable_project(context: AppContext, project: Project):
 
 
 def disable_project(context: AppContext, project: Project):
-    context.projects.enable_project(EnableProjectRequest(project_id=project.project_id))
+    context.projects.disable_project(
+        EnableProjectRequest(project_id=project.project_id)
+    )
     task = ProjectDisabledTask(context=context)
     task.invoke({"project_id": project.project_id})
 
@@ -374,6 +377,28 @@ def test_projects_crud_list_projects(context):
             break
 
     assert found is not None
+
+
+def test_project_crud_update_project_tags(context):
+    assert ProjectsTestContext.crud_project is not None
+
+    result = context.projects.get_project(
+        GetProjectRequest(project_id=ProjectsTestContext.crud_project.project_id)
+    )
+
+    project = result.project
+
+    initial_number_of_tags = len(project.tags)
+
+    project.tags.append(SocaKeyValue(key="test-key-u", value="test-value-u"))
+
+    context.projects.update_project(UpdateProjectRequest(project=project))
+
+    result = context.projects.get_project(
+        GetProjectRequest(project_id=ProjectsTestContext.crud_project.project_id)
+    )
+
+    assert len(result.project.tags) is initial_number_of_tags + 1
 
 
 def test_projects_crud_delete_project(context, membership):

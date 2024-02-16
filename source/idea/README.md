@@ -2,7 +2,7 @@
 
 # Documentation
 
-https://docs.ide-on-aws.com
+https://docs.aws.amazon.com/res/latest/ug/overview.html
 
 # Directories
 
@@ -14,10 +14,6 @@ Contains the files related to the initial install of the Research and Engineerin
 
 Contains the jinja templates needed throughout the solution.
 
-## idea-cli
-
-Contains files for CLI setup.
-
 ## idea-cluster-manager
 
 Contains everything needed for the cluster manager module (server set-up, api, etc).
@@ -27,11 +23,6 @@ Contains everything needed for the cluster manager module (server set-up, api, e
 Defines the data models used throughout the solution.
 
 ## idea-dcv-connection-gateway
-
-
-## idea-scheduler
-
-Contains everything needing for the scheduler module (server set-up, api, etc).
 
 ## idea-sdk
 

@@ -1,6 +1,13 @@
 # Change Log
 This file is used to list changes made in each release of Research and Engineering Studio (RES).
 
+2024.01.01
+------
+
+**BUG FIXES**
+
+- Upgraded CDK Lambda runtime to nodejs18.x
+
 2024.01
 ------
 

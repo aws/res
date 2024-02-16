@@ -2,7 +2,7 @@
 colored
 ipaddress
 sanic==23.6.0
-aws-cdk-lib==2.63.0
+aws-cdk-lib==2.*
 cdk-nag
 prettytable
 defusedxml

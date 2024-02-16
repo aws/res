@@ -37,8 +37,8 @@ class Snapshot(SocaBaseModel):
     status: Optional[SnapshotStatus]
     created_on: Optional[datetime]
     failure_reason: Optional[str]
-    
-    
+
+
 class ApplySnapshotStatus(str, Enum):
     IN_PROGRESS = 'IN_PROGRESS'
     COMPLETED = 'COMPLETED'
@@ -46,8 +46,8 @@ class ApplySnapshotStatus(str, Enum):
     ROLLBACK_IN_PROGRESS = "ROLLBACK_IN_PROGRESS"
     ROLLBACK_COMPLETE = "ROLLBACK_COMPLETE"
     ROLLBACE_FAILED = "ROLLBACK_FAILED"
-    
-    
+
+
 class ApplySnapshot(SocaBaseModel):
     apply_snapshot_identifier: Optional[str]
     s3_bucket_name: Optional[str]
@@ -55,7 +55,7 @@ class ApplySnapshot(SocaBaseModel):
     status: Optional[ApplySnapshotStatus]
     created_on: Optional[datetime]
     failure_reason: Optional[str]
-    
+
 
 class TableKeys(SocaBaseModel):
     partition_key: str
@@ -73,3 +73,4 @@ class TableName(str, Enum):
 class RESVersion(str, Enum):
     v_2023_11 = "2023.11"
     v_2024_01 = "2024.01"
+    v_2024_01_01 = "2024.01.01"

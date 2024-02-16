@@ -129,7 +129,7 @@ class CommonParameters(Base):
         Attributes(
             id=CommonKey.VDI_SUBNETS,
             type="List<AWS::EC2::Subnet::Id>",
-            description="Select at least 2 subnets from different Availability Zones. For deployments that need restricted internet access, select private subnets. For deployments that need internet access, select public subnets.",
+            description="Select at least 2 private subnets from different Availability Zones.",
             allowed_pattern=".+",
         )
     )

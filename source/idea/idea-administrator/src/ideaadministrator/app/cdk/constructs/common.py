@@ -110,6 +110,10 @@ class LambdaFunction(SocaBaseConstruct, lambda_.Function):
             vpc_subnets=vpc_subnets,
             log_retention_role=log_retention_role)
 
+        self.add_nag_suppression(suppressions=[
+            IdeaNagSuppression(rule_id='AwsSolutions-L1', reason='Lambda runtime uses Python 3.9 by default.')
+        ])
+
 
 class Policy(SocaBaseConstruct, iam.Policy):
 

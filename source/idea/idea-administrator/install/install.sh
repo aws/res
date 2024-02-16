@@ -14,7 +14,7 @@
 # RES Administrator Installation Script
 
 IDEA_APP_DEPLOY_DIR="/root/.idea"
-IDEA_CDK_VERSION="2.63.0"
+IDEA_CDK_VERSION="2.*"
 
 SCRIPT_DIR="$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
 

@@ -33,7 +33,7 @@ class VdcApiAuthorizationService(ApiAuthorizationServiceBase):
             # This is for clusteradmin
             user =  self.accounts_client.get_user(request=GetUserRequest(username=token_username)).user
         if not user:
-            exception_string = f'email: {email}' if email else f'username: {username}' 
+            exception_string = f'email: {email}' if email else f'username: {token_username}' 
             raise exceptions.SocaException(
                  error_code=errorcodes.AUTH_USER_NOT_FOUND,
                  message=f'User not found with {exception_string}'

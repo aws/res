@@ -492,7 +492,7 @@ class Projects extends Component<ProjectsProps, ProjectsState> {
             this.projects()
                 .updateProject({
                     project: {
-                        project_id: this.getSelected()?.project_id,
+                        ...this.getSelected(),
                         tags: this.state.tags,
                     },
                 })

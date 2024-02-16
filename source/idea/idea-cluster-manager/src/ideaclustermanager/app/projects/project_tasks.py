@@ -68,10 +68,10 @@ class ProjectGroupsUpdatedTask(BaseTask):
         project_id = payload['project_id']
         project = self.context.projects.projects_dao.get_project_by_id(project_id)
         if project['enabled']:
-            groups_added = payload.get('groups_added', [])
-            groups_removed = payload.get('groups_removed', [])
-            users_added = payload.get('users_added', [])
-            users_removed = payload.get('users_removed', [])
+            groups_added = payload.get('groups_added') or []
+            groups_removed = payload.get('groups_removed') or []
+            users_added = payload.get('users_added') or []
+            users_removed = payload.get('users_removed') or []
 
             for username in users_removed:
                 self.context.projects.user_projects_dao.delete_user_project(

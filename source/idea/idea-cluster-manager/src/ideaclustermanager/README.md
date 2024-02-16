@@ -2,7 +2,7 @@
 
 # Documentation
 
-https://docs.ide-on-aws.com
+https://docs.aws.amazon.com/res/latest/ug/overview.html
 
 # Directories
 

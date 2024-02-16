@@ -290,6 +290,7 @@ def test_projects_table_merger_add_groups_and_users_to_project_succeed(
     context: AppContext, monkeypatch
 ):
     monkeypatch.setattr(context.accounts, "get_group", lambda group_name: None)
+    monkeypatch.setattr(context.accounts, "get_user", lambda username: None)
 
     project_groups_updated_called = False
 
@@ -304,7 +305,7 @@ def test_projects_table_merger_add_groups_and_users_to_project_succeed(
             assert payload["users_added"] == ["user1"]
 
     monkeypatch.setattr(
-        context.projects.task_manager,
+        context.task_manager,
         "send",
         _task_manager_send_mock,
     )

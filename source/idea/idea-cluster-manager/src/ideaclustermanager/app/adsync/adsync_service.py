@@ -123,7 +123,7 @@ class ADSyncService:
         self, ldap_users: list, ldap_users_by_unique_identifier: dict, ldap_group_name: str = None
     ):
         for ldap_user in filter(lambda u: 'cn' in u, ldap_users):
-            cn = str(ldap_user['cn'])
+            cn = str(ldap_user['cn']).lower()
             if cn not in ldap_users_by_unique_identifier:
                 ldap_users_by_unique_identifier[cn] = ldap_user
 

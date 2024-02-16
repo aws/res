@@ -735,7 +735,7 @@ class AccountsService:
     def activate_user(self, existing_user: User):
         if not existing_user.is_active:
             username = existing_user.username
-            for additional_group in existing_user.additional_groups:
+            for additional_group in existing_user.additional_groups or []:
                 try:
                     self.logger.info(f'Adding username {username} to additional group: {additional_group}')
                     self.context.accounts.add_users_to_group([username], additional_group, bypass_active_user_check=True)

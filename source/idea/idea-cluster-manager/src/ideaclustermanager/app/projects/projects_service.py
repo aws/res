@@ -28,10 +28,8 @@ from ideadatamodel.projects import (
     DisableProjectResult,
     GetUserProjectsRequest,
     GetUserProjectsResult,
-    Project
 )
-from ideadatamodel.api.api_model import ApiAuthorization
-from ideasdk.utils import Utils, GroupNameHelper
+from ideasdk.utils import Utils
 from ideasdk.context import SocaContext
 from ideasdk.client.vdc_client import AbstractVirtualDesktopControllerClient
 
@@ -40,7 +38,7 @@ from ideaclustermanager.app.projects.db.user_projects_dao import UserProjectsDAO
 from ideaclustermanager.app.accounts.accounts_service import AccountsService
 from ideaclustermanager.app.tasks.task_manager import TaskManager
 
-from typing import List, Optional
+from typing import List
 
 
 class ProjectsService:
@@ -243,14 +241,21 @@ class ProjectsService:
                 for ldap_group_name in groups_added:
                     # check if group exists
                     self.accounts_service.get_group(ldap_group_name)
+                    
         users_added = None
         users_removed = None
+        if project.users:
+            existing_users = set(existing.get('users', []))
+            updated_users = set(project.users)
 
-        existing_users = set(existing.get('users', []))
-        updated_users = set(project.users)
-
-        users_added = updated_users - existing_users
-        users_removed = existing_users - updated_users
+            users_added = updated_users - existing_users
+            users_removed = existing_users - updated_users
+            
+            if len(users_added) > 0:
+                for username in users_added:
+                    # check if user exists
+                    self.accounts_service.get_user(username)
+            
         # none values will be skipped by db update. ensure enabled/disabled cannot be called via update project.
         project.enabled = None
 
@@ -263,10 +268,10 @@ class ProjectsService:
                     task_name='projects.project-groups-updated',
                     payload={
                         'project_id': updated_project.project_id,
-                        'groups_added': list(groups_added),
-                        'groups_removed': list(groups_removed),
-                        'users_added': list(users_added),
-                        'users_removed': list(users_removed)
+                        'groups_added': list(groups_added or []),
+                        'groups_removed': list(groups_removed or []),
+                        'users_added': list(users_added or []),
+                        'users_removed': list(users_removed or [])
                     },
                     message_group_id=updated_project.project_id
                 )

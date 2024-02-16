@@ -2,11 +2,11 @@
 
 # Documentation
 
-https://docs.ide-on-aws.com
+https://docs.aws.amazon.com/res/latest/ug/overview.html
 
 # Directories
 
-The idea-adminsitrator folder contains various files related to the initial install of IDEA via using the CDK and the cli commands for res-admin app (cluster install and management).
+The idea-adminsitrator folder contains various files related to the initial install of IDEA via CDK.
 
 ## install
 

@@ -314,7 +314,7 @@ class TokenService(TokenServiceProtocol):
         
         if self._context.config().get_bool('identity-provider.cognito.sso_enabled', required=True):
             identity_provider_name = self._context.config().get_string('identity-provider.cognito.sso_idp_provider_name', required=True)
-            identity_provider_prefix = identity_provider_name + "_"
+            identity_provider_prefix = (identity_provider_name + "_").lower()
             email = None
             if token_username.startswith(identity_provider_prefix):
                 email = token_username.replace(identity_provider_prefix, "", 1)
