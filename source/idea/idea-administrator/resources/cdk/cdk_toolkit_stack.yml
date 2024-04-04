@@ -60,6 +60,9 @@ Parameters:
     AllowedValues:
       - "true"
       - "false"
+  PermissionsBoundaryPolicy:
+    Type: String
+    Default: '{{ permission_boundary_arn }}'
 Conditions:
   HasTrustedAccounts:
     Fn::Not:
@@ -104,6 +107,10 @@ Conditions:
     Fn::Equals:
       - "true"
       - Ref: PublicAccessBlockConfiguration
+  HasPermissionsBoundary: !Not
+    - !Equals
+      - !Ref PermissionsBoundaryPolicy
+      - ''
 Resources:
   FileAssetsBucketEncryptionKey:
     Type: AWS::KMS::Key
@@ -316,6 +323,11 @@ Resources:
                   AWS:
                     Ref: TrustedAccounts
               - Ref: AWS::NoValue
+      PermissionsBoundary:
+        Fn::If:
+        - HasPermissionsBoundary
+        - !Ref PermissionsBoundaryPolicy
+        - !Ref AWS::NoValue
       RoleName:
         Fn::Sub: cdk-${Qualifier}-file-publishing-role-${AWS::AccountId}-${AWS::Region}
       Tags:
@@ -339,6 +351,11 @@ Resources:
                   AWS:
                     Ref: TrustedAccounts
               - Ref: AWS::NoValue
+      PermissionsBoundary:
+        Fn::If:
+        - HasPermissionsBoundary
+        - !Ref PermissionsBoundaryPolicy
+        - !Ref AWS::NoValue
       RoleName:
         Fn::Sub: cdk-${Qualifier}-image-publishing-role-${AWS::AccountId}-${AWS::Region}
       Tags:
@@ -370,6 +387,11 @@ Resources:
                   AWS:
                     Ref: TrustedAccounts
               - Ref: AWS::NoValue
+      PermissionsBoundary:
+        Fn::If:
+        - HasPermissionsBoundary
+        - !Ref PermissionsBoundaryPolicy
+        - !Ref AWS::NoValue
       RoleName:
         Fn::Sub: cdk-${Qualifier}-lookup-role-${AWS::AccountId}-${AWS::Region}
       ManagedPolicyArns:
@@ -466,6 +488,11 @@ Resources:
                   AWS:
                     Ref: TrustedAccounts
               - Ref: AWS::NoValue
+      PermissionsBoundary:
+        Fn::If:
+        - HasPermissionsBoundary
+        - !Ref PermissionsBoundaryPolicy
+        - !Ref AWS::NoValue
       Policies:
         - PolicyDocument:
             Statement:
@@ -553,6 +580,11 @@ Resources:
             Principal:
               Service: cloudformation.{{ aws_dns_suffix }}
         Version: "2012-10-17"
+      PermissionsBoundary:
+        Fn::If:
+        - HasPermissionsBoundary
+        - !Ref PermissionsBoundaryPolicy
+        - !Ref AWS::NoValue
       ManagedPolicyArns:
         Fn::If:
           - HasCloudFormationExecutionPolicies

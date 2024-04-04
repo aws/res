@@ -13,12 +13,18 @@
 
 import { Component } from "react";
 import { IdeaFormField, IdeaFormFieldRegistry, IdeaFormFieldLifecycleEvent, IdeaFormFieldStateChangeEvent } from "../form-field";
-import { Box, Button, ColumnLayout, Form, Header, Modal, SpaceBetween } from "@cloudscape-design/components";
+import {Box, Button, ColumnLayout, Container, Form, Header, Modal, SpaceBetween} from "@cloudscape-design/components";
 import Utils from "../../common/utils";
 import dot from "dot-object";
 import { GetParamChoicesRequest, GetParamChoicesResult, SocaUserInputGroupMetadata, SocaUserInputParamMetadata } from "../../client/data-model";
 import { IdeaFormFieldStateChangeEventHandler } from "../form-field";
 import { ModalProps } from "@cloudscape-design/components/modal/interfaces";
+
+
+export interface IdeaFormContainerGroup {
+    title: string
+    name: string
+}
 
 export interface IdeaFormProps {
     name: string;
@@ -42,6 +48,8 @@ export interface IdeaFormProps {
     stretch?: boolean;
     loading?: boolean;
     loadingText?: string;
+    useContainers?: boolean;
+    containerGroups?: ReadonlyArray<IdeaFormContainerGroup>;
 }
 
 export interface IdeaFormState {
@@ -321,6 +329,7 @@ class IdeaForm extends Component<IdeaFormProps, IdeaFormState> {
             return param.default;
         };
 
+
         const numColumns = () => (this.props.columns != null ? this.props.columns : 1);
 
         return (
@@ -328,25 +337,56 @@ class IdeaForm extends Component<IdeaFormProps, IdeaFormState> {
                 <Form actions={this.showActions() && this.buildFormActions()} header={this.showHeader() && <Header variant="h2">{this.props.title}</Header>} errorText={this.state.message}>
                     <SpaceBetween size="l" direction="vertical">
                         <ColumnLayout columns={numColumns()}>
-                            {this.props.params.map((param, index) => {
-                                return (
-                                    this.isVisible(param.name!) && (
-                                        <IdeaFormField
-                                            key={`${param.name}-${index}`}
-                                            module={this.props.name}
-                                            param={param}
-                                            onLifecycleEvent={this.onLifecycleEvent}
-                                            onStateChange={this.onStateChange}
-                                            value={getValue(param)}
-                                            onFetchOptions={this.props.onFetchOptions}
-                                            stretch={this.props.stretch}
-                                            onKeyEnter={() => {
-                                                this.handleOnSubmit();
-                                            }}
-                                        />
+                            {this.props.useContainers ? (
+                                this.props.containerGroups && this.props.containerGroups.map((containerGroup, index) => {
+                                    return(
+                                        <Container key={`${containerGroup.name}-${index}`} header={<Header variant="h3">{containerGroup.title}</Header>}>
+                                            {
+                                                this.props.params.filter((param) => param.container_group_name === containerGroup.name).map((param) => {
+                                                    return (
+                                                        this.isVisible(param.name!) && (
+                                                            <IdeaFormField
+                                                                key={`${containerGroup.name}-${param.name}-${index}`}
+                                                                module={this.props.name}
+                                                                param={param}
+                                                                onLifecycleEvent={this.onLifecycleEvent}
+                                                                onStateChange={this.onStateChange}
+                                                                value={getValue(param)}
+                                                                onFetchOptions={this.props.onFetchOptions}
+                                                                stretch={this.props.stretch}
+                                                                onKeyEnter={() => {
+                                                                    this.handleOnSubmit();
+                                                                }}
+                                                            />
+                                                        )
+                                                    )
+                                                })
+                                            }
+                                        </Container>
                                     )
-                                );
-                            })}
+                                })
+                                ) : (
+                                this.props.params.map((param, index) => {
+                                            return (
+                                                this.isVisible(param.name!) && (
+                                                    <IdeaFormField
+                                                        key={`${param.name}-${index}`}
+                                                        module={this.props.name}
+                                                        param={param}
+                                                        onLifecycleEvent={this.onLifecycleEvent}
+                                                        onStateChange={this.onStateChange}
+                                                        value={getValue(param)}
+                                                        onFetchOptions={this.props.onFetchOptions}
+                                                        stretch={this.props.stretch}
+                                                        onKeyEnter={() => {
+                                                            this.handleOnSubmit();
+                                                        }}
+                                                    />
+                                                )
+                                            );
+                                    })
+                                )
+                            }
                         </ColumnLayout>
                     </SpaceBetween>
                 </Form>

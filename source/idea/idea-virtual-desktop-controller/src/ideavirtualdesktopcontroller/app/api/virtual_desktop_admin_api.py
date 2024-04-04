@@ -529,8 +529,7 @@ class VirtualDesktopAdminAPI(VirtualDesktopAPI):
             old_software_stack.name = new_software_stack.name
         if Utils.is_not_empty(new_software_stack.enabled):
             old_software_stack.enabled = new_software_stack.enabled
-        if Utils.is_not_empty(new_software_stack.projects):
-            old_software_stack.projects = new_software_stack.projects
+        old_software_stack.projects = new_software_stack.projects
 
         new_software_stack = self.software_stack_db.update(old_software_stack)
         ss_projects = []

@@ -116,14 +116,7 @@ class AbstractLDAPClient:
             timeout=Utils.get_as_float(options.connection_timeout, DEFAULT_LDAP_CONNECTION_TIMEOUT),
             use_pool=Utils.get_as_bool(options.connection_pool_enabled, DEFAULT_LDAP_ENABLE_CONNECTION_POOL)
         )
-        self.unsecure_connection_manager = ConnectionManager(
-            uri=self.ldap_uri.replace('ldaps:', 'ldap:'),
-            size=Utils.get_as_int(options.connection_pool_size, DEFAULT_LDAP_CONNECTION_POOL_SIZE),
-            retry_max=Utils.get_as_int(options.connection_retry_max, DEFAULT_LDAP_CONNECTION_RETRY_MAX),
-            retry_delay=Utils.get_as_float(options.connection_retry_delay, DEFAULT_LDAP_CONNECTION_RETRY_DELAY),
-            timeout=Utils.get_as_float(options.connection_timeout, DEFAULT_LDAP_CONNECTION_TIMEOUT),
-            use_pool=Utils.get_as_bool(options.connection_pool_enabled, DEFAULT_LDAP_ENABLE_CONNECTION_POOL),
-        )
+
     # ldap wrapper methods
     def add_s(self, dn, modlist):
         trace_message = f'ldapadd -x -D "{self.ldap_root_bind}" -H {self.ldap_uri} "{dn}"'
@@ -157,15 +150,13 @@ class AbstractLDAPClient:
         with self.get_ldap_root_connection() as conn:
             conn.delete_s(dn)
 
-    def search_s(self, base, scope=ldap.SCOPE_SUBTREE, filterstr=None, attrlist=None, attrsonly=0, trace=True, ldaps=None):
+    def search_s(self, base, scope=ldap.SCOPE_SUBTREE, filterstr=None, attrlist=None, attrsonly=0, trace=True):
         if trace:
             trace_message = f'ldapsearch -x -b "{base}" -D "{self.ldap_root_bind}" -H {self.ldap_uri} "{filterstr}"'
             if attrlist is not None:
                 trace_message = f'{trace_message} {" ".join(attrlist)}'
             self.logger.info(f'> {trace_message}')
-        if not ldaps and self.ldap_uri.startswith('ldaps:'):
-            with self.get_unsecure_ldap_root_connection() as conn:
-                return conn.search_s(base, scope, filterstr, attrlist, attrsonly)
+
         with self.get_ldap_root_connection() as conn:
             return conn.search_s(base, scope, filterstr, attrlist, attrsonly)
 
@@ -425,20 +416,6 @@ class AbstractLDAPClient:
 
         return res
 
-    def get_unsecure_ldap_root_connection(self) -> LDAPObject:
-        """
-        returns an LDAP connection object bound to ROOT user from the connection pool
-        """
-        if self.ldap_uri.startswith('ldaps:'):
-            res = self.unsecure_connection_manager.connection(bind=self.ldap_root_bind, passwd=self.ldap_root_password)
-            if self.logger.isEnabledFor(logging.DEBUG):
-                cm_info = str(self.unsecure_connection_manager)
-                self.logger.debug(f"LDAP CM returning conn ({res}), CM now:\n{cm_info}")
-        else:
-            res = self.get_ldap_root_connection()
-
-        return res
-
     @staticmethod
     def convert_ldap_group(ldap_group: Dict) -> Optional[Dict]:
         if Utils.is_empty(ldap_group):
@@ -569,6 +546,7 @@ class AbstractLDAPClient:
         username = LdapUtils.get_string_value('uid', ldap_user)
         if Utils.is_empty(username):
             username = LdapUtils.get_string_value('sAMAccountName', ldap_user)
+        sam_account_name = LdapUtils.get_string_value('sAMAccountName', ldap_user)
         email = LdapUtils.get_string_value('mail', ldap_user)
         uid = LdapUtils.get_int_value('uidNumber', ldap_user)
         gid = LdapUtils.get_int_value('gidNumber', ldap_user)
@@ -589,6 +567,7 @@ class AbstractLDAPClient:
         result = {
             'cn': cn,
             'username': username,
+            'sam_account_name': sam_account_name,
             'email': email,
             'uid': uid,
             'gid': gid,

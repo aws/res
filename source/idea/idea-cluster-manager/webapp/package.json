@@ -1,6 +1,6 @@
 {
   "name": "web-portal", 
-  "version": "2024.01.01", 
+  "version": "2024.04", 
   "private": true,
   "dependencies": {
     "@cloudscape-design/components": "^3.0.82",

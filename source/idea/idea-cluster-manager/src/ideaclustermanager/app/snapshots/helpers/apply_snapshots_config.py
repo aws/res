@@ -22,7 +22,7 @@ from ideaclustermanager.app.snapshots.apply_snapshot_merge_table import (
 from typing import Dict, Type
 
 # This array should be updated each release to include the new RES version number
-RES_VERSION_IN_TOPOLOGICAL_ORDER = [RESVersion.v_2023_11, RESVersion.v_2024_01, RESVersion.v_2024_01_01]
+RES_VERSION_IN_TOPOLOGICAL_ORDER = [RESVersion.v_2023_11, RESVersion.v_2024_01, RESVersion.v_2024_01_01, RESVersion.v_2024_04]
 
 TABLE_TO_TABLE_KEYS_BY_VERSION: Dict[TableName, Dict[RESVersion, TableKeys]] = {
     TableName.CLUSTER_SETTINGS_TABLE_NAME: {

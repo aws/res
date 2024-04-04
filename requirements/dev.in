@@ -1,11 +1,16 @@
--r idea-dev-lambda.in
 -r idea-administrator.in
 -r idea-virtual-desktop-controller.in
 -r idea-cluster-manager.in
 -r doc.in
+-r lint.in
+-r build.in
 -r tests.in
-pip-tools
-invoke
-pyfiglet
-openapi-schema-pydantic
-pylint
+
+-e file:.
+-e file:./source/idea/idea-data-model/src
+
+pip-tools~=7.0
+pyfiglet~=1.0
+openapi-schema-pydantic~=1.0
+pylint~=2.0
+types-requests~=2.0

@@ -131,7 +131,7 @@ class VirtualDesktopSoftwareStackEditForm extends Component<VirtualDesktopSoftwa
 
                         const values = this.getForm().getValues();
                         let projects: Project[] = [];
-                        values.projects.forEach((project_id: string) => {
+                        values.projects?.forEach((project_id: string) => {
                             projects.push({
                                 project_id: project_id,
                             });
@@ -188,9 +188,6 @@ class VirtualDesktopSoftwareStackEditForm extends Component<VirtualDesktopSoftwa
                             multiple: true,
                             choices: this.state.projectChoices,
                             default: this.getCurrentProjectsChoices(),
-                            validate: {
-                                required: true,
-                            },
                         },
                     ]}
                 />

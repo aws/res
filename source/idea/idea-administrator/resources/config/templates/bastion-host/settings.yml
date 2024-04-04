@@ -1,5 +1,5 @@
 public: {{ alb_public | lower }}
-instance_type: {{instance_type}}
+instance_type: t3.medium
 base_os: {{base_os}}
 instance_ami: {{instance_ami}}
 volume_size: {{volume_size}}

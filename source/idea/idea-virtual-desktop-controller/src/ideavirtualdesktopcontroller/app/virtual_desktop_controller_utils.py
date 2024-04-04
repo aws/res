@@ -17,7 +17,7 @@ from typing import List, Dict, Optional
 import ideavirtualdesktopcontroller
 from botocore.exceptions import ClientError
 
-from ideadatamodel import constants, VirtualDesktopArchitecture
+from ideadatamodel import constants, VirtualDesktopArchitecture, Project
 from ideadatamodel import (
     VirtualDesktopSession,
     VirtualDesktopBaseOS,
@@ -29,6 +29,7 @@ from ideadatamodel import (
 )
 from ideasdk.bootstrap import BootstrapPackageBuilder, BootstrapUserDataBuilder
 from ideasdk.context import BootstrapContext
+from ideasdk.launch_configurations import ScriptOSType, ScriptEventType
 from ideasdk.utils import Utils, GroupNameHelper
 from ideavirtualdesktopcontroller.app.clients.events_client.events_client import VirtualDesktopEventType
 from ideavirtualdesktopcontroller.app.events.events_utils import EventsUtils
@@ -81,18 +82,17 @@ class VirtualDesktopControllerUtils:
         # TODO: Deprecate
         bootstrap_context.vars.dcv_host_ready_message = f'{{{escape_chars}"event_group_id{escape_chars}":{escape_chars}"{session.idea_session_id}{escape_chars}",{escape_chars}"event_type{escape_chars}":{escape_chars}"{VirtualDesktopEventType.DCV_HOST_READY_EVENT}{escape_chars}",{escape_chars}"detail{escape_chars}":{{{escape_chars}"idea_session_id{escape_chars}":{escape_chars}"{session.idea_session_id}{escape_chars}",{escape_chars}"idea_session_owner{escape_chars}":{escape_chars}"{session.owner}{escape_chars}"}}}}'
 
-        component = 'virtual-desktop-host-linux'
+        components = ['virtual-desktop-host-linux', 'nice-dcv-linux']
         if session.software_stack.base_os == VirtualDesktopBaseOS.WINDOWS:
-            component = 'virtual-desktop-host-windows'
+            components = ['virtual-desktop-host-windows']
 
         bootstrap_package_archive_file = BootstrapPackageBuilder(
             bootstrap_context=bootstrap_context,
             source_directory=self.context.get_bootstrap_dir(),
             target_package_basename=f'dcv-host-{session.idea_session_id}',
-            components=[component],
+            components=components,
             tmp_dir=os.path.join(f'{self.context.config().get_string("shared-storage.internal.mount_dir", required=True)}', self.context.cluster_name(), self.context.module_id(), 'dcv-host-bootstrap', session.owner, f'{Utils.to_secure_filename(session.name)}-{session.idea_session_id}'),
             force_build=True,
-            base_os=session.software_stack.base_os.value,
             logger=self._logger
         ).build()
 
@@ -108,15 +108,51 @@ class VirtualDesktopControllerUtils:
         return f's3://{cluster_s3_bucket}/{upload_key}'
 
     def _build_userdata(self, session: VirtualDesktopSession):
-        install_commands = [
-            '/bin/bash virtual-desktop-host-linux/setup.sh'
+        bootstrap_context = BootstrapContext(
+            config=self.context.config(),
+            module_name=constants.MODULE_VIRTUAL_DESKTOP_CONTROLLER,
+            module_id=self.context.module_id(),
+            module_set=self.context.module_set(),
+            base_os=session.software_stack.base_os.value,
+            instance_type=session.server.instance_type
+        )
+
+        gpu_family = "NONE"
+        if bootstrap_context.is_nvidia_gpu():
+            gpu_family = "NVIDIA"
+        elif bootstrap_context.is_amd_gpu():
+            gpu_family = "AMD"
+
+        # Store
+
+        ## Add on vdi start commands here for linux here
+        on_vdi_start_script_commands = self._retrieve_scripts_as_commands(session.project, ScriptOSType.LINUX, ScriptEventType.ON_VDI_START)
+        on_vdi_configured_script_commands = self._retrieve_scripts_as_commands(session.project, ScriptOSType.LINUX, ScriptEventType.ON_VDI_CONFIGURED)
+
+        on_vdi_start_script_store = self._store_commands_as_linux_script(on_vdi_start_script_commands, ScriptEventType.ON_VDI_START)
+        on_vdi_configured_script_store = self._store_commands_as_linux_script(on_vdi_configured_script_commands, ScriptEventType.ON_VDI_CONFIGURED)
+
+        install_commands = on_vdi_start_script_store + on_vdi_configured_script_store + [
+            '/bin/bash virtual-desktop-host-linux/export_launch_script_env.sh -p {0} -o {1} -n {2} -e {3} -c {4} -s {5}'.format(session.project.project_id, session.owner, session.project.name, self.context.config().cluster_name, f'{ScriptEventType.ON_VDI_CONFIGURED}.sh', f'{ScriptEventType.ON_VDI_START}.sh'),
+            'source /etc/launch_script_environment',
+            f'/bin/bash virtual-desktop-host-linux/{ScriptEventType.ON_VDI_START}.sh',
+            '/bin/bash virtual-desktop-host-linux/install.sh -r {0} -n {1} -v 1 -g {2}'.format(self.context.config().aws_region,
+                                                                                               self.context.config().cluster_name,
+                                                                                               gpu_family),
         ]
 
         if session.software_stack.base_os == BaseOS.WINDOWS:
-            install_commands = [
-                'cd \"virtual-desktop-host-windows\"',
-                'Import-Module .\\SetUp.ps1',
-                'Setup-WindowsEC2Instance'
+            change_directory_command = ['cd \"virtual-desktop-host-windows\"']
+            on_vdi_start_script_commands = self._retrieve_scripts_as_commands(session.project, ScriptOSType.WINDOWS, ScriptEventType.ON_VDI_START)
+            on_vdi_configured_script_commands = self._retrieve_scripts_as_commands(session.project, ScriptOSType.WINDOWS, ScriptEventType.ON_VDI_CONFIGURED)
+            on_vdi_start_script_store = self._store_commands_as_windows_script(on_vdi_start_script_commands, ScriptEventType.ON_VDI_START)
+            on_vdi_configured_script_store = self._store_commands_as_windows_script(on_vdi_configured_script_commands, ScriptEventType.ON_VDI_CONFIGURED)
+            export_env_variables_commands = ['Import-Module .\\ExportLaunchScriptEnv.ps1',
+                                             f'Export-EnvironmentVariables -ProjectId "{session.project.project_id}" -OwnerId "{session.owner}" -EnvName "{self.context.config().cluster_name}" -ProjectName "{session.project.name}" -OnVDIStartCommands "{ScriptEventType.ON_VDI_START}.ps1" -OnVDIConfigureCommands "{ScriptEventType.ON_VDI_CONFIGURED}.ps1"']
+            on_vdi_start_script_commands = ['Import-Module .\\DownloadAndExecuteScript.ps1', '& .\\$env:ON_VDI_START_COMMANDS']
+            install_commands = change_directory_command + export_env_variables_commands + on_vdi_start_script_store + on_vdi_configured_script_store + on_vdi_start_script_commands + [
+                'Import-Module .\\Install.ps1',
+                'Install-WindowsEC2Instance -ConfigureForRESVDI'
             ]
 
         https_proxy = self.context.config().get_string('cluster.network.https_proxy', required=False, default='')
@@ -124,10 +160,10 @@ class VirtualDesktopControllerUtils:
         proxy_config = {}
         if Utils.is_not_empty(https_proxy):
             proxy_config = {
-                    'http_proxy': https_proxy,
-                    'https_proxy': https_proxy,
-                    'no_proxy': no_proxy
-                    }
+                'http_proxy': https_proxy,
+                'https_proxy': https_proxy,
+                'no_proxy': no_proxy
+            }
 
         user_data_builder = BootstrapUserDataBuilder(
             base_os=session.software_stack.base_os.value,
@@ -139,6 +175,41 @@ class VirtualDesktopControllerUtils:
         )
 
         return user_data_builder.build()
+
+    def _store_commands_as_linux_script(self, commands: List[str], scriptName: str) -> List[str]:
+        begin = "#!/bin/bash"
+        script = "\n".join([begin] + commands)
+        return [f'echo "{script}" > virtual-desktop-host-linux/{scriptName}.sh', f'chmod +x virtual-desktop-host/{scriptName}.sh']
+
+    def _store_commands_as_windows_script(self, commands: List[str], scriptName: str) -> List[str]:
+        script = "`n".join(commands)
+        return [f'"{script}" | Out-File -FilePath {scriptName}.ps1']
+
+    def _retrieve_scripts_as_commands(self, project: Project, os_type: ScriptOSType, script_event: ScriptEventType) -> List[str]:
+        scripts = project.scripts
+        if not scripts:
+            return []
+
+        script_dir = '/root/bootstrap/latest'
+        script_type = None
+        if os_type == ScriptOSType.LINUX:
+            script_type = scripts.linux
+            command_prefix = f'/bin/bash {script_dir}/virtual-desktop-host-linux/download_and_execute_script.sh'
+        elif os_type == ScriptOSType.WINDOWS:
+            script_type = scripts.windows
+            command_prefix = "Download-And-Execute-Script -uri"
+
+        if not script_type:
+            return []
+
+        event_scripts = getattr(script_type, script_event.value, None)
+        if not event_scripts:
+            return []
+
+        if os_type == ScriptOSType.LINUX:
+            return [f"{command_prefix} {script.script_location} {' '.join(script.arguments or [])}" for script in event_scripts]
+        elif os_type == ScriptOSType.WINDOWS:
+            return [f"{command_prefix} {script.script_location} -arguments '{' '.join(script.arguments or [])}'" for script in event_scripts]
 
     def provision_dcv_host_for_session(self, session: VirtualDesktopSession) -> dict:
 
@@ -299,7 +370,7 @@ class VirtualDesktopControllerUtils:
                     continue
                 else:
                     self._logger.warning(f"Exhausted all deployment attempts. Cannot continue with this request.")
-                    raise err #session failure reason will be shown to user
+                    raise err  # session failure reason will be shown to user
 
             if response:
                 self._logger.debug(f"Returning response: {response}")
@@ -542,4 +613,3 @@ class VirtualDesktopControllerUtils:
             self._logger.error(e)
             return repr(e), False
         return '', True
-

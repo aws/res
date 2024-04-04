@@ -32,6 +32,7 @@ import SSHAccess from "./pages/home/ssh-access";
 import ClusterSettings from "./pages/cluster-admin/cluster-settings";
 import ClusterStatus from "./pages/cluster-admin/cluster-status";
 import Projects from "./pages/cluster-admin/projects";
+import ConfigureProject from "./pages/cluster-admin/configure-project";
 import FileSystems from "./pages/cluster-admin/filesystem";
 import { Box, HelpPanel, SideNavigationProps, StatusIndicator } from "@cloudscape-design/components";
 import { NonCancelableCustomEvent } from "@cloudscape-design/components/internal/events";
@@ -663,6 +664,25 @@ class IdeaWebPortalApp extends Component<IdeaWebPortalAppProps, IdeaWebPortalApp
                             <IdeaAuthenticatedRoute isLoggedIn={this.state.isLoggedIn}>
                                 <Projects
                                     ideaPageId="projects"
+                                    toolsOpen={this.state.toolsOpen}
+                                    tools={this.state.tools}
+                                    onToolsChange={this.onToolsChange}
+                                    onPageChange={this.onPageChange}
+                                    sideNavItems={this.state.sideNavItems}
+                                    sideNavHeader={this.state.sideNavHeader}
+                                    onSideNavChange={this.onSideNavChange}
+                                    onFlashbarChange={this.onFlashbarChange}
+                                    flashbarItems={this.state.flashbarItems}
+                                />
+                            </IdeaAuthenticatedRoute>
+                        }
+                    />
+                     <Route
+                        path="/cluster/projects/configure"
+                        element={
+                            <IdeaAuthenticatedRoute isLoggedIn={this.state.isLoggedIn}>
+                                <ConfigureProject
+                                    ideaPageId="configure-project"
                                     toolsOpen={this.state.toolsOpen}
                                     tools={this.state.tools}
                                     onToolsChange={this.onToolsChange}

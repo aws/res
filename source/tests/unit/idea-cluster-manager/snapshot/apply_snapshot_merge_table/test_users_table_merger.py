@@ -33,7 +33,7 @@ def test_users_table_merger_merge_valid_data_succeed(context: AppContext):
     context.accounts.user_dao.create_user(
         {
             "username": "test_user_1",
-            "email": "test_user_1@res.test",
+            "email": "test_user_1@example.org",
             "uid": 0,
             "gid": 0,
             "additional_groups": [],
@@ -48,7 +48,7 @@ def test_users_table_merger_merge_valid_data_succeed(context: AppContext):
     context.accounts.user_dao.create_user(
         {
             "username": "test_user_2",
-            "email": "test_user_2@res.test",
+            "email": "test_user_2@example.org",
             "uid": 1,
             "gid": 1,
             "additional_groups": [],
@@ -120,7 +120,7 @@ def test_users_table_merger_ignore_user_without_permission_change_succeed(
     context.accounts.user_dao.create_user(
         {
             "username": "test_user_3",
-            "email": "test_user_1@res.test",
+            "email": "test_user_1@example.org",
             "uid": 2,
             "gid": 2,
             "additional_groups": [],
@@ -155,7 +155,7 @@ def test_users_table_merger_roll_back_original_data_succeed(
     context.accounts.user_dao.create_user(
         {
             "username": "test_user_4",
-            "email": "test_user_1@res.test",
+            "email": "test_user_1@example.org",
             "uid": 3,
             "gid": 3,
             "additional_groups": [],
@@ -170,7 +170,7 @@ def test_users_table_merger_roll_back_original_data_succeed(
     context.accounts.user_dao.create_user(
         {
             "username": "test_user_5",
-            "email": "test_user_2@res.test",
+            "email": "test_user_2@example.org",
             "uid": 4,
             "gid": 4,
             "additional_groups": [],

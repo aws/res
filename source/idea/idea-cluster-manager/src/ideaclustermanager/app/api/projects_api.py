@@ -26,7 +26,7 @@ from ideadatamodel.projects import (
     ListFileSystemsForProjectRequest,
     ListFileSystemsForProjectResult
 )
-from ideadatamodel import exceptions, constants, errorcodes
+from ideadatamodel import exceptions, constants, errorcodes, ListSecurityGroupsRequest
 from ideasdk.utils import Utils, ApiUtils
 
 
@@ -74,6 +74,14 @@ class ProjectsAPI(BaseAPI):
             'Projects.ListFileSystemsForProject': {
                 'scope': self.SCOPE_READ,
                 'method': self.list_filesystems_for_project
+            },
+            'Projects.ListSecurityGroups': {
+                'scope': self.SCOPE_READ,
+                'method': self.list_security_groups
+            },
+            'Projects.ListPolicies': {
+                'scope': self.SCOPE_READ,
+                'method': self.list_policies
             }
         }
 
@@ -158,23 +166,31 @@ class ProjectsAPI(BaseAPI):
 
         context.success(ListFileSystemsForProjectResult(listing=filesystems))
 
+    def list_security_groups(self, context: ApiInvocationContext):
+        result = self.context.projects.list_security_groups()
+        context.success(result)
+
+    def list_policies(self, context: ApiInvocationContext):
+        result = self.context.projects.list_policies()
+        context.success(result)
+
     def invoke(self, context: ApiInvocationContext):
         namespace = context.namespace
 
         acl_entry = Utils.get_value_as_dict(namespace, self.acl)
         if acl_entry is None:
             raise exceptions.unauthorized_access()
-        
+
         acl_entry_scope = Utils.get_value_as_string('scope', acl_entry)
         is_authorized = context.is_authorized(elevated_access=True, scopes=[acl_entry_scope])
         is_authenticated_user = context.is_authenticated_user()
-        
+
         if is_authorized:
             acl_entry['method'](context)
             return
-        
+
         if is_authenticated_user and namespace in ('Projects.GetUserProjects', 'Projects.GetProject'):
             acl_entry['method'](context)
             return
-        
+
         raise exceptions.unauthorized_access()

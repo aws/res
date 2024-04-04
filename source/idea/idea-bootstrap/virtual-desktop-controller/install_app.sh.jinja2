@@ -22,13 +22,7 @@ AWS=$(command -v aws)
 INSTANCE_REGION=${AWS_REGION}
 S3_BUCKET=$(echo ${APP_PACKAGE_DOWNLOAD_URI} | cut -f3 -d/)
 
-if [[ ${INSTANCE_REGION} =~ ^us-gov-[a-z]+-[0-9]+$ ]]; then
-  S3_BUCKET_REGION=$(curl -s --head https://${S3_BUCKET}.s3.us-gov-west-1.amazonaws.com | grep bucket-region | awk '{print $2}' | tr -d '\r\n')
-  $AWS --region ${S3_BUCKET_REGION} s3 cp "${APP_PACKAGE_DOWNLOAD_URI}" "${BOOTSTRAP_DIR}/"
-else
-  #S3_BUCKET_REGION=$(curl -s --head https://${S3_BUCKET}.s3.us-east-1.amazonaws.com | grep bucket-region | awk '{print $2}' | tr -d '\r\n')
-  $AWS --region ${INSTANCE_REGION} s3 cp "${APP_PACKAGE_DOWNLOAD_URI}" "${BOOTSTRAP_DIR}/"
-fi
+$AWS --region ${INSTANCE_REGION} s3 cp "${APP_PACKAGE_DOWNLOAD_URI}" "${BOOTSTRAP_DIR}/"
 
 
 PACKAGE_ARCHIVE=$(basename "${APP_PACKAGE_DOWNLOAD_URI}")

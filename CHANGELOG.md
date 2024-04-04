@@ -1,6 +1,31 @@
 # Change Log
 This file is used to list changes made in each release of Research and Engineering Studio (RES).
 
+2024.04
+------
+
+**ENHANCEMENTS**
+
+- Add support for RES Ready AMI.
+  - Improve VDI boot times by installing all necessary software in the AMI instead of installing it at EC2 instance launch. This also allows VDIs to run in private subnets with no internet access.
+- Add QUIC support for VDIs.
+  - The QUIC protocol has better streaming performance in high latency environments. Administrators can toggle this for all VDIs under Session Management → Desktop Settings → General → QUIC. 
+- Add support for custom VDI Instance launch parameters.
+  - Launch parameters include additional IAM policies, security groups and launch scripts. Add these configurations under Advanced Options when creating or editing a project. The settings will apply to all VDIs launched for that project. 
+- Add support for IAM Permission boundaries.
+  - Customers can now specify a permission boundary that will be added to all IAM roles created by the RES environment.
+- Add support for deploying RES in an isolated VPC.
+- Add support for encrypting communications between RES and AD via LDAPS.
+- Add FSx Lustre as a storage option in RES.
+- Add support for the Israel (Tel Aviv) region.
+- Remove required creation of additional VPC during installation.
+- Reduce idle costs.
+  - Reduced instance size of some infrastructure instances to reduce base cost of running RES.
+
+**BUG FIXES**
+
+- Add support to auto renew Let’s Encrypt certificates.
+
 2024.01.01
 ------
 

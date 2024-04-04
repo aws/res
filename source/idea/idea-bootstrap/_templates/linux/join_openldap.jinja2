@@ -1,23 +1,8 @@
 # Begin: Join OpenLDAP
 
-IDEA_DS_TLS_CERTIFICATE_SECRET_ARN="{{context.config.get_string('directoryservice.tls_certificate_secret_arn', required=True)}}"
 IDEA_CLUSTER_HOME_DIR="{{context.config.get_string('shared-storage.home.mount_dir', required=True)}}"
 IDEA_DS_LDAP_BASE="{{context.config.get_string('directoryservice.ldap_base', required=True)}}"
 IDEA_DS_LDAP_HOST="{{context.config.get_string('directoryservice.hostname', required=True)}}"
-
-if [[ -f "/etc/openldap/ldap.conf" ]]; then
-  cp /etc/openldap/ldap.conf /etc/openldap/ldap.conf.orig
-fi
-echo -e "
-TLS_CACERTDIR /etc/openldap/cacerts/
-
-# Turning this off breaks GSSAPI used with krb5 when rdns = false
-SASL_NOCANON	on
-
-URI ldap://${IDEA_DS_LDAP_HOST}
-
-BASE ${IDEA_DS_LDAP_BASE}
-" > /etc/openldap/ldap.conf
 
 if [ -e /etc/sssd/sssd.conf ]; then
     cp /etc/sssd/sssd.conf /etc/sssd/sssd.conf.orig
@@ -69,10 +54,6 @@ homedir_substring = ${IDEA_CLUSTER_HOME_DIR}/home
 [secrets]
 " > /etc/sssd/sssd.conf
 chmod 600 /etc/sssd/sssd.conf
-
-mkdir -p /etc/openldap/cacerts/
-DS_TLS_CERTIFICATE=$(get_secret "${IDEA_DS_TLS_CERTIFICATE_SECRET_ARN}")
-echo -n "${DS_TLS_CERTIFICATE}" > /etc/openldap/cacerts/openldap-server.pem
 
 authconfig --disablesssd \
            --disablesssdauth \

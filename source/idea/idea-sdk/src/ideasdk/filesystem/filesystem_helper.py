@@ -35,6 +35,7 @@ import arrow
 import stat
 import mimetypes
 import shutil
+import pathlib
 from pwd import getpwnam
 import aiofiles
 from typing import Dict, List, Any
@@ -111,6 +112,10 @@ class FileSystemHelper:
             raise exceptions.unauthorized_access()
         # only support absolute paths
         if '..' in file:
+            raise exceptions.unauthorized_access()
+
+        if not pathlib.Path(file).exists():
+            # Validate the file path
             raise exceptions.unauthorized_access()
 
         data_mount_dir = self.context.config().get_string('shared-storage.home.mount_dir')

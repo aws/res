@@ -45,7 +45,7 @@ def test_ecs_cluster_creation(
 def test_create_task_creation(
     stack: InstallStack,
     template: Template,
-    registry_name: str,
+    installer_registry_name: str,
     expected_environment: list[Any],
 ) -> None:
     util.assert_resource_name_has_correct_type_and_props(
@@ -59,7 +59,7 @@ def test_create_task_creation(
                     {
                         "Command": Match.array_with(["/bin/sh", "-c"]),
                         "Environment": expected_environment,
-                        "Image": registry_name,
+                        "Image": installer_registry_name,
                         "LogConfiguration": {
                             "Options": {"awslogs-stream-prefix": "CreateLogStream"}
                         },
@@ -81,7 +81,7 @@ def test_create_task_creation(
 def test_update_task_creation(
     stack: InstallStack,
     template: Template,
-    registry_name: str,
+    installer_registry_name: str,
     expected_environment: list[Any],
 ) -> None:
     util.assert_resource_name_has_correct_type_and_props(
@@ -95,7 +95,7 @@ def test_update_task_creation(
                     {
                         "Command": Match.array_with(["/bin/sh", "-c"]),
                         "Environment": expected_environment,
-                        "Image": registry_name,
+                        "Image": installer_registry_name,
                         "LogConfiguration": {
                             "Options": {"awslogs-stream-prefix": "UpdateLogStream"}
                         },
@@ -117,7 +117,7 @@ def test_update_task_creation(
 def test_delete_task_creation(
     stack: InstallStack,
     template: Template,
-    registry_name: str,
+    installer_registry_name: str,
     expected_environment: list[Any],
 ) -> None:
     util.assert_resource_name_has_correct_type_and_props(
@@ -131,7 +131,7 @@ def test_delete_task_creation(
                     {
                         "Command": Match.array_with(["/bin/sh", "-c"]),
                         "Environment": expected_environment,
-                        "Image": registry_name,
+                        "Image": installer_registry_name,
                         "LogConfiguration": {
                             "Options": {"awslogs-stream-prefix": "DeleteLogStream"}
                         },
@@ -171,7 +171,7 @@ def test_define_main_system_exit_handling_behavior(with_code: bool) -> None:
             thing_to_execute()
         except SystemExit as e:
             success = e.code == 0
-            exit_code = e.code
+            exit_code = e.code  # type: ignore
 
         if not success:
             if exit_code == 0:

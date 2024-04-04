@@ -21,6 +21,8 @@ Statement:
       - ec2:CreateNetworkInterface
       - ec2:CreateTags
       - iam:CreateServiceLinkedRole
+      - iam:ListPolicies
+      - ec2:DescribeSecurityGroups
     Resource: '*'
     Effect: Allow
 
@@ -108,7 +110,7 @@ Statement:
       - dynamodb:DescribeImport
       - dynamodb:DeleteTable
       - dynamodb:Scan
-    Resource: 
+    Resource:
       - '{{ context.arns.get_ddb_table_arn("temp-*") }}'
     Effect: Allow
 
@@ -123,6 +125,15 @@ Statement:
       - dynamodb:DescribeExport
     Resource:
       - '{{ context.arns.get_ddb_table_export_arn() }}'
+    Effect: Allow
+
+  - Action:
+      - kinesis:CreateStream
+      - kinesis:ListShards
+      - kinesis:GetRecords
+      - kinesis:GetShardIterator
+    Resource:
+      - '{{ context.arns.get_ddb_table_stream_arn("cluster-settings") }}'
     Effect: Allow
 
   - Action:
@@ -195,4 +206,63 @@ Statement:
       - '{{ context.arns.get_kinesis_arn() }}'
     Effect: Allow
 
+  - Action:
+      - iam:CreateRole
+      - iam:DeleteRole
+      - iam:CreateInstanceProfile
+      - iam:DeleteInstanceProfile
+      - iam:AddRoleToInstanceProfile
+      - iam:PassRole
+    Resource:
+      - '{{ context.arns.get_vdi_iam_role_arn("*") }}'
+      - '{{ context.arns.get_vdi_iam_instance_profile_arn("*") }}'
+    Effect: Allow
+
+  - Action:
+      - iam:AttachRolePolicy
+      - iam:DetachRolePolicy
+      - iam:GetRole
+    Resource: '{{ context.arns.get_vdi_iam_role_arn("*") }}'
+    Effect: Allow
+
+  - Action:
+      - iam:AttachRolePolicy
+      - iam:DetachRolePolicy
+    Resource: '{{ context.arns.get_vdi_iam_role_arn("*") }}'
+    Condition:
+      ArnEquals:
+        iam:PolicyARN:
+          {{ context.utils.to_yaml(context.arns.dcv_host_required_policy_arns) | indent(10) }}
+    Effect: Allow
+
+  - Action:
+      - iam:GetPolicy
+    Resource: '*'
+    Condition:
+      StringEquals:
+        aws:ResourceTag/res:Resource: '{{ context.vars.vdi_host_policy_resource_tag }}'
+
+  - Action:
+      - elasticloadbalancing:DescribeTargetGroups
+      - elasticloadbalancing:DescribeListeners
+    Resource: '*'
+
+  - Action:
+      - elasticloadbalancing:DeleteTargetGroup
+      - elasticloadbalancing:CreateListener
+      - elasticloadbalancing:DeleteListener
+      - elasticloadbalancing:CreateTargetGroup
+      - elasticloadbalancing:RegisterTargets
+      - elasticloadbalancing:AddTags
+    Resource:
+      - '{{ context.arns.get_target_group_arn }}'
+      - '{{ context.arns.nlb_listener_arn }}'
+      - '{{ context.arns.get_loadbalancer_arn }}'
+
+  - Action:
+      - ec2:AuthorizeSecurityGroupEgress
+      - ec2:RevokeSecurityGroupEgress
+    Resource:
+      - '{{ context.arns.get_security_group_arn }}'
+      - '{{ context.arns.get_security_group_rule_arn }}'
 {% include '_templates/custom-kms-key.yml' %}

@@ -127,6 +127,7 @@ package_config:
       # SSSD and dependencies
       - adcli
       - avahi-libs
+      - authconfig
       - bind-libs
       - bind-libs-lite
       - bind-license
@@ -134,6 +135,7 @@ package_config:
       - c-ares
       - cups-libs
       - cyrus-sasl-gssapi
+      - expect
       - http-parser
       - krb5-workstation
       - libdhash
@@ -166,6 +168,7 @@ package_config:
       - sssd-krb5-common
       - sssd-ldap
       - sssd-proxy
+      - sssd-tools
 
     sssd_rhel7:
       - python-sssdconfig

@@ -173,7 +173,8 @@ class BastionHostStack(IdeaBaseStack):
                     )
                 )
             )],
-            require_imdsv2=True if metadata_http_tokens == "required" else False
+            require_imdsv2=True if metadata_http_tokens == "required" else False,
+            associate_public_ip_address=is_public
             )
 
         self.ec2_instance = ec2.CfnInstance(

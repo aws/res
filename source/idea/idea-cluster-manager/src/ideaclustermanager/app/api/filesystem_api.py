@@ -14,6 +14,7 @@ from ideadatamodel.shared_filesystem import (
     CreateFileSystemResult,
     OnboardEFSFileSystemRequest,
     OnboardONTAPFileSystemRequest,
+    OnboardLUSTREFileSystemRequest,
     OnboardFileSystemResult,
     CreateEFSFileSystemRequest,
     CreateONTAPFileSystemRequest
@@ -60,6 +61,10 @@ class FileSystemAPI(BaseAPI):
             "FileSystem.OnboardONTAPFileSystem": {
                 "scope": self.SCOPE_WRITE,
                 "method": self.onboard_filesystem,
+            },
+            "FileSystem.OnboardLUSTREFileSystem": {
+                "scope": self.SCOPE_WRITE,
+                "method": self.onboard_filesystem,
             }
         }
 
@@ -96,10 +101,13 @@ class FileSystemAPI(BaseAPI):
     def onboard_filesystem(self, context: ApiInvocationContext):
         if context.namespace == 'FileSystem.OnboardEFSFileSystem':
             self.context.shared_filesystem.onboard_efs_filesystem(context.get_request_payload_as(OnboardEFSFileSystemRequest))
-            
+
         elif context.namespace == 'FileSystem.OnboardONTAPFileSystem':
             self.context.shared_filesystem.onboard_ontap_filesystem(context.get_request_payload_as(OnboardONTAPFileSystemRequest))
-            
+
+        elif context.namespace == 'FileSystem.OnboardLUSTREFileSystem':
+            self.context.shared_filesystem.onboard_lustre_filesystem(context.get_request_payload_as(OnboardLUSTREFileSystemRequest))
+
         context.success(OnboardFileSystemResult())
 
     def invoke(self, context: ApiInvocationContext):

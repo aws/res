@@ -98,6 +98,9 @@ class ConfigGenerator:
 
     def get_prefix_list_ids(self) -> List[str]:
         return Utils.get_value_as_list('prefix_list_ids', self.user_values, [])
+    
+    def get_permission_boundary_arn(self) -> str:
+        return Utils.get_value_as_string('permission_boundary_arn', self.user_values, None)
 
     def get_client_ip(self) -> List[str]:
         return Utils.get_value_as_list('client_ip', self.user_values, [])
@@ -417,6 +420,7 @@ class ConfigGenerator:
             'internal_mount_dir': self.get_internal_mount_dir(),
             'home_mount_dir': self.get_home_mount_dir(),
             'prefix_list_ids': self.get_prefix_list_ids(),
+            'permission_boundary_arn': self.get_permission_boundary_arn(),
             'client_ip': self.get_client_ip(),
             'ssh_key_pair_name': self.get_ssh_key_pair_name(),
             'vpc_cidr_block': self.get_vpc_cidr_block(),

@@ -10,6 +10,9 @@ from aws_cdk.assertions import Template
 from idea.infrastructure.install.installer import Installer
 from idea.infrastructure.install.parameters.parameters import RESParameters
 from idea.infrastructure.install.stack import InstallStack
+from idea.infrastructure.install.tasks import Tasks
+
+INSTALLER_REGISTRY_NAME = "fake-installer-registry-name"
 
 
 @pytest.fixture
@@ -22,6 +25,11 @@ def registry_name() -> str:
     return "fake-registry-name"
 
 
+@pytest.fixture
+def installer_registry_name() -> str:
+    return INSTALLER_REGISTRY_NAME
+
+
 @pytest.fixture(autouse=True)
 def patch_wait_condition_suffix(
     monkeypatch: pytest.MonkeyPatch,
@@ -31,6 +39,32 @@ def patch_wait_condition_suffix(
 
     monkeypatch.setattr(
         Installer, "get_wait_condition_suffix", mock_get_wait_condition_suffix
+    )
+
+
+@pytest.fixture(autouse=True)
+def patch_installer_registry_name(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def mock_get_installer_registry_name(_: Any) -> str:
+        return INSTALLER_REGISTRY_NAME
+
+    monkeypatch.setattr(
+        Installer, "get_installer_registry_name", mock_get_installer_registry_name
+    )
+
+
+@pytest.fixture(autouse=True)
+def patch_get_ecr_arn_from_registry_name(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def mock_get_ecr_arn_from_registry_name(_: Any, registry_name: str) -> str:
+        return "mock-ecr-arn"
+
+    monkeypatch.setattr(
+        Tasks,
+        "get_ecr_arn_from_private_registry_name",
+        mock_get_ecr_arn_from_registry_name,
     )
 
 

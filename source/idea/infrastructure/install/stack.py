@@ -3,8 +3,11 @@
 import importlib.metadata
 from typing import Any, Optional, TypedDict, Union
 
+import aws_cdk
 from aws_cdk import Environment, IStackSynthesizer, SecretValue, Stack, Tags
 from aws_cdk import aws_dynamodb as dynamodb
+from aws_cdk import aws_iam as iam
+from aws_cdk import aws_kinesis as kinesis
 from aws_cdk import aws_kms as kms
 from aws_cdk import aws_secretsmanager as secretsmanager
 from constructs import Construct, DependencyGroup
@@ -72,9 +75,13 @@ class InstallStack(Stack):
         root_password_secret = self.get_directory_service_secret(
             DirectoryServiceKey.ROOT_PASSWORD
         )
+        root_user_dn_secret = self.get_directory_service_secret(
+            DirectoryServiceKey.ROOT_USER_DN
+        )
 
         self.parameters.root_username_secret_arn = root_username_secret.secret_arn
         self.parameters.root_password_secret_arn = root_password_secret.secret_arn
+        self.parameters.root_user_dn_secret_arn = root_user_dn_secret.secret_arn
 
         dependency_group = DependencyGroup()
         dependency_group.add(settings_table)
@@ -88,10 +95,34 @@ class InstallStack(Stack):
             dependency_group=dependency_group,
         )
 
+        self.attach_permission_boundaries()
+
     def get_dynamodb_kms_key(self, alias: Optional[str]) -> Optional[kms.IKey]:
         if alias is None:
             return None
         return kms.Key.from_lookup(self, id="dynamodb_kms_key", alias_name=alias)
+
+    def attach_permission_boundaries(self) -> None:
+        # Determine if IAMPermissionBoundary ARN input was provided in CFN.
+        permission_boundary_provided = aws_cdk.CfnCondition(
+            self,
+            "PermissionBoundaryProvided",
+            expression=aws_cdk.Fn.condition_not(
+                aws_cdk.Fn.condition_equals(
+                    aws_cdk.Fn.ref(CommonKey.IAM_PERMISSION_BOUNDARY), ""
+                )
+            ),
+        )
+        permission_boundary_policy = iam.ManagedPolicy.from_managed_policy_arn(
+            self,
+            "PermissionBoundaryPolicy",
+            aws_cdk.Fn.condition_if(
+                permission_boundary_provided.logical_id,
+                self.parameters.get(CommonKey.IAM_PERMISSION_BOUNDARY),
+                aws_cdk.Aws.NO_VALUE,
+            ).to_string(),
+        )
+        iam.PermissionsBoundary.of(self).apply(permission_boundary_policy)
 
     def get_directory_service_secret(
         self, key: DirectoryServiceKey
@@ -124,7 +155,7 @@ class InstallStack(Stack):
             "Settings",
             table_name=f"{self.parameters.get_str(CommonKey.CLUSTER_NAME)}.cluster-settings",
             billing_mode=dynamodb.BillingMode.PAY_PER_REQUEST,
-            stream=dynamodb.StreamViewType.NEW_AND_OLD_IMAGES,
+            kinesis_stream=self.get_kinesis_stream_for_settings_table(),
             partition_key=dynamodb.Attribute(
                 name="key", type=dynamodb.AttributeType.STRING
             ),
@@ -137,6 +168,22 @@ class InstallStack(Stack):
         )
 
         return table
+
+    def get_kinesis_stream_for_settings_table(self) -> kinesis.Stream:
+        kinesis_stream = kinesis.Stream(
+            self,
+            f"SettingsKinesisStream",
+            encryption=kinesis.StreamEncryption.MANAGED,
+            stream_mode=kinesis.StreamMode.ON_DEMAND,
+            stream_name=f"{self.parameters.get_str(CommonKey.CLUSTER_NAME)}.cluster-settings-kinesis-stream",
+        )
+
+        Tags.of(kinesis_stream).add(
+            key=constants.IDEA_TAG_ENVIRONMENT_NAME,
+            value=self.parameters.get_str(CommonKey.CLUSTER_NAME),
+        )
+
+        return kinesis_stream
 
     def get_modules_table(self) -> dynamodb.Table:
         table = dynamodb.Table(

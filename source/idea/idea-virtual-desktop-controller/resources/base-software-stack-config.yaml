@@ -1,18 +1,18 @@
 amazonlinux2:
   arm64:
-    default-name: 'Amazon Linux 2 - ARM64'
-    default-description: 'Amazon Linux 2 - ARM64'
-    default-min-storage-unit: gb
-    default-min-storage-value: 10
+    default-description: Amazon Linux 2 - ARM64
     default-min-ram-unit: gb
     default-min-ram-value: 4
+    default-min-storage-unit: gb
+    default-min-storage-value: 10
+    default-name: Amazon Linux 2 - ARM64
     af-south-1:
     - ami-id: ami-00a45e16508ceefa7
+      description: Software Stack Amazon Linux 2 - ARM64
+      min-storage-unit: gb
+      min-storage-value: 10
+      name: Software Stack Amazon Linux 2 - ARM64
       ss-id-suffix: base
-      name: 'Software Stack Amazon Linux 2 - ARM64' # override default name
-      description: 'Software Stack Amazon Linux 2 - ARM64' # override default description
-      min-storage-unit: gb # override default min-storage-unit
-      min-storage-value: 10 # override default min-storage-value
     ap-east-1:
     - ami-id: ami-01174e0118c296c37
       ss-id-suffix: base
@@ -55,6 +55,9 @@ amazonlinux2:
     eu-west-3:
     - ami-id: ami-0e9ca48e27e192f4f
       ss-id-suffix: base
+    il-central-1:
+    - ami-id: ami-08464237af58a0fbd
+      ss-id-suffix: base
     me-south-1:
     - ami-id: ami-01cbb5e0afe310efe
       ss-id-suffix: base
@@ -78,12 +81,12 @@ amazonlinux2:
     - ami-id: ami-0bbda02f23a4a8964
       ss-id-suffix: base
   x86-64:
-    default-name: 'Amazon Linux 2 - x86_64'
-    default-description: 'Amazon Linux 2 - x86_64'
-    default-min-storage-unit: gb
-    default-min-storage-value: 10
+    default-description: Amazon Linux 2 - x86_64
     default-min-ram-unit: gb
     default-min-ram-value: 4
+    default-min-storage-unit: gb
+    default-min-storage-value: 10
+    default-name: Amazon Linux 2 - x86_64
     af-south-1:
     - ami-id: ami-04f95a4a3609e4cf3
       ss-id-suffix: base
@@ -129,6 +132,9 @@ amazonlinux2:
     eu-west-3:
     - ami-id: ami-002e2b155689f6e23
       ss-id-suffix: base
+    il-central-1:
+    - ami-id: ami-051fd5c7084d435c4
+      ss-id-suffix: base
     me-south-1:
     - ami-id: ami-090a20e93e6698582
       ss-id-suffix: base
@@ -153,12 +159,12 @@ amazonlinux2:
       ss-id-suffix: base
 centos7:
   arm64:
-    default-name: 'CentOS7 - ARM64'
-    default-description: 'CentOS7 - ARM64'
-    default-min-storage-unit: gb
-    default-min-storage-value: 10
+    default-description: CentOS7 - ARM64
     default-min-ram-unit: gb
     default-min-ram-value: 4
+    default-min-storage-unit: gb
+    default-min-storage-value: 10
+    default-name: CentOS7 - ARM64
     af-south-1:
     - ami-id: ami-0002d7a67b2047e67
       ss-id-suffix: base
@@ -220,12 +226,12 @@ centos7:
     - ami-id: ami-0db02f65655518c52
       ss-id-suffix: base
   x86-64:
-    default-name: 'CentOS7 - x86_64'
-    default-description: 'CentOS7 - x86_64'
-    default-min-storage-unit: gb
-    default-min-storage-value: 10
+    default-description: CentOS7 - x86_64
     default-min-ram-unit: gb
     default-min-ram-value: 4
+    default-min-storage-unit: gb
+    default-min-storage-value: 10
+    default-name: CentOS7 - x86_64
     af-south-1:
     - ami-id: ami-0b761332115c38669
       ss-id-suffix: base
@@ -291,12 +297,12 @@ centos7:
       ss-id-suffix: base
 rhel7:
   x86-64:
-    default-name: 'RHEL7 - x86_64'
-    default-description: 'RHEL7 - x86_64'
-    default-min-storage-unit: gb
-    default-min-storage-value: 10
+    default-description: RHEL7 - x86_64
     default-min-ram-unit: gb
     default-min-ram-value: 4
+    default-min-storage-unit: gb
+    default-min-storage-value: 10
+    default-name: RHEL7 - x86_64
     af-south-1:
     - ami-id: ami-064aeb2452a82205f
       ss-id-suffix: base
@@ -339,6 +345,9 @@ rhel7:
     eu-west-3:
     - ami-id: ami-07185297899bb7755
       ss-id-suffix: base
+    il-central-1:
+    - ami-id: ami-0fa62108f2a0dfad2
+      ss-id-suffix: base
     me-south-1:
     - ami-id: ami-02f76563b3f70c99d
       ss-id-suffix: base
@@ -362,12 +371,12 @@ rhel7:
       ss-id-suffix: base
 rhel8:
   x86-64:
-    default-name: 'RHEL8 - x86_64'
-    default-description: 'RHEL8 - x86_64'
-    default-min-storage-unit: gb
-    default-min-storage-value: 10
+    default-description: RHEL8 - x86_64
     default-min-ram-unit: gb
     default-min-ram-value: 4
+    default-min-storage-unit: gb
+    default-min-storage-value: 10
+    default-name: RHEL8 - x86_64
     af-south-1:
     - ami-id: ami-08a8728b7fbf38c8b
       ss-id-suffix: base
@@ -410,6 +419,9 @@ rhel8:
     eu-west-3:
     - ami-id: ami-07ad907cba66e96ff
       ss-id-suffix: base
+    il-central-1:
+    - ami-id: ami-045a0e581d015b76d
+      ss-id-suffix: base
     me-south-1:
     - ami-id: ami-052613cf395c754e3
       ss-id-suffix: base
@@ -433,12 +445,12 @@ rhel8:
       ss-id-suffix: base
 rhel9:
   x86-64:
-    default-name: 'RHEL9 - x86_64'
-    default-description: 'RHEL9 - x86_64'
-    default-min-storage-unit: gb
-    default-min-storage-value: 10
+    default-description: RHEL9 - x86_64
     default-min-ram-unit: gb
     default-min-ram-value: 4
+    default-min-storage-unit: gb
+    default-min-storage-value: 10
+    default-name: RHEL9 - x86_64
     af-south-1:
     - ami-id: ami-046243dd08fb2a485
       ss-id-suffix: base
@@ -481,6 +493,9 @@ rhel9:
     eu-west-3:
     - ami-id: ami-0d767e966f3458eb5
       ss-id-suffix: base
+    il-central-1:
+    - ami-id: ami-03e22ac0ee7ce0d08
+      ss-id-suffix: base
     me-south-1:
     - ami-id: ami-0de3e6d26549e7ee6
       ss-id-suffix: base
@@ -504,12 +519,12 @@ rhel9:
       ss-id-suffix: base
 windows:
   x86-64:
-    default-description: 'Windows - x86_64'
-    default-name: 'Windows - x86_64'
-    default-min-storage-unit: gb
-    default-min-storage-value: 30
+    default-description: Windows - x86_64
     default-min-ram-unit: gb
     default-min-ram-value: 4
+    default-min-storage-unit: gb
+    default-min-storage-value: 30
+    default-name: Windows - x86_64
     ap-northeast-1:
     - ami-id: ami-03e9af94a9320bdf6
       ss-id-suffix: base

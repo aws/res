@@ -13,8 +13,20 @@ function install_nvidia_grid_drivers () {
   pushd /root/bootstrap/gpu_drivers
 
   local AWS=$(command -v aws)
-  local DRIVER_BUCKET_REGION=$(curl -s --head {{ context.config.get_string('global-settings.gpu_settings.nvidia.s3_bucket_url', required=True) }} | grep bucket-region | awk '{print $2}' | tr -d '\r\n')
-  $AWS --region ${DRIVER_BUCKET_REGION} s3 cp --quiet --recursive {{ context.config.get_string('global-settings.gpu_settings.nvidia.s3_bucket_path', required=True) }} .
+  local NVIDIA_S3_BUCKET_URL=$($AWS dynamodb get-item \
+                        --region "{{ context.aws_region }}" \
+                        --table-name "{{ context.cluster_name }}.cluster-settings" \
+                        --key '{"key": {"S": "global-settings.gpu_settings.nvidia.s3_bucket_url"}}' \
+                        --output text \
+                        | awk '/VALUE/ {print $2}')
+  local DRIVER_BUCKET_REGION=$(curl -s --head $NVIDIA_S3_BUCKET_URL | grep bucket-region | awk '{print $2}' | tr -d '\r\n')
+  local NVIDIA_S3_BUCKET_PATH=$($AWS dynamodb get-item \
+                        --region "{{ context.aws_region }}" \
+                        --table-name "{{ context.cluster_name }}.cluster-settings" \
+                        --key '{"key": {"S": "global-settings.gpu_settings.nvidia.s3_bucket_path"}}' \
+                        --output text \
+                        | awk '/VALUE/ {print $2}')
+  $AWS --region ${DRIVER_BUCKET_REGION} s3 cp --quiet --recursive $NVIDIA_S3_BUCKET_PATH .
   local x_server_pid=$(cat /tmp/.X0-lock)
   if [[ ! -z "${x_server_pid}" ]]; then
     kill $x_server_pid
@@ -84,8 +96,20 @@ function install_amd_gpu_drivers() {
   pushd /root/bootstrap/gpu_drivers
 
   local AWS=$(command -v aws)
-  local DRIVER_BUCKET_REGION=$(curl -s --head {{ context.config.get_string('global-settings.gpu_settings.amd.s3_bucket_url', required=True) }} | grep bucket-region | awk '{print $2}' | tr -d '\r\n')
-  $AWS --region ${DRIVER_BUCKET_REGION} s3 cp --quiet --recursive {{ context.config.get_string('global-settings.gpu_settings.amd.s3_bucket_path', required=True) }} .
+  local AMD_S3_BUCKET_URL=$($AWS dynamodb get-item \
+                      --region "{{ context.aws_region }}" \
+                      --table-name "{{ context.cluster_name }}.cluster-settings" \
+                      --key '{"key": {"S": "global-settings.gpu_settings.amd.s3_bucket_url"}}' \
+                      --output text \
+                      | awk '/VALUE/ {print $2}')
+  local DRIVER_BUCKET_REGION=$(curl -s --head $AMD_S3_BUCKET_URL | grep bucket-region | awk '{print $2}' | tr -d '\r\n')
+  local AMD_S3_BUCKET_PATH=$($AWS dynamodb get-item \
+                    --region "{{ context.aws_region }}" \
+                    --table-name "{{ context.cluster_name }}.cluster-settings" \
+                    --key '{"key": {"S": "global-settings.gpu_settings.amd.s3_bucket_path"}}' \
+                    --output text \
+                    | awk '/VALUE/ {print $2}')
+  $AWS --region ${DRIVER_BUCKET_REGION} s3 cp --quiet --recursive $AMD_S3_BUCKET_PATH .
   tar -xf amdgpu-pro-*rhel*.tar.xz
   cd amdgpu-pro*
   rpm --import RPM-GPG-KEY-amdgpu

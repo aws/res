@@ -40,8 +40,8 @@ class SingleSignOnHelper:
         self.context = context
         self.cluster_name = self.context._options.cluster_name
         self.aws_region =self.context._options.aws_region
-        self.context = context
         self.config: ClusterConfig = context._config
+        self.logger = context.logger(name=f'{context.module_id()}-sso-helper')
 
     def _update_config_entry(self, key: str, value: Any):
         module_id = self.config.get_module_id(constants.MODULE_IDENTITY_PROVIDER)
@@ -336,7 +336,12 @@ class SingleSignOnHelper:
 
         existing_identity_provider = self.get_identity_provider()
         sso_idp_identifier = self.context.config().get_string('identity-provider.cognito.sso_idp_identifier', DEFAULT_IDENTITY_PROVIDER_IDENTIFIER)
-        if existing_identity_provider is not None:
+
+        should_update_identity_provider = (existing_identity_provider is not None
+                                           and existing_identity_provider['ProviderName'] == request.provider_name
+                                           and existing_identity_provider['ProviderType'] == request.provider_type)
+
+        if should_update_identity_provider:
             self.context.aws().cognito_idp().update_identity_provider(
                 UserPoolId=user_pool_id,
                 ProviderName=request.provider_name,
@@ -349,6 +354,12 @@ class SingleSignOnHelper:
                 ]
             )
         else:
+            if existing_identity_provider is not None:
+                self.context.aws().cognito_idp().delete_identity_provider(
+                    UserPoolId=user_pool_id,
+                    ProviderName=existing_identity_provider['ProviderName']
+                )
+
             self.context.aws().cognito_idp().create_identity_provider(
                 UserPoolId=user_pool_id,
                 ProviderName=request.provider_name,
@@ -404,7 +415,7 @@ class SingleSignOnHelper:
 
                     # exclude system administration users
                     if username in cluster_admin_username or username.startswith('clusteradmin'):
-                        print(f'system administration user found: {username}. skip linking with IDP.')
+                        self.logger.info(f'system administration user found: {username}. skip linking with IDP.')
                         continue
 
                     email = None
@@ -419,17 +430,16 @@ class SingleSignOnHelper:
                             for identity in identities:
                                 if identity['providerName'] == provider_name:
                                     already_linked = True
-
                     if Utils.is_empty(email):
                         continue
                     if already_linked:
-                        print(f'user: {username}, email: {email} already linked. skip.')
+                        self.logger.info(f'user: {username}, email: {email} already linked. skip.')
                         continue
 
-                    print(f'linking user: {username}, email: {email} ...')
+                    self.logger.info(f'linking user: {username}, email: {email} ...')
 
                     def admin_link_provider_for_user(**kwargs):
-                        print(f'link request: {Utils.to_json(kwargs)}')
+                        self.logger.info(f'link request: {Utils.to_json(kwargs)}')
                         self.context.aws().cognito_idp().admin_link_provider_for_user(**kwargs)
 
                     admin_link_provider_for_user(
@@ -448,7 +458,7 @@ class SingleSignOnHelper:
                     # sleep for a while to avoid flooding aws with these requests.
                     time.sleep(0.2)
                 except Exception as e:
-                    print(f'failed to link user: {user} with IDP: {provider_name} - {e}')
+                    self.logger.error(f'failed to link user: {user} with IDP: {provider_name} - {e}')
 
             pagination_token = Utils.get_value_as_string('PaginationToken', list_users_result)
             if Utils.is_empty(pagination_token):
@@ -461,6 +471,9 @@ class SingleSignOnHelper:
         `identity-provider.cognito.sso_enabled` boolean config entry is set to True at the end of the flow.
         this config entry is the single place in the cluster to indicate SSO is enabled.
         """
+        # reset sso status
+        self._update_config_entry('cognito.sso_enabled', False)
+
         # identity provider
         self.create_or_update_identity_provider(request)
 

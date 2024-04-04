@@ -13,11 +13,24 @@
 
 set -x
 
-echo -e "
+if [[ -f /etc/os-release ]]; then
+  OS_RELEASE_ID=$(grep -E '^(ID)=' /etc/os-release | awk -F'"' '{print $2}')
+  OS_RELEASE_VERSION_ID=$(grep -E '^(VERSION_ID)=' /etc/os-release | awk -F'"' '{print $2}')
+  BASE_OS=$(echo $OS_RELEASE_ID${OS_RELEASE_VERSION_ID%%.*})
+elif [[ -f /usr/lib/os-release ]]; then
+  OS_RELEASE_ID=$(grep -E '^(ID)=' /usr/lib/os-release | awk -F'"' '{print $2}')
+  OS_RELEASE_VERSION_ID=$(grep -E '^(VERSION_ID)=' /usr/lib/os-release | awk -F'"' '{print $2}')
+  BASE_OS=$(echo $OS_RELEASE_ID${OS_RELEASE_VERSION_ID%%.*})
+else
+  echo "Base OS information on Linux instance cannot be found."
+  exit 1
+fi
+
+curr_environment=$(echo -e "
 ## [BEGIN] IDEA Environment Configuration - Do Not Delete
 AWS_DEFAULT_REGION={{ context.aws_region }}
 AWS_REGION={{ context.aws_region }}
-IDEA_BASE_OS={{ context.base_os }}
+RES_BASE_OS=$BASE_OS
 IDEA_MODULE_NAME={{ context.module_name }}
 IDEA_MODULE_ID={{ context.module_id }}
 IDEA_MODULE_SET={{ context.module_set }}
@@ -26,45 +39,76 @@ IDEA_CLUSTER_S3_BUCKET={{ context.cluster_s3_bucket }}
 IDEA_CLUSTER_NAME={{ context.cluster_name }}
 IDEA_CLUSTER_HOME={{ context.cluster_home_dir }}
 IDEA_APP_DEPLOY_DIR={{ context.app_deploy_dir }}
-BOOTSTRAP_DIR=/root/bootstrap" > /etc/environment
+BOOTSTRAP_DIR=/root/bootstrap
+")
+
 
 {% if context.https_proxy != '' %}
-echo -e "IDEA_HTTPS_PROXY={{ context.https_proxy }}
-IDEA_NO_PROXY={{ context.no_proxy }}" >> /etc/environment
+curr_environment+=$(echo -e "
+IDEA_HTTPS_PROXY={{ context.https_proxy }}
+IDEA_NO_PROXY={{ context.no_proxy }}
+") 
 {% endif %}
 
-echo -e "## [END] IDEA Environment Configuration
+curr_environment+=$(echo -e "
+## [END] IDEA Environment Configuration
 
 PATH=/bin:/usr/bin:/sbin:/usr/sbin:/usr/local/bin:/opt/idea/python/latest/bin
-" >> /etc/environment
+")
+
+SCRIPT_DIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
+
+# Merge Environments
+/bin/bash  "${SCRIPT_DIR}/../common/merge_environments.sh" -r "${curr_environment}" -o /etc/environment
 
 source /etc/environment
 
 echo -n "no" > ${BOOTSTRAP_DIR}/reboot_required.txt
 
-SCRIPT_DIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
+
 source "${SCRIPT_DIR}/../common/bootstrap_common.sh"
 
 {% include '_templates/linux/idea_proxy.jinja2' %}
 
 {% include '_templates/linux/idea_service_account.jinja2' %}
 
-{% include '_templates/linux/aws_ssm.jinja2' %}
+# Begin: Install and Configure AWS Systems Manager Agent
+/bin/bash "${SCRIPT_DIR}/../common/aws_ssm.sh" -o $RES_BASE_OS -r $AWS_REGION -n $IDEA_CLUSTER_NAME -s "${SCRIPT_DIR}"
+configure_amazon_ssm_agent
+# End: Install and Configure AWS Systems Manager Agent
 
-{% include '_templates/linux/epel_repo.jinja2' %}
+# Begin: Install EPEL Repo
+/bin/bash "${SCRIPT_DIR}/../common/epel_repo.sh" -o $RES_BASE_OS -s "${SCRIPT_DIR}"
+# End: Install EPEL Repo
 
-{% include '_templates/linux/system_packages.jinja2' %}
+# Begin: Install System Packages
+/bin/bash "${SCRIPT_DIR}/../common/system_packages.sh" -o $RES_BASE_OS -r $AWS_REGION -n $IDEA_CLUSTER_NAME -s "${SCRIPT_DIR}"
+# End: Install System Packages
 
-{%- include '_templates/linux/cloudwatch_agent.jinja2' %}
+# Begin: Install/Configure CloudWatch Agent
+/bin/bash "${SCRIPT_DIR}/../common/cloudwatch_agent.sh" -o $RES_BASE_OS -r $AWS_REGION -n $IDEA_CLUSTER_NAME -s "${SCRIPT_DIR}"
+
+{%- set cloudwatch_agent_config = context.get_cloudwatch_agent_config(additional_log_files=additional_log_files) %}
+{%- if cloudwatch_agent_config %}
+echo '{{ context.utils.to_json(cloudwatch_agent_config, indent=True) }}' > /opt/aws/amazon-cloudwatch-agent/etc/amazon-cloudwatch-agent.json
+/opt/aws/amazon-cloudwatch-agent/bin/amazon-cloudwatch-agent-ctl -a fetch-config -m ec2 -s -c file:/opt/aws/amazon-cloudwatch-agent/etc/amazon-cloudwatch-agent.json
+{%- else %}
+log_warning "cloudwatch_agent_config not provided."
+{%- endif %}
+# End: Install/Configure CloudWatch Agent
 
 {%- if context.is_metrics_provider_prometheus() %}
   {%- include '_templates/linux/prometheus.jinja2' %}
   {%- include '_templates/linux/prometheus_node_exporter.jinja2' %}
 {%- endif %}
 
-{% include '_templates/linux/nfs_utils.jinja2' %}
+# Begin: Install NFS Utils and dependency items
+/bin/bash "${SCRIPT_DIR}/../common/nfs_utils.sh" -o $RES_BASE_OS -s "${SCRIPT_DIR}"
+# End: Install NFS Utils and dependency items
 
-{% include '_templates/linux/jq.jinja2' %}
+# Begin: Install jq
+/bin/bash "${SCRIPT_DIR}/../common/jq.sh" -o $RES_BASE_OS -s "${SCRIPT_DIR}"
+# End: Install jq
 
 {%- with  ebs_volume_tags = [
   {'Key':'res:EnvironmentName', 'Value': context.cluster_name },
@@ -84,7 +128,9 @@ source "${SCRIPT_DIR}/../common/bootstrap_common.sh"
   {% include '_templates/linux/tag_network_interface.jinja2' %}
 {%- endwith %}
 
-{% include '_templates/linux/disable_se_linux.jinja2' %}
+# Begin: Disable SE Linux
+/bin/bash "${SCRIPT_DIR}/../common/disable_se_linux.sh" -o $RES_BASE_OS -s "${SCRIPT_DIR}"
+# End: Disable SE Linux
 
 {%- with alias_prefix = 'idea', install_dir = '/opt/idea/python' %}
   {% include '_templates/linux/python.jinja2' %}

@@ -18,11 +18,13 @@ from ideadatamodel.shared_filesystem import (
     AddFileSystemToProjectRequest,
     OnboardEFSFileSystemRequest,
     OnboardONTAPFileSystemRequest,
+    OnboardLUSTREFileSystemRequest,
     RemoveFileSystemFromProjectRequest,
     CommonOnboardFileSystemRequest,
     OffboardFileSystemRequest,
     FileSystem,
     FSxONTAPFileSystem,
+    FSxLUSTREFileSystem,
     ListFileSystemInVPCResult
 )
 from ideadatamodel.shared_filesystem.shared_filesystem_api import FSxONTAPDeploymentType
@@ -411,6 +413,57 @@ class SharedFilesystemService:
         )
         return config_entries
 
+    def onboard_lustre_filesystem(self, request: OnboardLUSTREFileSystemRequest):
+        self._validate_onboard_filesystem_request(request)
+        self._validate_filesystem_does_not_exist(request.filesystem_name)
+        self._validate_filesystem_present_in_vpc_and_not_onboarded(request.filesystem_id)
+
+        config_entries = self.build_config_for_vpc_lustre(request)
+
+        self.context.config().db.sync_cluster_settings_in_db(
+            config_entries=config_entries,
+            overwrite=True
+        )
+
+    def build_config_for_vpc_lustre(
+        self, request: OnboardLUSTREFileSystemRequest,
+    ):
+        fsx_client = self.context.aws().fsx()
+        filesystem_id = request.filesystem_id
+        describe_file_system_response = fsx_client.describe_file_systems(FileSystemIds=[filesystem_id])
+        if not describe_file_system_response.get('FileSystems'):
+            raise exceptions.soca_exception(
+                error_code=errorcodes.INVALID_PARAMS,
+                message=f"File system with ID {filesystem_id} doesn't exist",
+            )
+        file_system = describe_file_system_response['FileSystems'][0]
+        mount_name = file_system.get("LustreConfiguration", {}).get("MountName", "")
+        config = {
+            request.filesystem_name: {
+                "title": request.filesystem_title,
+                "provider": constants.STORAGE_PROVIDER_FSX_LUSTRE,
+                "scope": ["project"],
+                "projects": [],
+                "mount_dir": request.mount_directory,
+                "mount_options": "lustre defaults,noatime,flock,_netdev 0 0",
+                "mount_name": mount_name,
+                constants.STORAGE_PROVIDER_FSX_LUSTRE: {
+                    "removal_policy": "RETAIN",
+                    "use_existing_fs": True,
+                    "file_system_id": filesystem_id,
+                    "dns": f"{filesystem_id}.fsx.{self.context.aws().aws_region()}.amazonaws.com",
+                    "encrypted": Utils.get_value_as_string('Encrypted', file_system)
+                }
+            }
+        }
+        config_entries = []
+        self.traverse_config(
+            config_entries=config_entries,
+            prefix=constants.MODULE_SHARED_STORAGE,
+            config=config,
+        )
+        return config_entries
+
     def offboard_filesystem(self, request: OffboardFileSystemRequest):
         filesystem_name = request.filesystem_name
         self.config.db.delete_config_entries(f'{constants.MODULE_SHARED_STORAGE}.{filesystem_name}')
@@ -437,9 +490,10 @@ class SharedFilesystemService:
         onboarded_filesystem_ids = set([fs.get_filesystem_id() for fs in onboarded_filesystems])
 
         efs_filesystems = self._list_unonboarded_efs_file_systems(onboarded_filesystem_ids)
-        fsx_filesystems = self._list_unonboarded_ontap_file_systems(onboarded_filesystem_ids)
+        fsx_ontap_filesystems = self._list_unonboarded_ontap_file_systems(onboarded_filesystem_ids)
+        fsx_lustre_filesystems = self._list_unonboarded_lustre_file_systems(onboarded_filesystem_ids)
 
-        return ListFileSystemInVPCResult(efs=efs_filesystems, fsx=fsx_filesystems)
+        return ListFileSystemInVPCResult(efs=efs_filesystems, fsx_ontap=fsx_ontap_filesystems, fsx_lustre=fsx_lustre_filesystems)
 
     def update_filesystem_to_project_mapping(self, filesystem_name: str, project_name: str):
         fs = self.get_filesystem(filesystem_name)
@@ -548,9 +602,10 @@ class SharedFilesystemService:
         )
 
         efs_filesystems = self._list_unonboarded_efs_file_systems(onboarded_filesystem_ids)
-        fsx_filesystems = self._list_unonboarded_ontap_file_systems(onboarded_filesystem_ids)
+        fsx_ontap_filesystems = self._list_unonboarded_ontap_file_systems(onboarded_filesystem_ids)
+        fsx_lustre_filesystems = self._list_unonboarded_lustre_file_systems(onboarded_filesystem_ids)
 
-        filesystems_in_vpc = [*efs_filesystems, *fsx_filesystems]
+        filesystems_in_vpc = [*efs_filesystems, *fsx_ontap_filesystems, *fsx_lustre_filesystems]
 
         for filesystem in filesystems_in_vpc:
             if filesystem_id == filesystem.get_filesystem_id():
@@ -641,7 +696,7 @@ class SharedFilesystemService:
 
             filesystems: List[FSxONTAPFileSystem] = []
             for fsx in fsx_response:
-                if fsx['Lifecycle'] != 'AVAILABLE':
+                if fsx['FileSystemType'] != 'ONTAP' or fsx['Lifecycle'] != 'AVAILABLE':
                     continue
                 fs_id = fsx['FileSystemId']
                 subnet_response = ec2_client.describe_subnets(SubnetIds=fsx['SubnetIds'])
@@ -669,14 +724,35 @@ class SharedFilesystemService:
                         lambda volume_obj: volume_obj['Lifecycle'] == "CREATED",
                         volume_response['Volumes']
                     ))
-                    svm_list = [FSxONTAPSVM(storage_virtual_machine = svm) for svm in list_created_svms]
-                    volume_list = [FSxONTAPVolume(volume = volume) for volume in list_created_volumes]
-                    filesystems.append(FSxONTAPFileSystem(filesystem = fsx, svm = svm_list, volume = volume_list))
+                    svm_list = [FSxONTAPSVM(storage_virtual_machine=svm) for svm in list_created_svms]
+                    volume_list = [FSxONTAPVolume(volume=volume) for volume in list_created_volumes]
+                    filesystems.append(FSxONTAPFileSystem(filesystem=fsx, svm=svm_list, volume=volume_list))
             return filesystems
         except botocore.exceptions.ClientError as e:
             error_message = e.response["Error"]["Message"]
             raise exceptions.general_exception(error_message)
 
+    def _list_unonboarded_lustre_file_systems(self, onboarded_filesystem_ids: Set[str]) -> List[FSxLUSTREFileSystem]:
+        try:
+            env_vpc_id = self.config.db.get_config_entry("cluster.network.vpc_id")['value']
+
+            fsx_client = self.context.aws().fsx()
+            fsx_response = fsx_client.describe_file_systems()["FileSystems"]
+            ec2_client = self.context.aws().ec2()
+
+            filesystems: List[FSxLUSTREFileSystem] = []
+            for fsx in fsx_response:
+                if fsx['FileSystemType'] != 'LUSTRE' or fsx['Lifecycle'] != 'AVAILABLE':
+                    continue
+                fs_id = fsx['FileSystemId']
+                subnet_response = ec2_client.describe_subnets(SubnetIds=fsx['SubnetIds'])
+                if env_vpc_id == subnet_response['Subnets'][0]['VpcId'] and \
+                    fs_id not in onboarded_filesystem_ids:
+                    filesystems.append(FSxLUSTREFileSystem(filesystem=fsx))
+            return filesystems
+        except botocore.exceptions.ClientError as e:
+            error_message = e.response["Error"]["Message"]
+            raise exceptions.general_exception(error_message)
 
     @staticmethod
     def _check_required_parameters(

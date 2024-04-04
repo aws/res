@@ -13,7 +13,7 @@
 
 import { AddFileSystemToProjectRequest, AddFileSystemToProjectResult, CreateEFSFileSystemRequest, CreateEFSFileSystemResult, CreateONTAPFileSystemRequest, CreateONTAPFileSystemResult, ListFileSystemsRequest, ListFileSystemsResult, RemoveFileSystemFromProjectRequest, RemoveFileSystemFromProjectResult,     ListFileSystemsInVPCRequest,
     ListFileSystemsInVPCResult,
-    OnboardEFSFileSystemRequest, OnboardFileSystemResult, OnboardONTAPFileSystemRequest, } from "./data-model";
+    OnboardEFSFileSystemRequest, OnboardFileSystemResult, OnboardONTAPFileSystemRequest, OnboardLUSTREFileSystemRequest} from "./data-model";
 import IdeaBaseClient, { IdeaBaseClientProps } from "./base-client";
 
 export interface FileSystemClientProps extends IdeaBaseClientProps {}
@@ -47,8 +47,12 @@ class FileSystemClient extends IdeaBaseClient<FileSystemClientProps> {
         return this.apiInvoker.invoke_alt<OnboardEFSFileSystemRequest, OnboardFileSystemResult>("FileSystem.OnboardEFSFileSystem", req);
     }
 
-    onboardFSXONTAPFileSystem(req: OnboardONTAPFileSystemRequest) {
-        return this.apiInvoker.invoke_alt<OnboardONTAPFileSystemRequest, OnboardFileSystemResult>("FileSystem.OnboardONTAPFileSystem", req);
+    onboardFSXLUSTREFileSystem(req: OnboardEFSFileSystemRequest) {
+        return this.apiInvoker.invoke_alt<OnboardEFSFileSystemRequest, OnboardFileSystemResult>("FileSystem.OnboardLUSTREFileSystem", req);
+    }
+
+    onboardFSXONTAPFileSystem(req: OnboardLUSTREFileSystemRequest) {
+        return this.apiInvoker.invoke_alt<OnboardLUSTREFileSystemRequest, OnboardFileSystemResult>("FileSystem.OnboardONTAPFileSystem", req);
     }
 }
 

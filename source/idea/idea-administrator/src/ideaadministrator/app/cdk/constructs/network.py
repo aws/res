@@ -428,6 +428,14 @@ class WebPortalSecurityGroup(SecurityGroup):
         self.add_bastion_host_ingress_rule(self.bastion_host_security_group)
         self.add_loadbalancer_ingress_rule(self.loadbalancer_security_group)
 
+        #Add inbound for SES VPC endpoint. Doesn't support these AZs
+        #use1-az2, use1-az3, use1-az5, usw1-az2, usw2-az4, apne2-az4, cac1-az3, and cac1-az4
+        self.add_ingress_rule(
+            ec2.Peer.ipv4(self.vpc.vpc_cidr_block),
+            ec2.Port.tcp(465),
+            description='Allow SMTP traffic from VPC'
+        )
+
     def setup_egress(self):
         self.add_outbound_traffic_rule()
 

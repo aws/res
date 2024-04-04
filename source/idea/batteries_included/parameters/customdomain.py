@@ -27,7 +27,7 @@ class CustomDomainParameters(Base):
                 "(may be different from the Active Directory domain). "
                 "Used to generate certificates."
             ),
-            allowed_pattern="^([a-zA-Z0-9]+[\\.-])+([a-zA-Z0-9])+$",
+            allowed_pattern="^([a-zA-Z0-9]+[\\.-])+([a-zA-Z0-9])+$|^$",
         )
     )
 

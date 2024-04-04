@@ -23,6 +23,8 @@ class DirectoryServiceKey(Key):
     ROOT_PASSWORD = "ServiceAccountPassword"
     DOMAIN_TLS_CERTIFICATE_SECRET_ARN = "DomainTLSCertificateSecretArn"
     ENABLE_LDAP_ID_MAPPING = "EnableLdapIDMapping"
+    DISABLE_AD_JOIN = "DisableADJoin"
+    ROOT_USER_DN = "ServiceAccountUserDN"
 
 
 @dataclass
@@ -127,10 +129,28 @@ class DirectoryServiceParameters(Base):
             allowed_values=["True", "False"],
         )
     )
+    disable_ad_join: str = Base.parameter(
+        Attributes(
+            id=DirectoryServiceKey.DISABLE_AD_JOIN,
+            type="String",
+            description="Set to True to prevent linux hosts from joining the Directory Domain. Otherwise set to False",
+            allowed_values=["True", "False"],
+        )
+    )
+    root_user_dn: str = Base.parameter(
+        Attributes(
+            id=DirectoryServiceKey.ROOT_USER_DN,
+            type="AWS::SSM::Parameter::Value<String>",
+            description="Provide the Distinguished name (DN) of the service account user in the Active Directory",
+            allowed_pattern=".+",
+            no_echo=True,
+        )
+    )
 
     # These will be populated after the secrets are created from the above parameters
     root_username_secret_arn: Optional[str] = None
     root_password_secret_arn: Optional[str] = None
+    root_user_dn_secret_arn: Optional[str] = None
 
 
 class DirectoryServiceParameterGroups:
@@ -150,5 +170,7 @@ class DirectoryServiceParameterGroups:
             DirectoryServiceKey.COMPUTERS_OU,
             DirectoryServiceKey.DOMAIN_TLS_CERTIFICATE_SECRET_ARN,
             DirectoryServiceKey.ENABLE_LDAP_ID_MAPPING,
+            DirectoryServiceKey.DISABLE_AD_JOIN,
+            DirectoryServiceKey.ROOT_USER_DN,
         ],
     }

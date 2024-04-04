@@ -13,7 +13,7 @@ from threading import RLock
 
 from ideasdk.context import BootstrapContext
 from ideasdk.utils import Utils, Jinja2Utils
-from ideadatamodel import exceptions
+from ideadatamodel import BaseOS, exceptions
 
 from typing import List
 import os
@@ -35,7 +35,7 @@ class BootstrapPackageBuilder:
                  components: List[str],
                  tmp_dir: str = None,
                  force_build: bool = False,
-                 base_os: str = None,
+                 build_only_install_scripts: bool = False, 
                  logger=None):
         """
         :param bootstrap_context: template rendering context.
@@ -50,16 +50,17 @@ class BootstrapPackageBuilder:
         :param force_build: if force_build is True and the bootstrap package directory already exists, the existing directory will be deleted.
         if force_build is False, building bootstrap package will be skipped if the directory exists. this is to enable customizations
         to bootstrap package out of sources.
+
+        :param build_only_install_scripts: if build_only_install_scripts is True, then configure scripts will be excluded from bootstrap package.
+        if build_only_install_scripts is False, then install and configure scripts will be included. this allows simplification of bootstrap package
+        with only installation of dependencies scripts.
         """
 
         if Utils.is_empty(components):
             raise exceptions.invalid_params('components[] is required.')
-
+        
         if 'common' not in components:
-            if Utils.is_not_empty(base_os):
-                if base_os.lower() != 'windows':
-                    components.insert(0, 'common')
-            else:
+            if not bootstrap_context.base_os or bootstrap_context.base_os.lower() != BaseOS.WINDOWS:
                 components.insert(0, 'common')
 
         self.bootstrap_context = bootstrap_context
@@ -69,6 +70,7 @@ class BootstrapPackageBuilder:
         self.components = components
         self.logger = logger
         self.tmp_dir = tmp_dir
+        self.build_only_install_scripts = build_only_install_scripts
 
     def log(self, message: str):
         if self.logger is not None:
@@ -113,6 +115,8 @@ class BootstrapPackageBuilder:
                 os.makedirs(target_component_dir, exist_ok=True)
                 for file in files:
                     if file == '_templates':
+                        continue
+                    if self.build_only_install_scripts and file.lower().startswith('configure'):
                         continue
                     if file.endswith('.jinja2'):
                         template = env.get_template(f'{component}/{file}')

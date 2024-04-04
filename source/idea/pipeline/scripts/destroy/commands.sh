@@ -152,3 +152,31 @@ SG_SHARED_STORAGE_ID=$(echo $SG_SHARED_STORAGE_INFO | jq -r '.SecurityGroups[0].
 aws ec2 delete-security-group --group-id $SG_SHARED_STORAGE_ID;
 
 echo "$CLUSTER_NAME-shared-storage-security-group has been deleted!";
+
+#Delete Batteries Included if flag provided
+if [[ $DESTROY_BATTERIES_INCLUDED == "true" ]]; then
+    echo "Deleting Batteries Included";
+    batteriesStackId=$(aws cloudformation describe-stacks --stack-name $BATTERIES_INCLUDED_STACK_NAME --region $AWS_REGION | jq -r '.Stacks[0].StackId');
+    aws cloudformation delete-stack --stack-name $batteriesStackId --region $AWS_REGION;
+    waitMinutes=0;
+    stackResult=""
+    while [[ $stackResult == "" ]]
+    do
+        echo "$waitMinutes minutes have past...";
+        stackStatus=$(aws cloudformation describe-stacks --stack-name $batteriesStackId --region $AWS_REGION | jq -r '.Stacks[0].StackStatus');
+        echo "Status: $stackStatus";
+        if [[ $stackStatus == "DELETE_COMPLETE" ]] || [[ $stackStatus == "DELETE_FAILED" ]] ; then
+            stackResult=$stackStatus
+        fi
+        sleep 60;
+        let waitMinutes++;
+    done
+    #Verification of Batteries Included stack deletion
+    if [[ $stackResult == "DELETE_FAILED" ]] ; then
+        echo "Batteries Included deletion FAILED";
+        exit 1;
+    else
+        echo "Batteries Included has been deleted";
+        echo;
+    fi
+fi

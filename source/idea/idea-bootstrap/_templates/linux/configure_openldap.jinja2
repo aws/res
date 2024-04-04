@@ -1,0 +1,32 @@
+DS_TLS_CERTIFICATE_SECRET_ARN="{{context.config.get_string('directoryservice.tls_certificate_secret_arn', default='')}}"
+DS_LDAP_CONNECTION_URI="{{ context.config.get_string('directoryservice.ldap_connection_uri', required=True) }}"
+DS_LDAP_BASE="{{context.config.get_string('directoryservice.ldap_base', required=True)}}"
+
+SCRIPT_DIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
+
+source "${SCRIPT_DIR}/../common/bootstrap_common.sh"
+
+if [[ -f "/etc/openldap/ldap.conf" ]]; then
+  cp /etc/openldap/ldap.conf /etc/openldap/ldap.conf.orig
+fi
+
+echo -e "
+TLS_CACERTDIR /etc/openldap/cacerts/
+
+# Turning this off breaks GSSAPI used with krb5 when rdns = false
+SASL_NOCANON	on
+
+URI ${DS_LDAP_CONNECTION_URI}
+
+BASE ${DS_LDAP_BASE}
+" > /etc/openldap/ldap.conf
+
+if [[ "${DS_TLS_CERTIFICATE_SECRET_ARN}" != '' ]]; then
+  mkdir -p /etc/openldap/cacerts/
+  DS_TLS_CERTIFICATE=$(get_secret "${DS_TLS_CERTIFICATE_SECRET_ARN}")
+  echo -n "${DS_TLS_CERTIFICATE}" > /etc/openldap/cacerts/openldap-server.pem
+
+  echo -e "
+TLS_CACERT /etc/openldap/cacerts/openldap-server.pem
+" >> /etc/openldap/ldap.conf
+fi

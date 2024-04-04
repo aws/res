@@ -30,6 +30,7 @@ SUPPORTED_MODULE_TYPES = ('app', 'stack', 'config')
 
 SHARD_ITERATOR_INITIALIZER_INTERVAL = (10, 30)
 SHARD_PROCESSOR_INTERVAL = (10, 30)
+MAX_WAIT_TIME_FOR_RESOURCE_ACTIVATION = 300
 
 
 class ClusterConfigDB(DynamoDBStreamSubscriber):
@@ -73,13 +74,31 @@ class ClusterConfigDB(DynamoDBStreamSubscriber):
             self.check_table_created()
 
         self.modules_table = self.get_or_create_modules_table()
-        self.cluster_settings_table = self.get_or_create_cluster_settings_table()
+        self.cluster_settings_table = self.get_cluster_settings_table()
+        if not self.cluster_settings_table:
+            if self.create_database:
+                self.cluster_settings_table = self.create_cluster_settings_table()
+
+                # Use Amazon Kinesis Data Streams to capture changes to Amazon DynamoDB
+                self.aws.dynamodb().enable_kinesis_streaming_destination(
+                    TableName=self.get_cluster_settings_table_name(),
+                    StreamArn=self.create_kinesis_data_stream_for_db(),
+                    EnableKinesisStreamingConfiguration={
+                        'ApproximateCreationDateTimePrecision': 'MILLISECOND'
+                    }
+                )
+            else:
+                raise exceptions.SocaException(
+                    error_code=errorcodes.CLUSTER_CONFIG_NOT_INITIALIZED,
+                    message=f'cluster-settings table does not exist',
+                )
 
         self.stream_subscription: Optional[DynamoDBStreamSubscription] = None
         if self.create_subscription and self.stream_subscriber is not None:
             self.stream_subscription = DynamoDBStreamSubscription(
                 stream_subscriber=self,
                 table_name=self.get_cluster_settings_table_name(),
+                table_kinesis_stream_name=self.get_cluster_settings_table_kinesis_stream_name(),
                 aws_region=aws_region,
                 aws_profile=aws_profile
             )
@@ -111,6 +130,10 @@ class ClusterConfigDB(DynamoDBStreamSubscriber):
 
     def get_cluster_settings_table_name(self) -> str:
         return f'{self.cluster_name}.cluster-settings'
+
+    def get_cluster_settings_table_kinesis_stream_name(self) -> str:
+        cluster_settings_table_name = self.get_cluster_settings_table_name()
+        return f'{cluster_settings_table_name}-kinesis-stream'
 
     def check_table_created(self) -> bool:
         try:
@@ -187,65 +210,104 @@ class ClusterConfigDB(DynamoDBStreamSubscriber):
             else:
                 raise e
 
-    def get_or_create_cluster_settings_table(self):
-
+    def get_cluster_settings_table(self):
         table_name = self.get_cluster_settings_table_name()
-
-        try:
-
-            created = False
-            while not created:
+        timeout_start = time.time()
+        while time.time() < timeout_start + MAX_WAIT_TIME_FOR_RESOURCE_ACTIVATION:
+            try:
                 describe_table_result = self.aws.dynamodb().describe_table(TableName=table_name)
-                table = describe_table_result['Table']
-                created = table['TableStatus'] == 'ACTIVE'
-                if not created:
-                    time.sleep(2)
-
-            return self.aws.dynamodb_table().Table(table_name)
-
-        except botocore.exceptions.ClientError as e:
-            if e.response['Error']['Code'] == 'ResourceNotFoundException':
-                SSESpecification = {}
-                if self.dynamodb_kms_key_id is not None:
-                    SSESpecification = {
-                            'Enabled': True,
-                            'SSEType': 'KMS',
-                            'KMSMasterKeyId': self.dynamodb_kms_key_id
-                        }
-                if self.create_database:
-                    self.log_info(f'creating cluster config dynamodb table: {table_name}, region: {self.aws_region}')
-                    self.aws.dynamodb().create_table(
-                        TableName=table_name,
-                        AttributeDefinitions=[
-                            {
-                                'AttributeName': 'key',
-                                'AttributeType': 'S'
-                            }
-                        ],
-                        KeySchema=[
-                            {
-                                'AttributeName': 'key',
-                                'KeyType': 'HASH'
-                            }
-                        ],
-                        BillingMode='PAY_PER_REQUEST',
-                        StreamSpecification={
-                            'StreamEnabled': True,
-                            'StreamViewType': 'NEW_AND_OLD_IMAGES'
-                        },
-                        SSESpecification=SSESpecification,
-                        Tags=[
-                            {
-                                'Key': constants.IDEA_TAG_ENVIRONMENT_NAME,
-                                'Value': self.cluster_name
-                            }
-                        ]
-                    )
-                    return self.get_or_create_cluster_settings_table()
+            except botocore.exceptions.ClientError as e:
+                if e.response['Error']['Code'] == 'ResourceNotFoundException':
+                    return None
                 else:
                     raise e
+
+            table = describe_table_result['Table']
+            if table['TableStatus'] == 'ACTIVE':
+                return self.aws.dynamodb_table().Table(table_name)
             else:
-                raise e
+                time.sleep(2)
+
+        raise exceptions.SocaException(
+            error_code=errorcodes.CLUSTER_CONFIG_NOT_INITIALIZED,
+            message=f'timed out while waiting for {table_name} table activation'
+        )
+
+    def create_cluster_settings_table(self):
+        table_name = self.get_cluster_settings_table_name()
+        SSESpecification = {}
+        if self.dynamodb_kms_key_id is not None:
+            SSESpecification = {
+                    'Enabled': True,
+                    'SSEType': 'KMS',
+                    'KMSMasterKeyId': self.dynamodb_kms_key_id
+                }
+
+        self.log_info(f'creating cluster config dynamodb table: {table_name}, region: {self.aws_region}')
+        self.aws.dynamodb().create_table(
+            TableName=table_name,
+            AttributeDefinitions=[
+                {
+                    'AttributeName': 'key',
+                    'AttributeType': 'S'
+                }
+            ],
+            KeySchema=[
+                {
+                    'AttributeName': 'key',
+                    'KeyType': 'HASH'
+                }
+            ],
+            BillingMode='PAY_PER_REQUEST',
+            SSESpecification=SSESpecification,
+            Tags=[
+                {
+                    'Key': constants.IDEA_TAG_ENVIRONMENT_NAME,
+                    'Value': self.cluster_name
+                }
+            ]
+        )
+        return self.get_cluster_settings_table()
+
+    def get_kinesis_data_stream_for_db(self):
+        stream_name = self.get_cluster_settings_table_kinesis_stream_name()
+        timeout_start = time.time()
+        while time.time() < timeout_start + MAX_WAIT_TIME_FOR_RESOURCE_ACTIVATION:
+            try:
+                describe_stream_result = self.aws.kinesis().describe_stream(StreamName=stream_name)
+            except botocore.exceptions.ClientError as e:
+                if e.response['Error']['Code'] == 'ResourceNotFoundException':
+                    return None
+                else:
+                    raise e
+
+            stream = describe_stream_result.get('StreamDescription', {})
+            if stream.get('StreamStatus', '') == 'ACTIVE':
+                return stream.get('StreamARN', '')
+            else:
+                time.sleep(1)
+
+        raise exceptions.SocaException(
+            error_code=errorcodes.CLUSTER_CONFIG_NOT_INITIALIZED,
+            message=f'timed out while waiting for {stream_name} stream activation'
+        )
+
+    def create_kinesis_data_stream_for_db(self):
+        stream_name = self.get_cluster_settings_table_kinesis_stream_name()
+        self.aws.kinesis().create_stream(
+            StreamName=stream_name,
+            StreamModeDetails={
+                'StreamMode': 'ON_DEMAND'
+            },
+            Tags=[
+                {
+                    'Key': constants.IDEA_TAG_ENVIRONMENT_NAME,
+                    'Value': self.cluster_name
+                }
+            ]
+        )
+
+        return self.get_kinesis_data_stream_for_db()
 
     def sync_cluster_settings_in_db(self, config_entries: List[Dict], overwrite: bool = False):
         self.log_info(f'sync config entries to db. overwrite: {overwrite}')

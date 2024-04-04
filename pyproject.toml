@@ -23,30 +23,12 @@ classifiers = [
     "Programming Language :: Python :: 3.9",
     "Typing :: Typed",
 ]
-dependencies = [
-    "boto3",
-    "botocore",
-    "aws-cdk-lib",
-    "constructs",
-    "cdk-nag",
-]
 
 [tool.setuptools.dynamic]
 version = {file = ["RES_VERSION.txt"]}
 
 [project.scripts]
 cdk-app = "idea.app:main"
-
-[project.optional-dependencies]
-dev = [
-    "black~=24.1.0",
-    "tox",
-    "pytest",
-    "pytest-cov",
-    "boto3-stubs-lite[essential]",
-    "boto3-stubs-lite[cloudformation]",
-    "types-requests",
-]
 
 [tool.black]
 include = 'source/.*\.py'

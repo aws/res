@@ -8,15 +8,17 @@
 #  or in the 'license' file accompanying this file. This file is distributed on an 'AS IS' BASIS, WITHOUT WARRANTIES
 #  OR CONDITIONS OF ANY KIND, express or implied. See the License for the specific language governing permissions
 #  and limitations under the License.
+import json
 
 from ideasdk.protocols import AwsClientProviderProtocol, AWSUtilProtocol, SocaContextProtocol, PagingCallback
+from ideasdk.launch_configurations import LaunchRoleHelper
 from ideasdk.utils import Utils
 from ideadatamodel import (
     exceptions, errorcodes, constants,
     SocaAmount,
     EC2InstanceType, AutoScalingGroup, CloudFormationStack, CloudFormationStackResources,
     EC2Instance, EC2SpotFleetRequestConfig, EC2SpotFleetInstance, EC2InstanceUnitPrice, AwsProjectBudget,
-    SocaJob
+    SocaJob, SecurityGroup, Policy
 )
 from ideasdk.aws import EC2InstanceTypesDB
 
@@ -609,7 +611,7 @@ class AWSUtil(AWSUtilProtocol):
                 # sleep to avoid being throttled
                 time.sleep(0.5)
 
-    def is_security_group_valid(self, security_group_id: str) -> bool:
+    def is_security_group_valid(self, security_group_id: str, filters: List[Dict] = None) -> bool:
         cache_key = f'aws.ec2.security_group.{security_group_id}.is_valid'
 
         # todo - documentation note: if cluster admin deletes a security group,
@@ -620,10 +622,13 @@ class AWSUtil(AWSUtilProtocol):
         if is_valid is not None:
             return is_valid
         try:
-            self.aws().ec2().describe_security_groups(
-                GroupIds=[security_group_id]
+            response = self.aws().ec2().describe_security_groups(
+                GroupIds=[security_group_id],
+                Filters=filters
             )
             is_valid = True
+            if len(response['SecurityGroups']) == 0:
+                is_valid = False
         except botocore.exceptions.ClientError as e:
             error_code = str(e.response['Error']['Code'])
             if error_code.startswith('InvalidGroup'):
@@ -1001,32 +1006,26 @@ class AWSUtil(AWSUtilProtocol):
             )
 
         return True
-    
-    def dynamodb_import_table(self, import_table_request: Dict, wait: bool = False): 
+
+    def dynamodb_import_table(self, import_table_request: Dict, wait: bool = False):
         """
         Import table data from S3 to DynamoDB table
-        
         :param import_table_request:
         """
-        
+
         table_creation_parameters = import_table_request.get('TableCreationParameters')
         if not table_creation_parameters:
             raise exceptions.invalid_params("import_table_request must include 'TableCreationParameters'")
-        
         table_name = table_creation_parameters.get("TableName")
         if not table_name:
             raise exceptions.invalid_params("import_table_request must include 'TableCreationParameters.TableName'")
-        
         s3_bucket_source = import_table_request.get('S3BucketSource')
         if not s3_bucket_source:
             raise exceptions.invalid_params("import_table_request must include 'S3BucketSource'")
-        
         s3_bucket_name = s3_bucket_source.get('S3Bucket')
         s3_key_prefix = s3_bucket_source.get('S3KeyPrefix')
-        
         if not s3_bucket_name or not s3_key_prefix:
             raise exceptions.invalid_params("import_table_request must include 'S3BucketSource.S3Bucket' and 'S3BucketSource.S3KeyPrefix'. One or both were not provided")
-        
         dynamodb_kms_key_id = self._context.config().get_string('cluster.dynamodb.kms_key_id')
         if dynamodb_kms_key_id is not None:
             import_table_request['TableCreationParameters']['SSESpecification'] = {
@@ -1034,14 +1033,11 @@ class AWSUtil(AWSUtilProtocol):
                 'SSEType': 'KMS',
                 'KMSMasterKeyId': dynamodb_kms_key_id
                 }
-            
         self._logger.info(f'importing table {table_name} from S3 bucket {s3_bucket_name} and path {s3_key_prefix} to dynamodb table: {table_name} ...')
-        
         # Response for the query takes about 5 seconds. The response ensures that the table creation process has started.
         res = self.aws().dynamodb().import_table(**import_table_request)
-              
         return res
-    
+
     def dynamodb_check_import_completed_successfully(self, import_arn: str) -> bool:
         while True:
             describe_import_result = self.aws().dynamodb().describe_import(ImportArn=import_arn)
@@ -1049,18 +1045,15 @@ class AWSUtil(AWSUtilProtocol):
             result = describe_import_result['ImportTableDescription']
             if result['ImportStatus'] == 'COMPLETED':
                 return True
-            
             elif result['ImportStatus'] == 'CANCELLED':
                 self._logger.error(f'Import attempt {import_arn} was CANCELLED')
                 return False
-            
             elif result['ImportStatus'] == 'FAILED':
                 self._logger.error(f"Import attempt {import_arn} FAILED with code: {result['FailureCode']} and message: {result['FailureMessage']}")
                 return False
 
             time.sleep(10)
 
-    
     def dynamodb_delete_table(self, table_name: str, wait: bool = True) -> bool:
         """
         Deletes a DynamoDB table if exists. Most likely used for deletion of temp tables created during ApplySnapshot process
@@ -1068,16 +1061,13 @@ class AWSUtil(AWSUtilProtocol):
         :param table_name: Name of the DDB table that should be deleted
         :param wait: wait for table creation and status to become active
         """
-        
         if wait:
             try:
                 self.dynamodb_check_table_exists(table_name, wait)
             except botocore.exceptions.ClientError as e:
                 if e.response['Error']['Code'] == 'ResourceNotFoundException':
                     return True
-            
         self.aws().dynamodb().delete_table(TableName=table_name)
-        
         return True
 
     def create_s3_presigned_url(self, key: str, expires_in=3600) -> str:
@@ -1089,3 +1079,188 @@ class AWSUtil(AWSUtilProtocol):
             },
             ExpiresIn=expires_in
         )
+
+    def create_vdi_host_role(self, role_name: str) -> bool:
+        region = self.aws().aws_region()
+        assume_role_policy_document = {
+            "Version": "2012-10-17",
+            "Statement": [
+                {
+                    "Effect": "Allow",
+                    "Principal": {
+                        "Service": "ssm.amazonaws.com"
+                    },
+                    "Action": "sts:AssumeRole"
+                },
+                {
+                    "Effect": "Allow",
+                    "Principal": {
+                        "Service": "ec2.amazonaws.com"
+                    },
+                    "Action": "sts:AssumeRole"
+                }
+            ]
+        }
+        self.aws().iam().create_role(
+            Path=f'/{LaunchRoleHelper.get_vdi_role_path(cluster_name=self._context.cluster_name(), region=region)}/',
+            Description= f'{role_name} used for VDI instance',
+            RoleName=role_name,
+            AssumeRolePolicyDocument=json.dumps(assume_role_policy_document)
+            )
+        return True
+
+    def delete_vdi_host_role(self, role_name) -> bool:
+        try:
+            self.aws().iam().delete_role(
+                RoleName=role_name
+            )
+        except botocore.exceptions.ClientError as e:
+            if e.response['Error']['Code'] == 'NoSuchEntityException':
+                return True
+            raise e
+        return True
+
+    def attach_role_policy(self, role_name: str, policy_arn: str) -> bool:
+        try:
+            self.aws().iam().attach_role_policy(
+                RoleName=role_name,
+                PolicyArn=policy_arn
+            )
+        except botocore.exceptions.ClientError as e:
+            if e.response['Error']['Code'] == 'NoSuchEntityException':
+                raise exceptions.invalid_params('Policy arn provided does not exist')
+            raise e
+        return True
+
+    def detach_role_policy(self, role_name: str, policy_arn: str) -> bool:
+        try:
+            self.aws().iam().detach_role_policy(
+                RoleName=role_name,
+                PolicyArn=policy_arn
+            )
+        except botocore.exceptions.ClientError as e:
+            if e.response['Error']['Code'] == 'NoSuchEntityException':
+                return True
+            raise e
+        return True
+
+    def create_vdi_instance_profile(self, instance_profile_name: str) -> bool:
+        region = self.aws().aws_region()
+        self.aws().iam().create_instance_profile(
+            InstanceProfileName=instance_profile_name,
+            Path=f'/{LaunchRoleHelper.get_vdi_instance_profile_path(cluster_name=self._context.cluster_name(), region=region)}/'
+        )
+        return True
+
+    def delete_vdi_instance_profile(self, instance_profile_name: str) -> bool:
+
+        try:
+            self.aws().iam().delete_instance_profile(
+                InstanceProfileName=instance_profile_name
+            )
+        except botocore.exceptions.ClientError as e:
+            if e.response['Error']['Code'] == 'NoSuchEntityException':
+                return True
+            raise e
+        return True
+
+    def add_role_to_instance_profile(self, role_name: str, instance_profile_name: str) -> bool:
+        try:
+            self.aws().iam().add_role_to_instance_profile(
+                InstanceProfileName=instance_profile_name,
+                RoleName=role_name
+            )
+        except botocore.exceptions.ClientError as e:
+            return False
+        return True
+
+    def is_policy_valid(self, policy_arn: str) -> bool:
+        try:
+            self.aws().iam().get_policy(PolicyArn=policy_arn)
+        except botocore.exceptions.ClientError as e:
+            return False
+        return True
+
+    def does_vdi_role_exist(self, role_name: str) -> bool:
+        try:
+            response = self.aws().iam().get_role(RoleName=role_name)
+            role = response['Role']
+            region = self.aws().aws_region()
+            if role['Path'] != f'/{LaunchRoleHelper.get_vdi_role_path(cluster_name=self._context.cluster_name(), region=region)}/':
+                return False
+            return True
+        except botocore.exceptions.ClientError as e:
+            if e.response['Error']['Code'] == 'NoSuchEntityException':
+                return False
+            elif e.response['Error']['Code'] == 'AccessDenied':
+                return False
+            raise e
+
+    def list_available_security_groups(self, vpc_id: str) -> List[SecurityGroup]:
+        try:
+            def result_cb(result) -> List[SecurityGroup]:
+                results = []
+                listing = Utils.get_value_as_list('SecurityGroups', result, [])
+                for entry in listing:
+                    group_id = entry['GroupId']
+                    group_name = entry['GroupName']
+                    results.append(SecurityGroup(
+                        group_id=group_id,
+                        group_name=group_name
+                    ))
+                return results
+            # Retrieve security groups that have been tagged for RES
+            filter_tags = [
+                {
+                    'Name': 'tag:' + constants.VDI_RESOURCE_TAG_KEY,
+                    'Values': [constants.VDI_SECURITY_GROUP_RESOURCE_TAG]
+                },
+                {
+                    'Name': 'vpc-id',
+                    'Values': [vpc_id]
+                }
+            ]
+            security_groups = self.invoke_aws_listing(
+                fn=self.aws().ec2().describe_security_groups,
+                result_cb=result_cb,
+                fn_kwargs={
+                    "Filters": filter_tags
+                }
+            )
+            return security_groups
+        except Exception as e:
+            self.handle_aws_exception(e)
+
+    def list_available_host_policies(self) -> List[Policy]:
+        try:
+            def result_cb(result) -> List[Policy]:
+                results = [Policy(policy_arn=policy['Arn'], policy_name=policy['PolicyName'])
+                           for policy in result.get('Policies', [])
+                           if self.is_policy_valid(policy['Arn'])]
+                return results
+
+            # Will currently only grab customer managed policies
+            policies = self.invoke_aws_listing(
+                fn=self.aws().iam().list_policies,
+                result_cb=result_cb,
+                fn_kwargs={
+                    'Scope': 'Local'
+                }
+            )
+            return policies
+        except Exception as e:
+            self.handle_aws_exception(e)
+
+    def is_security_group_available(self, security_group_id: str, vpc_id: str) -> bool:
+        # Retrieve security groups that have been tagged for RES
+        filter_tags = [
+            {
+                'Name': 'tag:' + constants.VDI_RESOURCE_TAG_KEY,
+                'Values': [constants.VDI_SECURITY_GROUP_RESOURCE_TAG]
+            },
+            {
+                'Name': 'vpc-id',
+                'Values': [vpc_id]
+            }
+        ]
+        return self.is_security_group_valid(security_group_id, filter_tags)

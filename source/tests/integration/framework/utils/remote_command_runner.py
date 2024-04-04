@@ -10,6 +10,7 @@
 #  and limitations under the License.
 
 import logging
+from enum import Enum
 from typing import Any, Optional
 
 import boto3
@@ -17,12 +18,27 @@ import boto3
 logger = logging.getLogger(__name__)
 
 
+class EC2InstancePlatform(Enum):
+    LINUX = "linux"
+    WINDOWS = "windows"
+
+
 class RemoteCommandRunner:
-    def __init__(self, region: str, output_bucket: Optional[str] = None):
+    def __init__(
+        self,
+        region: str,
+        platform: EC2InstancePlatform = EC2InstancePlatform.LINUX,
+        output_bucket: Optional[str] = None,
+    ):
         session = boto3.session.Session(region_name=region)
         self._ssm_client = session.client("ssm")
         self._s3_resource = session.resource("s3")
         self._output_bucket = output_bucket
+
+        if platform == EC2InstancePlatform.LINUX:
+            self._document_name = "AWS-RunShellScript"
+        elif platform == EC2InstancePlatform.WINDOWS:
+            self._document_name = "AWS-RunPowerShellScript"
 
     def run(self, instance_id: str, commands: list[str]) -> Any:
         logger.debug(f"sending commands {commands} to instance {instance_id}")
@@ -30,14 +46,14 @@ class RemoteCommandRunner:
         if self._output_bucket:
             cmd_result = self._ssm_client.send_command(
                 InstanceIds=[instance_id],
-                DocumentName="AWS-RunShellScript",
+                DocumentName=self._document_name,
                 Parameters={"commands": commands},
                 OutputS3BucketName=self._output_bucket,
             )
         else:
             cmd_result = self._ssm_client.send_command(
                 InstanceIds=[instance_id],
-                DocumentName="AWS-RunShellScript",
+                DocumentName=self._document_name,
                 Parameters={"commands": commands},
             )
 

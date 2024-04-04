@@ -9,8 +9,6 @@ This project utilizes cdk pipelines for setting up a development pipeline that b
 2. Install the dependencies in your virtual environment
 
         pip install -r requirements/dev.txt
-        pip install -e source/idea/idea-data-model/src
-        pip install -e ".[dev]"
 
 3. Create a CodeCommit repo and add it as a remote
 

@@ -144,13 +144,14 @@ class Create:
         for key, value in self._get_directory_service_settings().items():
             # Only tls_certificate_secret_arn is optional. Update only if value present.
             if key == "directoryservice.tls_certificate_secret_arn":
-                cmd = f"if [ -n {value} ];"
-                cmd += f"{EXE} config set Key={key},Type={type(value).__name__},Value={value} --force {self._get_suffix()};"
-                cmd += "fi"
+                cmd = f'if [ -n "{value}" ]; then'
+                cmd += f" {EXE} config set Key={key},Type={type(value).__name__},Value={value} --force {self._get_suffix()};"
+                cmd += "fi "
+                config_update_commands.append(cmd)
                 continue
 
             config_update_commands.append(
-                f"{EXE} config set Key={key},Type={type(value).__name__},Value={value} --force {self._get_suffix()}"
+                f"{EXE} config set Key={key},Type={type(value).__name__},Value='{value}' --force {self._get_suffix()}"
             )
         config_update_commands.append(
             f"{EXE} config set Key=directoryservice.root_credentials_provided,Type=bool,Value=True --force {self._get_suffix()}"
@@ -217,6 +218,10 @@ class Create:
             "directoryservice.sssd.ldap_id_mapping": self.params.get_str(
                 DirectoryServiceKey.ENABLE_LDAP_ID_MAPPING
             ),
+            "directoryservice.disable_ad_join": self.params.get_str(
+                DirectoryServiceKey.DISABLE_AD_JOIN
+            ),
+            "directoryservice.root_user_dn_secret_arn": self.params.root_user_dn_secret_arn,
         }
 
     def _get_custom_domain_settings(self) -> dict[str, Any]:
@@ -259,6 +264,7 @@ client_ip:
 - {self.params.get_str(CommonKey.CLIENT_IP)}
 prefix_list_ids:
 - {self.params.get_str(CommonKey.CLIENT_PREFIX_LIST)}
+permission_boundary_arn: {self.params.get_str(CommonKey.IAM_PERMISSION_BOUNDARY)}
 alb_public: {self.params.get_str(CommonKey.IS_LOAD_BALANCER_INTERNET_FACING)}
 use_vpc_endpoints: true
 directory_service_provider: activedirectory
@@ -278,23 +284,20 @@ existing_resources:
 - shared-storage:home
 load_balancer_subnet_ids:
 $(echo "{
-    aws_cdk.Stack.of(
-        self.params.get(CommonKey.LOAD_BALANCER_SUBNETS).stack
-    ).to_json_string(
-        self.params.get(CommonKey.LOAD_BALANCER_SUBNETS).value_as_list)
-}" | tr -d '[]" ' | tr ',' '\n' | sed 's/^/- /')
+        self.params.load_balancer_subnets_string
+}" | tr -d '" ' | tr ',' '\n' | sed 's/^/- /')
 infrastructure_host_subnet_ids:
 $(echo "{
-    aws_cdk.Stack.of(self.params.get(CommonKey.INFRASTRUCTURE_HOST_SUBNETS).stack).to_json_string(self.params.get(CommonKey.INFRASTRUCTURE_HOST_SUBNETS).value_as_list)
-}" | tr -d '[]" ' | tr ',' '\n' | sed 's/^/- /')
+    self.params.infrastructure_host_subnets_string
+}" | tr -d '" ' | tr ',' '\n' | sed 's/^/- /')
 dcv_session_private_subnet_ids:
 $(echo "{
-    aws_cdk.Stack.of(self.params.get(CommonKey.VDI_SUBNETS).stack).to_json_string(self.params.get(CommonKey.VDI_SUBNETS).value_as_list)
-}" | tr -d '[]" ' | tr ',' '\n' | sed 's/^/- /')
+    self.params.dcv_session_private_subnets_string
+}" | tr -d '" ' | tr ',' '\n' | sed 's/^/- /')
 enabled_modules:
 - metrics
 - virtual-desktop-controller
-- bastion-host
+$(echo {self.params.get_str(CommonKey.IS_LOAD_BALANCER_INTERNET_FACING)}- bastion-host | grep true | sed 's:true::')
 metrics_provider: cloudwatch
 base_os: amazonlinux2
 instance_type: m5.large

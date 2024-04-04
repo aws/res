@@ -27,8 +27,6 @@ Statement:
       - cloudformation:GetTemplate
       - cloudformation:UpdateTerminationProtection
       - cloudwatch:PutMetricAlarm
-      - ds:CreateMicrosoftAD
-      - ds:DescribeDirectories
       - ec2:DescribeImages
       - ec2:AllocateAddress
       - ec2:AssociateAddress
@@ -107,6 +105,7 @@ Statement:
       - iam:PassRole
       - iam:PutRolePolicy
       - iam:TagRole
+      - kinesis:CreateStream
       - kms:CreateGrant
       - kms:Decrypt
       - kms:DescribeKey

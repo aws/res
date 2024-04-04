@@ -27,6 +27,7 @@ class BiStack(Stack):
                 "ServiceAccountPassword": str(parameters.root_password),
                 "ClientIpCidr": str(parameters.client_ip),
                 "ClientPrefixList": str(parameters.client_prefix_list),
+                "RetainStorageResources": str(parameters.retain_storage_resources),
             },
             template_url=template_url,
         )
@@ -115,9 +116,11 @@ class BiStack(Stack):
             self,
             id=str(parameters.acm_certificate_arn_for_web_ui),
             parameter_name=str(parameters.acm_certificate_arn_for_web_ui),
-            string_value=self.bi_stack.get_att(
-                "Outputs.ACMCertificateARNforWebApp"
-            ).to_string(),
+            string_value=(
+                self.bi_stack.get_att("Outputs.ACMCertificateARNforWebApp").to_string()
+                if parameters.portal_domain_name
+                else '""'
+            ),
         )
 
         self.acm_certificate_arn_for_web_ui.node.add_dependency(self.bi_stack)
@@ -126,9 +129,11 @@ class BiStack(Stack):
             self,
             id=str(parameters.private_key_secret_arn_for_vdi_domain_name),
             parameter_name=str(parameters.private_key_secret_arn_for_vdi_domain_name),
-            string_value=self.bi_stack.get_att(
-                "Outputs.PrivateKeySecretArn"
-            ).to_string(),
+            string_value=(
+                self.bi_stack.get_att("Outputs.PrivateKeySecretArn").to_string()
+                if parameters.portal_domain_name
+                else '""'
+            ),
         )
 
         self.private_key_secret_arn_for_vdi_domain_name.node.add_dependency(
@@ -139,9 +144,11 @@ class BiStack(Stack):
             self,
             id=str(parameters.certificate_secret_arn_for_vdi_domain_name),
             parameter_name=str(parameters.certificate_secret_arn_for_vdi_domain_name),
-            string_value=self.bi_stack.get_att(
-                "Outputs.CertificateSecretArn"
-            ).to_string(),
+            string_value=(
+                self.bi_stack.get_att("Outputs.CertificateSecretArn").to_string()
+                if parameters.portal_domain_name
+                else '""'
+            ),
         )
 
         self.certificate_secret_arn_for_vdi_domain_name.node.add_dependency(
@@ -158,6 +165,17 @@ class BiStack(Stack):
         )
 
         self.root_username.node.add_dependency(self.bi_stack)
+
+        self.root_user_dn = aws_ssm.StringParameter(
+            self,
+            id=str(parameters.root_user_dn),
+            parameter_name=str(parameters.root_user_dn),
+            string_value=self.bi_stack.get_att(
+                "Outputs.ServiceAccountUserDN"
+            ).to_string(),
+        )
+
+        self.root_user_dn.node.add_dependency(self.bi_stack)
 
         self.users_ou = aws_ssm.StringParameter(
             self,

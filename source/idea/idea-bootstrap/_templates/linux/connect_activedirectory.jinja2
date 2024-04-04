@@ -1,0 +1,120 @@
+# Begin: Connect ActiveDirectory
+
+RES_CLUSTER_HOME_DIR="{{ context.config.get_string('shared-storage.home.mount_dir', required=True) }}"
+AD_DOMAIN_NAME="{{ context.config.get_string('directoryservice.name', required=True) | lower}}"
+LDAP_CONNECTION_URI="{{ context.config.get_string('directoryservice.ldap_connection_uri', required=True) }}"
+
+AD_SUDOERS_GROUP_NAME="{{ context.config.get_string('directoryservice.sudoers.group_name', required=True) }}"
+AD_SUDOERS_GROUP_NAME_ESCAPED="{{ context.config.get_string('directoryservice.sudoers.group_name', required=True).replace(' ', '\ ') }}"
+
+SSSD_LDAP_ID_MAPPING="{{ context.config.get_bool('directoryservice.sssd.ldap_id_mapping', default=True) | lower }}"
+AD_TLS_CERTIFICATE_SECRET_ARN="{{context.config.get_string('directoryservice.tls_certificate_secret_arn', default='')}}"
+AD_LDAP_BASE="{{context.config.get_string('directoryservice.ldap_base', required=True)}}"
+
+ROOT_USER_DN_SECRET_ARN="{{ context.config.get_string('directoryservice.root_user_dn_secret_arn', required=True) }}"
+ROOT_USER_DN=$(get_secret "${ROOT_USER_DN_SECRET_ARN}")
+
+ROOT_USERNAME_SECRET_ARN="{{ context.config.get_string('directoryservice.root_username_secret_arn', required=True) }}"
+AD_USER_USERNAME=$(get_secret "${ROOT_USERNAME_SECRET_ARN}")
+
+set +x
+ROOT_PASSWORD_SECRET_ARN="{{ context.config.get_string('directoryservice.root_password_secret_arn', required=True) }}"
+AD_USER_PASSWORD=$(get_secret "${ROOT_PASSWORD_SECRET_ARN}")
+set -x
+
+if [[ ${IDEA_MODULE_NAME} == "cluster-manager" ]]; then
+  enumerate_value=True
+else
+  enumerate_value=False
+fi
+
+if [[ -f /etc/sssd/sssd.conf ]]; then
+  cp /etc/sssd/sssd.conf /etc/sssd/sssd.conf.orig
+fi
+
+echo -e "[sssd]
+domains = ${AD_DOMAIN_NAME}
+config_file_version = 2
+services = nss, pam
+
+[nss]
+homedir_substring = /home/
+
+[pam]
+
+[autofs]
+
+[ssh]
+
+[secrets]
+
+[domain/${AD_DOMAIN_NAME}]
+debug_level = 9
+id_provider = ldap
+auth_provider = ldap
+sudo_provider = none
+
+ldap_uri = ${LDAP_CONNECTION_URI}
+
+ldap_search_base = ${AD_LDAP_BASE}
+ldap_schema = ad
+use_fully_qualified_names = false
+
+ldap_user_object_class = user
+ldap_user_name = sAMAccountName
+ldap_user_uid_number = uidNumber
+ldap_user_gid_number = gidNumber
+ldap_user_home_directory = unixHomeDirectory
+ldap_user_shell = loginShell
+ldap_user_uuid = objectGUID
+
+ldap_group_object_class = group
+ldap_group_name = sAMAccountName
+ldap_group_gid_number = gidNumber
+ldap_group_member = member
+ldap_group_uuid = objectGUID
+
+ldap_default_bind_dn = ${ROOT_USER_DN}
+ldap_default_authtok_type = password
+ldap_default_authtok = generated_password
+
+enumerate = "${enumerate_value}"
+ldap_id_mapping = ${SSSD_LDAP_ID_MAPPING}
+
+cache_credentials = true
+
+default_shell = /bin/bash
+fallback_homedir = ${RES_CLUSTER_HOME_DIR}/%u
+
+" > /etc/sssd/sssd.conf
+
+chmod 600 /etc/sssd/sssd.conf
+
+# Place obfuscated password in the sssd.conf file.
+# Executing the sss_obfuscate command removes the ldap_auth_disable_tls_never_use_in_production setting in sssd
+# thus, sssd fails to communicate to AD
+/usr/bin/expect <<EOD
+set timeout -1
+eval spawn sudo sss_obfuscate --domain ${AD_DOMAIN_NAME}
+match_max 100
+expect -exact "Enter password: "
+send -- "${AD_USER_PASSWORD}\r"
+expect -exact "\r
+Re-enter password: "
+send -- "${AD_USER_PASSWORD}\r"
+expect eof
+EOD
+
+if [[ "${AD_TLS_CERTIFICATE_SECRET_ARN}" == '' ]]; then
+  # Adding the ldap_auth_disable_tls_never_use_in_production setting back into the file under sssd/domain section
+  echo -e "
+ldap_auth_disable_tls_never_use_in_production = true
+" >> /etc/sssd/sssd.conf
+fi
+
+systemctl enable sssd
+systemctl restart sssd
+
+authconfig --enablemkhomedir --enablesssdauth --enablesssd --updateall
+
+# End: Connect ActiveDirectory

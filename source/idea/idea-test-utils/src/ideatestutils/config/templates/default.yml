@@ -280,6 +280,7 @@ global-settings:
       sssd:
         # SSSD and dependencies
         - adcli
+        - authconfig
         - avahi-libs
         - bind-libs
         - bind-libs-lite
@@ -288,6 +289,7 @@ global-settings:
         - c-ares
         - cups-libs
         - cyrus-sasl-gssapi
+        - expect
         - http-parser
         - krb5-workstation
         - libdhash
@@ -321,6 +323,7 @@ global-settings:
         - sssd-krb5-common
         - sssd-ldap
         - sssd-proxy
+        - sssd-tools
       system:
         # Default packages installed on all Linux systems
         - chrony

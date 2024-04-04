@@ -16,6 +16,8 @@ __all__ = (
     'GetModuleSettingsRequest',
     'UpdateModuleSettingsResult',
     'UpdateModuleSettingsRequest',
+    'UpdateQuicConfigRequest',
+    'UpdateQuicConfigResult',
     'ListClusterHostsRequest',
     'ListClusterHostsResult',
     'DescribeInstanceTypesRequest',
@@ -86,6 +88,15 @@ class GetAllowedSessionsPerUserResult(SocaPayload):
     allowed_sessions_per_user: Optional[int]
 
 
+# ClusterSettings.UpdateQuic
+class UpdateQuicConfigRequest(SocaListingPayload):
+    enable: Optional[bool]
+
+
+class UpdateQuicConfigResult(SocaPayload):
+    pass
+
+
 OPEN_API_SPEC_ENTRIES_CLUSTER_SETTINGS = [
     IdeaOpenAPISpecEntry(
         namespace='ClusterSettings.ListClusterModules',
@@ -126,6 +137,13 @@ OPEN_API_SPEC_ENTRIES_CLUSTER_SETTINGS = [
         namespace='ClusterSettings.GetAllowedSessionsPerUser',
         request=GetAllowedSessionsPerUserRequest,
         result=GetAllowedSessionsPerUserResult,
+        is_listing=False,
+        is_public=False
+    ),
+    IdeaOpenAPISpecEntry(
+        namespace='ClusterSettings.UpdateQuicConfig',
+        request=UpdateQuicConfigRequest,
+        result=UpdateQuicConfigResult,
         is_listing=False,
         is_public=False
     )

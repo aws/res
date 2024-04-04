@@ -19,7 +19,8 @@ from ideasdk.utils import Utils, GroupNameHelper
 import constructs
 import aws_cdk as cdk
 from aws_cdk import (
-    aws_cognito as cognito
+    aws_cognito as cognito,
+    aws_iam as iam
 )
 
 from typing import Optional, Dict, List
@@ -82,6 +83,11 @@ class IdeaBaseStack(SocaBaseConstruct):
                 file_assets_bucket_name=cluster_s3_bucket
             )
         )
+        
+        permission_boundary_arn = self.context.config().get_string('cluster.iam.permission_boundary_arn')
+        if (permission_boundary_arn):
+            permission_boundary_policy = iam.ManagedPolicy.from_managed_policy_arn(self.stack, 'PermissionBoundaryPolicy', permission_boundary_arn)
+            iam.PermissionsBoundary.of(self.stack).apply(permission_boundary_policy)
 
     def get_target_group_name(self, identifier: str) -> str:
         # target group name cannot be more than 32 characters

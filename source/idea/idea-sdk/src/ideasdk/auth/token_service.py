@@ -298,20 +298,20 @@ class TokenService(TokenServiceProtocol):
             raise exceptions.unauthorized_access(f'Invalid Token - {e}')
 
 
-    
+
     def get_email_from_token_username(self, token_username: str) -> Optional[str]:
         """
-            For a user with 
-            1. email = a@email.com
+            For a user with
+            1. email = a@example.org
             2. SSO enabled with identity-provider-name = idp
-            Cognito creates a user as idp_a@gmail.com and that name is passed as username in access token. 
-            This method  gets the identity-provider-name prefix from database and removes that from the username
+            Cognito creates a user as idp_a@example.org and that name is passed as username in access token.
+            This method gets the identity-provider-name prefix from database and removes that from the username
             to get the user email back.
-            
+
             :param token_username
             :return email
         """
-        
+
         if self._context.config().get_bool('identity-provider.cognito.sso_enabled', required=True):
             identity_provider_name = self._context.config().get_string('identity-provider.cognito.sso_idp_provider_name', required=True)
             identity_provider_prefix = (identity_provider_name + "_").lower()

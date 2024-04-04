@@ -47,11 +47,28 @@ check_and_install_cdk () {
   popd
 }
 
+download_lambda_dependencies () {
+  pushd ${SCRIPT_DIR}/resources/lambda_functions
+    for fuction_dir in `ls -d */`;
+    do
+      echo "Installing dependencies for $fuction_dir"
+      pushd $fuction_dir
+        if [[ -f "requirements.txt" ]]; then
+          echo "Found requirements.txt"
+          mkdir dependencies
+          pip install -r requirements.txt --platform manylinux2014_x86_64 --only-binary=:all: --target ./dependencies --upgrade
+        fi
+      popd
+    done
+  popd
+}
+
 function install () {
   setup_deploy_dir
   check_and_install_cdk
   pip install --default-timeout=100 -r ${SCRIPT_DIR}/requirements.txt
   pip install $(ls ${SCRIPT_DIR}/*-lib.tar.gz)
+  download_lambda_dependencies
   local APP_DIR="${IDEA_APP_DEPLOY_DIR}/idea-administrator"
   mkdir -p "${APP_DIR}"
   mv ${SCRIPT_DIR}/resources ${APP_DIR}

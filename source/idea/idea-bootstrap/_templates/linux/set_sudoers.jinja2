@@ -1,0 +1,46 @@
+RES_USER_TABLE="${IDEA_CLUSTER_NAME}.accounts.users"
+AD_SUDOERS_GROUP_NAME="{{ context.config.get_string('directoryservice.sudoers.group_name', required=True) }}"
+AD_SUDOERS_GROUP_NAME_ESCAPED="{{ context.config.get_string('directoryservice.sudoers.group_name', required=True).replace(' ', '\ ') }}"
+
+grep -q "## Add the \"${AD_SUDOERS_GROUP_NAME}\"" /etc/sudoers
+if [[ "$?" != "0" ]]; then
+  echo -e "
+## Add the \"${AD_SUDOERS_GROUP_NAME}\" group from the ${AD_DOMAIN_NAME} domain.
+%${AD_SUDOERS_GROUP_NAME_ESCAPED} ALL=(ALL:ALL) ALL
+">> /etc/sudoers
+fi
+
+function add_admins_to_sudoers () {
+  if [[ ! -f "/root/.convert_from_dynamodb_object.jq" ]]; then
+    create_jq_ddb_filter
+  fi
+
+  admins=$($AWS dynamodb query \
+       --table-name ${RES_USER_TABLE} \
+       --index-name role-index \
+       --key-condition-expression "#R=:r1" --expression-attribute-names '{"#R":"role"}' \
+       --expression-attribute-values '{":r1":{"S":"admin"}}' \
+       --region "${AWS_REGION}" | jq -f /root/.convert_from_dynamodb_object.jq)
+
+  for row in $(echo "${admins}" | jq -r '.Items[] | @base64'); do
+    is_part_of_sudoer_group=$(echo $row | base64 --decode | jq --arg sudoers_group "$AD_SUDOERS_GROUP_NAME" \
+    -r '.additional_groups | any(. == $sudoers_group)')
+    if [ "$is_part_of_sudoer_group" = false ] ; then
+        admin=$(echo $row | base64 --decode | jq -r '.username')
+        echo "${admin} ALL=(ALL:ALL) ALL">> /etc/sudoers
+    fi
+  done
+}
+
+grep -q "## Add RES admins to sudoers" /etc/sudoers
+if [[ "$?" != "0" ]]; then
+  echo "## Add RES admins to sudoers" >> /etc/sudoers
+  add_admins_to_sudoers
+fi
+
+# note: sss is removed for nsswitch to compared to openldap, to avoid mail spams.
+grep -q "sudoers: files" /etc/nsswitch.conf
+if [[ "$?" != "0" ]]; then
+  echo "sudoers: files" >> /etc/nsswitch.conf
+fi
+

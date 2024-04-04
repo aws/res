@@ -40,6 +40,7 @@ from ideasdk.api import (
     ApiInvocationContext,
     BaseAPI
 )
+from ideasdk.context import ArnBuilder
 from ideasdk.utils import Utils
 from ideavirtualdesktopcontroller.app.events.events_utils import EventsUtils
 from ideavirtualdesktopcontroller.app.permission_profiles.virtual_desktop_permission_profile_db import VirtualDesktopPermissionProfileDB
@@ -96,6 +97,7 @@ class VirtualDesktopAPI(BaseAPI):
         )
 
         self.DEFAULT_ROOT_VOL_IOPS = '100'
+        self.arn_builder = ArnBuilder(self.context.config())
 
     def get_session_if_owner(self, username: str, idea_session_id: str) -> Optional[VirtualDesktopSession]:
         return self.session_db.get_from_db(idea_session_id=idea_session_id, idea_session_owner=username)
@@ -509,8 +511,11 @@ class VirtualDesktopAPI(BaseAPI):
             session.server.root_volume_iops = self.DEFAULT_ROOT_VOL_IOPS
 
         if Utils.is_empty(session.server.instance_profile_arn):
-            session.server.instance_profile_arn = self.context.config().get_string(
-                'virtual-desktop-controller.dcv_host_instance_profile_arn', required=True)
+            if Utils.is_empty(session.project.policy_arns):
+                session.server.instance_profile_arn = self.context.config().get_string(
+                    'virtual-desktop-controller.dcv_host_instance_profile_arn', required=True)
+            else:
+                session.server.instance_profile_arn = self.arn_builder.get_vdi_iam_instance_profile_arn(project_name=session.project.name)
 
             # self.default_instance_profile_arn = self.context.app_config.virtual_desktop_dcv_host_profile_arn
             # self.default_security_group = self.context.app_config.virtual_desktop_dcv_host_security_group_id
@@ -526,6 +531,8 @@ class VirtualDesktopAPI(BaseAPI):
         security_group_ids.add(self.context.config().get_string('virtual-desktop-controller.dcv_host_security_group_id', required=True))
         additional_security_groups = self.context.config().get_list('virtual-desktop-controller.dcv_session.additional_security_groups', default=[])
         security_group_ids.update(additional_security_groups)
+        if Utils.is_not_empty(session.project.security_groups):
+            security_group_ids.update(session.project.security_groups)
         session.server.security_groups = list(security_group_ids)
         session.idea_session_id = Utils.uuid()
 

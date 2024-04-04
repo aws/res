@@ -22,7 +22,7 @@ class SharedStorageParameters(Base):
             ),
             allowed_pattern="fs-[0-9a-f]{17}",
             constraint_description="SharedHomeFileSystemId must begin with 'fs-', only contain letters (a-f) or numbers(0-9) "
-            "and must be 17 characters in length",
+            "and must be 20 characters in length",
         )
     )
 

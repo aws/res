@@ -9,7 +9,6 @@
 #  OR CONDITIONS OF ANY KIND, express or implied. See the License for the specific language governing permissions
 #  and limitations under the License.
 
-
 from ideadatamodel import exceptions, errorcodes, constants
 from ideadatamodel.projects import (
     CreateProjectRequest,
@@ -28,9 +27,13 @@ from ideadatamodel.projects import (
     DisableProjectResult,
     GetUserProjectsRequest,
     GetUserProjectsResult,
+    ListSecurityGroupsResult,
+    ListPoliciesResult
 )
+from ideasdk.aws import AwsResources
 from ideasdk.utils import Utils
-from ideasdk.context import SocaContext
+from ideasdk.launch_configurations import LaunchScriptsHelper, LaunchRoleHelper
+from ideasdk.context import SocaContext, ArnBuilder
 from ideasdk.client.vdc_client import AbstractVirtualDesktopControllerClient
 
 from ideaclustermanager.app.projects.db.projects_dao import ProjectsDAO
@@ -38,7 +41,7 @@ from ideaclustermanager.app.projects.db.user_projects_dao import UserProjectsDAO
 from ideaclustermanager.app.accounts.accounts_service import AccountsService
 from ideaclustermanager.app.tasks.task_manager import TaskManager
 
-from typing import List
+from typing import List, Set
 
 
 class ProjectsService:
@@ -49,6 +52,7 @@ class ProjectsService:
         self.task_manager = task_manager
         self.vdc_client = vdc_client
         self.logger = context.logger('projects')
+        self.arn_builder = ArnBuilder(self.context.config())
 
         self.projects_dao = ProjectsDAO(context)
         self.projects_dao.initialize()
@@ -102,6 +106,29 @@ class ProjectsService:
 
         # ensure project is always disabled during creation
         project.enabled = False
+
+        # Validate scripts
+        scripts = project.scripts
+        if scripts is not None:
+            if not LaunchScriptsHelper.validate_scripts(scripts):
+                raise exceptions.invalid_params('Script location is incorrect. Script must be https://, s3://, or file://')
+
+        # Validate security groups and ensure security group is within VPC
+        if project.security_groups:
+            vpc_id = self.context.config().get_string('cluster.network.vpc_id')
+            for security_group_id in project.security_groups:
+                if not self.context.aws_util().is_security_group_available(security_group_id=security_group_id,vpc_id=vpc_id):
+                    self.logger.error(f'{security_group_id} is not a valid security group that can be attached')
+                    raise exceptions.invalid_params('Security group is not valid')
+
+        # Create VDI role only when policies are provided
+        policy_arns = Utils.get_as_string_list(project.policy_arns, [])
+        if policy_arns:
+            for policy_arn in policy_arns:
+                if not self.context.aws_util().is_policy_valid(policy_arn):
+                    self.logger.error(f'{policy_arn} is not a valid policy arn that can be attached')
+                    raise exceptions.invalid_params('Policy is not valid')
+            self._create_vdi_role_and_instance_profile(project.name, set(policy_arns))
 
         db_project = self.projects_dao.convert_to_db(project)
         db_created_project = self.projects_dao.create_project(db_project)
@@ -241,7 +268,6 @@ class ProjectsService:
                 for ldap_group_name in groups_added:
                     # check if group exists
                     self.accounts_service.get_group(ldap_group_name)
-                    
         users_added = None
         users_removed = None
         if project.users:
@@ -250,18 +276,41 @@ class ProjectsService:
 
             users_added = updated_users - existing_users
             users_removed = existing_users - updated_users
-            
             if len(users_added) > 0:
                 for username in users_added:
                     # check if user exists
                     self.accounts_service.get_user(username)
-            
         # none values will be skipped by db update. ensure enabled/disabled cannot be called via update project.
         project.enabled = None
 
+        # Validate scripts
+        scripts = project.scripts
+        if scripts is not None:
+            if not LaunchScriptsHelper.validate_scripts(scripts):
+                raise exceptions.invalid_params('Script location is incorrect. Script must be https://, s3://, or file://')
+
+        # Validate security groups and ensure security group is within VPC
+        if project.security_groups:
+            vpc_id = self.context.config().get_string('cluster.network.vpc_id')
+            for security_group_id in project.security_groups:
+                if not self.context.aws_util().is_security_group_available(security_group_id=security_group_id,vpc_id=vpc_id):
+                    self.logger.error(f'{security_group_id} is not a valid security group that can be attached')
+                    raise exceptions.invalid_params('Security group is not valid')
+
+        # Update VDI role if new policies differ from existing policies
+        policy_arns = Utils.get_as_string_list(project.policy_arns, [])
+        existing_policies = Utils.get_value_as_list('policy_arns', existing, [])
+        policies_to_detach = set(existing_policies) - set(policy_arns)
+        policies_to_attach = set(policy_arns) - set(existing_policies)
+        if policies_to_detach or policies_to_attach:
+            for policy_arn in policy_arns:
+                if not self.context.aws_util().is_policy_valid(policy_arn=policy_arn):
+                    self.logger.error(f'{policy_arn} is not a valid policy arn that can be attached')
+                    raise exceptions.invalid_params('Policy is not valid')
+            self._update_vdi_role(project_name=project.name, policies_to_detach=policies_to_detach, policies_to_attach=policies_to_attach)
+
         db_updated = self.projects_dao.update_project(self.projects_dao.convert_to_db(project))
         updated_project = self.projects_dao.convert_from_db(db_updated)
-
         if updated_project.enabled:
             if groups_added or groups_removed or users_added or users_removed:
                 self.task_manager.send(
@@ -436,3 +485,88 @@ class ProjectsService:
         return GetUserProjectsResult(
             projects=result
         )
+
+    def list_security_groups(self) -> ListSecurityGroupsResult:
+        vpc_id = self.context.config().get_string('cluster.network.vpc_id')
+        security_groups = self.context.aws_util().list_available_security_groups(vpc_id=vpc_id)
+        return ListSecurityGroupsResult(security_groups=security_groups)
+
+    def list_policies(self) -> ListPoliciesResult:
+        policies = self.context.aws_util().list_available_host_policies()
+        return ListPoliciesResult(policies=policies)
+
+    def _create_vdi_role_and_instance_profile(self, project_name: str , policy_arns: Set[str], ) -> bool:
+        self.logger.debug(f'Creating new VDI role for project {project_name}')
+        vdi_role_name = LaunchRoleHelper.get_vdi_role_name(cluster_name=self.context.cluster_name(), project_name=project_name)
+        instance_profile_name = vdi_role_name
+        is_vdi_role_created = False
+        is_vdi_instance_profile_created = False
+        policies_added = []
+        try:
+            is_vdi_role_created = self.context.aws_util().create_vdi_host_role(vdi_role_name)
+            is_vdi_instance_profile_created = self.context.aws_util().create_vdi_instance_profile(instance_profile_name)
+            self.logger.debug(f'Attach custom policies to VDI role {vdi_role_name}')
+            for policy_arn in policy_arns:
+                self.context.aws_util().attach_role_policy(
+                    role_name=vdi_role_name,
+                    policy_arn=policy_arn
+                )
+                policies_added.append(policy_arn)
+            self.logger.debug(f'Attach RES required policies to VDI role {vdi_role_name}')
+            vdi_required_policy_arns = self.arn_builder.dcv_host_required_policy_arns
+            for vdi_required_policy_arn in vdi_required_policy_arns:
+                self.context.aws_util().attach_role_policy(
+                    role_name=vdi_role_name,
+                    policy_arn=vdi_required_policy_arn
+                )
+                policies_added.append(vdi_required_policy_arn)
+            self.context.aws_util().add_role_to_instance_profile(
+                role_name=vdi_role_name, instance_profile_name=instance_profile_name)
+        except Exception as e:
+            # Roll back creation of VDI role and instance profile if any steps fail
+            if policies_added:
+                for policy_arn in policies_added:
+                    self.context.aws_util().detach_role_policy(
+                        role_name=vdi_role_name,
+                        policy_arn=policy_arn
+                    )
+            if is_vdi_role_created:
+                self.context.aws_util().delete_vdi_host_role(vdi_role_name)
+            if is_vdi_instance_profile_created:
+                self.context.aws_util().delete_vdi_instance_profile(instance_profile_name)
+            self.logger.error(f'Create VDI role error {e}')
+            raise exceptions.general_exception("Could not create role with given policies")
+        return True
+
+    def _update_vdi_role(self, project_name, policies_to_detach: Set[str], policies_to_attach: Set[str]) -> bool:
+        vdi_role_name = LaunchRoleHelper.get_vdi_role_name(cluster_name=self.context.cluster_name(), project_name=project_name)
+        if not self.context.aws_util().does_vdi_role_exist(role_name=vdi_role_name):
+            # If role does not exist, there were never any existing policies attached
+            return self._create_vdi_role_and_instance_profile(project_name, policies_to_attach)
+        policies_added = []
+        policies_removed = []
+        try:
+            for policy_arn in policies_to_detach:
+                self.context.aws_util().detach_role_policy(role_name=vdi_role_name, policy_arn=policy_arn)
+                policies_removed.append(policy_arn)
+            for policy_arn in policies_to_attach:
+                self.context.aws_util().attach_role_policy(role_name=vdi_role_name, policy_arn=policy_arn)
+                policies_added.append(policy_arn)
+        except Exception as e:
+            if policies_added:
+                for policy_arn in policies_added:
+                    self.context.aws_util().detach_role_policy(
+                        role_name=vdi_role_name,
+                        policy_arn=policy_arn
+                    )
+            if policies_removed:
+                for policy_arn in policies_removed:
+                    self.context.aws_util().attach_role_policy(
+                        role_name=vdi_role_name,
+                        policy_arn=policy_arn
+                    )
+            self.logger.error(f'Update VDI role error {e}')
+            raise exceptions.general_exception("Could not update role with given policies")
+
+        return True
+

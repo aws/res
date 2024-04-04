@@ -48,6 +48,26 @@ def _update_requirement(c: Context, name: str, upgrade: bool = False, package_na
     idea.console.success(f'Requirements file updated: {out_file_abs_path}')
 
 
+@task
+def sync_env(c, package_group_name='dev'):
+    # type: (Context, str) -> None
+    """
+    Update current active python environment using pip-sync to keep it sync with the given requirement file.
+    """
+
+    if '.' in package_group_name:
+        package_group_name = package_group_name[:package_group_name.rfind('.')]
+
+    txt_file = f'{package_group_name}.txt'
+    txt_file_abs_path = os.path.join(idea.props.project_root_dir, 'requirements', txt_file)
+
+    if not os.path.isfile(txt_file_abs_path):
+        idea.console.error(f'Requirements .txt file not found: {txt_file_abs_path}')
+        sys.exit(1)
+
+    c.run(f'pip-sync requirements/{package_group_name}.txt', echo=True)
+
+
 @task(optional=['name'])
 def update(c, name=None, upgrade=False, package_name=None):
     # type: (Context, Optional[str], bool, str) -> None
@@ -60,10 +80,10 @@ def update(c, name=None, upgrade=False, package_name=None):
 
     for name in ('dev',
                  'doc',
+                 'lint',
+                 'build',
                  'tests',
-                 'idea-dev-lambda',
                  'idea-administrator',
-                 # 'idea-scheduler',
                  'idea-cluster-manager',
                  'idea-virtual-desktop-controller'):
         _update_requirement(c, name, upgrade, package_name)

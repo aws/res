@@ -8,8 +8,7 @@
 #  or in the 'license' file accompanying this file. This file is distributed on an 'AS IS' BASIS, WITHOUT WARRANTIES
 #  OR CONDITIONS OF ANY KIND, express or implied. See the License for the specific language governing permissions
 #  and limitations under the License.
-
-from ideasdk.utils import Utils
+from ideasdk.launch_configurations import LaunchRoleHelper
 from ideasdk.config.cluster_config import ClusterConfig
 from ideadatamodel import constants
 
@@ -91,6 +90,18 @@ class ArnBuilder:
         )
 
     @property
+    def get_security_group_arn(self) -> str:
+        return self.get_arn(
+            service='ec2',
+            resource='security-group/*')
+
+    @property
+    def get_security_group_rule_arn(self) -> str:
+        return self.get_arn(
+            service='ec2',
+            resource='security-group-rule/*')
+
+    @property
     def ec2_common_arns(self) -> List[str]:
         return [
             self.get_arn('ec2', 'subnet/*', aws_account_id='*', aws_region='*'),
@@ -134,6 +145,23 @@ class ArnBuilder:
         )
 
     @property
+    def nlb_listener_arn(self) -> str:
+        return self.get_arn(
+            service='elasticloadbalancing',
+            resource=f'listener/net/{self.config.get_string("cluster.cluster_name")}*/*/*'
+        )
+
+    @property
+    def get_target_group_arn(self) -> str:
+        return self.get_arn(service='elasticloadbalancing',
+                            resource=f'targetgroup/{self.config.cluster_name}*/*')
+
+    @property
+    def get_loadbalancer_arn(self) -> str:
+        return self.get_arn(service='elasticloadbalancing',
+                            resource=f'loadbalancer/net/{self.config.cluster_name}*/*')
+
+    @property
     def target_group_arn(self) -> str:
         return self.get_arn(
             service='elasticloadbalancing',
@@ -173,6 +201,17 @@ class ArnBuilder:
             self.get_arn(service='s3', aws_region='', aws_account_id='', resource='dcv-license.*/*'),
             self.get_arn(service='s3', aws_region='', aws_account_id='', resource='dcv-license.*')
         ]
+
+    @property
+    def dcv_host_required_policy_arns(self) -> List[str]:
+        required_policies = [
+            'amazon_ssm_managed_instance_core_arn',
+            'cloud_watch_agent_server_arn',
+            'dcv_host_role_managed_policy_arn'
+        ]
+        required_policy_arns = [self.config.get_string(f'cluster.iam.policies.{policy}') for policy in required_policies]
+
+        return required_policy_arns
 
     @property
     def s3_bucket_arns(self) -> List[str]:
@@ -217,6 +256,11 @@ class ArnBuilder:
                             resource=f'table/{self.config.get_string("cluster.cluster_name")}.*/export/*',
                             aws_region=self.config.get_string("cluster.aws.region"))
 
+    def get_ddb_table_stream_arn(self, table_name_suffix: str) -> str:
+        return self.get_arn(service='kinesis',
+                            resource=f'stream/{self.config.get_string("cluster.cluster_name")}.{table_name_suffix}-kinesis-stream',
+                            aws_region=self.config.get_string("cluster.aws.region"))
+
     def get_ad_automation_ddb_table_arn(self) -> str:
         return self.get_ddb_table_arn('ad-automation')
 
@@ -241,12 +285,23 @@ class ArnBuilder:
 
     def get_route53_hostedzone_arn(self) -> str:
         return f'arn:{self.config.get_string("cluster.aws.partition", required=True)}:route53:::hostedzone/*'
-    
+
     def get_iam_arn(self, role_name_suffix: str) -> str:
         return self.get_arn(service='iam',
                             resource=f'role/{self.config.get_string("cluster.cluster_name")}-{role_name_suffix}-{self.config.get_string("cluster.aws.region")}',
                             aws_region='')
 
+    def get_vdi_iam_role_arn(self, project_name:str) -> str:
+        return self.get_arn(service = 'iam',
+                            aws_region='',
+                            resource= f'role/{LaunchRoleHelper.get_vdi_role_path( cluster_name=self.config.get_string("cluster.cluster_name"), region=self.config.get_string("cluster.aws.region"))}/{LaunchRoleHelper.get_vdi_role_name(self.config.get_string("cluster.cluster_name"),project_name)}'
+                            )
+
+    def get_vdi_iam_instance_profile_arn(self, project_name:str) -> str:
+        return self.get_arn(service = 'iam',
+                            aws_region='',
+                            resource= f'instance-profile/{LaunchRoleHelper.get_vdi_instance_profile_path( cluster_name=self.config.get_string("cluster.cluster_name"), region=self.config.get_string("cluster.aws.region"))}/{LaunchRoleHelper.get_vdi_instance_profile_name(self.config.get_string("cluster.cluster_name"),project_name)}'
+                            )
     @property
     def kms_secretsmanager_key_arn(self) -> str:
         return(self.get_arn(service='kms',

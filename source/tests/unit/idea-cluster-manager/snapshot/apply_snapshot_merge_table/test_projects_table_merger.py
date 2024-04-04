@@ -86,6 +86,8 @@ def test_users_table_merger_merge_existing_project_succeed(
             "title": "test_project_1",
             "updated_on": 0,
             "users": [],
+            "security_groups": [],
+            "policy_arns": [],
         }
     )
     table_data_to_merge = [
@@ -100,6 +102,8 @@ def test_users_table_merger_merge_existing_project_succeed(
             "title": "test_project_1",
             "updated_on": 0,
             "users": [],
+            "security_groups": [],
+            "policy_arns": [],
         },
     ]
 

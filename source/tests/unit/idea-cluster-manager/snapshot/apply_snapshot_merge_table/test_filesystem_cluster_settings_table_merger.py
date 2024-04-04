@@ -43,12 +43,17 @@ DUMMY_DEDUP_ID = "dedup_id"
 
 DUMMY_EFS_1 = "dummy_efs_1"
 DUMMY_ONTAP_1 = "dummy_ontap_1"
+DUMMY_LUSTRE_1 = "dummy_lustre_1"
 
 DUMMY_EFS_1_DEDUP = dummy_unique_resource_id_generator(DUMMY_EFS_1, DUMMY_DEDUP_ID)
 DUMMY_ONTAP_1_DEDUP = dummy_unique_resource_id_generator(DUMMY_ONTAP_1, DUMMY_DEDUP_ID)
+DUMMY_LUSTRE_1_DEDUP = dummy_unique_resource_id_generator(
+    DUMMY_LUSTRE_1, DUMMY_DEDUP_ID
+)
 
 DUMMY_EFS_FILESYSTEM_ID = "fs-efs-1-id"
-DUMMY_ONTAP_FLESYSTEM_ID = "fs-ontap-1-id"
+DUMMY_ONTAP_FILESYSTEM_ID = "fs-ontap-1-id"
+DUMMY_LUSTRE_FILESYSTEM_ID = "fs-lustre-1-id"
 
 DUMMY_PROJECT_NAME = "dummy_project"
 
@@ -74,7 +79,7 @@ dummy_snapshot_filesystem_details_in_dict = {
     },
     DUMMY_ONTAP_1: {
         "fsx_netapp_ontap": {
-            "file_system_id": DUMMY_ONTAP_FLESYSTEM_ID,
+            "file_system_id": DUMMY_ONTAP_FILESYSTEM_ID,
             "removal_policy": "RETAIN",
             "svm": {
                 "iscsi_dns": "iscsi.svm-1234.fs-1234.fsx.us-east-1.amazonaws.com",
@@ -98,6 +103,25 @@ dummy_snapshot_filesystem_details_in_dict = {
         "provider": "fsx_netapp_ontap",
         "scope": ["project"],
         "title": "ontap_1",
+    },
+    DUMMY_LUSTRE_1: {
+        "fsx_lustre": {
+            "cloudwatch_monitoring": "false",
+            "dns": "fs-lustre-1-id.fsx.us-east-1.amazonaws.com",
+            "encrypted": "true",
+            "file_system_id": DUMMY_LUSTRE_FILESYSTEM_ID,
+            "kms_key_id": "arn:aws:kms:us-east-1:1234",
+            "performance_mode": "generalPurpose",
+            "removal_policy": "RETAIN",
+            "throughput_mode": "elastic",
+            "transition_to_ia": "AFTER_30_DAYS",
+        },
+        "mount_dir": "/lustre-1",
+        "mount_options": "lustre defaults,noatime,flock,_netdev 0 0",
+        "projects": [DUMMY_PROJECT_NAME],
+        "provider": "fsx_lustre",
+        "scope": ["project"],
+        "title": "lustre-1",
     },
 }
 
@@ -124,13 +148,20 @@ class FileSystemClusterSettingsTableMergerTest(unittest.TestCase):
         self.monkeypatch.setattr(
             FileSystemsClusterSettingTableMerger,
             "get_list_of_accessible_filesystem_ids",
-            lambda x, y: [DUMMY_EFS_FILESYSTEM_ID, DUMMY_ONTAP_FLESYSTEM_ID],
+            lambda x, y: [
+                DUMMY_EFS_FILESYSTEM_ID,
+                DUMMY_ONTAP_FILESYSTEM_ID,
+                DUMMY_LUSTRE_FILESYSTEM_ID,
+            ],
         )
         self.monkeypatch.setattr(
             self.context.shared_filesystem, "onboard_efs_filesystem", lambda x: None
         )
         self.monkeypatch.setattr(
             self.context.shared_filesystem, "onboard_ontap_filesystem", lambda x: None
+        )
+        self.monkeypatch.setattr(
+            self.context.shared_filesystem, "onboard_lustre_filesystem", lambda x: None
         )
         self.monkeypatch.setattr(
             self.context.shared_filesystem, "add_filesystem_to_project", lambda x: None
@@ -181,7 +212,7 @@ class FileSystemClusterSettingsTableMergerTest(unittest.TestCase):
         )
 
         assert success
-        assert len(record_deltas) == 2
+        assert len(record_deltas) == 3
 
         merged_filesystem_names = []
         for record in record_deltas:
@@ -193,6 +224,9 @@ class FileSystemClusterSettingsTableMergerTest(unittest.TestCase):
 
         assert DUMMY_ONTAP_1 in merged_filesystem_names
         assert DUMMY_ONTAP_1_DEDUP not in merged_filesystem_names
+
+        assert DUMMY_LUSTRE_1 in merged_filesystem_names
+        assert DUMMY_LUSTRE_1_DEDUP not in merged_filesystem_names
 
     def test_filesystem_cluster_settings_table_merger_non_project_scope_filesystem_skipped(
         self,
@@ -271,7 +305,7 @@ class FileSystemClusterSettingsTableMergerTest(unittest.TestCase):
         )
 
         assert success
-        assert len(record_deltas) == 2
+        assert len(record_deltas) == 3
 
         merged_filesystem_names = []
         for record in record_deltas:
@@ -283,6 +317,9 @@ class FileSystemClusterSettingsTableMergerTest(unittest.TestCase):
 
         assert DUMMY_ONTAP_1 in merged_filesystem_names
         assert DUMMY_ONTAP_1_DEDUP not in merged_filesystem_names
+
+        assert DUMMY_LUSTRE_1 in merged_filesystem_names
+        assert DUMMY_LUSTRE_1_DEDUP not in merged_filesystem_names
 
     def test_filesystem_cluster_settings_table_merger_adds_existing_project_to_file_system(
         self,
@@ -540,7 +577,7 @@ class FileSystemClusterSettingsTableMergerTest(unittest.TestCase):
         )
 
         assert success
-        assert len(record_deltas) == 1
+        assert len(record_deltas) == 2
 
     def test_filesystem_cluter_settings_table_merger_skips_not_accessible_filesystem(
         self,
@@ -582,7 +619,7 @@ class FileSystemClusterSettingsTableMergerTest(unittest.TestCase):
         )
 
         assert success
-        assert len(record_deltas) == 1
+        assert len(record_deltas) == 2
 
     def test_filesystem_cluster_settings_table_merger_rollback_succeed(self):
         offboard_filesystem_called = False

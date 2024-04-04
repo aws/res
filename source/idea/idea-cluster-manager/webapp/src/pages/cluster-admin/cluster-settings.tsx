@@ -731,7 +731,7 @@ class ClusterSettings extends Component<ClusterSettingsProps, ClusterSettingsSta
                                                     <KeyValue title="Status" value={
                                                         <div>
                                                             <EnabledDisabledStatusIndicator enabled={isSingleSignOnEnabled()} />
-                                                            <Button iconName="edit" variant="link" disabled={isSingleSignOnEnabled()} onClick={() => this.getEnableSSOConfigForm().showModal()}></Button>
+                                                            <Button iconName="edit" variant="link" onClick={() => this.getEnableSSOConfigForm().showModal()}></Button>
                                                         </div>} type={"react-node"}
                                                     />
                                                     <KeyValue title="SAML Redirect URL" value={`${dot.pick('cognito.domain_url', this.state.identityProvider)}/saml2/idpresponse`} clipboard={true}/>

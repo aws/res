@@ -22,6 +22,7 @@ from ideaadministrator.app.cdk.constructs import (
     SQSQueue,
     SNSTopic,
     Policy,
+    ManagedPolicy,
     LambdaFunction,
     SecurityGroup,
     IdeaNagSuppression,
@@ -465,7 +466,6 @@ class VirtualDesktopControllerStack(IdeaBaseStack):
             scope=self.stack,
             roles=[self.dcv_host_role]
         )
-
         self.dcv_host_security_group = VirtualDesktopBastionAccessSecurityGroup(
             context=self.context,
             name=f'{self.module_id}-dcv-host-security-group',
@@ -872,7 +872,8 @@ class VirtualDesktopControllerStack(IdeaBaseStack):
                 ))
             )],
             role=iam_role,
-            require_imdsv2=True if metadata_http_tokens == "required" else False
+            require_imdsv2=True if metadata_http_tokens == "required" else False,
+            associate_public_ip_address=is_public
         )
 
         auto_scaling_group = asg.AutoScalingGroup(
@@ -1152,12 +1153,14 @@ class VirtualDesktopControllerStack(IdeaBaseStack):
             'controller_sqs_queue_url': self.controller_sqs_queue.queue_url,
             'controller_sqs_queue_arn': self.controller_sqs_queue.queue_arn,
             'external_nlb.load_balancer_dns_name': self.external_nlb.load_balancer_dns_name,
+            'external_nlb_arn': self.external_nlb.load_balancer_arn,
             'controller.asg_name': self.controller_auto_scaling_group.auto_scaling_group_name,
             'controller.asg_arn': self.controller_auto_scaling_group.auto_scaling_group_arn,
             'dcv_broker.asg_name': self.dcv_broker_autoscaling_group.auto_scaling_group_name,
             'dcv_broker.asg_arn': self.dcv_broker_autoscaling_group.auto_scaling_group_arn,
             'dcv_connection_gateway.asg_name': self.dcv_connection_gateway_autoscaling_group.auto_scaling_group_name,
-            'dcv_connection_gateway.asg_arn': self.dcv_connection_gateway_autoscaling_group.auto_scaling_group_arn
+            'dcv_connection_gateway.asg_arn': self.dcv_connection_gateway_autoscaling_group.auto_scaling_group_arn,
+            'gateway_security_group_id': self.dcv_connection_gateway_security_group.security_group_id
         }
 
         if not self.context.config().get_bool('virtual-desktop-controller.dcv_connection_gateway.certificate.provided', default=False):

@@ -11,38 +11,34 @@
 
 import logging
 from functools import cached_property
+from typing import Optional
 
 import boto3
 import pytest
-
-from tests.integration.framework.utils.ad_sync import ad_sync
-from tests.integration.framework.utils.ec2_utils import (
-    all_in_service_instances_from_asgs,
-)
-from tests.integration.framework.utils.test_mode import set_test_mode_for_all_servers
 
 logger = logging.getLogger(__name__)
 
 
 class ResEnvironment:
-    def __init__(self, environment_name: str, region: str):
+    def __init__(
+        self,
+        environment_name: str,
+        region: str,
+        custom_web_app_domain_name: Optional[str] = None,
+    ):
         self._environment_name = environment_name
         self._region = region
+        self._custom_web_app_domain_name = custom_web_app_domain_name
 
     @property
     def region(self) -> str:
         return self._region
 
-    @property
-    def cluster_manager_asg(self) -> str:
-        return f"{self._environment_name}-cluster-manager-asg"
-
-    @property
-    def vdc_controller_asg(self) -> str:
-        return f"{self._environment_name}-vdc-controller-asg"
-
     @cached_property
-    def default_web_app_domain_name(self) -> str:
+    def web_app_domain_name(self) -> str:
+        if self._custom_web_app_domain_name:
+            return self._custom_web_app_domain_name
+
         session = boto3.session.Session(region_name=self._region)
         client = session.client("elbv2")
 
@@ -65,34 +61,16 @@ def res_environment(
     region: str,
 ) -> ResEnvironment:
     """
-    Fixture for setting up the RES test environment
+    Fixture for the RES test environment
     """
-    # Initialize the Res Environment
-    res_environment = ResEnvironment(region=region, environment_name=environment_name)
-
-    cluster_manager_instances = all_in_service_instances_from_asgs(
-        [res_environment.cluster_manager_asg],
-        region,
+    custom_web_app_domain_name = request.config.getoption(
+        "--custom-web-app-domain-name"
     )
-    assert len(cluster_manager_instances) > 0, "Cluster Manager doesn't exist"
-    vdc_instances = all_in_service_instances_from_asgs(
-        [res_environment.vdc_controller_asg],
-        region,
+
+    res_environment = ResEnvironment(
+        region=region,
+        environment_name=environment_name,
+        custom_web_app_domain_name=custom_web_app_domain_name,
     )
-    assert len(vdc_instances) > 0, "Virtual Desktop Controller doesn't exist"
-
-    logger.info("relaunch servers in test mode")
-    server_instances = cluster_manager_instances + vdc_instances
-    set_test_mode_for_all_servers(region, server_instances, True)
-
-    # Sync users and groups from AD so that integ tests can run with these users and groups
-    logger.info("sync users and groups from AD")
-    ad_sync(region, cluster_manager_instances[0])
-
-    def tear_down() -> None:
-        logger.info("disable server test mode")
-        set_test_mode_for_all_servers(region, server_instances, False)
-
-    request.addfinalizer(tear_down)
 
     return res_environment

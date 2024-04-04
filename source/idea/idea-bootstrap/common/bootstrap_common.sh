@@ -1,3 +1,4 @@
+#!/bin/bash
 #  Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 #
 #  Licensed under the Apache License, Version 2.0 (the "License"). You may not use this file except in compliance
@@ -277,4 +278,12 @@ def convert_from_dynamodb_object:
     ;
 convert_from_dynamodb_object
 ' > /root/.convert_from_dynamodb_object.jq
+}
+
+function configure_amazon_ssm_agent () {
+  systemctl status amazon-ssm-agent
+  if [[ "$?" != "0" ]]; then
+    systemctl enable amazon-ssm-agent || true
+    systemctl restart amazon-ssm-agent
+  fi
 }

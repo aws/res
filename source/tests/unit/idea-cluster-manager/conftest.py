@@ -79,6 +79,15 @@ def context(ddb_local):
 
     mock_ec2_client = SocaAnyPayload()
     mock_ec2_client.describe_security_groups = mock_function
+    mock_ec2_client.authorize_security_group_egress = MagicMock(
+        return_value="egress created"
+    )
+    mock_ec2_client.revoke_security_group_egress = MagicMock(
+        return_value="egress deleted"
+    )
+    mock_ec2_client.describe_instances = MagicMock(
+        return_value={"Reservations": [{"Instances": [{"InstanceId": "i-123"}]}]}
+    )
 
     mock_s3_client = SocaAnyPayload()
     mock_s3_client.upload_file = mock_function
@@ -100,6 +109,7 @@ def context(ddb_local):
     mock_cognito_idp.describe_user_pool = mock_function
     mock_cognito_idp.update_identity_provider = MagicMock(return_value="idp updated")
     mock_cognito_idp.create_identity_provider = MagicMock(return_value="idp created")
+    mock_cognito_idp.delete_identity_provider = MagicMock(return_value="idp deleted")
     mock_cognito_idp.update_user_pool_client = MagicMock(
         return_value={
             "UserPoolClient": {"ClientId": "test-id", "ClientSecret": "test-secret"}
@@ -153,10 +163,60 @@ def context(ddb_local):
         return_value={"IdentityProvider": None}
     )
 
+    mock_elbv2 = SocaAnyPayload()
+    mock_elbv2.describe_target_groups = MagicMock(
+        return_value={
+            "TargetGroups": [
+                {
+                    "TargetGroupArn": "target-group-arn",
+                    "TargetGroupName": "target-group-name",
+                    "VpcId": "target-group-vpc-id",
+                }
+            ]
+        }
+    )
+    mock_elbv2.describe_listeners = MagicMock(
+        return_value={"Listeners": [{"ListenerArn": "listener-arn"}]}
+    )
+    mock_elbv2.delete_listener = MagicMock(return_value="listener deleted")
+    mock_elbv2.delete_target_group = MagicMock(return_value="target group deleted")
+    mock_elbv2.create_listener = MagicMock(
+        return_value={"Listeners": [{"ListenerArn": "listener-arn"}]}
+    )
+    mock_elbv2.create_target_group = MagicMock(
+        return_value={
+            "TargetGroups": [
+                {
+                    "TargetGroupArn": "target-group-arn",
+                    "TargetGroupName": "target-group-name",
+                    "VpcId": "target-group-vpc-id",
+                }
+            ]
+        }
+    )
+    mock_elbv2.register_targets = MagicMock(return_value="registered target")
+
     mock_secrets_manager = SocaAnyPayload()
     mock_secrets_manager.describe_secret = MagicMock(return_value=None)
     mock_secrets_manager.create_secret = MagicMock(return_value={"ARN": "secret-arn"})
     mock_secrets_manager.update_secret = MagicMock(return_value={"ARN": "secret-arn"})
+
+    mock_efs = SocaAnyPayload()
+    mock_efs.describe_file_systems = MagicMock(return_value={"FileSystems": []})
+
+    mock_fsx = SocaAnyPayload()
+    mock_fsx.describe_file_systems = MagicMock(
+        return_value={
+            "FileSystems": [
+                {
+                    "FileSystemType": "LUSTRE",
+                    "Lifecycle": "AVAILABLE",
+                    "FileSystemId": "lustre_filesystem_id",
+                    "SubnetIds": ["subnet_id"],
+                }
+            ]
+        }
+    )
 
     monkeypatch.setattr(
         EC2InstanceTypesDB,
@@ -182,6 +242,9 @@ def context(ddb_local):
     monkeypatch.setattr(
         AwsClientProvider, "secretsmanager", lambda *_: mock_secrets_manager
     )
+    monkeypatch.setattr(AwsClientProvider, "efs", lambda *_: mock_efs)
+    monkeypatch.setattr(AwsClientProvider, "fsx", lambda *_: mock_fsx)
+    monkeypatch.setattr(AwsClientProvider, "elbv2", lambda *_: mock_elbv2)
 
     mock_config = MockConfig()
 

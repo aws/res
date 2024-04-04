@@ -470,6 +470,10 @@ class Utils:
         return urllib.parse.unquote(data, encoding=encoding)
 
     @staticmethod
+    def is_url(url: str, scheme: str) -> bool:
+        return urllib.parse.urlparse(url).scheme == scheme
+
+    @staticmethod
     def encode_basic_auth(username: str, password: str) -> str:
         return Utils.base64_encode(f'{username}:{password}')
 

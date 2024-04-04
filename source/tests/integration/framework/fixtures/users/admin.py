@@ -26,7 +26,10 @@ def admin(
     Fixture for the admin user
     """
 
-    client = ResClient(request, res_environment, ClientAuth(username="clusteradmin"))
+    api_invoker_type = request.config.getoption("--api-invoker-type")
+    client = ResClient(
+        res_environment, ClientAuth(username="clusteradmin"), api_invoker_type
+    )
     admin = client.get_user(GetUserRequest(username=admin_username)).user
 
     is_active = admin.is_active

@@ -4,4 +4,4 @@
 
 set -ex
 
-pip install tox==4.12.0
+pip install -r requirements/build.txt

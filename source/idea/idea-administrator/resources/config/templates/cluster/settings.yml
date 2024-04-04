@@ -132,8 +132,10 @@ solution:
   custom_anonymous_metric_entry: ~ # Add a string to be automatically sent as "Misc" entry for Anonymous Metrics.
 
 iam:
-  # IAM policy ARNs provided below will be attached to all IAM roles for EC2 Instances launched by IDEA.
+  # IAM policy ARNs provided below will be attached to all IAM roles for EC2 Instances launched by RES.
   ec2_managed_policy_arns: []
+  # IAM permission boundary policy ARN provided below will be attached to all IAM roles created in RES.
+  permission_boundary_arn: {{ permission_boundary_arn if permission_boundary_arn else '~'}}
 
 load_balancers:
   external_alb:

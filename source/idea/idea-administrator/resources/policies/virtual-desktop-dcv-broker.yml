@@ -36,6 +36,16 @@ Statement:
       - '{{ context.arns.get_ddb_table_arn(context.config.get_module_id("virtual-desktop-controller") + ".*") }}'
     Effect: Allow
   - Action:
+      - dynamodb:GetItem
+    Resource:
+      {{ context.utils.to_yaml(context.arns.cluster_config_ddb_arn) | indent(6) }}
+    Effect: Allow
+    Condition:
+      ForAllValues:StringLike:
+        dynamodb:LeadingKeys:
+          - global-settings.package_config.*
+          - global-settings.gpu_settings.*
+  - Action:
       - cloudwatch:PutMetricData
     Resource: '*'
     Effect: Allow

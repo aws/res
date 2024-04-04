@@ -1,5 +1,0 @@
--r idea-sdk.in
-cachetools
-prettytable
-supervisor
-sanic==23.6.0

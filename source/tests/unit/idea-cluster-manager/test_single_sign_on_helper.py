@@ -229,7 +229,12 @@ def test_create_identity_provider_oidc(
 
 @patch.object(SingleSignOnHelper, "_update_config_entry")
 @patch.object(
-    SingleSignOnHelper, "get_identity_provider", return_value="existing-provider"
+    SingleSignOnHelper,
+    "get_identity_provider",
+    return_value={
+        "ProviderName": oidc_payload.provider_name,
+        "ProviderType": oidc_payload.provider_type,
+    },
 )
 @patch.object(
     SingleSignOnHelper, "get_oidc_provider_details", return_value="provider-details"
@@ -254,6 +259,60 @@ def test_update_identity_provider_oidc(
         ProviderDetails="provider-details",
         AttributeMapping={"email": oidc_payload.provider_email_attribute},
         IdpIdentifiers=["single-sign-on-identity-provider"],
+    )
+    mock_update_config.has_calls(
+        [
+            ("cognito.sso_idp_provider_name", oidc_payload.provider_name),
+            ("cognito.sso_idp_provider_type", oidc_payload.provider_type),
+            ("cognito.sso_idp_identifier", "single-sign-on-identity-provider"),
+            (
+                "cognito.sso_idp_provider_email_attribute",
+                oidc_payload.provider_email_attribute,
+            ),
+        ]
+    )
+
+
+@patch.object(SingleSignOnHelper, "_update_config_entry")
+@patch.object(
+    SingleSignOnHelper,
+    "get_identity_provider",
+    return_value={
+        # Different name and type
+        "ProviderName": saml_payload.provider_name,
+        "ProviderType": saml_payload.provider_type,
+    },
+)
+@patch.object(
+    SingleSignOnHelper, "get_oidc_provider_details", return_value="provider-details"
+)
+def test_recreate_identity_provider_oidc(
+    mock_get_provider_details, mock_get_idp, mock_update_config, context: AppContext
+):
+    """
+    create_or_update_identity_provider call with OIDC as provider type and pre-existing idp
+    """
+    context.accounts.single_sign_on_helper.create_or_update_identity_provider(
+        oidc_payload
+    )
+
+    mock_get_provider_details.assert_called_with(oidc_payload)
+    mock_get_idp.assert_called()
+    context.aws().cognito_idp().create_identity_provider.assert_called_with(
+        UserPoolId=context.config().get_string(
+            "identity-provider.cognito.user_pool_id", required=True
+        ),
+        ProviderName=oidc_payload.provider_name,
+        ProviderType=oidc_payload.provider_type,
+        ProviderDetails="provider-details",
+        AttributeMapping={"email": oidc_payload.provider_email_attribute},
+        IdpIdentifiers=["single-sign-on-identity-provider"],
+    )
+    context.aws().cognito_idp().delete_identity_provider.assert_called_with(
+        UserPoolId=context.config().get_string(
+            "identity-provider.cognito.user_pool_id", required=True
+        ),
+        ProviderName=saml_payload.provider_name,
     )
     mock_update_config.has_calls(
         [

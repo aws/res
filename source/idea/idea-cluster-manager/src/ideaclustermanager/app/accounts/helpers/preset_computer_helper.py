@@ -155,6 +155,16 @@ class PresetComputeHelper:
             raise exceptions.general_exception('unable to locate adcli on system to initialize PresetComputerHelper')
         self.ADCLI = which_adcli.stdout
 
+        # Currently adcli uses the GSSAPI SASL mechanism for LDAP authentication and to establish encryption.
+        # This should satisfy all requirements set on the server side and LDAPS should only be used if the LDAP
+        # port is not accessible due to firewalls or other reasons. Note that connection to the domain controller
+        # with LDAPS requires the latest version of adcli (>=0.9.1), which is not available in the Amazon Linux Core x86_64 repo.
+        # Only uncomment the lines below to force the LDAPS connection if required:
+        # ldap_connection_uri = self.context.config().get_string('directoryservice.ldap_connection_uri', required=True)
+        # self.use_ldaps = ldap_connection_uri.startswith('ldaps:')
+
+        self.use_ldaps = False
+
         # initialize domain controller IP addresses
         self._domain_controller_ips = self.get_domain_controller_ip_addresses()
 
@@ -178,7 +188,6 @@ class PresetComputeHelper:
             filterstr=self.get_ldap_computer_filterstr(self.hostname),
             attrlist=['dn'],
             trace=trace,
-            ldaps=False
         )
         return len(search_result) > 0
 
@@ -187,12 +196,16 @@ class PresetComputeHelper:
         perform adcli discovery on the AD domain name and return all the domain controller hostnames.
         :return: hostnames all available domain controllers
         """
+        cmd = [
+            self.ADCLI,
+            'info',
+        ]
+        if self.use_ldaps:
+            cmd.append("--use-ldaps")
+        cmd.append(self.ldap_client.domain_name.upper())
+
         result = self._shell.invoke(
-            cmd=[
-                self.ADCLI,
-                'info',
-                self.ldap_client.domain_name.upper()
-            ]
+            cmd=cmd,
         )
         if result.returncode != 0:
             raise exceptions.soca_exception(
@@ -301,18 +314,22 @@ class PresetComputeHelper:
         return selected_dc
 
     def delete_computer(self, domain_controller_ip: str):
+        cmd = [
+            self.ADCLI,
+            'delete-computer',
+            f'--domain-controller={domain_controller_ip}',
+            f'--login-user={self.ldap_client.ldap_root_username}',
+            '--stdin-password',
+            f'--domain={self.ldap_client.domain_name}',
+            f'--domain-realm={self.ldap_client.domain_name.upper()}',
+        ]
+        if self.use_ldaps:
+            cmd.append("--use-ldaps")
+        cmd.append(self.hostname)
+
         delete_computer_result = self._shell.invoke(
             cmd_input=self.ldap_client.ldap_root_password,
-            cmd=[
-                self.ADCLI,
-                'delete-computer',
-                f'--domain-controller={domain_controller_ip}',
-                f'--login-user={self.ldap_client.ldap_root_username}',
-                '--stdin-password',
-                f'--domain={self.ldap_client.domain_name}',
-                f'--domain-realm={self.ldap_client.domain_name.upper()}',
-                self.hostname
-            ]
+            cmd=cmd,
         )
         if delete_computer_result.returncode != 0:
             raise exceptions.soca_exception(
@@ -337,20 +354,24 @@ class PresetComputeHelper:
                 message=f'{self.log_tag} Internal error - Failed to generate a strong domain password'
             )
 
+        cmd = [
+            self.ADCLI,
+            'preset-computer',
+            f'--domain-controller={domain_controller_ip}',
+            f'--login-user={self.ldap_client.ldap_root_username}',
+            '--stdin-password',
+            f'--one-time-password={one_time_password}',
+            f'--domain={self.ldap_client.domain_name}',
+            f'--domain-ou={self.get_ldap_computers_base()}',
+            '--verbose',
+        ]
+        if self.use_ldaps:
+            cmd.append("--use-ldaps")
+        cmd.append(self.hostname)
+
         preset_computer_result = self._shell.invoke(
             cmd_input=self.ldap_client.ldap_root_password,
-            cmd=[
-                self.ADCLI,
-                'preset-computer',
-                f'--domain-controller={domain_controller_ip}',
-                f'--login-user={self.ldap_client.ldap_root_username}',
-                '--stdin-password',
-                f'--one-time-password={one_time_password}',
-                f'--domain={self.ldap_client.domain_name}',
-                f'--domain-ou={self.get_ldap_computers_base()}',
-                '--verbose',
-                self.hostname
-            ],
+            cmd=cmd,
             skip_error_logging=True
         )
 

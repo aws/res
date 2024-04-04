@@ -24,7 +24,7 @@ server:
 controller:
   autoscaling:
     public: false
-    instance_type: {{instance_type}}
+    instance_type: t3.medium
     base_os: {{base_os}}
     instance_ami: {{instance_ami}}
     volume_size: {{volume_size}}
@@ -68,18 +68,18 @@ dcv_broker:
     min_capacity: 1
     max_capacity: 3
     cooldown_minutes: 5
-    default_instance_warmup: 15
+    default_instance_warmup: 25
     new_instances_protected_from_scale_in: false
     elb_healthcheck:
       # Specifies the time in minutes Auto Scaling waits before checking the health status of an EC2 instance that has come into service.
-      grace_time_minutes: 15
+      grace_time_minutes: 25
     cpu_utilization_scaling_policy:
       target_utilization_percent: 80
       estimated_instance_warmup_minutes: 15
     rolling_update_policy:
       max_batch_size: 1
       min_instances_in_service: 1
-      pause_time_minutes: 15
+      pause_time_minutes: 25
     # instance metadata access method
     metadata_http_tokens: "required"  # supported values are "required" for IMDSv2 or "optional" for IMDSv1
   client_communication_port: 8444 # DO NOT CHANGE

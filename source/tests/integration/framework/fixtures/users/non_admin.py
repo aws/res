@@ -26,7 +26,10 @@ def non_admin(
     Fixture for the non admin user
     """
 
-    client = ResClient(request, res_environment, ClientAuth(username="clusteradmin"))
+    api_invoker_type = request.config.getoption("--api-invoker-type")
+    client = ResClient(
+        res_environment, ClientAuth(username="clusteradmin"), api_invoker_type
+    )
     non_admin = client.get_user(GetUserRequest(username=non_admin_username)).user
 
     is_active = non_admin.is_active

@@ -23,7 +23,7 @@ import {
     DescribeInstanceTypesRequest,
     DescribeInstanceTypesResult,
     GetModuleInfoRequest,
-    GetModuleInfoResult
+    GetModuleInfoResult, ConfigureQUICRequest, ConfigureSSORequest, ConfigureQUICResult
 } from "./data-model";
 import IdeaBaseClient, { IdeaBaseClientProps } from "./base-client";
 
@@ -52,6 +52,10 @@ class ClusterSettingsClient extends IdeaBaseClient<ClusterSettingsClientProps> {
 
     describeInstanceTypes(req: DescribeInstanceTypesRequest): Promise<DescribeInstanceTypesResult> {
         return this.apiInvoker.invoke_alt<DescribeInstanceTypesRequest, DescribeInstanceTypesResult>("ClusterSettings.DescribeInstanceTypes", req);
+    }
+
+    configureQUIC(req: ConfigureQUICRequest): Promise<ConfigureQUICResult> {
+        return this.apiInvoker.invoke_alt<ConfigureQUICRequest, ConfigureQUICResult>("ClusterSettings.UpdateQuicConfig", req)
     }
 }
 
