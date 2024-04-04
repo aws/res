@@ -11,11 +11,11 @@
 
 import tasks.idea as idea
 from tasks.tools.package_tool import PackageTool
+from tasks.tools.infra_ami_package_tool import InfraAmiPackageTool
 
 from invoke import task, Context
 import os
 import shutil
-
 
 @task
 def administrator(c):
@@ -80,6 +80,14 @@ def virtual_desktop_controller(c):
     package_tool.package()
     idea.console.success(f'distribution created: {package_tool.output_archive_name}')
 
+@task(name='infra_ami_deps')
+def package_infra_ami_dependencies(c):
+    """
+    package infrastructure ami dependencies
+    """
+    package_tool = InfraAmiPackageTool(c)
+    package_tool.package()
+    idea.console.success(f'distribution created: {package_tool.output_archive_name}')
 
 @task
 def make_all_archive(c):
@@ -132,6 +140,9 @@ def package_all(c):
 
     # all archive
     make_all_archive(c)
+
+    #infra ami dependencies
+    package_infra_ami_dependencies(c)
 
     print()
     idea.console.print_header_block('end: package all', style='main')

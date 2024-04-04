@@ -25,13 +25,7 @@ AWS=$(command -v aws)
 INSTANCE_REGION=${AWS_REGION}
 S3_BUCKET=$(echo ${APP_PACKAGE_DOWNLOAD_URI} | cut -f3 -d/)
 
-if [[ ${INSTANCE_REGION} =~ ^us-gov-[a-z]+-[0-9]+$ ]]; then
-  S3_BUCKET_REGION=$(curl -s --head https://${S3_BUCKET}.s3.us-gov-west-1.amazonaws.com | grep bucket-region | awk '{print $2}' | tr -d '\r\n')
-  $AWS --region ${S3_BUCKET_REGION} s3 cp "${APP_PACKAGE_DOWNLOAD_URI}" "${BOOTSTRAP_DIR}/"
-else
-  #S3_BUCKET_REGION=$(curl -s --head https://${S3_BUCKET}.s3.us-east-1.amazonaws.com | grep bucket-region | awk '{print $2}' | tr -d '\r\n')
-  $AWS --region ${INSTANCE_REGION} s3 cp "${APP_PACKAGE_DOWNLOAD_URI}" "${BOOTSTRAP_DIR}/"
-fi
+$AWS --region ${INSTANCE_REGION} s3 cp "${APP_PACKAGE_DOWNLOAD_URI}" "${BOOTSTRAP_DIR}/"
 
 PACKAGE_ARCHIVE=$(basename "${APP_PACKAGE_DOWNLOAD_URI}")
 PACKAGE_NAME="${PACKAGE_ARCHIVE%.tar.gz*}"
@@ -93,17 +87,20 @@ DCV_WEB_VIEWER_INSTALL_LOCATION="/usr/share/dcv/www"
 timestamp=$(date +%s)
 
 function install_dcv_connection_gateway() {
-  yum install -y nc
-  rpm --import ${DCV_GPG_KEY}
-  wget ${DCV_CONNECTION_GATEWAY_URL}
-  fileName=$(basename ${DCV_CONNECTION_GATEWAY_URL})
-  urlSha256Sum=$(wget -O - ${DCV_CONNECTION_GATEWAY_SHA256_URL})
-  if [[ $(sha256sum ${fileName} | awk '{print $1}') != ${urlSha256Sum} ]];  then
-    echo -e "FATAL ERROR: Checksum for DCV Connection Gateway failed. File may be compromised." > /etc/motd
-    exit 1
+  rpm -q nice-dcv-connection-gateway
+  if [[ "$?" != "0"  ]]; then
+    yum install -y nc
+    rpm --import ${DCV_GPG_KEY}
+    wget ${DCV_CONNECTION_GATEWAY_URL}
+    fileName=$(basename ${DCV_CONNECTION_GATEWAY_URL})
+    urlSha256Sum=$(wget -O - ${DCV_CONNECTION_GATEWAY_SHA256_URL})
+    if [[ $(sha256sum ${fileName} | awk '{print $1}') != ${urlSha256Sum} ]];  then
+      echo -e "FATAL ERROR: Checksum for DCV Connection Gateway failed. File may be compromised." > /etc/motd
+      exit 1
+    fi
+    yum install -y ${fileName}
+    rm -f ${fileName}
   fi
-  yum install -y ${fileName}
-  rm -f ${fileName}
 }
 
 function install_dcv_web_viewer() {
@@ -128,51 +125,28 @@ function install_dcv_web_viewer() {
     DCV_SERVER_SHA256_HASH=${DCV_SERVER_AARCH64_SHA256_HASH}
   fi
 
-  wget ${DCV_SERVER_URL}
-  if [[ $(sha256sum ${DCV_SERVER_TGZ} | awk '{print $1}') != ${DCV_SERVER_SHA256_HASH} ]];  then
-      echo -e "FATAL ERROR: Checksum for DCV Server failed. File may be compromised." > /etc/motd
-      exit 1
-  fi
-  tar zxvf ${DCV_SERVER_TGZ}
+  rpm -q nice-dcv-web-viewer
+  if [[ "$?" != "0"  ]]; then
+    wget ${DCV_SERVER_URL}
 
-  pushd nice-dcv-${DCV_SERVER_VERSION}
-  {% if context.base_os == 'amazonlinux2' -%}
-    rpm -ivh nice-dcv-web-viewer-*.${machine}.rpm
-  {% elif context.base_os in ('rhel7', 'rhel8', 'rhel9', 'centos7') -%}
-    rpm -ivh nice-dcv-web-viewer-*.${machine}.rpm --nodeps
-  {% endif -%}
-  popd
-  rm -rf nice-dcv-${DCV_SERVER_VERSION}
-  rm -rf ${DCV_SERVER_TGZ}
+    if [[ $(sha256sum ${DCV_SERVER_TGZ} | awk '{print $1}') != ${DCV_SERVER_SHA256_HASH} ]];  then
+        echo -e "FATAL ERROR: Checksum for DCV Server failed. File may be compromised." > /etc/motd
+        exit 1
+    fi
+    tar zxvf ${DCV_SERVER_TGZ}
+
+    pushd nice-dcv-${DCV_SERVER_VERSION}
+    {% if context.base_os == 'amazonlinux2' -%}
+      rpm -ivh nice-dcv-web-viewer-*.${machine}.rpm
+    {% elif context.base_os in ('rhel7', 'rhel8', 'rhel9', 'centos7') -%}
+      rpm -ivh nice-dcv-web-viewer-*.${machine}.rpm --nodeps
+    {% endif -%}
+    popd
+    rm -rf nice-dcv-${DCV_SERVER_VERSION}
+    rm -rf ${DCV_SERVER_TGZ}
+  fi
 
   yes | cp -a ${APP_DIR}/static_resources/. ${DCV_WEB_VIEWER_INSTALL_LOCATION}
-}
-
-function configure_certificates() {
-  local CERT_CONTENT=$(get_secret ${CERTIFICATE_SECRET_ARN})
-  local PRIVATE_KEY_CONTENT=$(get_secret ${PRIVATE_KEY_SECRET_ARN})
-  mkdir -p /etc/dcv-connection-gateway/certs/
-  if [[ -f /etc/dcv-connection-gateway/certs/default_cert.pem ]]; then
-    mv /etc/dcv-connection-gateway/certs/default_cert.pem /etc/dcv-connection-gateway/certs/default_cert.pem.${timestamp}
-  fi
-  if [[ -f /etc/dcv-connection-gateway/certs/default_key_pkcs1.pem ]]; then
-    mv /etc/dcv-connection-gateway/certs/default_key_pkcs1.pem /etc/dcv-connection-gateway/certs/default_key_pkcs1.pem.${timestamp}
-  fi
-  if [[ -f /etc/dcv-connection-gateway/certs/default_key_pkcs8.pem ]]; then
-    mv /etc/dcv-connection-gateway/certs/default_key_pkcs8.pem /etc/dcv-connection-gateway/certs/default_key_pkcs8.pem.${timestamp}
-  fi
-  touch /etc/dcv-connection-gateway/certs/default_cert.pem
-  touch /etc/dcv-connection-gateway/certs/default_key_pkcs1.pem
-  echo -e "${CERT_CONTENT}" > /etc/dcv-connection-gateway/certs/default_cert.pem
-  echo -e "${PRIVATE_KEY_CONTENT}" > /etc/dcv-connection-gateway/certs/default_key_pkcs1.pem
-  openssl pkcs8 -topk8 -inform PEM -outform PEM -nocrypt -in /etc/dcv-connection-gateway/certs/default_key_pkcs1.pem -out /etc/dcv-connection-gateway/certs/default_key_pkcs8.pem
-  chmod 600 /etc/dcv-connection-gateway/certs/default_cert.pem
-  chmod 600 /etc/dcv-connection-gateway/certs/default_key_pkcs1.pem
-  chmod 600 /etc/dcv-connection-gateway/certs/default_key_pkcs8.pem
-
-  chown -R dcvcgw:dcvcgw /etc/dcv-connection-gateway/certs/default_cert.pem
-  chown -R dcvcgw:dcvcgw /etc/dcv-connection-gateway/certs/default_key_pkcs1.pem
-  chown -R dcvcgw:dcvcgw /etc/dcv-connection-gateway/certs/default_key_pkcs8.pem
 }
 
 function configure_dcv_connection_gateway() {
@@ -211,5 +185,7 @@ tls-strict = false
 
 install_dcv_connection_gateway
 install_dcv_web_viewer
-configure_certificates
+
+{% include 'dcv-connection-gateway/_templates/configure_certificates.jinja2' %}
+
 configure_dcv_connection_gateway

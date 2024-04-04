@@ -102,3 +102,10 @@ class FSxONTAPFileSystem(SocaBaseModel):
 
     def get_filesystem_id(self):
         return self.filesystem.get('FileSystemId')
+
+
+class FSxLUSTREFileSystem(SocaBaseModel):
+    filesystem: Optional[Any]
+
+    def get_filesystem_id(self):
+        return self.filesystem.get('FileSystemId')

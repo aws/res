@@ -1,36 +1,13 @@
-function Write-ToLog {
-    # LOG: IDEA Bootstrap Log: Get-Content C:\ProgramData\Amazon\EC2-Windows\Launch\Log\UserdataExecutionIDEA.log
-    # LOG: Default User Data: Get-Content C:\ProgramData\Amazon\EC2-Windows\Launch\Log\UserdataExecution.log
-
-    Param (
-        [ValidateNotNullOrEmpty()]
-        [Parameter(Mandatory=$true)]
-        [String] $Message,
-        [String] $LogFile = ('{0}\ProgramData\Amazon\EC2-Windows\Launch\Log\UserdataExecutionIDEA.log' -f $env:SystemDrive),
-        [ValidateSet('Error','Warn','Info')]
-        [string] $Level = 'Info'
-    )
-
-    if (-not(Test-Path -Path $LogFile)) {
-        $null = New-Item -Path $LogFile -ItemType File -Force
-    }
-
-
-    $FormattedDate = Get-Date -Format 'yyyy-MM-dd HH:mm:ss'
-    switch ($Level) {
-        'Error' {
-            $LevelText = 'ERROR:'
-        }
-        'Warn' {
-            $LevelText = 'WARNING:'
-        }
-        'Info' {
-            $LevelText = 'INFO:'
-        }
-    }
-    # If Level == Error send ses message ?
-    "$FormattedDate $LevelText $Message" | Out-File -FilePath $LogFile -Append
-}
+#  Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+#
+#  Licensed under the Apache License, Version 2.0 (the "License"). You may not use this file except in compliance
+#  with the License. A copy of the License is located at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+#  or in the 'license' file accompanying this file. This file is distributed on an 'AS IS' BASIS, WITHOUT WARRANTIES
+#  OR CONDITIONS OF ANY KIND, express or implied. See the License for the specific language governing permissions
+#  and limitations under the License.
 
 function Bootstrap-DCV-WindowsHost {
   Param ()

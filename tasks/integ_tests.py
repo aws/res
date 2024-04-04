@@ -64,6 +64,7 @@ def _run_integ_tests(
     capture_output: bool = False,
     keywords=None,
     test_file=None,
+    num_workers=None,
 ) -> int:
     """
     Currently requires ~/.aws/credentials file to be setup in order to run due to boto being unable to use ~/.aws/config.
@@ -98,6 +99,8 @@ def _run_integ_tests(
             cmd = f"{cmd} --capture=tee-sys"
         if keywords is not None:
             cmd = f'{cmd} -k "{keywords}"'
+        if num_workers is not None:
+            cmd = f'{cmd} -n {num_workers}'
         idea.console.info(f"> {cmd}")
 
         try:
@@ -136,7 +139,7 @@ def cluster_manager(
 
 @task(iterable=["params"])
 def smoke(
-    c, keywords=None, params=None, capture_output=False, cov_report=None
+    c, keywords=None, params=None, capture_output=False, cov_report=None,
 ):
     # type: (Context, str, List[str], bool, str) -> None
     """
@@ -150,5 +153,6 @@ def smoke(
         capture_output=capture_output,
         keywords=keywords,
         test_file="smoke.py",
+        num_workers=10,
     )
     raise SystemExit(exit_code)

@@ -10,6 +10,7 @@
 #  and limitations under the License.
 
 import tasks.idea as idea
+import tasks.requirements
 from tasks.tools.build_tool import BuildTool
 from tasks.apispec import (
     cluster_manager as apispec_cluster_manager,
@@ -89,6 +90,14 @@ def build_all(c):
     build all
     """
 
+    # Prebuild environment sync
+    # By default, we will update the dev environment. However, in pipeline, we will skip this step and use the version pinned
+    # in the requirements/dev.txt.
+    if os.environ.get('SKIP_ENV_UPDATE', 'false') != 'true':
+        tasks.requirements.update(c, upgrade=True)
+    tasks.requirements.sync_env(c, package_group_name='dev')
+
+    # Real build steps
     idea.console.print_header_block('begin: build all', style='main')
 
     data_model(c)

@@ -157,6 +157,25 @@ class Utils {
         return result;
     }
 
+    static isListOfAttributeEditorRecords(value?: any): boolean {
+        let result = true;
+        if (value == null) {
+            result = false
+        } else {
+            for (let item of value) {
+                if (item == null || typeof item != "object") {
+                    result = false;
+                }
+                for (let required_key of  [ "key", "value"] ) {
+                    if(item[required_key] === null || typeof item[required_key] != "string") {
+                        result = false;
+                    }
+                }
+            }
+        }
+        return result;
+    }
+
     static isEmpty(value?: any): boolean {
         if (value == null) {
             return true;

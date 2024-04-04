@@ -11,6 +11,7 @@
 from typing import Any
 
 import ideaclustermanager
+from ideaclustermanager.app.accounts.helpers.quic_update_helper import UpdateQuicResults
 
 from ideasdk.api import ApiInvocationContext, BaseAPI
 from ideadatamodel.cluster_settings import (
@@ -21,10 +22,11 @@ from ideadatamodel.cluster_settings import (
     GetModuleSettingsResult,
     UpdateModuleSettingsRequest,
     UpdateModuleSettingsResult,
+    UpdateQuicConfigRequest,
     DescribeInstanceTypesResult,
     GetAllowedSessionsPerUserResult
 )
-from ideadatamodel import exceptions, constants
+from ideadatamodel import exceptions, constants, UpdateQuicConfigResult
 from ideasdk.config.cluster_config import ClusterConfig
 from ideasdk.utils import Utils
 
@@ -63,6 +65,10 @@ class ClusterSettingsAPI(BaseAPI):
             'ClusterSettings.GetAllowedSessionsPerUser': {
                 'scope': self.SCOPE_READ,
                 'method': self.get_allowed_sessions_per_user
+            },
+            'ClusterSettings.UpdateQuicConfig': {
+                'scope': self.SCOPE_WRITE,
+                'method': self.update_quic
             }
         }
 
@@ -171,6 +177,25 @@ class ClusterSettingsAPI(BaseAPI):
 
         context.success(GetAllowedSessionsPerUserResult(allowed_sessions_per_user=Utils.get_value_as_int("value", allowed_sessions_per_user, 0)))
 
+    def update_quic(self, context: ApiInvocationContext):
+        request = context.get_request_payload_as(UpdateQuicConfigRequest)
+        enable_quic = request.enable
+        result = self.context.accounts.update_quic(enable_quic)
+        quic_action = "enabling" if enable_quic else "disabling"
+        if result == UpdateQuicResults.SUCCESS:
+            context.success(UpdateQuicConfigResult())
+        elif result == UpdateQuicResults.ROLLBACK_COMPLETE:
+            context.fail(
+                error_code=result,
+                payload=UpdateQuicConfigResult(),
+                message=f"Error while {quic_action} QUIC, rollback was successful."
+            )
+        else:
+            context.fail(
+                error_code=result,
+                payload=UpdateQuicConfigResult(),
+                message=f"Error while {quic_action} QUIC, rollback was unsuccessful."
+            )
 
     def _update_config_entry(self, key: str, value: Any):
         module_id = self.config.get_module_id(constants.MODULE_CLUSTER_MANAGER)

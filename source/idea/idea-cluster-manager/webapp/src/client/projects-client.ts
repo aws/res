@@ -29,7 +29,7 @@ import {
     GetUserProjectsRequest,
     GetUserProjectsResult,
     ListFileSystemsForProjectRequest,
-    ListFileSystemsForProjectResult,
+    ListFileSystemsForProjectResult, ListSecurityGroupsRequest, ListSecurityGroupsResult, ListPoliciesRequest, ListPoliciesResult,
 } from "./data-model";
 import IdeaBaseClient, { IdeaBaseClientProps } from "./base-client";
 
@@ -70,6 +70,14 @@ class ProjectsClient extends IdeaBaseClient<ProjectsClientProps> {
 
     listFileSystemsForProject(req: ListFileSystemsForProjectRequest): Promise<ListFileSystemsForProjectResult> {
         return this.apiInvoker.invoke_alt<ListFileSystemsForProjectRequest, ListFileSystemsForProjectResult>("Projects.ListFileSystemsForProject", req);
+    }
+
+    listSecurityGroups(req?: ListSecurityGroupsRequest): Promise<ListSecurityGroupsResult> {
+        return this.apiInvoker.invoke_alt<ListSecurityGroupsRequest, ListSecurityGroupsResult>("Projects.ListSecurityGroups", req);
+    }
+
+    listPolicies(req?: ListPoliciesRequest): Promise<ListPoliciesResult> {
+        return this.apiInvoker.invoke_alt<ListPoliciesRequest, ListPoliciesResult>("Projects.ListPolicies", req)
     }
 }
 

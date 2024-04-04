@@ -59,6 +59,10 @@ coverage.xml
 .pytest_cache/
 *.scannerwork/
 
+# Viperlight
+viperlight/
+viperlight.zip
+
 # Translations
 *.mo
 *.pot

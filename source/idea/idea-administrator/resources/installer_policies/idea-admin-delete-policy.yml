@@ -49,6 +49,7 @@ Statement:
       - iam:DeleteServiceLinkedRole
       - iam:DetachRolePolicy
       - iam:RemoveRoleFromInstanceProfile
+      - kinesis:DeleteStream
       - lambda:DeleteFunction
       - lambda:RemovePermission
       - logs:DescribeLogGroups

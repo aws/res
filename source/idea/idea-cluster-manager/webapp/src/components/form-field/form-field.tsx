@@ -17,7 +17,7 @@ import { GetParamChoicesRequest, GetParamChoicesResult, GetParamDefaultRequest, 
 import Utils from "../../common/utils";
 import Input, { InputProps } from "@cloudscape-design/components/input";
 import FormField, { FormFieldProps } from "@cloudscape-design/components/form-field";
-import { Autosuggest, Button, ColumnLayout, DatePicker, FileUpload, Grid, HelpPanel, Link, Multiselect, RadioGroup, Select, SelectProps, SpaceBetween, Textarea, Tiles, Toggle } from "@cloudscape-design/components";
+import {AttributeEditor, Autosuggest, Button, ColumnLayout, DatePicker, ExpandableSection, FileUpload, Grid, HelpPanel, Link, Multiselect, RadioGroup, Select, SelectProps, SpaceBetween, Textarea, Tiles, Toggle} from "@cloudscape-design/components";
 import { BaseKeyDetail } from "@cloudscape-design/components/internal/events";
 import { faAdd, faRemove } from "@fortawesome/free-solid-svg-icons";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
@@ -99,6 +99,8 @@ export interface IdeaFormFieldState {
     fileVal(): File[];
 
     listOfRecordsVal(): Record<any, any>[]
+
+    listOfAttributeEditorRecords(): {key: string, value: string, error?: string}[]
 }
 
 export interface IdeaFormFieldStateChangeEvent {
@@ -268,6 +270,12 @@ class IdeaFormField extends Component<IdeaFormFieldProps, IdeaFormFieldState> {
                     return this.value
                 }
                 return []
+            },
+            listOfAttributeEditorRecords(): { key: string; value: string; error?: string }[] {
+                if (this.value != null) {
+                    return this.value
+                }
+                return []
             }
         };
     }
@@ -330,6 +338,13 @@ class IdeaFormField extends Component<IdeaFormFieldProps, IdeaFormFieldState> {
         return []
     }
 
+    getListOfAttributeEditorRecords() {
+        if(Utils.isListOfAttributeEditorRecords(this.state.listOfAttributeEditorRecords())) {
+            return this.state.listOfAttributeEditorRecords()
+        }
+        return []
+    }
+
     getTypedValue(): any {
         if (this.isMultiple()) {
             const dataType = this.getDataType();
@@ -340,7 +355,9 @@ class IdeaFormField extends Component<IdeaFormFieldProps, IdeaFormFieldState> {
                 case "bool":
                     return this.state.booleanArrayVal();
                 case "record":
-                    return this.state.listOfRecordsVal()
+                    return this.state.listOfRecordsVal();
+                case "attributes":
+                    return this.state.listOfAttributeEditorRecords()
                 default:
                     return this.state.stringArrayVal();
             }
@@ -951,6 +968,14 @@ class IdeaFormField extends Component<IdeaFormFieldProps, IdeaFormFieldState> {
         return "text";
     }
 
+    getContainerInputType(param: SocaUserInputParamMetadata): InputProps.Type {
+        const dataType = param.data_type!;
+        if ( dataType === "url" ) {
+            return "url"
+        }
+        return "text";
+    }
+
     isMarkDownAvailable(): boolean {
         return Utils.isNotEmpty(this.props.param.markdown);
     }
@@ -1543,6 +1568,18 @@ class IdeaFormField extends Component<IdeaFormFieldProps, IdeaFormFieldState> {
         );
     }
 
+    buildExpandable(props: FormFieldProps) {
+        return (
+            <ExpandableSection
+                headerText={this.props.param.title}
+                expanded={this.state.booleanVal()}
+                onChange={(event) => {
+                    this.onToggleStateChange(event.detail.expanded);
+                }}
+            ></ExpandableSection>
+        )
+    }
+
     onRadioGroupStateChange(value: string) {
         this.setState(
             {
@@ -1892,6 +1929,75 @@ class IdeaFormField extends Component<IdeaFormFieldProps, IdeaFormFieldState> {
         )
     }
 
+
+    buildAttributeEditor(props: FormFieldProps) {
+        const container_items = this.props.param.container_items
+        return this.buildFormField(<AttributeEditor
+                onAddButtonClick={() => this.setState({
+                        value: [...this.getListOfAttributeEditorRecords(), {key: "", value: ""}],
+                    }, this.setStateCallback
+                )}
+                onRemoveButtonClick={(changeEvent) => {
+                    const tmpItems = [...this.getListOfAttributeEditorRecords()];
+                    tmpItems.splice(changeEvent.detail.itemIndex, 1);
+                    this.setState({
+                        value: tmpItems
+                    }, this.setStateCallback)
+                }}
+                addButtonText={`Add ${this.props.param.attributes_editor_type}`}
+                removeButtonText={`Remove ${this.props.param.attributes_editor_type}`}
+                items={this.getListOfAttributeEditorRecords()}
+                empty={`There are no ${this.props.param.attributes_editor_type} that have been added`}
+                definition={(() => {
+                    if (container_items?.length === 2) {
+                        const key = container_items[0]
+                        const value = container_items[1]
+
+                        return [
+                            {
+                                label: <FormField label={<span>{key.title}{key.description ? <i> - {key.description}</i> : ""}</span>} info={<Link href={key.help_url} variant="info">Info</Link>}></FormField>,
+                                control: (item: { key: string, value: string, error?: string }, itemIndex: number) => (
+                                    <Input
+                                        value={item.key}
+                                        type={this.getContainerInputType(key)}
+                                        onChange={(e) => {
+                                            const tmpItems = [...this.getListOfAttributeEditorRecords()];
+                                            tmpItems[itemIndex].key = e.detail.value;
+                                            this.setState({
+                                                value: tmpItems
+                                            }, this.setStateCallback)
+                                        }}
+                                    ></Input>
+                                ),
+                                errorText: (item: {key: string, value: string, error?: string}) => { return item.error }
+                            },
+                            {
+                                label: <FormField label={<span>{value.title}{value.description ? <i> - {value.description}</i> : ""}</span>} info={<Link href={value.help_url} variant="info">Info</Link>}></FormField>,
+                                control: (item: { key: string, value: string, error?: string }, itemIndex: number) => (
+                                    <Input
+                                        value={item.value}
+                                        type={this.getContainerInputType(value)}
+                                        onChange={(e) => {
+                                            const tmpItems = [...this.getListOfAttributeEditorRecords()];
+                                            tmpItems[itemIndex].value = e.detail.value;
+                                            this.setState({
+                                                value: tmpItems
+                                            }, this.setStateCallback)
+                                        }}
+                                    ></Input>
+                                ),
+                                errorText: (item: {key: string, value: string, error?: string}) => { return item.error }
+                            }
+                        ]
+
+                    }
+                    return [];
+                })()
+                }/>,
+            props
+        )
+    }
+
     getRenderType(): string {
         const type = this.getNativeType();
         const param_type = this.props.param.param_type;
@@ -1910,7 +2016,10 @@ class IdeaFormField extends Component<IdeaFormFieldProps, IdeaFormFieldState> {
                 return "auto-suggest";
             } else if (param_type === "container"){
                 return "parent_parameter_array"
-            } else {
+            } else if (param_type === "attribute_editor") {
+                return "attribute_editor"
+            }
+                else {
                 if (multiline) {
                     return "textarea-array";
                 } else {
@@ -1940,6 +2049,9 @@ class IdeaFormField extends Component<IdeaFormFieldProps, IdeaFormFieldState> {
                 }
                 return "input";
             } else if (type === "boolean") {
+                if (param_type === "expandable") {
+                    return "expandable"
+                }
                 return "toggle";
             } else if (type === "amount") {
                 return "amount";
@@ -1983,6 +2095,8 @@ class IdeaFormField extends Component<IdeaFormFieldProps, IdeaFormFieldState> {
             formFields.push(this.buildTextAreaArray({ stretch: stretch }));
         } else if (type === "toggle") {
             formFields.push(this.buildToggle({ stretch: stretch }));
+        } else if (type === "expandable") {
+            formFields.push(this.buildExpandable({stretch: stretch}));
         } else if (type === "radio-group") {
             formFields.push(this.buildRadioGroup({ stretch: stretch }));
         } else if (type === "select") {
@@ -2001,6 +2115,8 @@ class IdeaFormField extends Component<IdeaFormFieldProps, IdeaFormFieldState> {
             formFields.push(this.buildFileUpload({ stretch: stretch }));
         } else if (type === "tiles") {
             formFields.push(this.buildTilesGroup({ stretch: stretch }));
+        } else if ( type === "attribute_editor") {
+            formFields.push(this.buildAttributeEditor({ stretch: stretch}));
         } else if (type === "parent_parameter_array") {
             formFields.push(this.buildContainerArray({ stretch: stretch }));
         } else {

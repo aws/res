@@ -198,7 +198,7 @@ class VirtualDesktopSoftwareStacks extends Component<VirtualDesktopSoftwareStack
                     }
                     const values = this.getRegisterSoftwareStackForm().getValues();
                     let projects: Project[] = [];
-                    values.projects.forEach((project_id: string) => {
+                    values.projects?.forEach((project_id: string) => {
                         projects.push({
                             project_id: project_id,
                         });
@@ -324,9 +324,6 @@ class VirtualDesktopSoftwareStacks extends Component<VirtualDesktopSoftwareStack
                         param_type: "select",
                         multiple: true,
                         choices: this.state.projectChoices,
-                        validate: {
-                            required: true,
-                        },
                     },
                 ]}
             />

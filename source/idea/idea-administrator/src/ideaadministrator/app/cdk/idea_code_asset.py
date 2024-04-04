@@ -77,18 +77,26 @@ class IdeaCodeAsset:
             shutil.move(requirements_file, build_src)
 
     @staticmethod
-    def _build_python_lambda(build_location: str):
+    def _build_python_lambda(build_location: str, lambda_package_name: str):
         if not Utils.is_file(os.path.join(build_location, 'requirements.txt')):
             return
 
-        shell = ShellInvoker(cwd=build_location)
-        response = shell.invoke(
-            shell=True,
-            cmd=['pip install -r requirements.txt --platform manylinux2014_x86_64 --only-binary=:all: --target . --upgrade'],
-            env=ideaadministrator.props.get_env()
-        )
-        if response.returncode != 0:
-            raise exceptions.general_exception(f'Issue building the lambda: {response}')
+        installed_dependencies_dir = os.path.join(build_location, lambda_package_name, 'dependencies')
+        if os.path.isdir(installed_dependencies_dir):
+            try:
+                shutil.copytree(src=installed_dependencies_dir, dst=build_location, dirs_exist_ok=True)
+                shutil.rmtree(installed_dependencies_dir)
+            except Exception as e:
+                raise exceptions.general_exception(f'Issue copying dependencies: {e}')
+        else:
+            shell = ShellInvoker(cwd=build_location)
+            response = shell.invoke(
+                shell=True,
+                cmd=['pip install -r requirements.txt --platform manylinux2014_x86_64 --only-binary=:all: --target . --upgrade'],
+                env=ideaadministrator.props.get_env()
+            )
+            if response.returncode != 0:
+                raise exceptions.general_exception(f'Issue building the lambda: {response}')
 
     def _validate_checksum_for_source_code(self) -> bool:
         if not Utils.is_dir(self.source_code_location):
@@ -149,7 +157,8 @@ class IdeaCodeAsset:
         )
 
         self.PLATFORM_BUILD_MAP[self.lambda_platform](
-            build_location=build_src
+            build_location=build_src,
+            lambda_package_name=self.lambda_package_name,
         )
 
         shell = ShellInvoker(cwd=self._build_location)

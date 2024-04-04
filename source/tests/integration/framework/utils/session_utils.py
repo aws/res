@@ -18,12 +18,16 @@ from ideadatamodel import (  # type: ignore
     GetSessionConnectionInfoRequest,
     GetSessionInfoRequest,
     ListSessionsRequest,
+    VirtualDesktopBaseOS,
     VirtualDesktopSession,
     VirtualDesktopSessionConnectionInfo,
     VirtualDesktopSessionState,
 )
 from tests.integration.framework.client.res_client import ResClient
-from tests.integration.framework.utils.remote_command_runner import RemoteCommandRunner
+from tests.integration.framework.utils.remote_command_runner import (
+    EC2InstancePlatform,
+    RemoteCommandRunner,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -33,7 +37,9 @@ SESSION_COMPLETE_STATES = [
     VirtualDesktopSessionState.STOPPED,
     VirtualDesktopSessionState.DELETED,
 ]
-MAX_WAITING_TIME_FOR_LAUNCHING_SESSION_IN_SEC = 3600
+# AWS credentials on CodeBuild expires in an hour.
+# Make sure to leave enough time for the test setup and cleanup when running in the code pipeline.
+MAX_WAITING_TIME_FOR_LAUNCHING_SESSION_IN_SEC = 2700
 MAX_WAITING_TIME_FOR_DELETING_SESSION_IN_SEC = 300
 MAX_WAITING_TIME_FOR_SESSION_CONNECTION_COUNT_IN_SEC = 300
 
@@ -92,8 +98,13 @@ def wait_for_session_connection_count(
     while (
         time.time() - start_time < MAX_WAITING_TIME_FOR_SESSION_CONNECTION_COUNT_IN_SEC
     ):
+        platform = (
+            EC2InstancePlatform.WINDOWS
+            if session.software_stack.base_os == VirtualDesktopBaseOS.WINDOWS
+            else EC2InstancePlatform.LINUX
+        )
         dcv_session_info = describe_dcv_session(
-            region, session.server.instance_id, session.dcv_session_id
+            region, session.server.instance_id, session.dcv_session_id, platform
         )
 
         num_of_connections = dcv_session_info["num-of-connections"]
@@ -109,10 +120,18 @@ def wait_for_session_connection_count(
 
 
 def describe_dcv_session(
-    region: str, server_instance_id: str, dcv_session_id: str
+    region: str,
+    server_instance_id: str,
+    dcv_session_id: str,
+    platform: EC2InstancePlatform,
 ) -> Any:
-    remote_command_runner = RemoteCommandRunner(region)
-    commands = [f"sudo dcv describe-session {dcv_session_id} -j"]
+    remote_command_runner = RemoteCommandRunner(region, platform)
+    if platform == EC2InstancePlatform.LINUX:
+        commands = [f"sudo dcv describe-session {dcv_session_id} -j"]
+    else:
+        commands = [
+            rf'&"C:\Program Files\NICE\DCV\Server\bin\dcv.exe" describe-session {dcv_session_id} -j'
+        ]
 
     output = remote_command_runner.run(server_instance_id, commands)
     try:

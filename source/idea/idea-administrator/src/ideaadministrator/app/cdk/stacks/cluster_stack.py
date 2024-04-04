@@ -126,6 +126,8 @@ class ClusterStack(IdeaBaseStack):
         self.internal_alb_dcv_broker_agent_listener: Optional[elbv2.CfnListener] = None
         self.internal_alb_dcv_broker_gateway_listener: Optional[elbv2.CfnListener] = None
 
+        self.dcv_host_role_managed_policy: Optional[ManagedPolicy] = None
+
         self.private_hosted_zone: Optional[PrivateHostedZone] = None
         self.cluster_prefix_list: Optional[ec2.CfnPrefixList] = None
         self.security_groups: Dict[str, SecurityGroup] = {}
@@ -313,6 +315,15 @@ class ClusterStack(IdeaBaseStack):
             managed_policy_name=f'{self.cluster_name}-{self.aws_region}-cloud-watch-agent-server-policy',
             description='Permissions required to use AmazonCloudWatchAgent on servers',
             policy_template_name='cloud-watch-agent-server-policy.yml'
+        )
+
+        self.dcv_host_role_managed_policy = ManagedPolicy(
+                context=self.context,
+                name='vdi-host-managed-policy',
+                description="Required policy for custom VDI instance profiles",
+                managed_policy_name=f'{self.cluster_name}-{self.aws_region}-vdi-host-managed-policy',
+                scope=self.stack,
+                policy_template_name='virtual-desktop-dcv-host.yml'
         )
 
         if self.is_metrics_provider_amazon_managed_prometheus():
@@ -1117,6 +1128,7 @@ class ClusterStack(IdeaBaseStack):
         # Policy Arns
         cluster_settings['iam.policies.amazon_ssm_managed_instance_core_arn'] = self.amazon_ssm_managed_instance_core_policy.managed_policy_arn
         cluster_settings['iam.policies.cloud_watch_agent_server_arn'] = self.cloud_watch_agent_server_policy.managed_policy_arn
+        cluster_settings['iam.policies.dcv_host_role_managed_policy_arn'] = self.dcv_host_role_managed_policy.managed_policy_arn
         if self.amazon_prometheus_remote_write_policy is not None:
             cluster_settings['iam.policies.amazon_prometheus_remote_write_arn'] = self.amazon_prometheus_remote_write_policy.managed_policy_arn
 

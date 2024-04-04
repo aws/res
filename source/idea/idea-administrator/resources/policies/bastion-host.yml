@@ -24,6 +24,17 @@ Statement:
     Resource: '*'
     Effect: Allow
 
+  - Action:
+      - dynamodb:GetItem
+    Resource:
+      {{ context.utils.to_yaml(context.arns.cluster_config_ddb_arn) | indent(6) }}
+    Effect: Allow
+    Condition:
+      ForAllValues:StringLike:
+        dynamodb:LeadingKeys:
+          - global-settings.package_config.*
+          - global-settings.gpu_settings.*
+
 {% include '_templates/aws-managed-ad.yml' %}
 
 {% include '_templates/activedirectory.yml' %}

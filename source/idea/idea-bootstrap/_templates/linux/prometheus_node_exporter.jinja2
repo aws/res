@@ -1,14 +1,25 @@
 # Begin: Install Prometheus Node Exporter
 {%- if context.base_os in ('amazonlinux2', 'centos7', 'rhel7', 'rhel8', 'rhel9') and context.is_prometheus_exporter_enabled('node_exporter') %}
-PROMETHEUS_NODE_EXPORTER_AMD64_URL="{{ context.config.get_string('global-settings.package_config.prometheus.exporters.node_exporter.linux.x86_64', required=True) }}"
-PROMETHEUS_NODE_EXPORTER_ARM64_URL="{{ context.config.get_string('global-settings.package_config.prometheus.exporters.node_exporter.linux.aarch64', required=True) }}"
 function install_prometheus_node_exporter () {
+  local AWS=$(command -v aws)
   local MACHINE=$(uname -m)
   local DOWNLOAD_URL=""
   if [[ ${MACHINE} == "aarch64" ]]; then
-    DOWNLOAD_URL="${PROMETHEUS_NODE_EXPORTER_ARM64_URL}"
+    local PROMETHEUS_NODE_EXPORTER_ARM64_URL=$($AWS dynamodb get-item \
+                                --region "{{ context.aws_region }}" \
+                                --table-name "{{ context.cluster_name }}.cluster-settings" \
+                                --key '{"key": {"S": "global-settings.package_config.prometheus.exporters.node_exporter.linux.aarch64"}}' \
+                                --output text \
+                                | awk '/VALUE/ {print $2}')
+    DOWNLOAD_URL=$(echo $PROMETHEUS_NODE_EXPORTER_ARM64_URL)
   else
-    DOWNLOAD_URL="${PROMETHEUS_NODE_EXPORTER_AMD64_URL}"
+    local PROMETHEUS_NODE_EXPORTER_AMD64_URL=$($AWS dynamodb get-item \
+                            --region "{{ context.aws_region }}" \
+                            --table-name "{{ context.cluster_name }}.cluster-settings" \
+                            --key '{"key": {"S": "global-settings.package_config.prometheus.exporters.node_exporter.linux.x86_64"}}' \
+                            --output text \
+                            | awk '/VALUE/ {print $2}')
+    DOWNLOAD_URL=$(echo $PROMETHEUS_NODE_EXPORTER_AMD64_URL)
   fi
   local PACKAGE_ARCHIVE=$(basename ${DOWNLOAD_URL})
   local PACKAGE_NAME="${PACKAGE_ARCHIVE%.tar.gz*}"

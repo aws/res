@@ -41,7 +41,9 @@ export type SocaUserInputParamType =
     | "radio-group"
     | "file-upload"
     | "tiles"
-    | "container";
+    | "container"
+    | "expandable"
+    | "attribute_editor";
 export type VirtualDesktopBaseOS = "amazonlinux2" | "centos7" | "rhel7" | "rhel8" | "rhel9" | "windows";
 export type SocaMemoryUnit = "bytes" | "kib" | "mib" | "gib" | "tib" | "kb" | "mb" | "gb" | "tb";
 export type VirtualDesktopArchitecture = "x86_64" | "arm64";
@@ -197,6 +199,7 @@ export interface SocaUserInputParamMetadata {
     description?: string;
     description2?: string;
     help_text?: string;
+    help_url?: string;
     param_type?: SocaUserInputParamType;
     data_type?: string;
     custom_type?: string;
@@ -228,6 +231,8 @@ export interface SocaUserInputParamMetadata {
     };
     container_items?: SocaUserInputParamMetadata[];
     custom_error_message?: string;
+    container_group_name?: string;
+    attributes_editor_type?: string;
 }
 export interface SocaUserInputValidate {
     eq?: unknown;
@@ -373,7 +378,36 @@ export interface Project {
     tags?: SocaKeyValue[];
     created_on?: string;
     updated_on?: string;
+    scripts?: Scripts;
+    policy_arns?: string[];
+    security_groups?: string[];
 }
+
+export interface Scripts {
+    windows?: ScriptEvents;
+    linux?: ScriptEvents;
+}
+
+export interface ScriptEvents {
+    on_vdi_start?: Script[];
+    on_vdi_configured?: Script[];
+}
+
+export interface Script {
+    script_location?: string;
+    arguments?: string[];
+}
+
+export interface SecurityGroup {
+    group_id?: string;
+    group_name?: string;
+}
+
+export interface Policy {
+    policy_arn?: string;
+    policy_name?: string;
+}
+
 export interface FileSystemsNotOnboarded {
     [filesystemId: string]: EFSFileSystem | FSxONTAPFileSystem;
 }
@@ -399,6 +433,10 @@ export interface FSxONTAPFileSystem {
     filesystem?: any;
     svm?: FSxONTAPSVM[];
     volume: FSxONTAPVolume[];
+}
+
+export interface FSxLUSTREFileSystem {
+    filesystem?: any;
 }
 
 export interface AwsProjectBudget {
@@ -1894,6 +1932,19 @@ export interface ListFileSystemsForProjectRequest {
     project_name?: string;
     project_id?: string;
 }
+
+export interface ListSecurityGroupsRequest {}
+
+export interface ListSecurityGroupsResult {
+    security_groups?: SecurityGroup[];
+}
+
+export interface ListPoliciesRequest {}
+
+export interface ListPoliciesResult {
+    policies?: Policy[]
+}
+
 export interface ListQueueProfilesResult {
     paginator?: SocaPaginator;
     sort_by?: SocaSortBy;
@@ -2089,7 +2140,8 @@ export interface ListFileSystemsInVPCRequest {}
 
 export interface ListFileSystemsInVPCResult {
     efs: EFSFileSystem[];
-    fsx: FSxONTAPFileSystem[];
+    fsx_ontap: FSxONTAPFileSystem[];
+    fsx_lustre: FSxLUSTREFileSystem[];
 }
 
 export interface DescribeSessionsRequest {
@@ -2209,4 +2261,16 @@ export interface OnboardONTAPFileSystemRequest extends CommonOnboardFileSystemRe
     volume_id: string;
     file_share_name?: string;
 }
+
+export interface OnboardLUSTREFileSystemRequest extends CommonOnboardFileSystemRequest {
+    mount_directory: string;
+}
 export interface OnboardFileSystemResult {}
+
+export interface ConfigureQUICRequest {
+    enable: boolean;
+}
+
+export interface ConfigureQUICResult {
+    result?: string;
+}

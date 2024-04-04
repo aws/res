@@ -15,6 +15,7 @@ __all__ = (
     'CommonOnboardFileSystemRequest',
     'OnboardEFSFileSystemRequest',
     'OnboardONTAPFileSystemRequest',
+    'OnboardLUSTREFileSystemRequest',
     'OnboardFileSystemResult',
     'OffboardFileSystemRequest',
     "OPEN_API_SPEC_ENTRIES_FILESYSTEM",
@@ -23,7 +24,7 @@ __all__ = (
 from enum import Enum
 
 from ideadatamodel.api import SocaPayload, IdeaOpenAPISpecEntry
-from ideadatamodel.shared_filesystem import EFSFileSystem, FSxONTAPFileSystem
+from ideadatamodel.shared_filesystem import EFSFileSystem, FSxONTAPFileSystem, FSxLUSTREFileSystem
 from typing import Optional, List
 
 
@@ -94,13 +95,17 @@ class RemoveFileSystemFromProjectRequest(SocaPayload):
 class RemoveFileSystemFromProjectResult(SocaPayload):
     pass
 
+
 # ListFileSystemInVPC
 class ListFileSystemInVPCRequest(SocaPayload):
     pass
 
+
 class ListFileSystemInVPCResult(SocaPayload):
     efs: Optional[List[EFSFileSystem]]
-    fsx: Optional[List[FSxONTAPFileSystem]]
+    fsx_ontap: Optional[List[FSxONTAPFileSystem]]
+    fsx_lustre: Optional[List[FSxLUSTREFileSystem]]
+
 
 # OnboardFileSystems
 class CommonOnboardFileSystemRequest(SocaPayload):
@@ -108,8 +113,10 @@ class CommonOnboardFileSystemRequest(SocaPayload):
     filesystem_title: str
     filesystem_id: str
 
+
 class OnboardEFSFileSystemRequest(CommonOnboardFileSystemRequest):
     mount_directory: str
+
 
 class OnboardONTAPFileSystemRequest(CommonOnboardFileSystemRequest):
     mount_directory: Optional[str]
@@ -117,6 +124,11 @@ class OnboardONTAPFileSystemRequest(CommonOnboardFileSystemRequest):
     svm_id: str
     volume_id: str
     file_share_name: Optional[str]
+
+
+class OnboardLUSTREFileSystemRequest(CommonOnboardFileSystemRequest):
+    mount_directory: str
+
 
 class OnboardFileSystemResult(SocaPayload):
     pass
@@ -172,6 +184,13 @@ OPEN_API_SPEC_ENTRIES_FILESYSTEM = [
     IdeaOpenAPISpecEntry(
         namespace="FileSystem.OnboardONTAPFileSystem",
         request=OnboardONTAPFileSystemRequest,
+        result=OnboardFileSystemResult,
+        is_listing=False,
+        is_public=False
+    ),
+    IdeaOpenAPISpecEntry(
+        namespace="FileSystem.OnboardLUSTREFileSystem",
+        request=OnboardLUSTREFileSystemRequest,
         result=OnboardFileSystemResult,
         is_listing=False,
         is_public=False

@@ -12,6 +12,7 @@ from idea.constants import (
     INSTALL_STACK_NAME,
     PIPELINE_STACK_NAME,
 )
+from idea.infrastructure.install.parameters.parameters import RESParameters
 from idea.infrastructure.install.stack import InstallStack
 from idea.pipeline.stack import PipelineStack
 
@@ -43,9 +44,16 @@ def main() -> None:
     )
 
     PipelineStack(app, PIPELINE_STACK_NAME, synthesizer=synthesizer)
+    use_bi_parameters_from_ssm = app.node.try_get_context("use_bi_parameters_from_ssm")
+    parameters = (
+        BIParameters()
+        if use_bi_parameters_from_ssm and use_bi_parameters_from_ssm.lower() == "true"
+        else RESParameters()
+    )
     InstallStack(
         app,
         INSTALL_STACK_NAME,
+        parameters=parameters,
         registry_name=registry_name,
         synthesizer=install_synthesizer,
     )

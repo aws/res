@@ -35,7 +35,8 @@ def project(
         project=project, filesystem_names=filesystem_names
     )
 
-    client = ResClient(request, res_environment, admin)
+    api_invoker_type = request.config.getoption("--api-invoker-type")
+    client = ResClient(res_environment, admin, api_invoker_type)
     project = client.create_project(create_project_request).project
 
     def tear_down() -> None:

@@ -24,7 +24,6 @@ class Permissions(Construct):
         )
 
         self.pipeline_role.add_to_policy(statement=self.get_cloudformation_access())
-        self.pipeline_role.add_to_policy(statement=self.get_directoryservice_access())
         self.pipeline_role.add_to_policy(statement=self.get_dynamodb_access())
         self.pipeline_role.add_to_policy(statement=self.get_ecr_access())
         self.pipeline_role.add_to_policy(
@@ -39,6 +38,7 @@ class Permissions(Construct):
         self.pipeline_role.add_to_policy(statement=self.get_cloudtrail_access())
         self.pipeline_role.add_to_policy(statement=self.get_fsx_access())
         self.pipeline_role.add_to_policy(statement=self.get_iam_access())
+        self.pipeline_role.add_to_policy(statement=self.get_kinesis_access())
         self.pipeline_role.add_to_policy(statement=self.get_kms_access())
         self.pipeline_role.add_to_policy(statement=self.get_lambda_access())
         self.pipeline_role.add_to_policy(statement=self.get_cloudwatch_logs_access())
@@ -50,7 +50,6 @@ class Permissions(Construct):
         self.pipeline_role.add_to_policy(statement=self.get_sns_access())
         self.pipeline_role.add_to_policy(statement=self.get_sqs_access())
         self.pipeline_role.add_to_policy(statement=self.get_sts_access())
-        self.pipeline_role.add_to_policy(statement=self.get_tag_access())
         self.pipeline_role.add_to_policy(statement=self.get_cognito_idp_access())
         self.pipeline_role.add_to_policy(statement=self.get_cognito_idp_list_access())
 
@@ -71,7 +70,7 @@ class Permissions(Construct):
         return iam.PolicyStatement(
             effect=iam.Effect.ALLOW,
             resources=[
-                f"arn:{aws_cdk.Aws.PARTITION}:cloudformation:{aws_cdk.Aws.REGION}:{aws_cdk.Aws.ACCOUNT_ID}:stack/res-*"
+                f"arn:{aws_cdk.Aws.PARTITION}:cloudformation:{aws_cdk.Aws.REGION}:{aws_cdk.Aws.ACCOUNT_ID}:stack/*"
             ],
             actions=[
                 "cloudformation:CreateChangeSet",
@@ -81,19 +80,11 @@ class Permissions(Construct):
                 "cloudformation:DescribeChangeSet",
                 "cloudformation:DescribeStackEvents",
                 "cloudformation:DescribeStacks",
+                "cloudformation:ListStacks",
                 "cloudformation:ExecuteChangeSet",
                 "cloudformation:GetTemplate",
                 "cloudformation:UpdateTerminationProtection",
             ],
-        )
-
-    def get_directoryservice_access(self) -> iam.PolicyStatement:
-        return iam.PolicyStatement(
-            effect=iam.Effect.ALLOW,
-            resources=[
-                f"arn:{aws_cdk.Aws.PARTITION}:ds:{aws_cdk.Aws.REGION}:{aws_cdk.Aws.ACCOUNT_ID}:*"
-            ],
-            actions=["ds:CreateMicrosoftAD", "ds:DescribeDirectories"],
         )
 
     def get_dynamodb_access(self) -> iam.PolicyStatement:
@@ -103,6 +94,15 @@ class Permissions(Construct):
                 f"arn:{aws_cdk.Aws.PARTITION}:dynamodb:{aws_cdk.Aws.REGION}:{aws_cdk.Aws.ACCOUNT_ID}:*"
             ],
             actions=["dynamodb:*"],
+        )
+
+    def get_kinesis_access(self) -> iam.PolicyStatement:
+        return iam.PolicyStatement(
+            effect=iam.Effect.ALLOW,
+            resources=[
+                f"arn:{aws_cdk.Aws.PARTITION}:kinesis:{aws_cdk.Aws.REGION}:{aws_cdk.Aws.ACCOUNT_ID}:*"
+            ],
+            actions=["kinesis:*"],
         )
 
     def get_ecr_access(self) -> iam.PolicyStatement:
@@ -353,13 +353,6 @@ class Permissions(Construct):
                 f"arn:{aws_cdk.Aws.PARTITION}:iam::{aws_cdk.Aws.ACCOUNT_ID}:role/*",
             ],
             actions=["sts:*"],
-        )
-
-    def get_tag_access(self) -> iam.PolicyStatement:
-        return iam.PolicyStatement(
-            effect=iam.Effect.ALLOW,
-            resources=["*"],
-            actions=["tag:GetResources"],
         )
 
     def get_cognito_idp_access(self) -> iam.PolicyStatement:

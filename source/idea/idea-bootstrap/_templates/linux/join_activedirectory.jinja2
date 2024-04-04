@@ -11,7 +11,6 @@ AD_REALM_NAME="{{ context.config.get_string('directoryservice.name', required=Tr
 AD_SUDOERS_GROUP_NAME="{{ context.config.get_string('directoryservice.sudoers.group_name', required=True) }}"
 AD_SUDOERS_GROUP_NAME_ESCAPED="{{ context.config.get_string('directoryservice.sudoers.group_name', required=True).replace(' ', '\ ') }}"
 SSSD_LDAP_ID_MAPPING="{{ context.config.get_bool('directoryservice.sssd.ldap_id_mapping', default=True) | lower }}"
-AD_TLS_CERTIFICATE_SECRET_ARN="{{context.config.get_string('directoryservice.tls_certificate_secret_arn', default='')}}"
 AD_LDAP_BASE="{{context.config.get_string('directoryservice.ldap_base', required=True)}}"
 
 AWS=$(command -v aws)
@@ -160,14 +159,18 @@ else
   enumerate_value=False
 fi
 
-if [[ "${AD_TLS_CERTIFICATE_SECRET_ARN}" == '' ]]; then
-  echo -e "[sssd]
+echo -e "[sssd]
 domains = ${AD_DOMAIN_NAME}
 config_file_version = 2
 services = nss, pam
 
 [domain/${AD_DOMAIN_NAME}]
 ad_domain = ${AD_DOMAIN_NAME}
+# When SSSD is configured to use AD provider, back end communication occurs over a GSSAPI-encrypted channel,
+# SSL/TLS options should not be used in this case and will be superseded by Kerberos usage. Note that the latest
+# version of SSSD (>=2.3.0) allows to force the LDAPS connection, but the package is not available in the Amazon Linux Core x86_64 repo.
+# Only uncomment the lines below to force the LDAPS connection with the latest SSSD version if required:
+# ad_use_ldaps = true
 
 krb5_realm = ${AD_REALM_NAME}
 realmd_tags = manages-system joined-with-adcli
@@ -204,63 +207,6 @@ homedir_substring = ${IDEA_CLUSTER_HOME_DIR}/
 
 [secrets]
 " > /etc/sssd/sssd.conf
-else
-  echo -e "[sssd]
-domains = ${AD_DOMAIN_NAME}
-config_file_version = 2
-services = nss, pam
-
-[domain/${AD_DOMAIN_NAME}]
-ad_server = ${AD_DOMAIN_NAME}
-ad_domain = ${AD_DOMAIN_NAME}
-ldap_uri = ldaps://${AD_DOMAIN_NAME}
-ldap_search_base = ${AD_LDAP_BASE}
-
-ldap_id_use_start_tls = True
-ldap_tls_cacertdir = /etc/openldap/cacerts
-ldap_tls_cacert = /etc/openldap/cacerts/ad-server.pem
-ldap_tls_reqcert = hard
-
-krb5_realm = ${AD_REALM_NAME}
-realmd_tags = manages-system joined-with-adcli
-cache_credentials = true
-id_provider = ad
-access_provider = ad
-auth_provider = ad
-chpass_provider = ad
-krb5_store_password_if_offline = true
-default_shell = /bin/bash
-
-# posix uidNumber and gidNumber will be ignored when ldap_id_mapping = true
-ldap_id_mapping = ${SSSD_LDAP_ID_MAPPING}
-
-use_fully_qualified_names = false
-fallback_homedir = ${IDEA_CLUSTER_HOME_DIR}/%u
-
-# disable or set to false for very large environments
-enumerate = "${enumerate_value}"
-
-sudo_provider = none
-
-# Use our AD-created IDEA hostname
-ldap_sasl_authid = ${IDEA_HOSTNAME}\$
-
-[nss]
-homedir_substring = ${IDEA_CLUSTER_HOME_DIR}/
-
-[pam]
-
-[autofs]
-
-[ssh]
-
-[secrets]
-" > /etc/sssd/sssd.conf
-
-  mkdir -p /etc/openldap/cacerts/
-  AD_TLS_CERTIFICATE=$(get_secret "${AD_TLS_CERTIFICATE_SECRET_ARN}")
-  echo -n "${AD_TLS_CERTIFICATE}" > /etc/openldap/cacerts/ad-server.pem
-fi
 
 chmod 600 /etc/sssd/sssd.conf
 

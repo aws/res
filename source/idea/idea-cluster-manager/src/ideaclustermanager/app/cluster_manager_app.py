@@ -163,7 +163,7 @@ class ClusterManagerApp(ideasdk.app.SocaApp):
             evdi_client=evdi_client,
             token_service=self.context.token_service
         )
-        
+
         #api authorization service
         self.context.api_authorization_service = ClusterManagerApiAuthorizationService(accounts=self.context.accounts)
 
@@ -206,7 +206,7 @@ class ClusterManagerApp(ideasdk.app.SocaApp):
             accounts=self.context.accounts,
             email_templates=self.context.email_templates
         )
-        
+
         self.context.shared_filesystem = SharedFilesystemService(
             context=self.context
         )

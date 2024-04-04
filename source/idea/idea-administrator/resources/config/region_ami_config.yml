@@ -28,6 +28,8 @@ eu-west-2:
   amazonlinux2: ami-05e4ed86eaaac596f
 eu-west-3:
   amazonlinux2: ami-09f63a3a06d08cac1
+il-central-1:
+  amazonlinux2: ami-051fd5c7084d435c4
 me-south-1:
   amazonlinux2: ami-0d7f2bd7b639a7bdf
 sa-east-1:

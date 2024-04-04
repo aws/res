@@ -11,8 +11,9 @@
 
 from ideasdk.utils import Utils
 from ideadatamodel import (exceptions, Project, AwsProjectBudget, ListProjectsRequest, ListProjectsResult,
-                           SocaPaginator, SocaKeyValue)
+                           SocaPaginator, SocaKeyValue, Scripts, Script, ScriptEvents)
 from ideasdk.context import SocaContext
+from ideasdk.launch_configurations import LaunchScriptsHelper, ScriptEventType, ScriptOSType
 
 from typing import Dict, Optional
 from boto3.dynamodb.conditions import Attr, Key
@@ -85,6 +86,8 @@ class ProjectsDAO:
         enabled = Utils.get_value_as_bool('enabled', project, False)
         enable_budgets = Utils.get_value_as_bool('enable_budgets', project, False)
         budget_name = Utils.get_value_as_string('budget_name', project)
+        security_groups = Utils.get_value_as_list('security_groups', project, [])
+        policy_arns = Utils.get_value_as_list('policy_arns', project, [])
         budget = None
         if Utils.is_not_empty(budget_name):
             budget = AwsProjectBudget(
@@ -96,6 +99,23 @@ class ProjectsDAO:
             tags = []
             for key, value in db_tags.items():
                 tags.append(SocaKeyValue(key=key, value=value))
+
+        scripts_dict = {}
+        os_types = LaunchScriptsHelper.get_supported_os_types()
+        db_scripts = Utils.get_value_as_dict('scripts', project)
+
+        if db_scripts is not None:
+            for os_type in os_types:
+                os_scripts = db_scripts.get(os_type, {})
+                on_vdi_start_scripts = os_scripts.get(ScriptEventType.ON_VDI_START, [])
+                on_vdi_start = [Script(script_location=script.get('script_location'), arguments=script.get('arguments', [])) for script in on_vdi_start_scripts]
+
+                on_vdi_configured_scripts = os_scripts.get(ScriptEventType.ON_VDI_CONFIGURED, [])
+                on_vdi_configured = [Script(script_location=script.get('script_location'), arguments=script.get('arguments', [])) for script in on_vdi_configured_scripts]
+
+                scripts_dict[os_type] = ScriptEvents(on_vdi_start=on_vdi_start, on_vdi_configured=on_vdi_configured)
+
+        scripts = Scripts(linux=scripts_dict.get(ScriptOSType.LINUX), windows=scripts_dict.get(ScriptOSType.WINDOWS))
 
         created_on = Utils.get_value_as_int('created_on', project, 0)
         updated_on = Utils.get_value_as_int('updated_on', project, 0)
@@ -111,6 +131,9 @@ class ProjectsDAO:
             enabled=enabled,
             enable_budgets=enable_budgets,
             budget=budget,
+            security_groups=security_groups,
+            policy_arns=policy_arns,
+            scripts=scripts,
             created_on=arrow.get(created_on).datetime,
             updated_on=arrow.get(updated_on).datetime
         )
@@ -153,6 +176,16 @@ class ProjectsDAO:
 
         if project.budget is not None and project.budget.budget_name is not None:
             db_project['budget_name'] = project.budget.budget_name
+
+        if project.policy_arns is not None:
+            db_project['policy_arns'] = project.policy_arns
+
+        if project.security_groups is not None:
+            db_project['security_groups'] = project.security_groups
+
+        scripts = project.scripts
+        if scripts:
+            db_project['scripts'] = LaunchScriptsHelper.convert_scripts_to_dict(scripts)
 
         return db_project
 

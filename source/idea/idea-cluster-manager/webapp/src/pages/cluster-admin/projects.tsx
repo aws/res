@@ -14,12 +14,11 @@
 import React, { Component, RefObject } from "react";
 
 import { TableProps } from "@cloudscape-design/components/table/interfaces";
-import { Project, SocaUserInputChoice, SocaUserInputParamMetadata } from "../../client/data-model";
+import { Project } from "../../client/data-model";
 import IdeaListView from "../../components/list-view";
 import { AccountsClient, ClusterSettingsClient, ProjectsClient } from "../../client";
 import { AppContext } from "../../common";
 import { Box, Button, Header, Modal, ProgressBar, SpaceBetween, StatusIndicator, TagEditor } from "@cloudscape-design/components";
-import IdeaForm from "../../components/form";
 import Utils from "../../common/utils";
 import { IdeaSideNavigationProps } from "../../components/side-navigation";
 import IdeaAppLayout, { IdeaAppLayoutProps } from "../../components/app-layout";
@@ -28,15 +27,11 @@ import IdeaSplitPanel from "../../components/split-panel";
 import { SharedStorageFileSystem } from "../../common/shared-storage-utils";
 import { FILESYSTEM_TABLE_COLUMN_DEFINITIONS } from "./filesystem";
 import FilesystemClient from "../../client/filesystem-client";
-import { Constants } from "../../common/constants";
-import dot from "dot-object";
 
 export interface ProjectsProps extends IdeaAppLayoutProps, IdeaSideNavigationProps {}
 
 export interface ProjectsState {
     projectSelected: boolean;
-    createProjectModalType: string; // create or update
-    showCreateProjectForm: boolean;
     showTagEditor: boolean;
     tags: any[];
     splitPanelOpen: boolean;
@@ -127,17 +122,13 @@ const PROJECT_TABLE_COLUMN_DEFINITIONS: TableProps.ColumnDefinition<Project>[] =
 class Projects extends Component<ProjectsProps, ProjectsState> {
     listing: RefObject<IdeaListView>;
     filesystemListing: RefObject<IdeaListView>;
-    createProjectForm: RefObject<IdeaForm>;
 
     constructor(props: ProjectsProps) {
         super(props);
         this.listing = React.createRef();
-        this.createProjectForm = React.createRef();
         this.filesystemListing = React.createRef();
         this.state = {
             projectSelected: false,
-            showCreateProjectForm: false,
-            createProjectModalType: "",
             showTagEditor: false,
             tags: [],
             splitPanelOpen: false,
@@ -176,28 +167,6 @@ class Projects extends Component<ProjectsProps, ProjectsState> {
         return this.filesystemListing.current!;
     }
 
-    getCreateProjectForm(): IdeaForm {
-        return this.createProjectForm.current!;
-    }
-
-    showCreateProjectForm(type: string) {
-        this.setState(
-            {
-                showCreateProjectForm: true,
-                createProjectModalType: type,
-            },
-            () => {
-                this.getCreateProjectForm().showModal();
-            }
-        );
-    }
-
-    hideCreateProjectForm() {
-        this.setState({
-            showCreateProjectForm: false,
-            createProjectModalType: "",
-        });
-    }
 
     isSelected(): boolean {
         return this.state.projectSelected;
@@ -225,262 +194,6 @@ class Projects extends Component<ProjectsProps, ProjectsState> {
     }
     clusterSettings(): ClusterSettingsClient {
         return AppContext.get().client().clusterSettings();
-    }
-
-    buildAddFileSystemParam(isUpdate: boolean): SocaUserInputParamMetadata[] {
-        const params: SocaUserInputParamMetadata[] = [];
-        if (isUpdate) {
-            return params;
-        }
-        params.push({
-            name: "add_filesystems",
-            title: "Add file systems",
-            description: "Select applicable file systems for the Project",
-            param_type: "select",
-            multiple: true,
-            data_type: "str",
-            dynamic_choices: true,
-            default: ["home"],
-        });
-        return params;
-    }
-
-    buildUserParam(): SocaUserInputParamMetadata[] {
-        const params: SocaUserInputParamMetadata[] = [];
-        params.push({
-            name: "users",
-            title: "Users",
-            description: "Select applicable users for the Project",
-            param_type: "select",
-            multiple: true,
-            data_type: "str",
-            dynamic_choices: true,
-            validate: {
-                required: false,
-            },
-        });
-        return params;
-    }
-
-    buildCreateProjectForm() {
-        let values = undefined;
-        const isUpdate = this.state.createProjectModalType === "update";
-        if (isUpdate) {
-            const selected = this.getSelected();
-            if (selected != null) {
-                values = {
-                    ...selected,
-                    "budget.budget_name": selected.budget?.budget_name,
-                };
-            }
-        }
-        return (
-            this.state.showCreateProjectForm && (
-                <IdeaForm
-                    ref={this.createProjectForm}
-                    name="create-update-project"
-                    modal={true}
-                    modalSize="medium"
-                    title={isUpdate ? "Update Project" : "Create new Project"}
-                    values={values}
-                    onSubmit={() => {
-                        if (!this.getCreateProjectForm().validate()) {
-                            return;
-                        }
-                        const values = this.getCreateProjectForm().getValues();
-                        let createOrUpdate;
-                        let filesystemNames;
-                        if (isUpdate) {
-                            createOrUpdate = (request: any) => this.projects().updateProject(request);
-                            values.project_id = this.getSelected()?.project_id;
-                        } else {
-                            filesystemNames = dot.del("add_filesystems", values);
-                            filesystemNames = filesystemNames.filter((filesystemName: string) => filesystemName != "home");
-                            createOrUpdate = (request: any) => this.projects().createProject(request);
-                        }
-                        createOrUpdate({
-                            project: values,
-                            filesystem_names: filesystemNames,
-                        })
-                            .then(() => {
-                                this.setState(
-                                    {
-                                        projectSelected: false,
-                                    },
-                                    () => {
-                                        this.hideCreateProjectForm();
-                                        this.getListing().fetchRecords();
-                                    }
-                                );
-                            })
-                            .catch((error) => {
-                                this.getCreateProjectForm().setError(error.errorCode, error.message);
-                            });
-                    }}
-                    onCancel={() => {
-                        this.hideCreateProjectForm();
-                    }}
-                    onFetchOptions={(request) => {
-                        if (request.param === "ldap_groups") {
-                            return this.accounts()
-                                .listGroups({
-                                    filters: [
-                                        {
-                                            key: "group_type",
-                                            eq: "project",
-                                        },
-                                    ],
-                                })
-                                .then((result) => {
-                                    const listing = result.listing!;
-                                    if (listing.length === 0) {
-                                        return {
-                                            listing: [],
-                                        };
-                                    } else {
-                                        const choices: SocaUserInputChoice[] = [];
-                                        listing.forEach((value) => {
-                                            choices.push({
-                                                title: `${value.name} (${value.gid})`,
-                                                value: value.name,
-                                            });
-                                        });
-                                        return {
-                                            listing: choices,
-                                        };
-                                    }
-                                });
-                        } else if (request.param === "users") {
-                            return this.accounts()
-                                .listUsers()
-                                .then((result) => {
-                                    const listing = result.listing!;
-                                    if (listing.length === 0) {
-                                        return {
-                                            listing: [],
-                                        };
-                                    } else {
-                                        const choices: SocaUserInputChoice[] = [];
-                                        listing.forEach((value) => {
-                                            if (value.username != "clusteradmin") {
-                                                choices.push({
-                                                    title: `${value.username} (${value.uid})`,
-                                                    value: value.username,
-                                                });
-                                            }
-                                        });
-                                        return {
-                                            listing: choices,
-                                        };
-                                    }
-                                });
-                        } else if (request.param === "add_filesystems") {
-                            let promises: Promise<any>[] = [];
-                            promises.push(this.clusterSettings().getModuleSettings({ module_id: Constants.MODULE_SHARED_STORAGE }));
-                            return Promise.all(promises).then((result) => {
-                                const choices: SocaUserInputChoice[] = [];
-                                const sharedFileSystem = result[0].settings;
-                                Object.keys(sharedFileSystem).forEach((key) => {
-                                    const storage = dot.pick(key, sharedFileSystem);
-                                    const provider = dot.pick("provider", storage);
-                                    if (Utils.isEmpty(provider)) {
-                                        return true;
-                                    }
-                                    const isInternal = key === "internal";
-                                    if (!isInternal) {
-                                        let choice: SocaUserInputChoice = {
-                                            title: `${key} [${provider}]`,
-                                            value: `${key}`,
-                                        };
-                                        if (key === "home") {
-                                            choice.disabled = true;
-                                        }
-                                        choices.push(choice);
-                                    }
-                                });
-                                return { listing: choices };
-                            });
-                        } else {
-                            return Promise.resolve({
-                                listing: [],
-                            });
-                        }
-                    }}
-                    params={[
-                        {
-                            name: "title",
-                            title: "Title",
-                            description: "Enter a user friendly project title",
-                            data_type: "str",
-                            param_type: "text",
-                            validate: {
-                                required: true,
-                            },
-                        },
-                        {
-                            name: "name",
-                            title: "Project ID",
-                            description: "Enter a project-id",
-                            help_text: "Project ID can only use lowercase alphabets, numbers, and hyphens (-). Must be between 3 and 18 characters long.",
-                            data_type: "str",
-                            param_type: "text",
-                            readonly: isUpdate,
-                            validate: {
-                                required: true,
-                                regex: "^([a-z0-9-]+){3,18}$",
-                                message: "Only use lowercase alphabets, numbers, and hyphens (-). Must be between 3 and 18 characters long.",
-                            },
-                        },
-                        {
-                            name: "description",
-                            title: "Description",
-                            description: "Enter the project description",
-                            data_type: "str",
-                            param_type: "text",
-                            multiline: true,
-                        },
-                        {
-                            name: "ldap_groups",
-                            title: "Groups",
-                            description: "Select applicable ldap groups for the Project",
-                            param_type: "select",
-                            multiple: true,
-                            data_type: "str",
-                            validate: {
-                                required: true,
-                            },
-                            dynamic_choices: true,
-                        },
-                        ...this.buildUserParam(),
-                        ...this.buildAddFileSystemParam(isUpdate),
-                        {
-                            name: "enable_budgets",
-                            title: "Do you want to enable budgets for this project?",
-                            data_type: "bool",
-                            param_type: "confirm",
-                            default: false,
-                            validate: {
-                                required: true,
-                            },
-                        },
-                        {
-                            name: "budget.budget_name",
-                            title: "Enter the AWS Budgets name for the project",
-                            description: "Select budget name that you have created in AWS budget",
-                            data_type: "str",
-                            param_type: "text",
-                            validate: {
-                                required: true,
-                            },
-                            when: {
-                                param: "enable_budgets",
-                                eq: true,
-                            },
-                        },
-                    ]}
-                />
-            )
-        );
     }
 
     buildTagEditor() {
@@ -620,7 +333,7 @@ class Projects extends Component<ProjectsProps, ProjectsState> {
                     id: "create-project",
                     text: "Create Project",
                     onClick: () => {
-                        this.showCreateProjectForm("create");
+                        this.props.navigate("/cluster/projects/configure")
                     },
                 }}
                 secondaryActionsDisabled={!this.isSelected()}
@@ -629,7 +342,7 @@ class Projects extends Component<ProjectsProps, ProjectsState> {
                         id: "edit-project",
                         text: "Edit Project",
                         onClick: () => {
-                            this.showCreateProjectForm("update");
+                            this.props.navigate("/cluster/projects/configure", { state: { isUpdate: true, project: this.getSelected() }})
                         },
                     },
                     {
@@ -770,7 +483,6 @@ class Projects extends Component<ProjectsProps, ProjectsState> {
                 ]}
                 content={
                     <div>
-                        {this.buildCreateProjectForm()}
                         {this.buildTagEditor()}
                         {this.buildListing()}
                     </div>

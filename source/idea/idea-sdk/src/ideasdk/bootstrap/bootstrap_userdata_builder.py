@@ -46,8 +46,8 @@ class BootstrapUserDataBuilder:
     def _build_windows_userdata(self) -> str:
         userdata = f'''
 <powershell>
- $BootstrapDir = "C`:\\Users\\Administrator\\IDEA\\bootstrap"
- function Download-Idea-Package {{
+ $BootstrapDir = "C`:\\Users\\Administrator\\RES\\Bootstrap"
+ function Download-RES-Package {{
      Param(
      [ValidateNotNullOrEmpty()]
      [Parameter(Mandatory=$true)]
@@ -70,7 +70,7 @@ class BootstrapUserDataBuilder:
      }}
      Tar -xf "$BootstrapDir\\$PackageArchive"
  }}
- Download-Idea-Package {self.bootstrap_package_uri}
+ Download-RES-Package {self.bootstrap_package_uri}
 '''
         for install_command in self.install_commands:
             userdata += f'{install_command}{os.linesep}'
@@ -123,23 +123,26 @@ exec > /root/bootstrap/logs/userdata.log 2>&1
 export PATH="${!PATH}:/usr/local/bin"
 
 function install_aws_cli () {
-  if [[ "${!BASE_OS}" == "amazonlinux2" ]]; then
-    yum remove -y awscli
+  AWS=$(command -v aws)
+  if [[ $($AWS --version | awk -F'[/.]' '{print $2}') != 2 ]]; then
+    if [[ "${!BASE_OS}" == "amazonlinux2" ]]; then
+      yum remove -y awscli
+    fi
+    cd /root/bootstrap
+    local machine=$(uname -m)
+    if [[ ${!machine} == "x86_64" ]]; then
+      curl -s ${!AWSCLI_X86_64_URL} -o "awscliv2.zip"
+      elif [[ ${!machine} == "aarch64" ]]; then
+        curl -s ${!AWSCLI_AARCH64_URL} -o "awscliv2.zip"
+    fi
+    which unzip > /dev/null 2>&1
+    if [[ "$?" != "0" ]]; then
+      yum install -y unzip
+    fi
+    unzip -q awscliv2.zip
+    ./aws/install --bin-dir /bin --update
+    rm -rf aws awscliv2.zip
   fi
-  cd /root/bootstrap
-  local machine=$(uname -m)
-  if [[ ${!machine} == "x86_64" ]]; then
-    curl -s ${!AWSCLI_X86_64_URL} -o "awscliv2.zip"
-    elif [[ ${!machine} == "aarch64" ]]; then
-      curl -s ${!AWSCLI_AARCH64_URL} -o "awscliv2.zip"
-  fi
-  which unzip > /dev/null 2>&1
-  if [[ "$?" != "0" ]]; then
-    yum install -y unzip
-  fi
-  unzip -q awscliv2.zip
-  ./aws/install --bin-dir /bin --update
-  rm -rf aws awscliv2.zip
 }
 
 echo "#!/bin/bash
@@ -149,14 +152,7 @@ PACKAGE_NAME=\\${!PACKAGE_ARCHIVE%.tar.gz*}
 INSTANCE_REGION=\\$(TOKEN=\\$(curl --silent -X PUT 'http://169.254.169.254/latest/api/token' -H 'X-aws-ec2-metadata-token-ttl-seconds: 900') && curl --silent -H \\"X-aws-ec2-metadata-token: \\${!TOKEN}\\" 'http://169.254.169.254/latest/meta-data/placement/region')
 if [[ \\${!PACKAGE_DOWNLOAD_URI} == s3://* ]]; then
   AWS=\\$(command -v aws)
-  S3_BUCKET=\\$(echo \\${!PACKAGE_DOWNLOAD_URI} | cut -f3 -d/)
-  if [[ \\${!INSTANCE_REGION} =~ ^us-gov-[a-z]+-[0-9]+$ ]]; then
-    S3_BUCKET_REGION=\\$(curl -s --head https://\${!S3_BUCKET}.s3.us-gov-west-1.amazonaws.com | grep bucket-region | awk '{print \$2}' | tr -d '\\r\\n')
-    \\$AWS --region \\${!S3_BUCKET_REGION} s3 cp \\${!PACKAGE_DOWNLOAD_URI} /root/bootstrap/
-  else
-    #S3_BUCKET_REGION=\\$(curl -s --head https://\${!S3_BUCKET}.s3.us-east-1.amazonaws.com | grep bucket-region | awk '{print \$2}' | tr -d '\\r\\n')
-    \\$AWS --region \\${!INSTANCE_REGION} s3 cp \\${!PACKAGE_DOWNLOAD_URI} /root/bootstrap/
-  fi
+  \\$AWS --region \\${!INSTANCE_REGION} s3 cp \\${!PACKAGE_DOWNLOAD_URI} /root/bootstrap/
 else
   cp \\${!PACKAGE_DOWNLOAD_URI} /root/bootstrap/
 fi
@@ -166,7 +162,7 @@ if [[ -d \\${!PACKAGE_DIR} ]]; then
 fi
 mkdir -p \\${!PACKAGE_DIR}
 tar -xvf /root/bootstrap/\\${!PACKAGE_ARCHIVE} -C \\${!PACKAGE_DIR}
-rm /root/bootstrap/latest
+rm -rf /root/bootstrap/latest
 ln -sf \\${!PACKAGE_DIR} /root/bootstrap/latest
 " > /root/bootstrap/download_bootstrap.sh
 
@@ -218,23 +214,26 @@ exec > /root/bootstrap/logs/userdata.log 2>&1
 export PATH="${PATH}:/usr/local/bin"
 
 function install_aws_cli () {
-  if [[ "${BASE_OS}" == "amazonlinux2" ]]; then
-    yum remove -y awscli
+  AWS=$(command -v aws)
+  if [[ $($AWS --version | awk -F'[/.]' '{print $2}') != 2 ]]; then
+    if [[ "${BASE_OS}" == "amazonlinux2" ]]; then
+      yum remove -y awscli
+    fi
+    cd /root/bootstrap
+    local machine=$(uname -m)
+    if [[ ${machine} == "x86_64" ]]; then
+      curl -s ${AWSCLI_X86_64_URL} -o "awscliv2.zip"
+      elif [[ ${machine} == "aarch64" ]]; then
+        curl -s ${AWSCLI_AARCH64_URL} -o "awscliv2.zip"
+    fi
+    which unzip > /dev/null 2>&1
+    if [[ "$?" != "0" ]]; then
+      yum install -y unzip
+    fi
+    unzip -q awscliv2.zip
+    ./aws/install --bin-dir /bin --update
+    rm -rf aws awscliv2.zip
   fi
-  cd /root/bootstrap
-  local machine=$(uname -m)
-  if [[ ${machine} == "x86_64" ]]; then
-    curl -s ${AWSCLI_X86_64_URL} -o "awscliv2.zip"
-    elif [[ ${machine} == "aarch64" ]]; then
-      curl -s ${AWSCLI_AARCH64_URL} -o "awscliv2.zip"
-  fi
-  which unzip > /dev/null 2>&1
-  if [[ "$?" != "0" ]]; then
-    yum install -y unzip
-  fi
-  unzip -q awscliv2.zip
-  ./aws/install --bin-dir /bin --update
-  rm -rf aws awscliv2.zip
 }
 
 echo "#!/bin/bash
@@ -244,14 +243,7 @@ PACKAGE_NAME=\\${PACKAGE_ARCHIVE%.tar.gz*}
 INSTANCE_REGION=\\$(TOKEN=\\$(curl --silent -X PUT 'http://169.254.169.254/latest/api/token' -H 'X-aws-ec2-metadata-token-ttl-seconds: 900') && curl --silent -H \\"X-aws-ec2-metadata-token: \\${TOKEN}\\" 'http://169.254.169.254/latest/meta-data/placement/region')
 if [[ \\${PACKAGE_DOWNLOAD_URI} == s3://* ]]; then
   AWS=\\$(command -v aws)
-  S3_BUCKET=\\$(echo \\${PACKAGE_DOWNLOAD_URI} | cut -f3 -d/)
-  if [[ \\${INSTANCE_REGION} =~ ^us-gov-[a-z]+-[0-9]+$ ]]; then
-    S3_BUCKET_REGION=\\$(curl -s --head https://\\${S3_BUCKET}.s3.us-gov-west-1.amazonaws.com | grep bucket-region | awk '{print \$2}' | tr -d '\\r\\n')
-    \\$AWS --region \\${S3_BUCKET_REGION} s3 cp \\${PACKAGE_DOWNLOAD_URI} /root/bootstrap/
-  else
-    #S3_BUCKET_REGION=\\$(curl -s --head https://\\${S3_BUCKET}.s3.us-east-1.amazonaws.com | grep bucket-region | awk '{print \$2}' | tr -d '\\r\\n')
-    \\$AWS --region \\${INSTANCE_REGION} s3 cp \\${PACKAGE_DOWNLOAD_URI} /root/bootstrap/
-  fi
+  \\$AWS --region \\${INSTANCE_REGION} s3 cp \\${PACKAGE_DOWNLOAD_URI} /root/bootstrap/
 else
   cp \\${PACKAGE_DOWNLOAD_URI} /root/bootstrap/
 fi
@@ -261,7 +253,7 @@ if [[ -d \\${PACKAGE_DIR} ]]; then
 fi
 mkdir -p \\${PACKAGE_DIR}
 tar -xvf /root/bootstrap/\\${PACKAGE_ARCHIVE} -C \\${PACKAGE_DIR}
-rm /root/bootstrap/latest
+rm -rf /root/bootstrap/latest
 ln -sf \\${PACKAGE_DIR} /root/bootstrap/latest
 " > /root/bootstrap/download_bootstrap.sh
 

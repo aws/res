@@ -30,11 +30,25 @@ source "${SCRIPT_DIR}/../common/bootstrap_common.sh"
 
 if [[ ! -f ${BOOTSTRAP_DIR}/idea_preinstalled_packages.log ]]; then
 
-  {% include '_templates/linux/disable_se_linux.jinja2' %}
+  # Begin: Disable SE Linux
+  /bin/bash "${SCRIPT_DIR}/../common/disable_se_linux.sh" -o $RES_BASE_OS -s "${SCRIPT_DIR}"
+  # End: Disable SE Linux
 
-  {% include '_templates/linux/system_packages.jinja2' %}
+  # Begin: Install System Packages
+  /bin/bash "${SCRIPT_DIR}/../common/system_packages.sh" -o $RES_BASE_OS -r $AWS_REGION -n $IDEA_CLUSTER_NAME -s "${SCRIPT_DIR}"
+  # End: Install System Packages
 
-  {% include '_templates/linux/cloudwatch_agent.jinja2' %}
+  # Begin: Install/Configure CloudWatch Agent
+  /bin/bash "${SCRIPT_DIR}/../common/cloudwatch_agent.sh" -o $RES_BASE_OS -r $AWS_REGION -n $IDEA_CLUSTER_NAME -s "${SCRIPT_DIR}"
+
+  {%- set cloudwatch_agent_config = context.get_cloudwatch_agent_config(additional_log_files=additional_log_files) %}
+  {%- if cloudwatch_agent_config %}
+  echo '{{ context.utils.to_json(cloudwatch_agent_config, indent=True) }}' > /opt/aws/amazon-cloudwatch-agent/etc/amazon-cloudwatch-agent.json
+  /opt/aws/amazon-cloudwatch-agent/bin/amazon-cloudwatch-agent-ctl -a fetch-config -m ec2 -s -c file:/opt/aws/amazon-cloudwatch-agent/etc/amazon-cloudwatch-agent.json
+  {%- else %}
+  log_warning "cloudwatch_agent_config not provided."
+  {%- endif %}
+  # End: Install/Configure CloudWatch Agent
 
   {%- if context.is_metrics_provider_prometheus() %}
     {%- include '_templates/linux/prometheus.jinja2' %}

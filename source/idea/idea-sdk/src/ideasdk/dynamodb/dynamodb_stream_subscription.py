@@ -13,10 +13,11 @@ from ideasdk.utils import Utils
 from ideasdk.dynamodb.dynamodb_stream_subscriber import DynamoDBStreamSubscriber
 import botocore.session
 import botocore.exceptions
-import os
 from botocore.config import Config
 from boto3.dynamodb.types import TypeDeserializer
 
+import json
+import os
 import threading
 from typing import Dict, Optional
 import time
@@ -32,10 +33,11 @@ class DynamoDBStreamSubscription:
     Create subscription for a DynamoDB Stream and Publish updates via DynamoDBStreamSubscriber protocol
     """
 
-    def __init__(self, stream_subscriber: DynamoDBStreamSubscriber, table_name: str, aws_region: str, aws_profile: Optional[str] = None, logger=None):
+    def __init__(self, stream_subscriber: DynamoDBStreamSubscriber, table_name: str, table_kinesis_stream_name: str, aws_region: str, aws_profile: Optional[str] = None, logger=None):
 
         self.stream_subscriber = stream_subscriber
         self.table_name = table_name
+        self.table_kinesis_stream_name = table_kinesis_stream_name
         self.aws_region = aws_region
         self.aws_profile = aws_profile
         self.logger = logger
@@ -48,9 +50,7 @@ class DynamoDBStreamSubscription:
             proxy_definitions = {'https': https_proxy}
             config = Config(proxies=proxy_definitions)
         self.dynamodb_client = self.boto_session.client(service_name='dynamodb', region_name=self.aws_region)
-        self.dynamodb_streams_client = self.boto_session.client(service_name='dynamodbstreams', region_name=self.aws_region, config=config)
-
-        self.stream_arn: Optional[str] = None
+        self.kinesis_client = self.boto_session.client(service_name='kinesis', region_name=self.aws_region, config=config)
 
         self.ddb_type_deserializer = TypeDeserializer()
 
@@ -92,22 +92,8 @@ class DynamoDBStreamSubscription:
         while not self._exit.is_set():
             try:
                 with self._shard_iterator_lock:
-
-                    # lazy initialize stream arn - once
-                    if Utils.is_empty(self.stream_arn):
-                        try:
-                            describe_table_result = self.dynamodb_client.describe_table(TableName=self.table_name)
-                            table = describe_table_result['Table']
-                            self.stream_arn = table['LatestStreamArn']
-                        except botocore.exceptions.ClientError as e:
-                            if e.response['Error']['Code'] == 'ResourceNotFoundException':
-                                # table may not be created yet due to race condition in module deployments
-                                continue
-                            else:
-                                raise e
-
-                    describe_stream_result = self.dynamodb_streams_client.describe_stream(StreamArn=self.stream_arn)
-                    shards = describe_stream_result['StreamDescription']['Shards']
+                    list_shards_result = self.kinesis_client.list_shards(StreamName=self.table_kinesis_stream_name)
+                    shards = list_shards_result.get('Shards', [])
                     for shard in shards:
                         shard_id = shard['ShardId']
                         shard_iterator = self.shard_iterators_map.get(shard_id)
@@ -115,8 +101,8 @@ class DynamoDBStreamSubscription:
                             success = False
                             while not success:
                                 try:
-                                    get_shard_iterator_result = self.dynamodb_streams_client.get_shard_iterator(
-                                        StreamArn=self.stream_arn,
+                                    get_shard_iterator_result = self.kinesis_client.get_shard_iterator(
+                                        StreamName=self.table_kinesis_stream_name,
                                         ShardId=shard_id,
                                         ShardIteratorType='LATEST'
                                     )
@@ -170,7 +156,7 @@ class DynamoDBStreamSubscription:
                         next_shard_iterator = shard_iterator
                         while True:
                             try:
-                                get_records_result = self.dynamodb_streams_client.get_records(ShardIterator=next_shard_iterator, Limit=1000)
+                                get_records_result = self.kinesis_client.get_records(ShardIterator=next_shard_iterator, Limit=1000)
                             except botocore.exceptions.ClientError as e:
                                 if e.response['Error']['Code'] == 'ProvisionedThroughputExceededException':
                                     time.sleep(1)
@@ -191,23 +177,24 @@ class DynamoDBStreamSubscription:
 
                             for record in records:
                                 try:
-                                    event_name = record['eventName']
+                                    record_data = json.loads(record['Data'])
+                                    event_name = record_data['eventName']
                                     if event_name == 'INSERT':
-                                        config_entry_raw = record['dynamodb']['NewImage']
+                                        config_entry_raw = record_data['dynamodb']['NewImage']
                                         config_entry = {k: self.ddb_type_deserializer.deserialize(v) for k, v in config_entry_raw.items()}
                                         self.stream_subscriber.on_create(config_entry)
                                     elif event_name == 'MODIFY':
-                                        old_config_entry_raw = record['dynamodb']['OldImage']
+                                        old_config_entry_raw = record_data['dynamodb']['OldImage']
                                         old_config_entry = {k: self.ddb_type_deserializer.deserialize(v) for k, v in old_config_entry_raw.items()}
-                                        new_config_entry_raw = record['dynamodb']['NewImage']
+                                        new_config_entry_raw = record_data['dynamodb']['NewImage']
                                         new_config_entry = {k: self.ddb_type_deserializer.deserialize(v) for k, v in new_config_entry_raw.items()}
                                         self.stream_subscriber.on_update(old_config_entry, new_config_entry)
                                     elif event_name == 'REMOVE':
-                                        config_entry_raw = record['dynamodb']['OldImage']
+                                        config_entry_raw = record_data['dynamodb']['OldImage']
                                         config_entry = {k: self.ddb_type_deserializer.deserialize(v) for k, v in config_entry_raw.items()}
                                         self.stream_subscriber.on_delete(config_entry)
                                 except Exception as e:
-                                    self.log_exception(f'failed to process {self.table_name} stream update: {e}, record: {record}')
+                                    self.log_exception(f'failed to process {self.table_name} stream update: {e}, record: {record_data}')
 
                             if len(records) == 0:
                                 break

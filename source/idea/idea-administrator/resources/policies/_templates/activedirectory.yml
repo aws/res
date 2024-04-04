@@ -17,4 +17,19 @@
       - '{{ context.arns.get_ddb_table_arn("accounts.users/index/*") }}'
     Effect: Allow
     Sid: UsersDDB
+  - Action:
+      - secretsmanager:GetSecretValue
+    Condition:
+      StringEquals:
+        secretsmanager:ResourceTag/res:EnvironmentName: '{{ context.cluster_name }}'
+        secretsmanager:ResourceTag/res:ModuleName:
+        - directoryservice
+    Resource: '*'
+    Effect: Allow
+  {%- if context.config.get_string("directoryservice.tls_certificate_secret_arn", '') != '' %}
+  - Action:
+      - secretsmanager:GetSecretValue
+    Resource: '{{ context.config.get_string("directoryservice.tls_certificate_secret_arn") }}'
+    Effect: Allow
+  {%- endif %}
   {%- endif %}

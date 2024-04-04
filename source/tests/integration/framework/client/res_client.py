@@ -12,7 +12,6 @@
 import logging
 from typing import Type
 
-import pytest
 from selenium import webdriver
 from selenium.webdriver.chrome.webdriver import WebDriver
 
@@ -35,6 +34,8 @@ from ideadatamodel import (  # type: ignore
     GetSessionInfoResponse,
     GetUserRequest,
     GetUserResult,
+    ListAllowedInstanceTypesRequest,
+    ListAllowedInstanceTypesResponse,
     ListSessionsRequest,
     ListSessionsResponse,
     ListSoftwareStackRequest,
@@ -45,6 +46,8 @@ from ideadatamodel import (  # type: ignore
     SocaHeader,
     SocaPayload,
     SocaPayloadType,
+    UpdateModuleSettingsRequest,
+    UpdateModuleSettingsResult,
     UpdateSessionRequest,
     UpdateSessionResponse,
     VirtualDesktopSession,
@@ -68,23 +71,14 @@ class ResClient:
 
     def __init__(
         self,
-        request: pytest.FixtureRequest,
         res_environment: ResEnvironment,
         client_auth: ClientAuth,
+        api_invoker_type: str,
     ):
         self._client_auth = client_auth
-        self._api_invoker = self._get_api_invoker(
-            request.config.getoption("--api-invoker-type")
-        )
+        self._api_invoker = self._get_api_invoker(api_invoker_type)
 
-        custom_web_app_domain_name = request.config.getoption(
-            "--custom-web-app-domain-name"
-        )
-        self._endpoint = (
-            f"https://{custom_web_app_domain_name}"
-            if custom_web_app_domain_name
-            else f"https://{res_environment.default_web_app_domain_name}"
-        )
+        self._endpoint = f"https://{res_environment.web_app_domain_name}"
 
     def create_project(self, request: CreateProjectRequest) -> CreateProjectResult:
         logger.info(f"creating project {request.project.name}...")
@@ -163,6 +157,18 @@ class ResClient:
             ListSoftwareStackResponse,
         )
 
+    def list_allowed_instance_types(
+        self, request: ListAllowedInstanceTypesRequest
+    ) -> ListAllowedInstanceTypesResponse:
+        logger.info(f"listing allowed instance types...")
+
+        return self._invoke(
+            "VirtualDesktopUtils.ListAllowedInstanceTypes",
+            "vdc",
+            request,
+            ListAllowedInstanceTypesResponse,
+        )
+
     def create_session(self, request: CreateSessionRequest) -> CreateSessionResponse:
         logger.info(f"creating session {request.session.name}...")
 
@@ -233,9 +239,10 @@ class ResClient:
 
         # Open the session connection URL from a Chrome browser and keep the connection active.
         options = webdriver.ChromeOptions()
-        options.add_argument("--headless")  # type: ignore
-        options.add_argument("--ignore-certificate-errors")  # type: ignore
-        options.add_argument("--no-sandbox")  # type: ignore
+        options.add_argument("--headless")
+        options.add_argument("--ignore-certificate-errors")
+        options.add_argument("--no-sandbox")
+        options.binary_location = "/usr/bin/chrome"
         driver = webdriver.Chrome(options=options)
 
         connection_url = f"{connection_info.endpoint}{connection_info.web_url_path}?authToken={connection_info.access_token}#{connection_info.dcv_session_id}"
@@ -252,6 +259,18 @@ class ResClient:
             "vdc",
             request,
             DeleteSessionResponse,
+        )
+
+    def update_module_settings(
+        self, request: UpdateModuleSettingsRequest
+    ) -> UpdateModuleSettingsResult:
+        logger.info(f"updating module settings...")
+
+        return self._invoke(
+            "ClusterSettings.UpdateModuleSettings",
+            "cluster-manager",
+            request,
+            UpdateModuleSettingsResult,
         )
 
     def _invoke(

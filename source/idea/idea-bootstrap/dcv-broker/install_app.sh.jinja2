@@ -49,15 +49,19 @@ function install_dcv_broker_package() {
   echo "dcv session manager broker package installation start."
   setup_staging_area
 
-  rpm --import ${DCV_GPG_KEY}
-  pushd ${STAGING_AREA_RELATIVE_PATH}
-  wget ${DCV_SESSION_MANAGER_BROKER_URL}
-  if [[ $(sha256sum nice-dcv-session-manager-broker-${DCV_SESSION_MANAGER_BROKER_NOARCH_VERSION}.rpm | awk '{print $1}') != ${DCV_SESSION_MANAGER_BROKER_SHA256_HASH} ]];  then
-    echo -e "FATAL ERROR: Checksum for DCV Broker failed. File may be compromised." > /etc/motd
-    exit 1
+
+  which dcv-session-manager-broker
+  if [[ "$?" != "0" ]]; then
+    rpm --import ${DCV_GPG_KEY}
+    pushd ${STAGING_AREA_RELATIVE_PATH}
+    wget ${DCV_SESSION_MANAGER_BROKER_URL}
+    if [[ $(sha256sum nice-dcv-session-manager-broker-${DCV_SESSION_MANAGER_BROKER_NOARCH_VERSION}.rpm | awk '{print $1}') != ${DCV_SESSION_MANAGER_BROKER_SHA256_HASH} ]];  then
+      echo -e "FATAL ERROR: Checksum for DCV Broker failed. File may be compromised." > /etc/motd
+      exit 1
+    fi
+    yum install -y nice-dcv-session-manager-broker-${DCV_SESSION_MANAGER_BROKER_NOARCH_VERSION}.rpm
+    popd
   fi
-  yum install -y nice-dcv-session-manager-broker-${DCV_SESSION_MANAGER_BROKER_NOARCH_VERSION}.rpm
-  popd
   echo "dcv session manager broker package installation complete."
 }
 
@@ -149,14 +153,20 @@ session-screenshot-max-width = 800
   systemctl enable dcv-session-manager-broker
   echo "dcv session manager broker properties configuration complete."
 
-  if [[ ! -z "${IDEA_HTTPS_PROXY}" ]]; then
-      echo "Detected RES_HTTPS_PROXY.. starting java networking properties configuration updates"
+  if [[ ! -z ${IDEA_HTTPS_PROXY} ]]; then
+    _HTTPS_PROXY=${IDEA_HTTPS_PROXY}
+  elif [[ ! -z ${https_proxy} ]]; then
+    _HTTPS_PROXY=${https_proxy}
+  fi
+
+  if [[ ! -z "${_HTTPS_PROXY}" ]]; then
+      echo "Detected https_proxy.. starting java networking properties configuration updates"
       if [[ -f /etc/alternatives/jre/conf/net.properties ]]; then
           cp  /etc/alternatives/jre/conf/net.properties /etc/alternatives/jre/conf/net.properties.${timestamp}
       fi
       sed -i "s/http.nonProxyHosts=localhost|127.*|\[::1\]/http.nonProxyHosts=localhost|127.*|\[::1\]|169.254.169.254|dynamodb.${AWS_REGION}.amazonaws.com/" /etc/alternatives/jre/conf/net.properties
-      PROXY_HOST=$(echo $IDEA_HTTPS_PROXY | awk '{split($0,a,"//"); print a[2]}' | awk '{split($0,a,":"); print a[1]}')
-      PROXY_PORT=$(echo $IDEA_HTTPS_PROXY | awk '{split($0,a,":"); print a[3]}')
+      PROXY_HOST=$(echo ${_HTTPS_PROXY} | awk '{split($0,a,"//"); print a[2]}' | awk '{split($0,a,":"); print a[1]}')
+      PROXY_PORT=$(echo ${_HTTPS_PROXY} | awk '{split($0,a,":"); print a[3]}')
       sed -i "s/# https.proxyHost=/https.proxyHost=${PROXY_HOST}/" /etc/alternatives/jre/conf/net.properties
       sed -i "s/# https.proxyPort=443/https.proxyPort=${PROXY_PORT}/" /etc/alternatives/jre/conf/net.properties
       echo "java networking properties configuration completed"

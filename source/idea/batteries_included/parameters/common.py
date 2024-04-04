@@ -1,7 +1,7 @@
 #  Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 #  SPDX-License-Identifier: Apache-2.0
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Optional
 
 from idea.infrastructure.install.parameters.base import Attributes, Base, Key
 
@@ -13,11 +13,13 @@ class CommonKey(Key):
     SSH_KEY_PAIR = "SSHKeyPair"
     CLIENT_IP = "ClientIp"
     CLIENT_PREFIX_LIST = "ClientPrefixList"
+    IAM_PERMISSION_BOUNDARY = "IAMPermissionBoundary"
     VPC_ID = "VpcId"
     LOAD_BALANCER_SUBNETS = "LoadBalancerSubnets"
     INFRASTRUCTURE_HOST_SUBNETS = "InfrastructureHostSubnets"
     VDI_SUBNETS = "VdiSubnets"
     IS_LOAD_BALANCER_INTERNET_FACING = "IsLoadBalancerInternetFacing"
+    RETAIN_STORAGE_RESOURCES = "RetainStorageResources"
 
 
 @dataclass
@@ -87,6 +89,16 @@ class CommonParameters(Base):
         )
     )
 
+    iam_permission_boundary: str = Base.parameter(
+        Attributes(
+            id=CommonKey.IAM_PERMISSION_BOUNDARY,
+            type="String",
+            description="(Optional) You may provide an IAM permission boundary ARN that will be attached to all roles created in RES.",
+            allowed_pattern="^(?:arn:aws:iam::[0-9]{12}:policy/[A-Za-z0-9\-\_\+\=\,\.\@]{1,128})?$",
+            constraint_description="The IAM permission boundary must be a valid ARN.",
+        )
+    )
+
     infrastructure_host_ami: str = Base.parameter(
         Attributes(
             id=CommonKey.INFRASTRUCTURE_HOST_AMI,
@@ -141,6 +153,19 @@ class CommonParameters(Base):
         )
     )
 
+    retain_storage_resources: str = Base.parameter(
+        Attributes(
+            id=CommonKey.RETAIN_STORAGE_RESOURCES,
+            type="String",
+            description="Retain the home file system and the RES VPC on RES deletion. Provide `True` to eliminate risk of accidentally deleting data.",
+            allowed_values=["True", "False"],
+        )
+    )
+
+    load_balancer_subnets_string: Optional[str] = None
+    infrastructure_host_subnets_string: Optional[str] = None
+    dcv_session_private_subnets_string: Optional[str] = None
+
 
 class CommonParameterGroups:
     parameter_group_for_environment_and_installer_details: dict[str, Any] = {
@@ -152,6 +177,7 @@ class CommonParameterGroups:
             CommonKey.SSH_KEY_PAIR,
             CommonKey.CLIENT_IP,
             CommonKey.CLIENT_PREFIX_LIST,
+            CommonKey.IAM_PERMISSION_BOUNDARY,
         ],
     }
 
@@ -163,5 +189,6 @@ class CommonParameterGroups:
             CommonKey.LOAD_BALANCER_SUBNETS,
             CommonKey.INFRASTRUCTURE_HOST_SUBNETS,
             CommonKey.VDI_SUBNETS,
+            CommonKey.RETAIN_STORAGE_RESOURCES,
         ],
     }

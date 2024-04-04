@@ -23,6 +23,7 @@ from tests.integration.framework.client.res_client import ResClient
 from tests.integration.framework.fixtures.fixture_request import FixtureRequest
 from tests.integration.framework.fixtures.res_environment import ResEnvironment
 from tests.integration.framework.model.client_auth import ClientAuth
+from tests.integration.tests.config import TEST_SOFTWARE_STACKS_GOVCLOUD
 
 
 @pytest.fixture
@@ -38,7 +39,15 @@ def software_stack(
     project = request.getfixturevalue(request.param[1])
     software_stack.projects = [project]
 
-    client = ResClient(request, res_environment, admin)
+    api_invoker_type = request.config.getoption("--api-invoker-type")
+    client = ResClient(res_environment, admin, api_invoker_type)
+
+    if (res_environment.region == "us-gov-west-1") and (
+        software_stack.name not in TEST_SOFTWARE_STACKS_GOVCLOUD
+    ):
+        pytest.skip(
+            f"Software stack: {software_stack.name} not supported in us-gov-west-1"
+        )
 
     if not software_stack.ami_id:
         base_os = software_stack.base_os

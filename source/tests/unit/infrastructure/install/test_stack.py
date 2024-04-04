@@ -46,7 +46,7 @@ def test_settings_table_creation(
                 "AttributeDefinitions": [
                     {"AttributeName": "key", "AttributeType": "S"}
                 ],
-                "StreamSpecification": {"StreamViewType": "NEW_AND_OLD_IMAGES"},
+                "KinesisStreamSpecification": {"StreamArn": Match.any_value()},
                 "Tags": [
                     {
                         "Key": constants.IDEA_TAG_ENVIRONMENT_NAME,
@@ -56,6 +56,34 @@ def test_settings_table_creation(
                     }
                 ],
                 **sse_specification,
+            },
+        },
+    )
+
+
+def test_settings_table_kinesis_stream_creation(
+    stack: InstallStack, template: Template
+) -> None:
+    util.assert_resource_name_has_correct_type_and_props(
+        stack,
+        template,
+        resources=["SettingsKinesisStream"],
+        cfn_type="AWS::Kinesis::Stream",
+        props={
+            "Properties": {
+                "StreamModeDetails": {"StreamMode": "ON_DEMAND"},
+                "Tags": [
+                    {
+                        "Key": constants.IDEA_TAG_ENVIRONMENT_NAME,
+                        "Value": {
+                            "Ref": CommonKey.CLUSTER_NAME,
+                        },
+                    }
+                ],
+                "StreamEncryption": {
+                    "EncryptionType": "KMS",
+                    "KeyId": "alias/aws/kinesis",
+                },
             },
         },
     )

@@ -13,12 +13,25 @@
 
 set -x
 
+if [[ -f /etc/os-release ]]; then
+  OS_RELEASE_ID=$(grep -E '^(ID)=' /etc/os-release | awk -F'"' '{print $2}')
+  OS_RELEASE_VERSION_ID=$(grep -E '^(VERSION_ID)=' /etc/os-release | awk -F'"' '{print $2}')
+  BASE_OS=$(echo $OS_RELEASE_ID${OS_RELEASE_VERSION_ID%%.*})
+elif [[ -f /usr/lib/os-release ]]; then
+  OS_RELEASE_ID=$(grep -E '^(ID)=' /usr/lib/os-release | awk -F'"' '{print $2}')
+  OS_RELEASE_VERSION_ID=$(grep -E '^(VERSION_ID)=' /usr/lib/os-release | awk -F'"' '{print $2}')
+  BASE_OS=$(echo $OS_RELEASE_ID${OS_RELEASE_VERSION_ID%%.*})
+else
+  echo "Base OS information on Linux instance cannot be found."
+  exit 1
+fi
+
 {% set PATH = '/bin:/usr/bin:/sbin:/usr/sbin:/usr/local/bin:/opt/pbs/bin:/opt/pbs/sbin:/opt/pbs/bin' %}
 echo -e "
 ## [BEGIN] IDEA Environment Configuration - Do Not Delete
 AWS_DEFAULT_REGION={{ context.aws_region }}
 AWS_REGION={{ context.aws_region }}
-IDEA_BASE_OS={{ context.base_os }}
+RES_BASE_OS=$BASE_OS
 IDEA_MODULE_NAME={{ context.module_name }}
 IDEA_MODULE_ID={{ context.module_id }}
 IDEA_MODULE_SET={{ context.module_set }}
@@ -58,11 +71,18 @@ source "${SCRIPT_DIR}/../common/bootstrap_common.sh"
 
 {% include '_templates/linux/idea_service_account.jinja2' %}
 
-{% include '_templates/linux/aws_ssm.jinja2' %}
+# Begin: Install and Configure AWS Systems Manager Agent
+/bin/bash "${SCRIPT_DIR}/../common/aws_ssm.sh" -o $RES_BASE_OS -r $AWS_REGION -n $IDEA_CLUSTER_NAME -s "${SCRIPT_DIR}"
+configure_amazon_ssm_agent
+# End: Install and Configure AWS Systems Manager Agent
 
-{% include '_templates/linux/epel_repo.jinja2' %}
+# Begin: Install EPEL Repo
+/bin/bash "${SCRIPT_DIR}/../common/epel_repo.sh" -o $RES_BASE_OS -s "${SCRIPT_DIR}"
+# End: Install EPEL Repo
 
-{% include '_templates/linux/nfs_utils.jinja2' %}
+# Begin: Install NFS Utils and dependency items
+/bin/bash "${SCRIPT_DIR}/../common/nfs_utils.sh" -o $RES_BASE_OS -s "${SCRIPT_DIR}"
+# End: Install NFS Utils and dependency items
 
 {% include '_templates/linux/mount_shared_storage.jinja2' %}
 

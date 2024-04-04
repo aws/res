@@ -4,7 +4,16 @@ import pathlib
 import typing
 from typing import Union
 
-from aws_cdk import CfnOutput, Duration, IStackSynthesizer, RemovalPolicy, Stack, Stage
+import aws_cdk
+from aws_cdk import (
+    CfnOutput,
+    Duration,
+    Fn,
+    IStackSynthesizer,
+    RemovalPolicy,
+    Stack,
+    Stage,
+)
 from aws_cdk import aws_codebuild as codebuild
 from aws_cdk import aws_codecommit as codecommit
 from aws_cdk import aws_ecr as ecr
@@ -35,8 +44,10 @@ UNITTESTS = [
 ]
 COVERAGEREPORTS = ["coverage"]
 COMPONENT_INTEG_TESTS = ["integ-tests.cluster-manager"]
-SCANS = ["npm_audit", "bandit"]
+SCANS = ["npm_audit", "bandit", "viperlight_scan"]
 PUBLICECRRepository = "public.ecr.aws/l6g7n3r5/research-engineering-studio"
+ONBOARDED_REGIONS = "ap-northeast-1,ap-northeast-2,ap-south-1,ap-southeast-1,ap-southeast-2,ca-central-1,eu-central-1,eu-south-1,eu-west-1,eu-west-2,eu-west-3,us-east-1,us-east-2,us-west-1,us-west-2"
+ONBOARDED_REGIONS_GOVCLOUD = "us-gov-west-1"
 
 
 class PipelineStack(Stack):
@@ -46,7 +57,9 @@ class PipelineStack(Stack):
     _deploy: bool = False
     _integ_tests: bool = False
     _bi: bool = False
+    _use_bi_parameters_from_ssm: bool = False
     _destroy: bool = False
+    _destroy_bi: bool = False
     _publish_templates: bool = False
 
     @property
@@ -81,18 +94,36 @@ class PipelineStack(Stack):
         context_bi = self.node.try_get_context("batteries_included")
         if context_bi:
             self._bi = context_bi.lower() == "true"
+        context_use_bi_parameters_from_ssm = self.node.try_get_context(
+            "use_bi_parameters_from_ssm"
+        )
+        context_use_bi_parameters_from_ssm = (
+            context_use_bi_parameters_from_ssm
+            if context_use_bi_parameters_from_ssm
+            else ""
+        )
+        self._use_bi_parameters_from_ssm = (
+            context_use_bi_parameters_from_ssm.lower() == "true"
+        )
+        context_portal_domain_name = self.node.try_get_context("portal_domain_name")
+        self._portal_domain_name = (
+            context_portal_domain_name if context_portal_domain_name else ""
+        )
         context_destroy = self.node.try_get_context("destroy")
+        context_destroy_bi = self.node.try_get_context("destroy_batteries_included")
         context_integ_tests = self.node.try_get_context("integration_tests")
         self._integ_tests = (
             context_integ_tests.lower() == "true" if context_integ_tests else "true"
         )
         if context_destroy:
             self._destroy = context_destroy.lower() == "true"
+        if context_destroy_bi:
+            self._destroy_bi = context_destroy_bi.lower() == "true"
         context_publish_templates = self.node.try_get_context("publish_templates")
         if context_publish_templates:
             self._publish_templates = context_publish_templates.lower() == "true"
         self.params: Union[RESParameters, BIParameters]
-        if self._bi:
+        if self._bi or self._use_bi_parameters_from_ssm:
             self.params = BIParameters.from_context(self)
         else:
             self.params = RESParameters.from_context(self)
@@ -130,7 +161,13 @@ class PipelineStack(Stack):
         )
         ecr_repository_name = ecr_repository.repository_name
         ecr_repository_arn = ecr_repository.repository_arn
-
+        ecr_repository.grant_pull(
+            iam.Role(
+                self,
+                "PrivateEcrPull",
+                assumed_by=iam.ServicePrincipal("codebuild.amazonaws.com"),
+            )
+        )
         codebuild_ecr_access = iam.PolicyStatement(
             effect=iam.Effect.ALLOW,
             actions=codebuild_ecr_access_actions,
@@ -148,7 +185,10 @@ class PipelineStack(Stack):
             self,
             "Pipeline",
             synth=self.get_synth_step(
-                ecr_repository_name, ecr_public_repository_name, bi_stack_template_url
+                ecr_repository_name,
+                ecr_public_repository_name,
+                bi_stack_template_url,
+                context_use_bi_parameters_from_ssm,
             ),
             code_build_defaults=pipelines.CodeBuildOptions(
                 build_environment=codebuild.BuildEnvironment(
@@ -172,9 +212,18 @@ class PipelineStack(Stack):
         coverage_wave.add_post(*self.get_steps_from_tox(COVERAGEREPORTS))
 
         if self._deploy:
-            deploy_stage = DeployStage(self, "Deploy", parameters=self.params)
+            deploy_stage = DeployStage(
+                self,
+                "Deploy",
+                use_bi_parameters_from_ssm=self._use_bi_parameters_from_ssm,
+                parameters=self.params,
+            )
 
             post_steps = []
+            create_web_and_vdi_record_step = self.get_create_web_and_vdi_record_step()
+            if self._portal_domain_name != "":
+                post_steps.append(create_web_and_vdi_record_step)
+
             if self._integ_tests:
                 component_integ_test_steps = self.get_component_integ_test_steps(
                     COMPONENT_INTEG_TESTS
@@ -182,8 +231,13 @@ class PipelineStack(Stack):
                 smoke_test_step = self.get_smoke_test_step()
                 # Smoke test cannot run with other integ tests in parallel, as it requires to relaunch the web servers
                 # and the servers will become temporarily unresponsive to other integ tests.
+                # And all integ tests should run after create_web_and_vdi_record_step.
                 for component_integ_test_step in component_integ_test_steps:
                     smoke_test_step.add_step_dependency(component_integ_test_step)
+                    if self._portal_domain_name != "":
+                        component_integ_test_step.add_step_dependency(
+                            create_web_and_vdi_record_step
+                        )
 
                 post_steps += component_integ_test_steps
                 post_steps.append(smoke_test_step)
@@ -198,9 +252,32 @@ class PipelineStack(Stack):
             self._pipeline.add_stage(deploy_stage, post=post_steps)
 
         if self._publish_templates:
-            publish_steps = self.get_publish_steps(ecr_public_repository_name)
+            is_classic_region = aws_cdk.CfnCondition(
+                self,
+                "IsClassicRegion",
+                expression=Fn.condition_equals(self.partition, "aws"),
+            )
+            self.onboarded_regions = Fn.condition_if(
+                is_classic_region.logical_id,
+                ONBOARDED_REGIONS,
+                ONBOARDED_REGIONS_GOVCLOUD,
+            ).to_string()
             publish_wave = self._pipeline.add_wave("Publish")
+            publish_steps = self.get_publish_steps(ecr_public_repository_name)
             publish_wave.add_post(publish_steps)
+
+            # After the artifacts gets published into each region's "RELEASE_VERSION" prefixed bucket, we will release
+            # the change to "/latest" bucket after a manual approval.
+            manual_approval_step = pipelines.ManualApprovalStep(
+                "ManualApprovalForLatestBucketRefresh"
+            )
+            manual_approval_step.add_step_dependency(publish_steps)
+            publish_wave.add_post(manual_approval_step)
+
+            artifacts_release_steps = self.get_latest_bucket_refresh_steps()
+            artifacts_release_steps.add_step_dependency(manual_approval_step)
+            publish_wave.add_post(artifacts_release_steps)
+
         self._pipeline.build_pipeline()
         if self._publish_templates and publish_steps and publish_steps.project.role:
             CfnOutput(
@@ -224,6 +301,7 @@ class PipelineStack(Stack):
         ecr_repository_name: str,
         ecr_public_repository_name: str,
         bi_stack_template_url: str,
+        use_bi_parameters_from_ssm: str,
     ) -> pipelines.CodeBuildStep:
         return pipelines.CodeBuildStep(
             "Synth",
@@ -234,11 +312,15 @@ class PipelineStack(Stack):
                 DEPLOY="true" if self._deploy else "false",
                 INTEGRATION_TESTS="true" if self._integ_tests else "false",
                 DESTROY="true" if self._destroy else "false",
+                DESTROY_BATTERIES_INCLUDED="true" if self._destroy_bi else "false",
                 BATTERIES_INCLUDED="true" if self._bi else "false",
                 BIStackTemplateURL=bi_stack_template_url,
                 ECR_REPOSITORY=ecr_repository_name,
                 ECR_PUBLIC_REPOSITORY_NAME=ecr_public_repository_name,
+                USE_BI_PARAMETERS_FROM_SSM=use_bi_parameters_from_ssm,
                 PUBLISH_TEMPLATES="true" if self._publish_templates else "false",
+                SKIP_ENV_UPDATE="true",
+                PORTAL_DOMAIN_NAME=self._portal_domain_name,
                 **self.params.to_context(),
             ),
             install_commands=get_commands_for_scripts(
@@ -253,6 +335,43 @@ class PipelineStack(Stack):
                 ]
             ),
             partial_build_spec=self.get_reports_partial_build_spec("pytest-report.xml"),
+        )
+
+    def get_web_and_vdi_record_policy(
+        self,
+    ) -> tuple[iam.PolicyStatement, iam.PolicyStatement]:
+        codebuild_read_policy = iam.PolicyStatement(
+            effect=iam.Effect.ALLOW,
+            actions=[
+                "route53:ListHostedZones",
+                "elasticloadbalancing:DescribeLoadBalancers",
+            ],
+            resources=["*"],
+        )
+        codebuild_route53_policy = iam.PolicyStatement(
+            effect=iam.Effect.ALLOW,
+            actions=["route53:ChangeResourceRecordSets", "route53:GetChange"],
+            resources=["arn:aws:route53:::hostedzone/*", "arn:aws:route53:::change/*"],
+        )
+        return codebuild_read_policy, codebuild_route53_policy
+
+    def get_create_web_and_vdi_record_step(self) -> pipelines.CodeBuildStep:
+        codebuild_read_policy, codebuild_route53_policy = (
+            self.get_web_and_vdi_record_policy()
+        )
+        return pipelines.CodeBuildStep(
+            "CreateWebAndVdiDNSRecords",
+            env=dict(
+                PORTAL_DOMAIN=self._portal_domain_name,
+                WEB_PORTAL_DOMAIN=self.params.custom_domain_name_for_web_ui,
+                VDI_PORTAL_DOMAIN=self.params.custom_domain_name_for_vdi,
+                CLUSTER_NAME=self.params.cluster_name,
+                WEB_AND_VDI_RECORD_ACTION="UPSERT",
+            ),
+            commands=get_commands_for_scripts(
+                ["source/idea/pipeline/scripts/common/web_and_vdi_record_commands.sh"]
+            ),
+            role_policy_statements=[codebuild_read_policy, codebuild_route53_policy],
         )
 
     def get_component_integ_test_steps(
@@ -424,6 +543,7 @@ class PipelineStack(Stack):
                 f"arn:{self.partition}:cloudformation:{self.region}:{self.account}:stack/{self.params.cluster_name}-cluster-manager/*",
                 f"arn:{self.partition}:cloudformation:{self.region}:{self.account}:stack/{self.params.cluster_name}-vdc/*",
                 f"arn:{self.partition}:cloudformation:{self.region}:{self.account}:stack/{self.params.cluster_name}-bastion-host/*",
+                f"arn:{self.partition}:cloudformation:{self.region}:{self.account}:stack/Deploy-{BATTERIES_INCLUDED_STACK_NAME}*",
             ],
         )
         codebuild_cloudformation_delete_stack_policy = iam.PolicyStatement(
@@ -432,7 +552,8 @@ class PipelineStack(Stack):
                 "cloudformation:DeleteStack",
             ],
             resources=[
-                f"arn:{self.partition}:cloudformation:{self.region}:{self.account}:stack/Deploy-{INSTALL_STACK_NAME}/*"
+                f"arn:{self.partition}:cloudformation:{self.region}:{self.account}:stack/Deploy-{INSTALL_STACK_NAME}/*",
+                f"arn:{self.partition}:cloudformation:{self.region}:{self.account}:stack/Deploy-{BATTERIES_INCLUDED_STACK_NAME}*",
             ],
         )
         codebuild_read_ssm_parameter_vpc_id_policy = iam.PolicyStatement(
@@ -518,6 +639,16 @@ class PipelineStack(Stack):
                 },
             },
         )
+        (
+            codebuild_destroy_records_read_policy,
+            codebuild_destroy_records_route53_policy,
+        ) = self.get_web_and_vdi_record_policy()
+
+        commands = ["source/idea/pipeline/scripts/destroy/commands.sh"]
+        if self._portal_domain_name != "":
+            commands.insert(
+                0, "source/idea/pipeline/scripts/common/web_and_vdi_record_commands.sh"
+            )
         return pipelines.CodeBuildStep(
             "Destroy",
             build_environment=codebuild.BuildEnvironment(
@@ -529,8 +660,14 @@ class PipelineStack(Stack):
                 CLUSTER_NAME=self.params.cluster_name,
                 AWS_REGION=self.region,
                 BATTERIES_INCLUDED="true" if self._bi else "false",
+                DESTROY_BATTERIES_INCLUDED="true" if self._destroy_bi else "false",
                 VPC_ID=self.params.vpc_id,
                 INSTALL_STACK_NAME=INSTALL_STACK_NAME,
+                BATTERIES_INCLUDED_STACK_NAME=f"Deploy-{BATTERIES_INCLUDED_STACK_NAME}",
+                PORTAL_DOMAIN=self._portal_domain_name,
+                WEB_PORTAL_DOMAIN=self.params.custom_domain_name_for_web_ui,
+                VDI_PORTAL_DOMAIN=self.params.custom_domain_name_for_vdi,
+                WEB_AND_VDI_RECORD_ACTION="DELETE",
             ),
             install_commands=get_commands_for_scripts(
                 [
@@ -538,11 +675,7 @@ class PipelineStack(Stack):
                     "source/idea/pipeline/scripts/destroy/install_commands.sh",
                 ]
             ),
-            commands=get_commands_for_scripts(
-                [
-                    "source/idea/pipeline/scripts/destroy/commands.sh",
-                ]
-            ),
+            commands=get_commands_for_scripts(commands),
             role_policy_statements=[
                 codebuild_cloudformation_read_policy,
                 codebuild_cloudformation_delete_stack_policy,
@@ -554,6 +687,8 @@ class PipelineStack(Stack):
                 codebuild_fsx_delete_svms_volumes_policy,
                 codebuild_shared_storage_security_group_read_policy,
                 codebuild_shared_storage_security_group_delete_policy,
+                codebuild_destroy_records_read_policy,
+                codebuild_destroy_records_route53_policy,
             ],
             timeout=Duration.hours(2),
         )
@@ -606,6 +741,8 @@ class PipelineStack(Stack):
                 ECR_REPOSITORY=ecr_public_repository_name,
                 PUBLISH_TEMPLATES="true" if self._publish_templates else "false",
                 ECR_REPOSITORY_URI_PARAMETER=ecr_public_repository_uri,
+                SKIP_ENV_UPDATE="true",
+                ONBOARDED_REGIONS=self.onboarded_regions,
             ),
             install_commands=get_commands_for_scripts(
                 [
@@ -623,6 +760,35 @@ class PipelineStack(Stack):
                 codebuild_ecr_repository,
                 codebuild_describe_regions,
             ],
+        )
+
+    def get_latest_bucket_refresh_steps(self) -> pipelines.CodeBuildStep:
+        codebuild_s3_all_access = iam.PolicyStatement(
+            effect=iam.Effect.ALLOW,
+            actions=[
+                "s3:PutObject",
+                "s3:getBucketLocation",
+                "s3:ListBucket",
+                "s3:GetObject",
+                "s3:DeleteObject",
+            ],
+            resources=[
+                f"arn:{self.partition}:s3:::{ARTIFACTS_BUCKET_PREFIX_NAME}-*",
+            ],
+        )
+
+        return pipelines.CodeBuildStep(
+            "Refresh the /latest bucket",
+            env=dict(
+                ARTIFACTS_BUCKET_PREFIX_NAME=ARTIFACTS_BUCKET_PREFIX_NAME,
+                ONBOARDED_REGIONS=self.onboarded_regions,
+            ),
+            commands=get_commands_for_scripts(
+                [
+                    "source/idea/pipeline/scripts/publish/latest_bucket_refresh.sh",
+                ]
+            ),
+            role_policy_statements=[codebuild_s3_all_access],
         )
 
     @staticmethod
@@ -659,11 +825,14 @@ class DeployStage(Stage):
         self,
         scope: Construct,
         construct_id: str,
+        use_bi_parameters_from_ssm: bool,
         parameters: Union[RESParameters, BIParameters],
     ):
         super().__init__(scope, construct_id)
         registry_name = self.node.try_get_context("registry_name")
-        if isinstance(parameters, BIParameters):
+
+        self.batteries_included_stack = None
+        if isinstance(parameters, BIParameters) and not use_bi_parameters_from_ssm:
             bi_stack_template_url = self.node.try_get_context("BIStackTemplateURL")
             self.batteries_included_stack = BiStack(
                 self,
@@ -671,17 +840,12 @@ class DeployStage(Stage):
                 template_url=bi_stack_template_url,
                 parameters=parameters,
             )
-            self.install_stack = InstallStack(
-                self,
-                INSTALL_STACK_NAME,
-                parameters=parameters,
-                registry_name=registry_name,
-            )
+
+        self.install_stack = InstallStack(
+            self,
+            INSTALL_STACK_NAME,
+            parameters=parameters,
+            registry_name=registry_name,
+        )
+        if self.batteries_included_stack:
             self.install_stack.add_dependency(target=self.batteries_included_stack)
-        else:
-            self.install_stack = InstallStack(
-                self,
-                INSTALL_STACK_NAME,
-                parameters=parameters,
-                registry_name=registry_name,
-            )

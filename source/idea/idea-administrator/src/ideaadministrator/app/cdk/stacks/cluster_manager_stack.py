@@ -10,7 +10,7 @@
 #  and limitations under the License.
 
 from ideadatamodel import (
-    constants
+    constants, SocaAnyPayload
 )
 from ideasdk.utils import Utils
 from ideasdk.bootstrap import BootstrapUserDataBuilder
@@ -167,13 +167,17 @@ class ClusterManagerStack(IdeaBaseStack):
             assumed_by=['ssm', 'ec2'],
             managed_policies=ec2_managed_policies
         )
+        variables = SocaAnyPayload()
+        variables.vdi_host_policy_resource_tag = constants.VDI_HOST_POLICY_RESOURCE_TAG
+        variables.vdi_security_group_resource_tag = constants.VDI_SECURITY_GROUP_RESOURCE_TAG
         self.cluster_manager_role.attach_inline_policy(
             Policy(
                 context=self.context,
                 name='cluster-manager-policy',
                 scope=self.stack,
                 policy_template_name='cluster-manager.yml',
-                module_id=self.module_id
+                module_id=self.module_id,
+                vars=variables
             )
         )
 
@@ -310,7 +314,8 @@ class ClusterManagerStack(IdeaBaseStack):
                 ))
             )],
             role=self.cluster_manager_role,
-            require_imdsv2=True if metadata_http_tokens == "required" else False
+            require_imdsv2=True if metadata_http_tokens == "required" else False,
+            associate_public_ip_address=is_public
         )
 
         self.auto_scaling_group = asg.AutoScalingGroup(

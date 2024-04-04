@@ -13,7 +13,7 @@
 
 import React, { Component, RefObject } from "react";
 
-import { Button, ColumnLayout, Container, Header, Link, SpaceBetween, Table, Tabs } from "@cloudscape-design/components";
+import { Button, ColumnLayout, Container, Header, Link, SpaceBetween, Table, Tabs, TextContent, Toggle } from '@cloudscape-design/components';
 import IdeaForm from "../../components/form";
 import { IdeaSideNavigationProps } from "../../components/side-navigation";
 import IdeaAppLayout, { IdeaAppLayoutProps } from "../../components/app-layout";
@@ -326,6 +326,49 @@ class VirtualDesktopSettings extends Component<VirtualDesktopSettingsProps, Virt
             return !Utils.asBoolean(dot.pick("dcv_connection_gateway.certificate.provided", this.state.vdcSettings), false);
         };
 
+        const handleQuicToggleChange = (newToggleStatus: boolean) => {
+            AppContext.get().client().clusterSettings().configureQUIC(
+                {
+                    enable: newToggleStatus
+                }
+            ).then((res)=> {
+                this.props.onFlashbarChange({
+                    items: [
+                        {
+                            type: "success",
+                            content: "Successfully updated QUIC configuration.",
+                            dismissible: true
+                        }
+                    ]
+                })
+                const vdcSettings = {...this.state.vdcSettings}
+                dot.set("dcv_session.quic_support", `${newToggleStatus}`, vdcSettings)
+                this.setState({vdcSettings: vdcSettings})
+            }).catch((error) =>{
+                if (error.errorCode == "ROLLBACK_COMPLETE") {
+                    this.props.onFlashbarChange({
+                        items: [
+                            {
+                                type: "warning",
+                                content: error.message,
+                                dismissible: true
+                            }
+                        ]
+                    })
+                } else {
+                    this.props.onFlashbarChange({
+                        items: [
+                            {
+                                type: "error",
+                                content: error.message,
+                                dismissible: true
+                            }
+                        ]
+                    })
+                }
+            });
+        }
+
         const buildAutoScalingSettingContainer = (setting: any) => {
             return (
                 <Container header={<Header variant={"h2"}>Autoscaling</Header>}>
@@ -408,7 +451,15 @@ class VirtualDesktopSettings extends Component<VirtualDesktopSettingsProps, Virt
                                             <Container header={<Header variant={"h2"}>General</Header>}>
                                                 <ColumnLayout variant={"text-grid"} columns={2}>
                                                     <KeyValue title="QUIC">
-                                                        <EnabledDisabledStatusIndicator enabled={Utils.asBoolean(dot.pick("dcv_session.quic_support", this.state.vdcSettings))} />
+                                                        <div>
+                                                            <TextContent>
+                                                                <p><small>Quick UDP Internet Connections (QUIC) is a protocol that attempts to improve streaming in higher latency environments.<br />Toggle on to activate QUIC in favor of TCP as the default streaming protocol for all your virtual desktops</small></p>
+                                                            </TextContent>
+                                                            <div style={{display: 'flex', flexDirection: 'row', gap: '4px'}}>
+                                                                <EnabledDisabledStatusIndicator enabled={Utils.asBoolean(dot.pick("dcv_session.quic_support", this.state.vdcSettings))} />
+                                                                <Toggle checked={Utils.asBoolean(dot.pick("dcv_session.quic_support", this.state.vdcSettings))} onChange={({ detail }) => handleQuicToggleChange(detail.checked)} />
+                                                            </div>
+                                                        </div>
                                                     </KeyValue>
                                                     <KeyValue title="eVDI Subnets" value={dot.pick("dcv_session.network.private_subnets", this.state.vdcSettings)} clipboard={true} />
                                                     <KeyValue title="Subnet AutoRetry">

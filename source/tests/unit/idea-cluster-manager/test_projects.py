@@ -244,6 +244,24 @@ def test_projects_crud_create_project(context):
                     SocaKeyValue(key="k1", value="v1"),
                     SocaKeyValue(key="k2", value="v2"),
                 ],
+                scripts={
+                    "linux": {
+                        "on_vdi_start": [
+                            {
+                                "script_location": "file://example/bath",
+                                "arguments": ["ex1", "ex2"],
+                            }
+                        ]
+                    },
+                    "windows": {
+                        "on_vdi_configured": [
+                            {
+                                "script_location": "https://s3.amazonaws.com/bucket/example_file",
+                                "arguments": ["ex1", "ex2"],
+                            }
+                        ]
+                    },
+                },
             )
         )
     )
@@ -272,6 +290,48 @@ def test_projects_crud_create_project(context):
     assert result.project.tags[1].value == "v2"
     assert result.project.created_on is not None
     assert result.project.updated_on is not None
+
+
+def test_projects_crud_create_project_url_error(context):
+    """
+    create project
+    """
+    group = context.accounts.create_group(
+        Group(
+            title=f"Sample Project Group URL",
+            name=f"sample-project-group-url",
+            group_type=constants.GROUP_TYPE_PROJECT,
+        )
+    )
+
+    assert group is not None
+
+    with pytest.raises(exceptions.SocaException) as exc_info:
+        context.projects.create_project(
+            CreateProjectRequest(
+                project=Project(
+                    name="sampleproject",
+                    title="Sample Project",
+                    description="Sample Project Description",
+                    ldap_groups=["sample-project-group-url"],
+                    tags=[
+                        SocaKeyValue(key="k1", value="v1"),
+                        SocaKeyValue(key="k2", value="v2"),
+                    ],
+                    scripts={
+                        "linux": {
+                            "on_vdi_start": [
+                                {
+                                    "script_location": "wrong_url",
+                                    "arguments": ["ex1", "ex2"],
+                                }
+                            ]
+                        }
+                    },
+                )
+            )
+        )
+    assert exc_info.value.error_code == errorcodes.INVALID_PARAMS
 
 
 def test_projects_crud_get_project_by_name(context):

@@ -19,8 +19,7 @@ from ideasdk.utils import Utils, EnvironmentUtils, GroupNameHelper, Jinja2Utils
 from ideasdk.api import ApiInvocationContext
 
 from ideasdk.server.sanic_config import SANIC_LOGGING_CONFIG, SANIC_APP_CONFIG
-from ideasdk.server.cors import add_cors_headers
-from ideasdk.server.options import create_ssl_context, setup_options
+from ideasdk.server.cors import get_cors_config
 from ideasdk.filesystem.filesystem_helper import FileSystemHelper
 
 from typing import Optional, Dict, List, Iterable
@@ -36,6 +35,7 @@ import sanic.config
 import sanic.signals
 import sanic.router
 from sanic.models.handler_types import RouteHandler
+from sanic.http.tls.context import create_context
 import socket
 from prometheus_client import generate_latest
 
@@ -470,7 +470,7 @@ class ApiInvocationHandler:
                 logger=self.logger,
                 token=self.get_token(http_request),
                 token_service=self.api_invoker.get_token_service(),
-                api_authorization_service = self.api_invoker.get_api_authorization_service(),
+                api_authorization_service=self.api_invoker.get_api_authorization_service(),
             )
 
             # validate request prior to logging
@@ -571,8 +571,6 @@ class SocaServer(SocaService):
         self._is_running = Event()
 
         self._sanic_config: Optional[sanic.config.Config] = None
-        self._sanic_router: Optional[sanic.router.Router] = None
-        self._sanic_signal_router: Optional[sanic.signals.SignalRouter] = None
 
         self._unix_app: Optional[sanic.Sanic] = None
         self._unix_server: Optional[AsyncioServer] = None
@@ -595,20 +593,6 @@ class SocaServer(SocaService):
         finally:
             if sock is not None:
                 sock.close()
-
-    @property
-    def sanic_router(self) -> sanic.router.Router:
-        if self._sanic_router is not None:
-            return self._sanic_router
-        self._sanic_router = sanic.router.Router()
-        return self._sanic_router
-
-    @property
-    def sanic_signal_router(self) -> sanic.signals.SignalRouter:
-        if self._sanic_signal_router is not None:
-            return self._sanic_signal_router
-        self._sanic_signal_router = sanic.signals.SignalRouter()
-        return self._sanic_signal_router
 
     @property
     def http_app(self) -> sanic.Sanic:
@@ -635,7 +619,7 @@ class SocaServer(SocaService):
         if self.options.enable_http:
             for path_prefix in self.options.api_path_prefixes:
                 self.http_app.add_route(handler, f'{path_prefix}{uri}', methods, name=f'{path_prefix}{name or ""}{uri}')
-        else:
+        if self.options.enable_unix_socket:
             for path_prefix in self.options.api_path_prefixes:
                 self.unix_app.add_route(handler, f'{path_prefix}{uri}', methods, name=f'{path_prefix}{name or ""}{uri}')
 
@@ -645,10 +629,11 @@ class SocaServer(SocaService):
             self._http_app = sanic.Sanic(
                 name='http-server',
                 config=SANIC_APP_CONFIG,
-                router=self.sanic_router,
-                signal_router=self.sanic_signal_router,
+                router=sanic.router.Router(),
+                signal_router=sanic.signals.SignalRouter(),
                 log_config=SANIC_LOGGING_CONFIG,
             )
+            self.apply_sanic_extensions(self._http_app)
 
         if self.options.enable_unix_socket:
             unix_socket_parent = str(pathlib.Path(self.options.unix_socket_file).parent)
@@ -658,10 +643,11 @@ class SocaServer(SocaService):
             self._unix_app = sanic.Sanic(
                 name='unix-server',
                 config=SANIC_APP_CONFIG,
-                router=self.sanic_router,
-                signal_router=self.sanic_signal_router,
+                router=sanic.router.Router(),
+                signal_router=sanic.signals.SignalRouter(),
                 log_config=SANIC_LOGGING_CONFIG
             )
+            self.apply_sanic_extensions(self._unix_app)
 
         if self.options.enable_metrics:
             if not Utils.is_file(self.metrics_api_token_file):
@@ -671,9 +657,6 @@ class SocaServer(SocaService):
                 self.metrics_api_token = f.read()
 
         if self.options.enable_http:
-            self.http_app.register_listener(setup_options, "before_server_start")
-            self.http_app.register_middleware(add_cors_headers, "response")
-
             # health check routes
             self.http_app.add_route(self.health_check_route, '/healthcheck', name="healthcheck", methods=['GET'])
             self.add_route(self.health_check_route, '/healthcheck', methods=['GET'])
@@ -695,6 +678,9 @@ class SocaServer(SocaService):
 
         self.add_route(self.api_route, '/api/v1', methods=['POST'])
         self.add_route(self.api_route, '/api/v1/<namespace:str>', methods=['POST'], name='NamespaceAPI')
+
+    def apply_sanic_extensions(self, app: sanic.Sanic):
+        app.extend(config=get_cors_config())
 
     async def invoke_api_task(self, http_request):
         result = self._executor.submit(
@@ -845,7 +831,7 @@ class SocaServer(SocaService):
         if self.options.enable_http:
             await self._http_server.startup()
             await self._http_server.before_start()
-        else:
+        if self.options.enable_unix_socket:
             await self._unix_server.startup()
             await self._unix_server.before_start()
 
@@ -857,7 +843,7 @@ class SocaServer(SocaService):
 
             ssl_context = None
             if self.options.enable_tls:
-                ssl_context = create_ssl_context(self.options.tls_certificate_file, self.options.tls_key_file)
+                ssl_context = create_context(self.options.tls_certificate_file, self.options.tls_key_file)
 
             if self.options.enable_http:
                 if self.is_another_instance_running(self.options.hostname, self.options.port):

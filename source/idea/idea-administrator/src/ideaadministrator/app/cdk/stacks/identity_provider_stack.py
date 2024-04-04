@@ -110,26 +110,19 @@ class IdentityProviderStack(IdeaBaseStack):
         # if the user pool is already created, read the existing values and set them again to avoid replacing the values
         # during cdk stack update
         user_pool_id = self.context.config().get_string('identity-provider.cognito.user_pool_id')
-        if Utils.is_empty(user_pool_id):
-            user_invitation_email_subject = f'Invitation to Join RES Environment: {self.cluster_name}'
-            email_message = [
-                '<p>Hello <b>{username},</b></p>',
-                f'<p>You have been invited to join the <b>{self.cluster_name}</b> environment.</p>',
-                f'<p>Your temporary password is:</p>',
-                '<h3>{####}</h3>',
-                '<p>You can sign in to your account using the link below: <br/>',
-                f'<a href="{external_endpoint}">{external_endpoint}</a></p>',
-                f'<p>---<br/>',
-                f'<b>RES Environment Admin</b></p>'
-            ]
-            user_invitation_email_body = os.linesep.join(email_message)
-        else:
-            describe_user_pool_result = self.context.aws().cognito_idp().describe_user_pool(
-                UserPoolId=user_pool_id
-            )
-            invite_message_template = describe_user_pool_result['UserPool']['AdminCreateUserConfig']['InviteMessageTemplate']
-            user_invitation_email_subject = invite_message_template['EmailSubject']
-            user_invitation_email_body = invite_message_template['EmailMessage']
+
+        user_invitation_email_subject = f'Invitation to Join RES Environment: {self.cluster_name}'
+        email_message = [
+            '<p>Hello <b>{username},</b></p>',
+            f'<p>You have been invited to join the <b>{self.cluster_name}</b> environment.</p>',
+            f'<p>Your temporary password is:</p>',
+            '<h3>{####}</h3>',
+            '<p>You can sign in to your account using the link below: <br/>',
+            f'<a href="{external_endpoint}">{external_endpoint}</a></p>',
+            f'<p>---<br/>',
+            f'<b>RES Environment Admin</b></p>'
+        ]
+        user_invitation_email_body = os.linesep.join(email_message)
 
         self.user_pool = UserPool(
             context=self.context,

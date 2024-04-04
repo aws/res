@@ -28,11 +28,15 @@ __all__ = (
     'GetUserProjectsResult',
     'ListFileSystemsForProjectRequest',
     'ListFileSystemsForProjectResult',
+    'ListSecurityGroupsResult',
+    'ListPoliciesResult',
+    'ListPoliciesRequest',
+    'ListSecurityGroupsRequest',
     'OPEN_API_SPEC_ENTRIES_PROJECTS'
 )
 
 from ideadatamodel import SocaPayload, SocaListingPayload, IdeaOpenAPISpecEntry
-from ideadatamodel.projects.projects_model import Project
+from ideadatamodel.projects.projects_model import Project, SecurityGroup, Policy
 from typing import Optional, List
 
 from ideadatamodel.shared_filesystem import FileSystem
@@ -115,6 +119,21 @@ class GetUserProjectsResult(SocaPayload):
     projects: Optional[List[Project]]
 
 
+class ListSecurityGroupsRequest(SocaPayload):
+    pass
+
+class ListSecurityGroupsResult(SocaPayload):
+    security_groups: Optional[List[SecurityGroup]]
+
+
+class ListPoliciesRequest(SocaPayload):
+    pass
+
+
+class ListPoliciesResult(SocaPayload):
+    policies: Optional[List[Policy]]
+
+
 # Projects.ListFileSystemsForProject
 class ListFileSystemsForProjectRequest(SocaPayload):
     project_id: Optional[str]
@@ -185,6 +204,20 @@ OPEN_API_SPEC_ENTRIES_PROJECTS = [
         namespace='Projects.DeleteProject',
         request=DeleteProjectRequest,
         result=DeleteProjectResult,
+        is_listing=False,
+        is_public=False
+    ),
+    IdeaOpenAPISpecEntry(
+        namespace='Projects.ListSecurityGroups',
+        request=ListSecurityGroupsRequest,
+        result=ListSecurityGroupsResult,
+        is_listing=False,
+        is_public=False
+    ),
+    IdeaOpenAPISpecEntry(
+        namespace='Projects.ListPolicies',
+        request=ListPoliciesRequest,
+        result=ListPoliciesResult,
         is_listing=False,
         is_public=False
     )

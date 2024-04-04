@@ -62,7 +62,7 @@ def test_admin_create_user(context: TestContext):
     global test_password
     test_username = Utils.generate_password(8, 0, 8, 0, 0)
     test_password = Utils.generate_password(8, 1, 1, 1, 1)
-    email = f'{test_username}@samplesocauser.local'
+    email = f'{test_username}@example.org'
     result = context.get_cluster_manager_client().invoke_alt(
         namespace='Accounts.CreateUser',
         payload=CreateUserRequest(

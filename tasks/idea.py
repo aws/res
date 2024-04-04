@@ -134,6 +134,14 @@ class SocaDevelopmentProps:
         return os.path.join(self.project_root_dir, 'requirements')
 
     @property
+    def bootstrap_dir(self) -> str:
+        return os.path.join(self.project_source_dir, 'idea-bootstrap')
+
+    @property
+    def global_settings_dir(self) -> str:
+        return os.path.join(self.project_source_dir, 'idea-administrator','resources', 'config', 'templates', 'global-settings')
+
+    @property
     def administrator_project_dir(self) -> str:
         return os.path.join(self.project_source_dir, 'idea-administrator')
 

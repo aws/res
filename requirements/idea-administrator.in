@@ -1,8 +1,7 @@
 -r idea-sdk.in
-colored
-ipaddress
-sanic==23.6.0
-aws-cdk-lib==2.*
-cdk-nag
-prettytable
-defusedxml
+colored~=1.0
+ipaddress~=1.0
+aws-cdk-lib~=2.0
+cdk-nag~=2.0
+prettytable~=3.0
+defusedxml~=0.0

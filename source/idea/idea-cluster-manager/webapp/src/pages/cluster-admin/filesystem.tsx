@@ -493,6 +493,32 @@ class FileSystems extends Component<FileSystemProps, FileSystemState> {
         return fSxNetAppONTAPParams;
     }
 
+    buildOnboardFSxLUSTREParams(): SocaUserInputParamMetadata[]  {
+        const fsxLUSTREParams: SocaUserInputParamMetadata[] = [
+            {
+                name: `${Constants.SHARED_STORAGE_PROVIDER_FSX_LUSTRE}.mount_directory`,
+                title: "Mount Directory",
+                description: "Enter directory to mount the file system",
+                help_text: "Mount directory cannot contain white spaces or special characters. Only use lowercase alphabets, numbers, and hyphens (-). Must be between 3 and 18 characters long starting with '/'. Eg. /lustre-01",
+                data_type: "str",
+                param_type: "text",
+                validate: {
+                    required: true,
+                    regex: "^/([a-z0-9-]+){3,18}$",
+                    message: "Only use lowercase alphabets, numbers, and hyphens (-). Must be between 3 and 18 characters long starting with '/'."
+                }
+            }
+        ];
+        fsxLUSTREParams.forEach((param) => {
+            param.when = {
+                param: "onboard_filesystem",
+                starts_with: Constants.SHARED_STORAGE_PROVIDER_FSX_LUSTRE
+            }
+        })
+
+        return fsxLUSTREParams;
+    }
+
     getSelectedOnboardFileSystem() {
         return this.getOnboardFileSystemForm().getFormField("onboard_filesystem");
     }
@@ -514,7 +540,8 @@ class FileSystems extends Component<FileSystemProps, FileSystemState> {
                 if (
                     !dot.pick(`${Constants.SHARED_STORAGE_PROVIDER_EFS}.mount_directory`,values) &&
                     !dot.pick(`${Constants.SHARED_STORAGE_PROVIDER_FSX_NETAPP_ONTAP}.mount_directory`,values) &&
-                    !dot.pick(`${Constants.SHARED_STORAGE_PROVIDER_FSX_NETAPP_ONTAP}.mount_drive`,values)
+                    !dot.pick(`${Constants.SHARED_STORAGE_PROVIDER_FSX_NETAPP_ONTAP}.mount_drive`,values) &&
+                    !dot.pick(`${Constants.SHARED_STORAGE_PROVIDER_FSX_LUSTRE}.mount_directory`,values)
                 ) {
                     this.getOnboardFileSystemForm().setError('InvalidParams','one of mount directory or mount drive is required')
                     return;
@@ -535,6 +562,9 @@ class FileSystems extends Component<FileSystemProps, FileSystemState> {
                 let volumeId;
                 if(provider === Constants.SHARED_STORAGE_PROVIDER_EFS) {
                     attachFileSystem = (request: any) => this.filesystem().onboardEFSFileSystem(request);
+                }
+                else if (provider === Constants.SHARED_STORAGE_PROVIDER_FSX_LUSTRE) {
+                    attachFileSystem = (request: any) => this.filesystem().onboardFSXLUSTREFileSystem(request);
                 }
                 else {
                     //Extract volume id
@@ -588,7 +618,8 @@ class FileSystems extends Component<FileSystemProps, FileSystemState> {
                 if (request.param ===  "onboard_filesystem") {
                     return this.filesystem().listFileSystemsInVPC({}).then((result) => {
                         const efsFileSystems = result.efs;
-                        const fsxFileSystems = result.fsx;
+                        const fsxONTAPFileSystems = result.fsx_ontap;
+                        const fsxLUSTREFileSystems = result.fsx_lustre;
                         const filesystemsNotOnboarded:FileSystemsNotOnboarded = {};
                         const choices: SocaUserInputChoice[] = []
                         efsFileSystems?.forEach((efsFileSystem) => {
@@ -600,14 +631,23 @@ class FileSystems extends Component<FileSystemProps, FileSystemState> {
                                 });
                                 dot.set(fileSystemId, efsFileSystem, filesystemsNotOnboarded);
                         });
-                        fsxFileSystems?.forEach((fsxFileSystem) => {
-                            const fileSystemId = fsxFileSystem.filesystem.FileSystemId;
+                        fsxONTAPFileSystems?.forEach((fsxONTAPFileSystem) => {
+                            const fileSystemId = fsxONTAPFileSystem.filesystem.FileSystemId;
                             const provider = Constants.SHARED_STORAGE_PROVIDER_FSX_NETAPP_ONTAP;
                             choices.push( {
                                 title: `${fileSystemId} [${provider}]`,
                                 value: `${provider}.${fileSystemId}`
                             });
-                            dot.set(fileSystemId, fsxFileSystem, filesystemsNotOnboarded);
+                            dot.set(fileSystemId, fsxONTAPFileSystem, filesystemsNotOnboarded);
+                        });
+                        fsxLUSTREFileSystems?.forEach((fsxLUSTREFileSystem) => {
+                            const fileSystemId = fsxLUSTREFileSystem.filesystem.FileSystemId;
+                            const provider = Constants.SHARED_STORAGE_PROVIDER_FSX_LUSTRE;
+                            choices.push( {
+                                title: `${fileSystemId} [${provider}]`,
+                                value: `${provider}.${fileSystemId}`
+                            });
+                            dot.set(fileSystemId, fsxLUSTREFileSystem, filesystemsNotOnboarded);
                         });
                         this.setState({
                             filesystemsNotOnboarded
@@ -676,7 +716,8 @@ class FileSystems extends Component<FileSystemProps, FileSystemState> {
                     },
                     ...this.buildCommonOnboardFileSystemParams(),
                     ...this.buildOnboardEFSParams(),
-                    ...this.buildOnboardFSxNetAppONTAPParams()
+                    ...this.buildOnboardFSxNetAppONTAPParams(),
+                    ...this.buildOnboardFSxLUSTREParams()
                 ]
             }
         />
@@ -692,6 +733,10 @@ class FileSystems extends Component<FileSystemProps, FileSystemState> {
                 {
                     title: "FSX NetApp ONTAP",
                     value: Constants.SHARED_STORAGE_PROVIDER_FSX_NETAPP_ONTAP,
+                },
+                {
+                    title: "FSX LUSTRE",
+                    value: Constants.SHARED_STORAGE_PROVIDER_FSX_LUSTRE,
                 },
             ];
         };

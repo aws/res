@@ -1,3 +1,2 @@
 -r idea-sdk.in
-supervisor
-sanic==23.6.0
+supervisor~=4.0

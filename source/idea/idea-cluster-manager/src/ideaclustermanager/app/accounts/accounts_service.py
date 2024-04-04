@@ -41,6 +41,7 @@ from ideaclustermanager.app.accounts.db.single_sign_on_state_dao import SingleSi
 from ideaclustermanager.app.accounts.helpers.single_sign_on_helper import SingleSignOnHelper
 from ideaclustermanager.app.tasks.task_manager import TaskManager
 from ideaclustermanager.app.accounts.helpers.sssd_helper import SSSD
+from ideaclustermanager.app.accounts.helpers.quic_update_helper import QuicUpdateHelper, UpdateQuicResults
 
 from typing import Optional, List
 import os
@@ -88,6 +89,7 @@ class AccountsService:
         self.group_members_dao = GroupMembersDAO(context, self.user_dao)
         self.sso_state_dao = SingleSignOnStateDAO(context)
         self.single_sign_on_helper = SingleSignOnHelper(context)
+        self.quic_update_helper = QuicUpdateHelper(context)
 
         self.user_dao.initialize()
         self.group_dao.initialize()
@@ -774,7 +776,7 @@ class AccountsService:
         is_enabled = Utils.get_value_as_bool('enabled', existing_user, False)
         if not is_enabled:
             return
-        
+
         self.user_dao.update_user({'username': username, 'enabled': False})
         self.evdi_client.publish_user_disabled_event(username=username)
 
@@ -836,12 +838,12 @@ class AccountsService:
             old_password=old_password,
             new_password=new_password
         )
-        
+
     def get_user_from_access_token(self, access_token: str) -> Optional[User]:
         decoded_token = self.token_service.decode_token(token=access_token)
         token_username = decoded_token.get('username')
         return self.get_user_from_token_username(token_username=token_username)
-        
+
     def get_user_from_token_username(self, token_username: str) -> Optional[User]:
         if not token_username:
             raise exceptions.unauthorized_access()
@@ -853,7 +855,7 @@ class AccountsService:
             # This is for clusteradmin
             user =  self.get_user(username=token_username)
         return user
-    
+
     def add_role_dbusername_to_auth_result(self, authresult: InitiateAuthResult, ssoAuth: bool = False) -> Optional[InitiateAuthResult]:
         access_token = authresult.auth.access_token
         user = self.get_user_from_access_token(access_token=access_token)
@@ -865,7 +867,7 @@ class AccountsService:
             self.sign_out(authresult.auth.refresh_token, sso_auth=ssoAuth)
             self.logger.error(msg=f'User {user.username} is disabled. Denied login.')
             raise exceptions.unauthorized_access()
-        
+
     # public API methods for user onboarding, login, forgot password flows.
     def initiate_auth(self, request: InitiateAuthRequest) -> InitiateAuthResult:
         auth_flow = request.auth_flow
@@ -1045,4 +1047,7 @@ class AccountsService:
     def configure_sso(self, request: ConfigureSSORequest):
         self.single_sign_on_helper.configure_sso(request)
         self.context.ad_sync.sync_from_ad()  # submit ad_sync task after configuring SSO
+
+    def update_quic(self, quic: bool) -> UpdateQuicResults:
+        return self.quic_update_helper.update_quic_config(quic)
 

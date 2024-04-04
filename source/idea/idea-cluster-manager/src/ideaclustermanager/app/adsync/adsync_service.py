@@ -122,12 +122,12 @@ class ADSyncService:
     def consolidate_ldap_users_by_unique_identifier(
         self, ldap_users: list, ldap_users_by_unique_identifier: dict, ldap_group_name: str = None
     ):
-        for ldap_user in filter(lambda u: 'cn' in u, ldap_users):
-            cn = str(ldap_user['cn']).lower()
-            if cn not in ldap_users_by_unique_identifier:
-                ldap_users_by_unique_identifier[cn] = ldap_user
+        for ldap_user in filter(lambda u: 'sam_account_name' in u, ldap_users):
+            sam_account_name = str(ldap_user['sam_account_name']).lower()
+            if sam_account_name not in ldap_users_by_unique_identifier:
+                ldap_users_by_unique_identifier[sam_account_name] = ldap_user
 
-            user = ldap_users_by_unique_identifier[cn]
+            user = ldap_users_by_unique_identifier[sam_account_name]
             if ldap_group_name:
                 user['additional_groups'] = list(set(user.get('additional_groups', []) + [ldap_group_name]))
 
@@ -205,13 +205,13 @@ class ADSyncService:
         additional_groups = set(user.get('additional_groups', []))
         is_admin = admin_group in additional_groups
         if is_admin:
-            self.logger.info(f"Designating user {user['cn']} as admin")
+            self.logger.info(f"Designating user {user['sam_account_name']} as admin")
 
         try:
             password = Utils.generate_password(8, 2, 2, 2, 2)
             self.context.accounts.create_user(
                 user=User(
-                    username=user['cn'],
+                    username=user['sam_account_name'],
                     password=password,
                     email=user['email'],
                     uid=user['uid'],
@@ -225,10 +225,10 @@ class ADSyncService:
                 ),
                 email_verified=True,
             )
-            self.logger.info(f"Added {user['cn']} to RES successfully")
+            self.logger.info(f"Added {user['sam_account_name']} to RES successfully")
         # todo: handle specific exception(s)
         except Exception as e:
-            self.logger.error(f"Error while adding user {user['cn']} to RES. Error: {e}")
+            self.logger.error(f"Error while adding user {user['sam_account_name']} to RES. Error: {e}")
 
     def handle_user_deletion(self, user):
         try:

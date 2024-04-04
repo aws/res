@@ -12,6 +12,7 @@
 import ideaadministrator
 
 from ideadatamodel import (
+    BaseOS,
     constants,
     exceptions,
     CustomFileLoggerParams
@@ -358,6 +359,58 @@ class CdkInvoker:
             self.exec_shell(cdk_cmd, print_cmd=True)
         finally:
             self.log('CdkInvoker: End Destroy')
+    
+    def upload_vdi_install_scripts(self, cluster_config: ClusterConfig,
+                                           force_build=False,
+                                           upload=True) -> None:
+        """
+        render the bootstrap package for VDI install scripts and upload to the cluster's s3 bucket.
+        returns None.
+        """
+
+        if ideaadministrator.props.is_dev_mode():
+            bootstrap_source_dir = ideaadministrator.props.dev_mode_bootstrap_source_dir
+        else:
+            bootstrap_source_dir = os.path.join(ideaadministrator.props.resources_dir, 'bootstrap')
+                
+        session = Utils.create_boto_session(self.aws_region, self.aws_profile)
+        s3_client = session.client('s3')
+
+        for vdi_os in ['linux', 'windows']:
+            bootstrap_context = BootstrapContext(
+                config=cluster_config,
+                module_name=self.module_name,
+                module_id=self.module_id,
+                module_set=self.module_set,
+                base_os=BaseOS.AMAZON_LINUX_2.value if vdi_os == 'linux' else BaseOS.WINDOWS.value,
+                instance_type='t3.medium',
+            )
+
+            components = ['virtual-desktop-host-linux', 'nice-dcv-linux']
+            if vdi_os == BaseOS.WINDOWS:
+                components = ['virtual-desktop-host-windows']
+
+            builder = BootstrapPackageBuilder(
+                bootstrap_context=bootstrap_context,
+                source_directory=bootstrap_source_dir,
+                target_package_basename=f"res_{vdi_os}_install_{bootstrap_context.module_version}",
+                components=components,
+                tmp_dir=self.deployment_dir,
+                force_build=force_build,
+                build_only_install_scripts=True
+            )
+            bootstrap_package_archive_file = builder.build()
+
+            cluster_s3_bucket = bootstrap_context.config.get_string('cluster.cluster_s3_bucket', required=True)
+            bootstrap_package_uri = f's3://{cluster_s3_bucket}/idea/vdc/res-ready-install-script-packages/{vdi_os}/{os.path.basename(bootstrap_package_archive_file)}'
+
+            if upload:
+                self.log(f'uploading bootstrap install script package {bootstrap_package_uri} ...')
+                s3_client.upload_file(
+                    Bucket=cluster_s3_bucket,
+                    Filename=bootstrap_package_archive_file,
+                    Key=f'idea/vdc/res-ready-install-script-packages/{vdi_os}/{os.path.basename(bootstrap_package_archive_file)}'
+                )
 
     def build_and_upload_bootstrap_package(self, bootstrap_context: BootstrapContext,
                                            bootstrap_package_basename: str,
@@ -438,7 +491,7 @@ class CdkInvoker:
                 aws_region=self.aws_region,
                 aws_profile=self.aws_profile,
                 module_id=constants.MODULE_CLUSTER,
-                module_set=self.module_set
+                module_set=self.module_set,
             )
 
             # find the elb account id for the current region
@@ -452,7 +505,8 @@ class CdkInvoker:
                 'aws_dns_suffix': aws_client.aws_dns_suffix(),
                 'cluster_s3_bucket': cluster_config.get_string('cluster.cluster_s3_bucket', required=True),
                 'config': cluster_config,
-                'aws_elb_account_id': elb_account_id
+                'aws_elb_account_id': elb_account_id,
+                'permission_boundary_arn': cluster_config.get_string('cluster.iam.permission_boundary_arn', default='')
             })
             with open(toolkit_stack_target_file, 'w') as f:
                 f.write(toolkit_stack_content)
@@ -896,6 +950,11 @@ class CdkInvoker:
                 bootstrap_components=[
                     'dcv-connection-gateway'
                 ],
+                upload=upload_bootstrap_package,
+                force_build=force_build_bootstrap
+            )
+            self.upload_vdi_install_scripts(
+                cluster_config=cluster_config,
                 upload=upload_bootstrap_package,
                 force_build=force_build_bootstrap
             )

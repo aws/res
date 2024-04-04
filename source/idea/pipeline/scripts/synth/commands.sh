@@ -31,4 +31,4 @@ echo Pushing the Docker image...
 docker push $ECR_REPOSITORY_URI:$RELEASE_VERSION-$COMMIT_ID
 
 # Synthesize the template
-npx cdk synth -c repository_name=$REPOSITORY_NAME -c branch_name=$BRANCH -c deploy=$DEPLOY -c batteries_included=$BATTERIES_INCLUDED -c integration_tests=$INTEGRATION_TESTS -c destroy=$DESTROY -c registry_name=$ECR_REPOSITORY_URI:$RELEASE_VERSION-$COMMIT_ID -c publish_templates=$PUBLISH_TEMPLATES -c file_asset_prefix="releases/$RELEASE_VERSION/" -c ecr_public_repository_name=$ECR_PUBLIC_REPOSITORY_NAME
+npx cdk synth -c repository_name=$REPOSITORY_NAME -c branch_name=$BRANCH -c deploy=$DEPLOY -c batteries_included=$BATTERIES_INCLUDED -c integration_tests=$INTEGRATION_TESTS -c destroy=$DESTROY -c registry_name=$ECR_REPOSITORY_URI:$RELEASE_VERSION-$COMMIT_ID -c publish_templates=$PUBLISH_TEMPLATES -c file_asset_prefix="releases/$RELEASE_VERSION/" -c ecr_public_repository_name=$ECR_PUBLIC_REPOSITORY_NAME -c use_bi_parameters_from_ssm=$USE_BI_PARAMETERS_FROM_SSM -c destroy_batteries_included=$DESTROY_BATTERIES_INCLUDED -c portal_domain_name=$PORTAL_DOMAIN_NAME

@@ -19,7 +19,6 @@ from prettytable import PrettyTable
 import time
 import botocore.exceptions
 
-
 class DeleteCluster:
 
     def __init__(self, cluster_name: str, aws_region: str, aws_profile: str, delete_bootstrap: bool, delete_databases: bool, delete_backups: bool, delete_cloudwatch_logs: bool, delete_all: bool, force: bool):
@@ -247,65 +246,50 @@ class DeleteCluster:
         stacks_to_delete = []
         cluster_stacks = []
         identity_provider_stacks = []
-        pagination_token = None
-        while True:
-            request = {
-                'TagFilters': [
-                    {
-                        'Key': constants.IDEA_TAG_ENVIRONMENT_NAME,
-                        'Values': [self.cluster_name]
-                    }
-                ],
-                'ResourceTypeFilters': ['cloudformation']
-            }
-            if pagination_token is None:
-                get_resources_result = self.context.aws().resource_groups_tagging_api().get_resources(**request)
-            else:
-                get_resources_result = self.context.aws().resource_groups_tagging_api().get_resources(**{
-                    **request,
-                    'PaginationToken': pagination_token
-                })
+        paginator = self.context.aws().cloudformation().get_paginator('list_stacks')
+        page_iterator = paginator.paginate()
+        # TODO: Use S3 select instead of looping on all the stacks for more efficient tag based querying 
+        for page in page_iterator:
+            for stacks in page.get('StackSummaries', []):
+                stack_name = stacks.get('StackName')
 
-            pagination_token = Utils.get_value_as_string('PaginationToken', get_resources_result)
+                if not stack_name:
+                    continue
+                
+                if not stack_name.strip().startswith(self.cluster_name):
+                    continue
+                
+                stack_id = stacks.get('StackId')
+                stack = self.describe_cloud_formation_stack(stack_id)
+                
+                if stack['StackStatus'] == 'DELETE_COMPLETE':
+                    continue
 
-            resources = Utils.get_value_as_list('ResourceTagMappingList', get_resources_result, [])
-            for resource in resources:
-                try:
+                tags = stack.get('Tags', {})
+                tag_value = None
+                for tag in tags:
+                    if tag['Key'] == constants.IDEA_TAG_ENVIRONMENT_NAME:
+                        tag_value = tag['Value']
+                        break
 
-                    stack_id = Utils.get_value_as_string('ResourceARN', resource)
+                if not tag_value or tag_value != self.cluster_name:
+                    continue
 
-                    stack = self.describe_cloud_formation_stack(stack_id)
-                    stack_name = Utils.get_value_as_string('StackName', stack)
+                if self.is_bootstrap_stack(stack_name):
+                    continue
 
-                    if Utils.is_empty(stack_name):
-                        continue
-
-                    if self.is_bootstrap_stack(stack_name):
-                        continue
-
-                    if self.is_batteries_included_stack(stack):
-                        continue
-
-                    if self.is_cluster_stack(stack_name):
-                        cluster_stacks.append(stack)
-                    elif self.is_identity_provider_stack(stack_name):
-                        identity_provider_stacks.append(stack)
-                    else:
-                        stacks_to_delete.append(stack)
-
-                    # sleep for a while to ensure we don't flood describe_stack() API
-                    time.sleep(0.5)
-
-                except botocore.exceptions.ClientError as e:
-                    # race condition, where resources tagging API returns a cfn stack, but the stack could be deleted.
-                    # * this scenario occurs when scheduler launches a job stack and deletes it by the time delete cluster calls describe cfn stack
-                    # * to address this scenario, skip all validation error cases
-                    if e.response['Error']['Code'] != 'ValidationError':
-                        raise e
-
-            if Utils.is_empty(pagination_token):
-                break
-
+                if self.is_batteries_included_stack(stack):
+                    continue
+                
+                if self.is_cluster_stack(stack_name):
+                    cluster_stacks.append(stack)
+                elif self.is_identity_provider_stack(stack_name):
+                    identity_provider_stacks.append(stack)
+                else:
+                    stacks_to_delete.append(stack)
+                
+                # sleep for a while to ensure we don't flood describe_stack() API
+                time.sleep(0.5)
         self.cloud_formation_stacks = stacks_to_delete
         self.cluster_stacks = cluster_stacks
         self.identity_provider_stacks = identity_provider_stacks
@@ -485,65 +469,6 @@ class DeleteCluster:
 
     def delete_identity_provider_stacks(self):
         stack_names = []
-        user_pool_ids_to_unprotect = []
-
-        describe_user_pool_paginator = self.context.aws().cognito_idp().get_paginator('list_user_pools')
-        user_pool_iter = describe_user_pool_paginator.paginate(MaxResults=50)
-
-        # Walk the list of user pools in the account looking for our matching pool
-        # The pool must match the expected name, as well as having the proper
-        # res:EnvironmentName tag for us to consider it as valid.
-        for page in user_pool_iter:
-            user_pools = Utils.get_value_as_list('UserPools', page, default=[])
-
-            confirm_delete_pools = self.force
-            if not self.force:
-                confirm_delete_pools = self.context.prompt(f'Are you sure you want to delete the User Pools associated with the cluster: 'f'{self.cluster_name}? This action is not reversible.')
-
-            if not confirm_delete_pools:
-                self.context.error('Aborting Delete Operation - User Pools remain intact!')
-                raise SystemExit
-
-            if user_pools:
-                for pool in user_pools:
-                    pool_name = Utils.get_value_as_string('Name', pool, default='')
-                    pool_id = Utils.get_value_as_string('Id', pool, default=None)
-                    if pool_name == f'{self.cluster_name}-user-pool' and pool_id is not None:
-                        user_pool_ids_to_unprotect.append(pool_id)
-
-            # Unprotect the discovered user pools if they have matching cluster Tags
-            for pool_id in user_pool_ids_to_unprotect:
-                _remove_pool_protection = False
-                describe_user_pool_result = self.context.aws().cognito_idp().describe_user_pool(
-                    UserPoolId=pool_id
-                )
-                delete_protection = Utils.get_value_as_string('DeletionProtection', describe_user_pool_result, default='ACTIVE')
-
-                if delete_protection.upper() == 'ACTIVE':
-                    pool_tags = Utils.get_value_as_dict('UserPoolTags', Utils.get_value_as_dict('UserPool', describe_user_pool_result, default={}), default={})
-                    # Support previous deployments that didn't have UserPoolTags
-                    # It is OK to do this since we validated that the user pool Name still matched the expected name.
-                    # Note that the Name and the Name Tag can be different in this case.
-                    if not pool_tags:
-                        self.context.info(f'Cognito User Pool {pool_id} - Deletion Protection is {delete_protection} - No tags found - proceeding to remove')
-                        _remove_pool_protection = True
-                    for tag_name, tag_value in pool_tags.items():
-                        if tag_name == constants.IDEA_TAG_ENVIRONMENT_NAME and tag_value == self.cluster_name:
-                            self.context.info(f'Cognito User Pool {pool_id} - Deletion Protection is {delete_protection} - Removing')
-                            _remove_pool_protection = True
-
-                    if _remove_pool_protection:
-                        self.context.aws().cognito_idp().update_user_pool(
-                            UserPoolId=pool_id,
-                            DeletionProtection='INACTIVE'
-                        )
-                        time.sleep(0.5)
-
-                elif delete_protection.upper() == 'INACTIVE':
-                    self.context.info(f'Cognito User Pool {pool_id} - Deletion Protection is INACTIVE - No need to remove protection.')
-
-        # For non-Cognito deployments - we should just land here to cleanup the stacks
-        # If there are any other cleanups needed - add them here
         for stack in self.identity_provider_stacks:
             stack_name = Utils.get_value_as_string('StackName', stack)
             stack_names.append(stack_name)
@@ -807,6 +732,43 @@ class DeleteCluster:
             else:
                 raise e
 
+    def validate_target_group(self, tg_arn: str) -> bool:
+        if not tg_arn:
+            return False
+        tag_description = self.context.aws().elbv2().describe_tags(ResourceArns=[tg_arn]).get('TagDescriptions', [None])[0]
+
+        if not tag_description:
+            return False
+
+        tags = tag_description.get('Tags', [])
+        for tag in tags:
+            if tag.get('Key') == constants.IDEA_TAG_ENVIRONMENT_NAME and tag.get('Value') == self.cluster_name:
+                return True
+        return False
+
+    def delete_target_groups(self):
+        self.context.info(
+            f'Searching for target groups to be deleted...')
+
+        try:
+            target_group_arns = []
+            tg_paginator = self.context.aws().elbv2().get_paginator('describe_target_groups')
+            tg_iterator = tg_paginator.paginate()
+
+            for page in tg_iterator:
+                for tg in page.get('TargetGroups', []):
+                    tg_name = tg.get('TargetGroupName', '')
+                    tg_arn = tg.get('TargetGroupArn', '')
+                    if tg_name.startswith(self.cluster_name) and self.validate_target_group(tg_arn):
+                        self.context.info(f'Target group : {tg_name}')
+                        target_group_arns.append(tg_arn)
+
+            for target_group_arn in target_group_arns:
+                self.context.aws().elbv2().delete_target_group(TargetGroupArn=target_group_arn)
+
+        except Exception as e:
+            self.context.error(f'Error deleting target groups: {e}')
+
     def invoke(self):
 
         # Finding ec2 instances
@@ -860,6 +822,11 @@ class DeleteCluster:
             if confirm_delete_bootstrap:
                 self.delete_bootstrap_and_s3_bucket()
 
+        #Required here because QUIC support modifies the target groups which cloudformation cannot recognize
+        #At this point load balancers and listeners have been deleted
+        self.context.info(f'Deleting target groups...')
+        self.delete_target_groups()
+        
         if self.delete_databases or self.delete_all:
             self.find_dynamodb_tables()
             if Utils.is_not_empty(self.dynamodb_tables):
@@ -883,3 +850,5 @@ class DeleteCluster:
 
                 if confirm_delete_cloudwatch_logs:
                     self.delete_cloudwatch_log_groups()
+
+        

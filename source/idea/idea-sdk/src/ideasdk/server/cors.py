@@ -9,29 +9,12 @@
 #  OR CONDITIONS OF ANY KIND, express or implied. See the License for the specific language governing permissions
 #  and limitations under the License.
 
-from typing import Iterable
+from sanic_ext import Config
 
 
-def _add_cors_headers(response, methods: Iterable[str]) -> None:
-    allow_methods = list(set(methods))
-    if "OPTIONS" not in allow_methods:
-        allow_methods.append("OPTIONS")
-    headers = {
-        "Access-Control-Allow-Methods": ",".join(allow_methods),
-        "Access-Control-Allow-Origin": "*",
-        "Access-Control-Allow-Credentials": "*",
-        "Access-Control-Allow-Headers": (
-            "origin, content-type, accept, "
-            "authorization, x-xsrf-token, x-request-id"
-        )
-    }
-    response.headers.extend(headers)
-
-
-def add_cors_headers(request, response):
-    if request.method != "OPTIONS" and request.route is not None:
-        methods = [
-            method
-            for method in request.route.methods
-        ]
-        _add_cors_headers(response, methods)
+def get_cors_config() -> Config:
+    return Config(
+        cors_origins="*",
+        cors_allow_headers=["origin", "content-type", "accept",
+                            "authorization", "x-xsrf-token", "x-request-id"]
+    )

@@ -10,6 +10,8 @@
 #  and limitations under the License.
 
 import logging
+import os
+from typing import Optional
 
 import pytest
 
@@ -45,10 +47,9 @@ from tests.integration.framework.model.client_auth import ClientAuth
 from tests.integration.framework.utils.session_utils import (
     wait_for_session_connection_count,
 )
+from tests.integration.tests.config import TEST_SOFTWARE_STACKS
 
 logger = logging.getLogger(__name__)
-MIN_STORAGE = SocaMemory(value=10, unit=SocaMemoryUnit.GB)
-MIN_RAM = SocaMemory(value=4, unit=SocaMemoryUnit.GB)
 
 
 @pytest.mark.usefixtures("res_environment")
@@ -73,8 +74,8 @@ class TestsSmoke(object):
         [
             (
                 Project(
-                    title="res-integ-test",
-                    name="res-integ-test",
+                    title="res-integ-test" + os.environ.get("PYTEST_XDIST_WORKER", ""),
+                    name="res-integ-test" + os.environ.get("PYTEST_XDIST_WORKER", ""),
                     description="RES integ test project",
                     enable_budgets=False,
                     ldap_groups=["RESAdministrators", "group_1", "group_2"],
@@ -88,17 +89,10 @@ class TestsSmoke(object):
         "software_stack",
         [
             (
-                VirtualDesktopSoftwareStack(
-                    name="res-integ-test-stack",
-                    description="RES integ test software stack",
-                    base_os=VirtualDesktopBaseOS.AMAZON_LINUX2,
-                    architecture=VirtualDesktopArchitecture.X86_64,
-                    min_storage=MIN_STORAGE,
-                    min_ram=MIN_RAM,
-                    gpu=VirtualDesktopGPU.NO_GPU,
-                ),
+                software_stack,
                 "project",
             )
+            for software_stack in TEST_SOFTWARE_STACKS
         ],
         indirect=True,
     )
@@ -107,12 +101,8 @@ class TestsSmoke(object):
         [
             (
                 VirtualDesktopSession(
-                    base_os=VirtualDesktopBaseOS.AMAZON_LINUX2,
-                    name="VirtualDesktop1",
-                    server=VirtualDesktopServer(
-                        instance_type="t3.medium", root_volume_size=MIN_STORAGE
-                    ),
-                    description="VirtualDesktop1",
+                    name="VirtualDesktop" + os.environ.get("PYTEST_XDIST_WORKER", ""),
+                    description="RES integ test VDI session",
                     hibernation_enabled=False,
                 ),
                 "project",
@@ -132,7 +122,7 @@ class TestsSmoke(object):
         res_environment: ResEnvironment,
         project: Project,
         software_stack: VirtualDesktopSoftwareStack,
-        session: VirtualDesktopSession,
+        session: Optional[VirtualDesktopSession],
     ) -> None:
         """
         Test the end to end workflow:
@@ -140,7 +130,12 @@ class TestsSmoke(object):
         2. Join the virtual desktop session from a headless web browser and close it.
         3. Clean up the test project, software stack and virtual desktop session.
         """
-        client = ResClient(request, res_environment, non_admin)
+        if not session:
+            # VDI is not supported with the current configuration
+            return
+
+        api_invoker_type = request.config.getoption("--api-invoker-type")
+        client = ResClient(res_environment, non_admin, api_invoker_type)
         web_driver = client.join_session(session)
         wait_for_session_connection_count(region, session, 1)
 
