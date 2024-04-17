@@ -628,6 +628,7 @@ class VirtualDesktopControllerStack(IdeaBaseStack):
                 'CONTROLLER_EVENTS_QUEUE_URL': '${__CONTROLLER_EVENTS_QUEUE_URL__}'
             },
             proxy_config=proxy_config,
+            bootstrap_source_dir_path=ideaadministrator.props.bootstrap_source_dir,
             base_os=self.context.config().get_string('virtual-desktop-controller.dcv_broker.autoscaling.base_os', required=True)
         ).build()
         substituted_userdata = cdk.Fn.sub(broker_userdata, {
@@ -728,6 +729,7 @@ class VirtualDesktopControllerStack(IdeaBaseStack):
                     '/bin/bash virtual-desktop-controller/setup.sh'
                 ],
                 proxy_config=proxy_config,
+                bootstrap_source_dir_path=ideaadministrator.props.bootstrap_source_dir,
                 base_os=self.context.config().get_string('virtual-desktop-controller.controller.autoscaling.base_os', required=True)
             ).build()),
             node_type=constants.NODE_TYPE_APP
@@ -964,6 +966,7 @@ class VirtualDesktopControllerStack(IdeaBaseStack):
                 'PRIVATE_KEY_SECRET_ARN': '${__PRIVATE_KEY_SECRET_ARN__}',
             },
             proxy_config=proxy_config,
+            bootstrap_source_dir_path=ideaadministrator.props.bootstrap_source_dir,
             base_os=self.context.config().get_string('virtual-desktop-controller.dcv_connection_gateway.autoscaling.base_os', required=True)
         ).build()
 

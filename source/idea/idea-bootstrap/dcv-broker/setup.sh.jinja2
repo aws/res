@@ -13,6 +13,10 @@
 
 set -x
 
+if [ -f /root/bootstrap/semaphore/instance_ready.lock ]; then
+  exit 0
+fi
+
 if [[ -f /etc/os-release ]]; then
   OS_RELEASE_ID=$(grep -E '^(ID)=' /etc/os-release | awk -F'"' '{print $2}')
   OS_RELEASE_VERSION_ID=$(grep -E '^(VERSION_ID)=' /etc/os-release | awk -F'"' '{print $2}')
@@ -146,3 +150,5 @@ log_warning "cloudwatch_agent_config not provided."
 {%- endwith %}
 
 /bin/bash ${SCRIPT_DIR}/install_app.sh
+
+echo $(date +%s) > /root/bootstrap/semaphore/instance_ready.lock

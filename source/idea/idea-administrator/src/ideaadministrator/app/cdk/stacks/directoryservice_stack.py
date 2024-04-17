@@ -266,7 +266,8 @@ class DirectoryServiceStack(IdeaBaseStack):
                 'LDAP_TLS_CERTIFICATE_SECRET_ARN': '${__LDAP_TLS_CERTIFICATE_SECRET_ARN__}',
                 'LDAP_TLS_PRIVATE_KEY_SECRET_ARN': '${__LDAP_TLS_PRIVATE_KEY_SECRET_ARN__}'
             },
-            proxy_config=proxy_config
+            proxy_config=proxy_config,
+            bootstrap_source_dir_path=ideaadministrator.props.bootstrap_source_dir
         ).build()
 
         substituted_userdata = cdk.Fn.sub(user_data, {

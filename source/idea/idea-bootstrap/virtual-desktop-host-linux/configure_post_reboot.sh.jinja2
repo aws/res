@@ -12,6 +12,13 @@
 
 set -x
 
+SEMAPHORE_DIR=/root/bootstrap/semaphore
+INSTANCE_READY_LOCK=${SEMAPHORE_DIR}/instance_ready.lock
+
+if [ -f ${INSTANCE_READY_LOCK} ]; then
+  exit 0
+fi
+
 source /etc/environment
 if [[ -f /etc/profile.d/proxy.sh ]]; then
     source /etc/profile.d/proxy.sh
@@ -19,15 +26,6 @@ fi
 
 timestamp=$(date +%s)
 exec > ${BOOTSTRAP_DIR}/logs/configure_post_reboot.log.${timestamp} 2>&1
-
-for ARG in "$@"
-do
-  if [[ "$ARG" == "crontab" ]]; then
-    # clean crontab, remove current file from reboot commands
-    crontab -l | grep -v 'configure_post_reboot.sh' | crontab -
-    break
-  fi
-done
 
 echo -n "no" > ${BOOTSTRAP_DIR}/reboot_required.txt
 
@@ -53,6 +51,10 @@ chmod +x "${IDEA_SERVICES_PATH}/idea-reboot-do-not-edit-or-delete-idea-notif.sh"
 
 crontab -l | grep -v "idea-reboot-do-not-edit-or-delete-idea-notif.sh" | crontab -
 (crontab -l; echo "@reboot /bin/bash ${IDEA_SERVICES_PATH}/idea-reboot-do-not-edit-or-delete-idea-notif.sh") | crontab -
+
+# Instance ready
+mkdir -p ${SEMAPHORE_DIR}
+echo $(date +%s) > ${INSTANCE_READY_LOCK}
 
 # Future fix for aml2 hibernate - works when following this steps manually on the server however,
 # with the automation below, these commands complete succesfully and everything is created but

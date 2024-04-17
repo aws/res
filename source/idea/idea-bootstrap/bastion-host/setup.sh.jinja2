@@ -13,6 +13,10 @@
 
 set -x
 
+if [ -f /root/bootstrap/semaphore/instance_ready.lock ]; then
+  exit 0
+fi
+
 if [[ -f /etc/os-release ]]; then
   OS_RELEASE_ID=$(grep -E '^(ID)=' /etc/os-release | awk -F'"' '{print $2}')
   OS_RELEASE_VERSION_ID=$(grep -E '^(VERSION_ID)=' /etc/os-release | awk -F'"' '{print $2}')
@@ -47,7 +51,7 @@ BOOTSTRAP_DIR=/root/bootstrap
 curr_environment+=$(echo -e "
 IDEA_HTTPS_PROXY={{ context.https_proxy }}
 IDEA_NO_PROXY={{ context.no_proxy }}
-") 
+")
 {% endif %}
 
 curr_environment+=$(echo -e "
@@ -161,6 +165,8 @@ log_warning "cloudwatch_agent_config not provided."
 {% if context.config.get_string('scheduler.private_dns_name') %}
   {% include '_templates/linux/openpbs_client.jinja2' %}
 {% endif %}
+
+echo $(date +%s) > /root/bootstrap/semaphore/instance_ready.lock
 
 REBOOT_REQUIRED=$(cat /root/bootstrap/reboot_required.txt)
 if [[ "${REBOOT_REQUIRED}" == "yes" ]]; then

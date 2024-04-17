@@ -9,7 +9,7 @@
 {%- if context.config.get_string('directoryservice.provider') in ['activedirectory', 'aws_managed_activedirectory'] %}
   {%- if context.config.get_string('directoryservice.disable_ad_join') == 'True'%}
     {%- include '_templates/linux/connect_activedirectory.jinja2' %}
-    {%- include '_templates/linux/set_sudoers.jinja2' %}
+{% include '_templates/linux/set_sudoers.jinja2' %}
   {% endif -%}
   {%- if context.config.get_string('directoryservice.disable_ad_join') == 'False'%}
     {%- include '_templates/linux/join_activedirectory.jinja2' %}

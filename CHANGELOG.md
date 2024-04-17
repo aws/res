@@ -1,6 +1,15 @@
 # Change Log
 This file is used to list changes made in each release of Research and Engineering Studio (RES).
 
+
+2024.04.01
+------
+
+**BUG FIXES**
+
+- Fixed an issue where Admin users outside the sudoers group were not granted sudo permissions on Linux virtual desktops when DisableADJoin was set to True.
+- Resolved an issue that prevented RES infrastructure hosts and Linux virtual desktops from automatically recovering after unexpected reboots during instance warm-up.
+
 2024.04
 ------
 
@@ -9,9 +18,9 @@ This file is used to list changes made in each release of Research and Engineeri
 - Add support for RES Ready AMI.
   - Improve VDI boot times by installing all necessary software in the AMI instead of installing it at EC2 instance launch. This also allows VDIs to run in private subnets with no internet access.
 - Add QUIC support for VDIs.
-  - The QUIC protocol has better streaming performance in high latency environments. Administrators can toggle this for all VDIs under Session Management → Desktop Settings → General → QUIC. 
+  - The QUIC protocol has better streaming performance in high latency environments. Administrators can toggle this for all VDIs under Session Management → Desktop Settings → General → QUIC.
 - Add support for custom VDI Instance launch parameters.
-  - Launch parameters include additional IAM policies, security groups and launch scripts. Add these configurations under Advanced Options when creating or editing a project. The settings will apply to all VDIs launched for that project. 
+  - Launch parameters include additional IAM policies, security groups and launch scripts. Add these configurations under Advanced Options when creating or editing a project. The settings will apply to all VDIs launched for that project.
 - Add support for IAM Permission boundaries.
   - Customers can now specify a permission boundary that will be added to all IAM roles created by the RES environment.
 - Add support for deploying RES in an isolated VPC.

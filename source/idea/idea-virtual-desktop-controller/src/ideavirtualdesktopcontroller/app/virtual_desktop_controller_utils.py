@@ -132,13 +132,17 @@ class VirtualDesktopControllerUtils:
         on_vdi_start_script_store = self._store_commands_as_linux_script(on_vdi_start_script_commands, ScriptEventType.ON_VDI_START)
         on_vdi_configured_script_store = self._store_commands_as_linux_script(on_vdi_configured_script_commands, ScriptEventType.ON_VDI_CONFIGURED)
 
-        install_commands = on_vdi_start_script_store + on_vdi_configured_script_store + [
+        lock_file = "/root/bootstrap/semaphore/custom_script.lock"
+        install_commands = [
+            f"if [[ ! -f {lock_file} ]]; then",
+            *on_vdi_start_script_store,
+            *on_vdi_configured_script_store,
             '/bin/bash virtual-desktop-host-linux/export_launch_script_env.sh -p {0} -o {1} -n {2} -e {3} -c {4} -s {5}'.format(session.project.project_id, session.owner, session.project.name, self.context.config().cluster_name, f'{ScriptEventType.ON_VDI_CONFIGURED}.sh', f'{ScriptEventType.ON_VDI_START}.sh'),
             'source /etc/launch_script_environment',
             f'/bin/bash virtual-desktop-host-linux/{ScriptEventType.ON_VDI_START}.sh',
-            '/bin/bash virtual-desktop-host-linux/install.sh -r {0} -n {1} -v 1 -g {2}'.format(self.context.config().aws_region,
-                                                                                               self.context.config().cluster_name,
-                                                                                               gpu_family),
+            f"echo $(date +%s) > {lock_file}",
+            "fi",
+            '/bin/bash virtual-desktop-host-linux/install.sh -r {0} -n {1} -g {2} -p false'.format(self.context.config().aws_region, self.context.config().cluster_name, gpu_family),
         ]
 
         if session.software_stack.base_os == BaseOS.WINDOWS:
@@ -171,7 +175,8 @@ class VirtualDesktopControllerUtils:
             bootstrap_package_uri=self._build_and_upload_bootstrap_package(session),
             install_commands=install_commands,
             proxy_config=proxy_config,
-            substitution_support=False
+            substitution_support=False,
+            bootstrap_source_dir_path=self.context.get_bootstrap_dir()
         )
 
         return user_data_builder.build()
