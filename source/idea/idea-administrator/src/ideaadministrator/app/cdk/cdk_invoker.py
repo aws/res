@@ -359,7 +359,7 @@ class CdkInvoker:
             self.exec_shell(cdk_cmd, print_cmd=True)
         finally:
             self.log('CdkInvoker: End Destroy')
-    
+
     def upload_vdi_install_scripts(self, cluster_config: ClusterConfig,
                                            force_build=False,
                                            upload=True) -> None:
@@ -368,11 +368,6 @@ class CdkInvoker:
         returns None.
         """
 
-        if ideaadministrator.props.is_dev_mode():
-            bootstrap_source_dir = ideaadministrator.props.dev_mode_bootstrap_source_dir
-        else:
-            bootstrap_source_dir = os.path.join(ideaadministrator.props.resources_dir, 'bootstrap')
-                
         session = Utils.create_boto_session(self.aws_region, self.aws_profile)
         s3_client = session.client('s3')
 
@@ -392,7 +387,7 @@ class CdkInvoker:
 
             builder = BootstrapPackageBuilder(
                 bootstrap_context=bootstrap_context,
-                source_directory=bootstrap_source_dir,
+                source_directory=ideaadministrator.props.bootstrap_source_dir,
                 target_package_basename=f"res_{vdi_os}_install_{bootstrap_context.module_version}",
                 components=components,
                 tmp_dir=self.deployment_dir,

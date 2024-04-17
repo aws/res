@@ -15,6 +15,7 @@ function add_admins_to_sudoers () {
     create_jq_ddb_filter
   fi
 
+  local AWS=$(command -v aws)
   admins=$($AWS dynamodb query \
        --table-name ${RES_USER_TABLE} \
        --index-name role-index \

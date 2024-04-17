@@ -1,0 +1,111 @@
+Content-Type: multipart/mixed; boundary="//"
+MIME-Version: 1.0
+
+--//
+Content-Type: text/cloud-config; charset="us-ascii"
+MIME-Version: 1.0
+Content-Transfer-Encoding: 7bit
+Content-Disposition: attachment; filename="cloud-config.txt"
+
+#cloud-config, set to always run to counter unexpected reboots. Lock files will be used to skip executed steps.
+cloud_final_modules:
+- [scripts-user, always]
+
+--//
+Content-Type: text/x-shellscript; charset="us-ascii"
+MIME-Version: 1.0
+Content-Transfer-Encoding: 7bit
+Content-Disposition: attachment; filename="userdata.txt"
+
+#!/bin/bash
+set -x
+
+if [ ! -f /root/bootstrap/semaphore/pre_install_finished.lock ]; then
+  mkdir -p /root/bootstrap
+  AWS_REGION="{{ aws_region }}"
+  BASE_OS="{{ base_os }}"
+  DEFAULT_AWS_REGION="{{ aws_region }}"
+  AWSCLI_X86_64_URL="https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip"
+  AWSCLI_AARCH64_URL="https://awscli.amazonaws.com/awscli-exe-linux-aarch64.zip"
+
+  echo "
+  {% if proxy_config %}
+  {% for key, value in proxy_config.items() %}
+  export {{ key }}={{ value }}
+  {% endfor %}
+  {% else %}
+  {% endif %}
+  " > /root/bootstrap/proxy.cfg
+  source /root/bootstrap/proxy.cfg
+
+  timestamp=$(date +%s)
+  mkdir -p /root/bootstrap/logs
+  if [[ -f /root/bootstrap/logs/userdata.log ]]; then
+    mv /root/bootstrap/logs/userdata.log /root/bootstrap/logs/userdata.log.${timestamp}
+  fi
+  exec > /root/bootstrap/logs/userdata.log 2>&1
+
+  export PATH="${PATH}:/usr/local/bin"
+
+  function install_aws_cli () {
+    AWS=$(command -v aws)
+    if [[ $($AWS --version | awk -F'[/.]' '{print $2}') != 2 ]]; then
+      if [[ "${BASE_OS}" == "amazonlinux2" ]]; then
+        yum remove -y awscli
+      fi
+      cd /root/bootstrap
+      local machine=$(uname -m)
+      if [[ ${machine} == "x86_64" ]]; then
+        curl -s ${AWSCLI_X86_64_URL} -o "awscliv2.zip"
+        elif [[ ${machine} == "aarch64" ]]; then
+          curl -s ${AWSCLI_AARCH64_URL} -o "awscliv2.zip"
+      fi
+      which unzip > /dev/null 2>&1
+      if [[ "$?" != "0" ]]; then
+        yum install -y unzip
+      fi
+      unzip -q awscliv2.zip
+      ./aws/install --bin-dir /bin --update
+      rm -rf aws awscliv2.zip
+    fi
+  }
+
+  echo "#!/bin/bash
+  PACKAGE_DOWNLOAD_URI=\${1}
+  PACKAGE_ARCHIVE=\$(basename \${PACKAGE_DOWNLOAD_URI})
+  PACKAGE_NAME=\${PACKAGE_ARCHIVE%.tar.gz*}
+  INSTANCE_REGION=\$(TOKEN=\$(curl --silent -X PUT 'http://169.254.169.254/latest/api/token' -H 'X-aws-ec2-metadata-token-ttl-seconds: 900') && curl --silent -H \"X-aws-ec2-metadata-token: \${TOKEN}\" 'http://169.254.169.254/latest/meta-data/placement/region')
+  if [[ \${PACKAGE_DOWNLOAD_URI} == s3://* ]]; then
+    AWS=\$(command -v aws)
+    \$AWS --region \${INSTANCE_REGION} s3 cp \${PACKAGE_DOWNLOAD_URI} /root/bootstrap/
+  else
+    cp \${PACKAGE_DOWNLOAD_URI} /root/bootstrap/
+  fi
+  PACKAGE_DIR=/root/bootstrap/\${PACKAGE_NAME}
+  if [[ -d \${PACKAGE_DIR} ]]; then
+    rm -rf \${PACKAGE_DIR}
+  fi
+  mkdir -p \${PACKAGE_DIR}
+  tar -xvf /root/bootstrap/\${PACKAGE_ARCHIVE} -C \${PACKAGE_DIR}
+  rm -rf /root/bootstrap/latest
+  ln -sf \${PACKAGE_DIR} /root/bootstrap/latest
+  " > /root/bootstrap/download_bootstrap.sh
+
+  chmod +x /root/bootstrap/download_bootstrap.sh
+
+  install_aws_cli
+  bash /root/bootstrap/download_bootstrap.sh "{{ bootstrap_package_uri }}"
+
+  # prepare steps are done, create the lock file with the timestamp
+  mkdir -p /root/bootstrap/semaphore
+  echo $(date +%s) > /root/bootstrap/semaphore/pre_install_finished.lock
+fi
+
+cd /root/bootstrap/latest
+
+# Run the install commands, each install script should ensure their own idempotency
+{% for install_command in install_commands %}
+{{ install_command }}
+{% endfor %}
+
+--//--

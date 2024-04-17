@@ -86,6 +86,13 @@ class AdministratorProps:
             return os.path.join(self.soca_admin_dir, 'resources')
 
     @property
+    def bootstrap_source_dir(self) -> str:
+        if self.is_dev_mode():
+            return self.dev_mode_bootstrap_source_dir
+        else:
+            return os.path.join(self.resources_dir, 'bootstrap')
+
+    @property
     def lambda_function_commons_package_name(self) -> str:
         return 'idea_lambda_commons'
 

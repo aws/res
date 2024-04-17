@@ -323,7 +323,8 @@ class SchedulerStack(IdeaBaseStack):
                 '/bin/bash scheduler/setup.sh'
             ],
             proxy_config=proxy_config,
-            base_os=base_os
+            base_os=base_os,
+            bootstrap_source_dir_path=ideaadministrator.props.bootstrap_source_dir
         ).build()
 
         launch_template = ec2.LaunchTemplate(

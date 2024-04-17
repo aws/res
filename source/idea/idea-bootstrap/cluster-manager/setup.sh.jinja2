@@ -13,6 +13,10 @@
 
 set -x
 
+if [ -f /root/bootstrap/semaphore/instance_ready.lock ]; then
+  exit 0
+fi
+
 if [[ -f /etc/os-release ]]; then
   OS_RELEASE_ID=$(grep -E '^(ID)=' /etc/os-release | awk -F'"' '{print $2}')
   OS_RELEASE_VERSION_ID=$(grep -E '^(VERSION_ID)=' /etc/os-release | awk -F'"' '{print $2}')
@@ -174,6 +178,8 @@ yum install -y ${OPENLDAP_SERVER_PKGS[*]} ${PUTTY_PKGS[*]}
 # lock down access to IDEA_CLUSTER_HOME for root user
 mkdir -p "${IDEA_CLUSTER_HOME}"
 chmod 700 "${IDEA_CLUSTER_HOME}"
+
+echo $(date +%s) > /root/bootstrap/semaphore/instance_ready.lock
 
 REBOOT_REQUIRED=$(cat /root/bootstrap/reboot_required.txt)
 if [[ "${REBOOT_REQUIRED}" == "yes" ]]; then
