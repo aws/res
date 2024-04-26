@@ -1,6 +1,19 @@
 # Change Log
 This file is used to list changes made in each release of Research and Engineering Studio (RES).
 
+2024.04.02
+------
+
+**BUG FIXES**
+
+- Fixed a bug where RES Users were given the option to create FSx for Lustre file systems through the UI. RES only supports mounting existing file systems. To create an FSx for Lustre file system see https://docs.aws.amazon.com/fsx/latest/LustreGuide/getting-started.html#getting-started-step1
+- Resolved an issue with the IAMPermissionBoundary parameter that prevented the use of GovCloud ARNs.
+- Resolved an issue that caused failures when deleting a RES environment in GovCloud.
+- Resolved an issue preventing RES installation for accounts with GuardDuty Runtime Monitoring for AWS Fargate enabled.
+
+**ENHANCEMENTS**
+
+- Added support for onboarding FSx for Lustre file systems onto RHEL 9 kernel version 5.14.0-362*.
 
 2024.04.01
 ------

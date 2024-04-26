@@ -94,7 +94,7 @@ class CommonParameters(Base):
             id=CommonKey.IAM_PERMISSION_BOUNDARY,
             type="String",
             description="(Optional) You may provide an IAM permission boundary ARN that will be attached to all roles created in RES.",
-            allowed_pattern="^(?:arn:aws:iam::[0-9]{12}:policy/[A-Za-z0-9\-\_\+\=\,\.\@]{1,128})?$",
+            allowed_pattern="^(?:arn:(?:aws|aws-us-gov|aws-cn):iam::[0-9]{12}:policy/[A-Za-z0-9\-\_\+\=\,\.\@]{1,128})?$",
             constraint_description="The IAM permission boundary must be a valid ARN.",
         )
     )

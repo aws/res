@@ -131,7 +131,7 @@ if [[ -z "$(rpm -qa lustre-client)" ]]; then
   kernel=$(uname -r)
   machine=$(uname -m)
   log_info "Found kernel version: $kernel running on: $machine"
-  if [[ $kernel == *"5.14.0-362.13"*$machine ]]; then
+  if [[ $kernel == *"5.14.0-362"*$machine ]]; then
     curl https://fsx-lustre-client-repo-public-keys.s3.amazonaws.com/fsx-rpm-public-key.asc -o /tmp/fsx-rpm-public-key.asc
     sudo rpm --import /tmp/fsx-rpm-public-key.asc
     sudo curl https://fsx-lustre-client-repo.s3.amazonaws.com/el/9/fsx-lustre-client.repo -o /etc/yum.repos.d/aws-fsx.repo
@@ -147,7 +147,7 @@ if [[ -z "$(rpm -qa lustre-client)" ]]; then
     sudo yum install -y kmod-lustre-client lustre-client
     set_reboot_required "FSx for Lustre client installed"
   else
-    log_error "Can't install FSx for Lustre client as kernel version $kernel isn't matching expected versions: (x86_64: 5.14.0-362.13, -70)!"
+    log_error "Can't install FSx for Lustre client as kernel version $kernel isn't matching expected versions: (x86_64: 5.14.0-362, -70)!"
   fi
 fi
 {%- endif %}

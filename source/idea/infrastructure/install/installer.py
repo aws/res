@@ -19,7 +19,7 @@ from idea.infrastructure.install.parameters.common import CommonKey
 from idea.infrastructure.install.parameters.parameters import RESParameters
 
 INSTALLER_ECR_REPO_NAME_SUFFIX = "-installer-ecr"
-LAMBDA_RUNTIME = lambda_.Runtime.PYTHON_3_9
+LAMBDA_RUNTIME = lambda_.Runtime.PYTHON_3_11
 
 
 class LambdaCodeParams(TypedDict):
