@@ -734,10 +734,6 @@ class FileSystems extends Component<FileSystemProps, FileSystemState> {
                     title: "FSX NetApp ONTAP",
                     value: Constants.SHARED_STORAGE_PROVIDER_FSX_NETAPP_ONTAP,
                 },
-                {
-                    title: "FSX LUSTRE",
-                    value: Constants.SHARED_STORAGE_PROVIDER_FSX_LUSTRE,
-                },
             ];
         };
         return (

@@ -27,6 +27,9 @@ class Permissions(Construct):
         self.pipeline_role.add_to_policy(statement=self.get_dynamodb_access())
         self.pipeline_role.add_to_policy(statement=self.get_ecr_access())
         self.pipeline_role.add_to_policy(
+            statement=self.get_ecs_task_execution_ecr_access()
+        )
+        self.pipeline_role.add_to_policy(
             statement=self.get_ecr_authorizationtoken_access()
         )
         self.pipeline_role.add_to_policy(statement=self.get_ec2_access())
@@ -112,6 +115,19 @@ class Permissions(Construct):
                 f"arn:{aws_cdk.Aws.PARTITION}:ecr:{aws_cdk.Aws.REGION}:{aws_cdk.Aws.ACCOUNT_ID}:*"
             ],
             actions=["ecr:*"],
+        )
+
+    def get_ecs_task_execution_ecr_access(self) -> iam.PolicyStatement:
+        return iam.PolicyStatement(
+            effect=iam.Effect.ALLOW,
+            resources=[
+                f"arn:{aws_cdk.Aws.PARTITION}:ecr:{aws_cdk.Aws.REGION}:*:repository/aws-guardduty-agent-fargate"
+            ],
+            actions=[
+                "ecr:BatchCheckLayerAvailability",
+                "ecr:GetDownloadUrlForLayer",
+                "ecr:BatchGetImage",
+            ],
         )
 
     def get_ecr_authorizationtoken_access(self) -> iam.PolicyStatement:

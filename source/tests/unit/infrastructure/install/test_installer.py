@@ -20,7 +20,7 @@ def test_installer_event_handler_lambda_creation(
         props={
             "Properties": {
                 "Description": "Lambda to handle the CFN custom resource events",
-                "Runtime": "python3.9",
+                "Runtime": "python3.11",
                 "Handler": "handlers.handle_custom_resource_lifecycle_event",
                 "Environment": {
                     "Variables": {
@@ -48,7 +48,7 @@ def test_installer_wait_condition_lambda_creation(
         props={
             "Properties": {
                 "Description": "Lambda to send response using the wait condition callback",
-                "Runtime": "python3.9",
+                "Runtime": "python3.11",
                 "Handler": "handlers.send_wait_condition_response",
             }
         },
