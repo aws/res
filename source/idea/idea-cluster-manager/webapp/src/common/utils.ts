@@ -618,6 +618,8 @@ class Utils {
                 return "RedHat Enterprise Linux 8";
             case "rhel9":
                 return "RedHat Enterprise Linux 9";
+            case "ubuntu2204":
+                return "Ubuntu 22.04";
             case "windows":
                 return "Windows";
         }

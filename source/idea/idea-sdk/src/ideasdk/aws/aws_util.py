@@ -1080,7 +1080,7 @@ class AWSUtil(AWSUtilProtocol):
             ExpiresIn=expires_in
         )
 
-    def create_vdi_host_role(self, role_name: str) -> bool:
+    def create_vdi_host_role(self, role_name: str, permissions_boundary: Optional[str]) -> bool:
         region = self.aws().aws_region()
         assume_role_policy_document = {
             "Version": "2012-10-17",
@@ -1101,12 +1101,19 @@ class AWSUtil(AWSUtilProtocol):
                 }
             ]
         }
-        self.aws().iam().create_role(
-            Path=f'/{LaunchRoleHelper.get_vdi_role_path(cluster_name=self._context.cluster_name(), region=region)}/',
-            Description= f'{role_name} used for VDI instance',
-            RoleName=role_name,
-            AssumeRolePolicyDocument=json.dumps(assume_role_policy_document)
+        arguments = {
+            "Path":f'/{LaunchRoleHelper.get_vdi_role_path(cluster_name=self._context.cluster_name(), region=region)}/',
+            "Description": f'{role_name} used for VDI instance',
+            "RoleName": role_name,
+            "AssumeRolePolicyDocument": json.dumps(assume_role_policy_document),
+        }
+        if permissions_boundary:
+            self.aws().iam().create_role(
+                **arguments,
+                PermissionsBoundary=permissions_boundary
             )
+        else:
+            self.aws().iam().create_role(**arguments)
         return True
 
     def delete_vdi_host_role(self, role_name) -> bool:

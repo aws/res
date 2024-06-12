@@ -25,7 +25,11 @@ def config_parser():
     parser.add_argument("-t", "--type", choices=["core", "vdi"], required=True)
     parser.add_argument("-o", "--output_file")
     parser.add_argument("-v", "--verbose", action="store_true")
-    parser.add_argument("-r", "--region")
+    parser.add_argument(
+        "-r",
+        "--region",
+        help="Pass 'all_classic' to update ami list for all AWS classic regions",
+    )
     return parser
 
 
@@ -179,7 +183,7 @@ def process_vdi_yaml(config_info, region):
             )
 
             amd_ami_id = get_latest_ami_id_by_ami_name(
-                ec2_client, f"DCV-Windows-2023.*-AMD-22.*-*"
+                ec2_client, f"DCV-Windows-2023.*-AMD-*"
             )
             add_or_update_ami_info(
                 config_info[platform]["x86-64"],
@@ -192,7 +196,7 @@ def process_vdi_yaml(config_info, region):
             )
 
             nvidia_ami_id = get_latest_ami_id_by_ami_name(
-                ec2_client, f"DCV-Windows-2023.*-NVIDIA-528.*-*"
+                ec2_client, f"DCV-Windows-2023.*-NVIDIA-*"
             )
             add_or_update_ami_info(
                 config_info[platform]["x86-64"],
@@ -211,6 +215,27 @@ def main():
     global verbose
     verbose = args.verbose
 
+    all_supported_classic_regions = [
+        "ap-northeast-1",
+        "ap-northeast-2",
+        "ap-south-1",
+        "ap-southeast-1",
+        "ap-southeast-2",
+        "ca-central-1",
+        "eu-central-1",
+        "eu-west-1",
+        "eu-west-2",
+        "eu-west-3",
+        "us-east-1",
+        "us-east-2",
+        "us-west-1",
+        "us-west-2",
+    ]
+
+    # This list is informational. For updating AMIs in opt-in regions or gov cloud the account whose credentials are assumed must have the region enabled.
+    # all_supported_opt_in_regions = ["eu-south-1", "il-central-1"]
+    # all_supported_gov_cloud_regions = ["us-gov-west-1"]
+
     config_info = load_yaml(args.input_yaml_file)
     if args.type == "core":
         process_core_yaml(config_info)
@@ -222,7 +247,16 @@ def main():
         if not args.region:
             raise "Region is required for updating VDI AMIs"
 
-        process_vdi_yaml(config_info, args.region)
+        regions = (
+            all_supported_classic_regions
+            if args.region == "all_classic"
+            else [args.region]
+        )
+
+        for region in regions:
+            print(f"Processing region: {region}")
+            process_vdi_yaml(config_info, region)
+
         if args.output_file is not None:
             with open(args.output_file, "w") as file:
                 yaml.dump(config_info, file, indent=2, default_flow_style=False)

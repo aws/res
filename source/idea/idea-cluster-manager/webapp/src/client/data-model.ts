@@ -660,6 +660,72 @@ export interface RemoveUserFromGroupResult {
 export interface CreateProjectRequest {
     project?: Project;
 }
+export interface PutRoleAssignmentRequest {
+    request_id: string;
+    resource_id: string;
+    actor_id: string;
+    resource_type: string;
+    actor_type: string;
+    role_id: string;
+}
+export interface PutRoleAssignmentSuccessResponse {
+    request_id: string;
+    status_code: string;
+}
+export interface PutRoleAssignmentErrorResponse {
+    request_id: string;
+    error_code: string;
+    message?: string;
+}
+export interface BatchPutRoleAssignmentRequest {
+    items?: PutRoleAssignmentRequest[];
+}
+export interface BatchPutRoleAssignmentResponse {
+    items?: PutRoleAssignmentSuccessResponse[];
+    errors?: PutRoleAssignmentErrorResponse[];
+}
+
+export interface DeleteRoleAssignmentRequest {
+    request_id: string;
+    resource_id: string;
+    actor_id: string;
+    resource_type: string;
+    actor_type: string;
+}
+export interface DeleteRoleAssignmentSuccessResponse {
+    request_id: string;
+    status_code: string;
+}
+export interface DeleteRoleAssignmentErrorResponse {
+    request_id: string;
+    error_code: string;
+    message?: string;
+}
+export interface BatchDeleteRoleAssignmentRequest {
+    items?: DeleteRoleAssignmentRequest[];
+}
+export interface BatchDeleteRoleAssignmentResponse {
+    items?: DeleteRoleAssignmentSuccessResponse[];
+    errors?: DeleteRoleAssignmentErrorResponse[];
+}
+export interface ListRoleAssignmentsRequest {
+    paginator?: SocaPaginator;
+    resource_key?: string;
+    actor_key?: string;
+    max_results?: number;
+}
+export interface RoleAssignment {
+    resource_key: string;
+    actor_key: string;
+    resource_id: string;
+    actor_id: string;
+    resource_type: string;
+    actor_type: string;
+    role_id: string;
+}
+export interface ListRoleAssignmentsResponse {
+    items: RoleAssignment[];
+}
 export interface CreateFileSystemRequest {
     filesystem?: FileSystem;
 }

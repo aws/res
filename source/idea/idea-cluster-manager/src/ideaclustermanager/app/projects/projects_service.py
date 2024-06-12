@@ -10,7 +10,7 @@
 #  and limitations under the License.
 
 from ideadatamodel import exceptions, errorcodes, constants
-from ideadatamodel.projects import (
+from ideadatamodel import (
     CreateProjectRequest,
     CreateProjectResult,
     DeleteProjectRequest,
@@ -28,16 +28,17 @@ from ideadatamodel.projects import (
     GetUserProjectsRequest,
     GetUserProjectsResult,
     ListSecurityGroupsResult,
-    ListPoliciesResult
+    ListPoliciesResult,
+    ListRoleAssignmentsRequest
 )
 from ideasdk.aws import AwsResources
-from ideasdk.utils import Utils
+from ideasdk.utils import Utils, ApiUtils
 from ideasdk.launch_configurations import LaunchScriptsHelper, LaunchRoleHelper
 from ideasdk.context import SocaContext, ArnBuilder
 from ideasdk.client.vdc_client import AbstractVirtualDesktopControllerClient
 
 from ideaclustermanager.app.projects.db.projects_dao import ProjectsDAO
-from ideaclustermanager.app.projects.db.user_projects_dao import UserProjectsDAO
+from ideaclustermanager.app.authz.db.role_assignments_dao import RoleAssignmentsDAO
 from ideaclustermanager.app.accounts.accounts_service import AccountsService
 from ideaclustermanager.app.tasks.task_manager import TaskManager
 
@@ -57,12 +58,8 @@ class ProjectsService:
         self.projects_dao = ProjectsDAO(context)
         self.projects_dao.initialize()
 
-        self.user_projects_dao = UserProjectsDAO(
-            context=context,
-            projects_dao=self.projects_dao,
-            accounts_service=self.accounts_service
-        )
-        self.user_projects_dao.initialize()
+        self.role_assignments_dao = RoleAssignmentsDAO(context=context)
+        self.role_assignments_dao.initialize()
 
     def create_project(self, request: CreateProjectRequest) -> CreateProjectResult:
         """
@@ -88,15 +85,6 @@ class ProjectsService:
         if existing is not None:
             raise exceptions.invalid_params(f'project with name: {project.name} already exists')
 
-        for ldap_group_name in project.ldap_groups:
-            # check if group exists
-            # Active Directory mode checks the back-end LDAP
-            if ds_provider in {constants.DIRECTORYSERVICE_ACTIVE_DIRECTORY}:
-                self.logger.debug(f'Performing DS lookup for group: {ldap_group_name}')
-                self.accounts_service.ldap_client.get_group(ldap_group_name)
-            else:
-                self.accounts_service.get_group(ldap_group_name)
-
         enable_budgets = Utils.get_as_bool(project.enable_budgets, False)
         if enable_budgets:
             if project.budget is None or Utils.is_empty(project.budget.budget_name):
@@ -111,7 +99,7 @@ class ProjectsService:
         scripts = project.scripts
         if scripts is not None:
             if not LaunchScriptsHelper.validate_scripts(scripts):
-                raise exceptions.invalid_params('Script location is incorrect. Script must be https://, s3://, or file://')
+                raise exceptions.invalid_params(constants.SCRIPT_LOCATION_ERROR_MESSAGE)
 
         # Validate security groups and ensure security group is within VPC
         if project.security_groups:
@@ -119,7 +107,7 @@ class ProjectsService:
             for security_group_id in project.security_groups:
                 if not self.context.aws_util().is_security_group_available(security_group_id=security_group_id,vpc_id=vpc_id):
                     self.logger.error(f'{security_group_id} is not a valid security group that can be attached')
-                    raise exceptions.invalid_params('Security group is not valid')
+                    raise exceptions.invalid_params(constants.SECURITY_GROUP_ERROR_MESSAGE)
 
         # Create VDI role only when policies are provided
         policy_arns = Utils.get_as_string_list(project.policy_arns, [])
@@ -127,7 +115,7 @@ class ProjectsService:
             for policy_arn in policy_arns:
                 if not self.context.aws_util().is_policy_valid(policy_arn):
                     self.logger.error(f'{policy_arn} is not a valid policy arn that can be attached')
-                    raise exceptions.invalid_params('Policy is not valid')
+                    raise exceptions.invalid_params(constants.POLICY_ARN_ERROR_MESSAGE)
             self._create_vdi_role_and_instance_profile(project.name, set(policy_arns))
 
         db_project = self.projects_dao.convert_to_db(project)
@@ -179,7 +167,10 @@ class ProjectsService:
                 raise exceptions.general_exception(f'project is still used by software stacks. '
                                                    f'Project ID: {project_id}, Stack IDs: {stack_ids_by_project_id}')
 
-            self.user_projects_dao.delete_project(project_id)
+            role_assignments = self.role_assignments_dao.list_role_assignments(ListRoleAssignmentsRequest(resource_key=f"{project_id}:project")).items
+            for role_assignment in role_assignments:
+                if role_assignment.actor_type in constants.VALID_ROLE_ASSIGNMENT_ACTOR_TYPES:
+                    self.role_assignments_dao.delete_role_assignment(actor_key=role_assignment.actor_key, resource_key=role_assignment.resource_key)
             self.projects_dao.delete_project(project_id)
 
         return DeleteProjectResult()
@@ -255,31 +246,6 @@ class ProjectsService:
             budget_name = project.budget.budget_name
             self.context.aws_util().budgets_get_budget(budget_name)
 
-        groups_added = None
-        groups_removed = None
-        if Utils.is_not_empty(project.ldap_groups):
-            existing_ldap_groups = set(Utils.get_value_as_list('ldap_groups', existing, []))
-            updated_ldap_groups = set(project.ldap_groups)
-
-            groups_added = updated_ldap_groups - existing_ldap_groups
-            groups_removed = existing_ldap_groups - updated_ldap_groups
-
-            if len(groups_added) > 0:
-                for ldap_group_name in groups_added:
-                    # check if group exists
-                    self.accounts_service.get_group(ldap_group_name)
-        users_added = None
-        users_removed = None
-        if project.users:
-            existing_users = set(existing.get('users', []))
-            updated_users = set(project.users)
-
-            users_added = updated_users - existing_users
-            users_removed = existing_users - updated_users
-            if len(users_added) > 0:
-                for username in users_added:
-                    # check if user exists
-                    self.accounts_service.get_user(username)
         # none values will be skipped by db update. ensure enabled/disabled cannot be called via update project.
         project.enabled = None
 
@@ -287,7 +253,7 @@ class ProjectsService:
         scripts = project.scripts
         if scripts is not None:
             if not LaunchScriptsHelper.validate_scripts(scripts):
-                raise exceptions.invalid_params('Script location is incorrect. Script must be https://, s3://, or file://')
+                raise exceptions.invalid_params(constants.SCRIPT_LOCATION_ERROR_MESSAGE)
 
         # Validate security groups and ensure security group is within VPC
         if project.security_groups:
@@ -295,7 +261,7 @@ class ProjectsService:
             for security_group_id in project.security_groups:
                 if not self.context.aws_util().is_security_group_available(security_group_id=security_group_id,vpc_id=vpc_id):
                     self.logger.error(f'{security_group_id} is not a valid security group that can be attached')
-                    raise exceptions.invalid_params('Security group is not valid')
+                    raise exceptions.invalid_params(constants.SECURITY_GROUP_ERROR_MESSAGE)
 
         # Update VDI role if new policies differ from existing policies
         policy_arns = Utils.get_as_string_list(project.policy_arns, [])
@@ -306,24 +272,11 @@ class ProjectsService:
             for policy_arn in policy_arns:
                 if not self.context.aws_util().is_policy_valid(policy_arn=policy_arn):
                     self.logger.error(f'{policy_arn} is not a valid policy arn that can be attached')
-                    raise exceptions.invalid_params('Policy is not valid')
+                    raise exceptions.invalid_params(constants.POLICY_ARN_ERROR_MESSAGE)
             self._update_vdi_role(project_name=project.name, policies_to_detach=policies_to_detach, policies_to_attach=policies_to_attach)
 
         db_updated = self.projects_dao.update_project(self.projects_dao.convert_to_db(project))
         updated_project = self.projects_dao.convert_from_db(db_updated)
-        if updated_project.enabled:
-            if groups_added or groups_removed or users_added or users_removed:
-                self.task_manager.send(
-                    task_name='projects.project-groups-updated',
-                    payload={
-                        'project_id': updated_project.project_id,
-                        'groups_added': list(groups_added or []),
-                        'groups_removed': list(groups_removed or []),
-                        'users_added': list(users_added or []),
-                        'users_removed': list(users_removed or [])
-                    },
-                    message_group_id=updated_project.project_id
-                )
 
         return UpdateProjectResult(
             project=updated_project
@@ -439,23 +392,20 @@ class ProjectsService:
                     error_code=errorcodes.PROJECT_NOT_FOUND, message=f'project is disabled: {project_id}')
             projects.append(project)
 
-        # for each project where the group is a part of the 'ldap_groups', remove the group
-        for project in filter(lambda p: group_name in p.get('ldap_groups', []), projects):
-            self.projects_dao.update_project(
-                {
-                    'project_id': project['project_id'],
-                    'ldap_groups': [g for g in project.get('ldap_groups', []) if g != group_name],
-                }
-            )
-
-            self.user_projects_dao.ldap_group_removed(
-                project_id=project['project_id'], group_name=group_name)
+        # for each project where the group is added, remove the role assignment
+        for project in projects:
+            self.role_assignments_dao.delete_role_assignment(
+                resource_key=f"{project['project_id']}:project",
+                actor_key=f'{group_name}:group',
+                )
 
     def get_user_projects(self, request: GetUserProjectsRequest) -> GetUserProjectsResult:
         if Utils.is_empty(request):
             raise exceptions.invalid_params('request is required')
         if Utils.is_empty(request.username):
             raise exceptions.invalid_params('username is required')
+
+        ApiUtils.validate_input(request.username, constants.USERNAME_REGEX, constants.USERNAME_ERROR_MESSAGE)
 
         self.logger.debug(f'get_user_projects() - request: {request}')
 
@@ -467,8 +417,10 @@ class ProjectsService:
             user_result = self.accounts_service.ldap_client.get_user(username=request.username)
             self.logger.debug(f'get_user_projects() - User Result: {user_result}')
 
-        user_projects = self.user_projects_dao.get_projects_by_username(request.username)
-        is_user_enabled = Utils.is_true(self.context.accounts.get_user(request.username).enabled)
+        # This gets all projects for a user via direct project-user role assignments or from any of their group-project assignments
+        user = self.context.accounts.get_user(request.username)
+        is_user_enabled = Utils.is_true(user.enabled)
+        user_projects = self.role_assignments_dao.get_projects_for_user(request.username, user.additional_groups)
 
         result = []
         if is_user_enabled:
@@ -503,7 +455,8 @@ class ProjectsService:
         is_vdi_instance_profile_created = False
         policies_added = []
         try:
-            is_vdi_role_created = self.context.aws_util().create_vdi_host_role(vdi_role_name)
+            permissions_boundary = self.context.config().get_string('cluster.iam.permission_boundary_arn', None)
+            is_vdi_role_created = self.context.aws_util().create_vdi_host_role(vdi_role_name, permissions_boundary)
             is_vdi_instance_profile_created = self.context.aws_util().create_vdi_instance_profile(instance_profile_name)
             self.logger.debug(f'Attach custom policies to VDI role {vdi_role_name}')
             for policy_arn in policy_arns:
@@ -520,8 +473,10 @@ class ProjectsService:
                     policy_arn=vdi_required_policy_arn
                 )
                 policies_added.append(vdi_required_policy_arn)
-            self.context.aws_util().add_role_to_instance_profile(
-                role_name=vdi_role_name, instance_profile_name=instance_profile_name)
+            is_role_attached_to_instance_profile = self.context.aws_util().add_role_to_instance_profile(role_name=vdi_role_name, instance_profile_name=instance_profile_name)
+            if not is_role_attached_to_instance_profile:
+                self.logger.error('Failed to add role to instance profile')
+                raise exceptions.general_exception('Failed to add role to instance profile')
         except Exception as e:
             # Roll back creation of VDI role and instance profile if any steps fail
             if policies_added:

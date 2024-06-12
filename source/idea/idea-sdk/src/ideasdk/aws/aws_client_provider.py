@@ -51,6 +51,7 @@ AWS_RESOURCE_DYNAMODB_TABLE = 'dynamodb.table'
 AWS_RESOURCE_S3_BUCKET = 's3.bucket'
 AWS_CLIENT_RESOURCE_GROUPS_TAGGING_API = 'resourcegroupstaggingapi'
 AWS_CLIENT_BACKUP = 'backup'
+AWS_CLIENT_LAMBDA = 'lambda'
 
 SUPPORTED_CLIENTS = {
     AWS_CLIENT_S3,
@@ -83,7 +84,8 @@ SUPPORTED_CLIENTS = {
     AWS_CLIENT_COGNITO_IDP,
     AWS_CLIENT_KINESIS_STREAM,
     AWS_CLIENT_RESOURCE_GROUPS_TAGGING_API,
-    AWS_CLIENT_BACKUP
+    AWS_CLIENT_BACKUP,
+    AWS_CLIENT_LAMBDA
 }
 
 DEFAULT_PRICING_API_REGION = 'us-east-1'
@@ -344,3 +346,6 @@ class AwsClientProvider(AwsClientProviderProtocol):
 
     def backup(self):
         return self.get_client(service_name=AWS_CLIENT_BACKUP)
+
+    def aws_lambda(self):
+        return self.get_client(service_name=AWS_CLIENT_LAMBDA)

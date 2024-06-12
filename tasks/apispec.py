@@ -59,6 +59,7 @@ def cluster_manager(_, output_file=None, server_url=None):
         OPEN_API_SPEC_ENTRIES_AUTH,
         OPEN_API_SPEC_ENTRIES_EMAIL_TEMPLATES,
         OPEN_API_SPEC_ENTRIES_PROJECTS,
+        OPEN_API_SPEC_ENTRIES_AUTHZ,
         OPEN_API_SPEC_ENTRIES_CLUSTER_SETTINGS,
         OPEN_API_SPEC_ENTRIES_FILE_BROWSER,
         OPEN_API_SPEC_ENTRIES_FILESYSTEM,
@@ -69,6 +70,7 @@ def cluster_manager(_, output_file=None, server_url=None):
     spec_entries += OPEN_API_SPEC_ENTRIES_AUTH
     spec_entries += OPEN_API_SPEC_ENTRIES_EMAIL_TEMPLATES
     spec_entries += OPEN_API_SPEC_ENTRIES_PROJECTS
+    spec_entries += OPEN_API_SPEC_ENTRIES_AUTHZ
     spec_entries += OPEN_API_SPEC_ENTRIES_FILESYSTEM
     spec_entries += OPEN_API_SPEC_ENTRIES_CLUSTER_SETTINGS
     spec_entries += OPEN_API_SPEC_ENTRIES_FILE_BROWSER

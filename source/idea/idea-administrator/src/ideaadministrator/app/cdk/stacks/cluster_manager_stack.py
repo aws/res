@@ -97,6 +97,7 @@ class ClusterManagerStack(IdeaBaseStack):
         self.build_auto_scaling_group()
         self.build_endpoints()
         self.build_scheduled_event_adsync_infra()
+        self.build_configure_sso_lambda()
         self.build_cluster_settings()
 
     def build_oauth2_client(self):
@@ -555,3 +556,37 @@ class ClusterManagerStack(IdeaBaseStack):
             scheduled_ad_sync_lambda
         ))
         self.add_common_tags(schedule_trigger_rule)
+
+    def build_configure_sso_lambda(self):
+        lambda_name = f'configure_sso'
+
+        configure_sso_lambda_role = Role(
+            context=self.context,
+            name=f'{lambda_name}-role',
+            scope=self.stack,
+            assumed_by=['lambda'],
+            description=f'{lambda_name}-role'
+        )
+
+        configure_sso_lambda_role.attach_inline_policy(Policy(
+            context=self.context,
+            name=f'{lambda_name}-policy',
+            scope=self.stack,
+            policy_template_name='configure-sso-lambda.yml'
+        ))
+
+        configure_sso_lambda = LambdaFunction(
+            context=self.context,
+            name=lambda_name,
+            description=f'Lambda to configure sso',
+            scope=self.stack,
+            environment={
+                'CLUSTER_NAME': self.cluster_name,
+            },
+            timeout_seconds=180,
+            role=configure_sso_lambda_role,
+            idea_code_asset=IdeaCodeAsset(
+                lambda_package_name='configure_sso',
+                lambda_platform=SupportedLambdaPlatforms.PYTHON
+            )
+        )

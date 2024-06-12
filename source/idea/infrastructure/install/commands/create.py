@@ -190,7 +190,9 @@ class Create:
                 DirectoryServiceKey.LDAP_BASE
             ),
             "directoryservice.root_username_secret_arn": self.params.root_username_secret_arn,
-            "directoryservice.root_password_secret_arn": self.params.root_password_secret_arn,
+            "directoryservice.root_password_secret_arn": self.params.get_str(
+                DirectoryServiceKey.ROOT_PASSWORD_SECRET_ARN
+            ),
             "directoryservice.ad_short_name": self.params.get_str(
                 DirectoryServiceKey.AD_SHORT_NAME
             ),

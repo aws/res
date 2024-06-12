@@ -30,6 +30,17 @@ fi
 
 source "$SCRIPT_DIR/../common/bootstrap_common.sh"
 
+SUB_DIR=""
+if [[ $BASE_OS =~ ^(amzn2|centos7|rhel7|rhel8|rhel9)$ ]]; then
+  SUB_DIR="red_hat"
+elif [[ $BASE_OS =~ ^(ubuntu2204)$ ]]; then
+  SUB_DIR="debian"
+else
+  log_warning "Base OS not supported."
+  exit 1
+fi
+source "${SCRIPT_DIR}/../common/$SUB_DIR/cloudwatch_agent.sh"
+
 CLOUDWATCH_AGENT_BOOTSTRAP_DIR="/root/bootstrap/amazon-cloudwatch-agent"
 mkdir -p ${CLOUDWATCH_AGENT_BOOTSTRAP_DIR}
 function get_cloudwatch_agent_download_link() {
@@ -50,41 +61,19 @@ function get_cloudwatch_agent_download_link() {
                                 --key '{"key": {"S": "global-settings.package_config.amazon_cloudwatch_agent.download_link_pattern"}}' \
                                 --output text \
                                 | awk '/VALUE/ {print $2}')
-  echo -n ${DOWNLOAD_LINK_PATTERN} > ${CLOUDWATCH_AGENT_BOOTSTRAP_DIR}/cloudwatch_download_link.txt
-  sed -i "s/%region%/${AWS_REGION}/g" ${CLOUDWATCH_AGENT_BOOTSTRAP_DIR}/cloudwatch_download_link.txt
-  case $BASE_OS in
-    amzn2)
-      sed -i 's/%os%/amazon_linux/g' ${CLOUDWATCH_AGENT_BOOTSTRAP_DIR}/cloudwatch_download_link.txt
-      sed -i 's/%ext%/rpm/g' ${CLOUDWATCH_AGENT_BOOTSTRAP_DIR}/cloudwatch_download_link.txt
-      ;;
-    rhel7|rhel8|rhel9)
-      sed -i 's/%os%/redhat/g' ${CLOUDWATCH_AGENT_BOOTSTRAP_DIR}/cloudwatch_download_link.txt
-      sed -i 's/%ext%/rpm/g' ${CLOUDWATCH_AGENT_BOOTSTRAP_DIR}/cloudwatch_download_link.txt
-      ;;
-    centos7)
-      sed -i 's/%os%/centos/g' ${CLOUDWATCH_AGENT_BOOTSTRAP_DIR}/cloudwatch_download_link.txt
-      sed -i 's/%ext%/rpm/g' ${CLOUDWATCH_AGENT_BOOTSTRAP_DIR}/cloudwatch_download_link.txt
-      ;;
-  esac
-  local MACHINE=$(uname -m)
-  case $MACHINE in
-    aarch64)
-      sed -i 's/%architecture%/arm64/g' ${CLOUDWATCH_AGENT_BOOTSTRAP_DIR}/cloudwatch_download_link.txt
-      ;;
-    x86_64)
-      sed -i 's/%architecture%/amd64/g' ${CLOUDWATCH_AGENT_BOOTSTRAP_DIR}/cloudwatch_download_link.txt
-      ;;
-  esac
-  cat ${CLOUDWATCH_AGENT_BOOTSTRAP_DIR}/cloudwatch_download_link.txt
+  local DOWNLOAD_LINK_TXT=${CLOUDWATCH_AGENT_BOOTSTRAP_DIR}/cloudwatch_download_link.txt
+  echo -n ${DOWNLOAD_LINK_PATTERN} > $DOWNLOAD_LINK_TXT
+  sed -i "s/%region%/${AWS_REGION}/g" $DOWNLOAD_LINK_TXT
+  update_cloudwatch_agent_download_link_txt $DOWNLOAD_LINK_TXT
+  cat $DOWNLOAD_LINK_TXT
 }
 
-rpm -q amazon-cloudwatch-agent
-if [[ "$?" != "0"  ]]; then
+if ! pre_installed; then
   CLOUDWATCH_AGENT_DOWNLOAD_LINK="$(get_cloudwatch_agent_download_link)"
   CLOUDWATCH_AGENT_PACKAGE_NAME="$(basename ${CLOUDWATCH_AGENT_DOWNLOAD_LINK})"
   pushd ${CLOUDWATCH_AGENT_BOOTSTRAP_DIR}
   wget "${CLOUDWATCH_AGENT_DOWNLOAD_LINK}"
-  rpm -U ./${CLOUDWATCH_AGENT_PACKAGE_NAME}
+  install_cloudwatch_agent ${CLOUDWATCH_AGENT_PACKAGE_NAME}
   popd
 fi
 # End: Install CloudWatch Agent

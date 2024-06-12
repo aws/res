@@ -25,7 +25,7 @@ ses:
   max_sending_rate: 1
 
 route53:
-  private_hosted_zone_name: "{{cluster_name}}.{{aws_region}}.local"
+  private_hosted_zone_name: "{{cluster_name}}.{{aws_region}}.res"
 
 network:
   # You must specify the maximum number of entries for the prefix list. The maximum number of entries cannot be changed later.
@@ -46,7 +46,7 @@ network:
     {{ utils.to_yaml(public_subnet_ids) | indent(4) }}
   load_balancer_subnets:
     {{ utils.to_yaml(load_balancer_subnet_ids) | indent(4) }}
-  infrastructure_host_subnets: 
+  infrastructure_host_subnets:
     {{ utils.to_yaml(infrastructure_host_subnet_ids) | indent(4) }}
   {%- else %}
   max_azs: 3

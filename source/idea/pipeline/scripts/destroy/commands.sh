@@ -68,7 +68,7 @@ fi
 echo "Cleaning up all RES EFS file systems in VPC using $CLUSTER_NAME-shared-storage-security-group...";
 
 #Pulling VPC ID from provided SSM parameter to VPC ID of BI
-if [[ $BATTERIES_INCLUDED == "true" ]]; then
+if [[ $BATTERIES_INCLUDED == "true" ]] || [[ $USE_BI_PARAMETERS_FROM_SSM == "true" ]]; then
     VPC_ID_INFO=$(aws ssm get-parameter --name $VPC_ID)
     VPC_ID=$(echo $VPC_ID_INFO | jq -r '.Parameter.Value')
 fi

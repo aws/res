@@ -271,7 +271,14 @@ class AccountsAPI(BaseAPI):
         acl_entry_scope = Utils.get_value_as_string('scope', acl_entry)
         is_authorized = context.is_authorized(elevated_access=True, scopes=[acl_entry_scope])
 
-        if is_authorized:
+        if namespace in ['Accounts.ListUsers', 'Accounts.ListGroups']:
+            username = context.get_username()
+            user = self.context.accounts.get_user(username)
+            if is_authorized or self.context.authz.is_user_any_project_owner(user=user):
+                acl_entry['method'](context)
+            else:
+                raise exceptions.unauthorized_access()
+        elif is_authorized:
             acl_entry['method'](context)
         else:
             raise exceptions.unauthorized_access()

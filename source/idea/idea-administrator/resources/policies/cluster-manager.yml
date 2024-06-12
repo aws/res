@@ -103,6 +103,8 @@ Statement:
       - '{{ context.arns.get_ddb_table_arn(context.module_id + ".distributed-lock") }}'
       - '{{ context.arns.get_ddb_table_arn("snapshots") }}'
       - '{{ context.arns.get_ddb_table_arn("apply-snapshot") }}'
+      - '{{ context.arns.get_ddb_table_arn("authz.role-assignments") }}'
+      - '{{ context.arns.get_ddb_table_arn("authz.role-assignments/index/*") }}'
     Effect: Allow
 
   - Action:
@@ -163,6 +165,11 @@ Statement:
           - cluster-manager
           - directoryservice
     Resource: '*'
+    Effect: Allow
+
+  - Action:
+      - secretsmanager:GetSecretValue
+    Resource: '{{ context.config.get_string("directoryservice.root_password_secret_arn") }}'
     Effect: Allow
 
     {%- if context.config.get_string("directoryservice.tls_certificate_secret_arn", '') != '' %}
@@ -265,4 +272,10 @@ Statement:
     Resource:
       - '{{ context.arns.get_security_group_arn }}'
       - '{{ context.arns.get_security_group_rule_arn }}'
+
+  - Action:
+    - lambda:InvokeFunction
+    Resource:
+      - '{{ context.arns.get_lambda_arn("configure_sso") }}'
+    Effect: Allow
 {% include '_templates/custom-kms-key.yml' %}

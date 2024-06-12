@@ -1,19 +1,26 @@
 import React, {Component, RefObject} from "react";
 import IdeaAppLayout, {IdeaAppLayoutProps} from "../../components/app-layout";
 import {IdeaSideNavigationProps} from "../../components/side-navigation";
-import { Header} from "@cloudscape-design/components";
+import { AttributeEditor, Button, Container, FormField, Header, Select, SpaceBetween} from "@cloudscape-design/components";
 import IdeaForm from "../../components/form";
 import {withRouter} from "../../navigation/navigation-utils";
 import Utils from "../../common/utils";
 import {AppContext} from "../../common";
-import {Project, ScriptEvents, Scripts, SocaUserInputChoice, SocaUserInputParamMetadata} from "../../client/data-model";
+import {BatchPutRoleAssignmentResponse, DeleteRoleAssignmentRequest, Project, PutRoleAssignmentRequest, RoleAssignment, ScriptEvents, Scripts, SocaUserInputChoice, SocaUserInputParamMetadata} from "../../client/data-model";
 import {AccountsClient, ClusterSettingsClient} from "../../client";
 import {Constants} from "../../common/constants";
 import dot from "dot-object";
+import AuthzClient from "../../client/authz-client";
+import { OptionDefinition } from "@cloudscape-design/components/internal/components/option/interfaces";
 
 export interface ConfigureProjectState {
     isUpdate: boolean
     project?: Project
+    projectRoles?: RoleAssignment[];
+    attachedUsers: { key: string, value: OptionDefinition, error?: string }[];
+    availableUsers: OptionDefinition[];
+    attachedGroups: { key: string, value: OptionDefinition, error?: string }[];
+    availableGroups: OptionDefinition[];
 }
 
 export interface ConfigureProjectProps extends IdeaAppLayoutProps, IdeaSideNavigationProps {
@@ -28,10 +35,67 @@ class ConfigureProject extends Component<ConfigureProjectProps, ConfigureProject
         const { state } = this.props.location
         this.state = {
             isUpdate: state ? state.isUpdate ?? false : false,
-            project: state ? state.project : null
+            project: state ? state.project : null,
+            projectRoles: state ? state.projectRoles : [],
+            attachedUsers: this.getDefaultUsers(state ? state.projectRoles : []),
+            availableUsers: [],
+            attachedGroups: this.getDefaultGroups(state ? state.projectRoles : []),
+            availableGroups: [],
         };
+        this.getUsers();
+        this.getGroups();
     }
 
+    getRoles(): OptionDefinition[] {
+      return [
+        {
+          label: "Project Owner",
+          value: "project_owner",
+        },
+        {
+          label: "Project Member",
+          value: "project_member",
+        }
+      ]
+    }
+
+    getDefaultUsers(projectRoles?: RoleAssignment[]): { key: string; value: OptionDefinition; error?: string }[] {
+      const defaults = [];
+      for (const existingMapping of projectRoles ?? []) {
+        if (existingMapping.actor_type === "user")
+          defaults.push({
+            key: existingMapping.actor_id,
+            value: {
+              value: existingMapping.role_id!,
+              label: existingMapping.role_id === "project_owner" ? "Project Owner" : "Project Member",
+            },
+          });
+      }
+      return defaults;
+    }
+
+    getDefaultGroups(projectRoles?: RoleAssignment[]): { key: string; value: OptionDefinition; error?: string }[] {
+      const defaults = [];
+      for (const existingMapping of projectRoles ?? []) {
+        if (existingMapping.actor_type === "group")
+          defaults.push({
+            key: existingMapping.actor_id,
+            value: {
+              value: existingMapping.role_id!,
+              label: existingMapping.role_id === "project_owner" ? "Project Owner" : "Project Member",
+            },
+          });
+      }
+      return defaults;
+    }
+
+    isAdmin(): boolean {
+      return AppContext.get().auth().isAdmin();
+    }
+
+    authz(): AuthzClient {
+      return AppContext.get().client().authz();
+    }
 
     projects() {
         return AppContext.get().client().projects()
@@ -48,22 +112,304 @@ class ConfigureProject extends Component<ConfigureProjectProps, ConfigureProject
         return this.configureProjectForm.current!;
     }
 
-    buildUserParam(): SocaUserInputParamMetadata[] {
-        const params: SocaUserInputParamMetadata[] = [];
-        params.push({
-            name: "users",
-            title: "Users",
-            description: "Select applicable users for the Project",
-            param_type: "select",
-            multiple: true,
-            data_type: "str",
-            dynamic_choices: true,
-            validate: {
-                required: false,
-            },
-            container_group_name: "team_configurations"
+    async updateRoleAssignments() {
+      const authzClient = AppContext.get().client().authz();
+
+      const listResponse = this.state.projectRoles!;
+
+      const toDelete: DeleteRoleAssignmentRequest[] = [];
+      const toUpdate: PutRoleAssignmentRequest[] = [];
+
+      const newUsers = this.state.attachedUsers;
+      const newGroups = this.state.attachedGroups;
+      const projectId = this.state.project?.project_id!;
+
+      for (const existingMapping of listResponse) {
+        // loop through groups and see if actor exists; if not, delete it
+        let exists = false;
+        for (const actor of existingMapping.actor_type === "group" ? newGroups : newUsers) {
+          if (actor.key === existingMapping.actor_id) {
+            exists = true;
+            if (actor.value.value !== existingMapping.role_id) {
+              // we have a different role, need to update
+              toUpdate.push({
+                actor_id: actor.key,
+                actor_type: existingMapping.actor_type,
+                resource_type: "project",
+                resource_id: projectId,
+                role_id: actor.value.value ?? "project_member",
+                request_id: Utils.getUUID(),    
+              });
+            }
+            break;
+          }
+        }
+        // the existingMapping is not present in new mappings, need to delete
+        if (!exists) {
+          toDelete.push({
+            actor_id: existingMapping.actor_id,
+            actor_type: existingMapping.actor_type,
+            request_id: Utils.getUUID(),
+            resource_id: projectId!,
+            resource_type: "project",
+          });
+        }
+      }
+
+      for (const user of newUsers) {
+        // if the new user is not present in the existing mappings
+        // we have a new user being added to the project. Add an update for these
+        if (listResponse.findIndex(x => x.actor_id === user.key) === -1) {
+          toUpdate.push({
+            actor_id: user.key,
+            actor_type: "user",
+            resource_type: "project",
+            resource_id: projectId,
+            role_id: user.value.value ?? "project_member",
+            request_id: Utils.getUUID(),    
+          });
+        }
+      }
+
+      for (const group of newGroups) {
+        // if the new group is not present in the existing mappings
+        // we have a new group being added to the project. Add an update for these
+        if (listResponse.findIndex(x => x.actor_id === group.key) === -1) {
+          toUpdate.push({
+            actor_id: group.key,
+            actor_type: "group",
+            resource_type: "project",
+            resource_id: projectId,
+            role_id: group.value.value ?? "project_member",
+            request_id: Utils.getUUID(),    
+          });
+        }
+      }
+
+      if (toDelete.length > 0) {
+        await Promise.resolve(authzClient.batchDeleteRoleAssignment({
+          items: toDelete,
+        }));
+      }
+      
+      if (toUpdate.length > 0) {
+        await Promise.resolve(authzClient.batchPutRoleAssignment({
+          items: toUpdate,
+        }));
+      }
+    }
+
+    createRoleAssignments(projectId: string): Promise<BatchPutRoleAssignmentResponse> {
+      const authzClient = AppContext.get().client().authz();
+
+      const groupRoleAssignments = this.state.attachedGroups;
+      const userRoleAssignments = this.state.attachedUsers;
+
+      const items: PutRoleAssignmentRequest[] = [];
+      for (const groupRoleMapping of groupRoleAssignments) {
+        items.push({
+          actor_id: groupRoleMapping.key,
+          actor_type: "group",
+          resource_type: "project",
+          resource_id: projectId,
+          role_id: groupRoleMapping.value.value ?? "project_member",
+          request_id: Utils.getUUID(),    
         });
-        return params;
+      }
+      for (const userRoleMapping of userRoleAssignments ?? []) {
+        items.push({
+          actor_id: userRoleMapping.key,
+          actor_type: "user",
+          resource_type: "project",
+          resource_id: projectId,
+          role_id: userRoleMapping.value.value ?? "project_member",
+          request_id: Utils.getUUID(),    
+        });
+      }
+
+
+      return authzClient.batchPutRoleAssignment({
+        items
+      });
+    }
+
+    getUsers() {
+      this.accounts().listUsers().then((result) => {
+          const listing = result.listing!;
+          if (listing.length === 0) {
+              return;
+          }
+          const choices: OptionDefinition[] = [];
+          listing.forEach((value) => {
+              if (value.username !== "clusteradmin") {
+                  choices.push({
+                      label: `${value.username} (${value.uid})`,
+                      value: value.username!,
+                  });
+              }
+          });
+          this.setState({ availableUsers: choices });
+      });
+    }
+
+    getGroups() {
+      this.accounts().listGroups({
+          filters: [
+              {
+                  key: "group_type",
+                  eq: "project",
+              },
+          ],
+      })
+      .then((result) => {
+          const listing = result.listing!;
+          if (listing.length === 0) {
+              return {
+                  listing: [],
+              };
+          }
+          const choices: OptionDefinition[] = [];
+          listing.forEach((value) => {
+              choices.push({
+                  label: `${value.name} (${value.gid})`,
+                  value: value.name,
+              });
+          });
+          this.setState({ availableGroups: choices });
+      });
+    }
+
+    buildUserParam(): React.ReactElement {
+        return <SpaceBetween size="m">
+          <AttributeEditor
+            key="UserAttributeEditor"
+            onAddButtonClick={() => {
+              this.setState({
+                attachedUsers: [...this.state.attachedUsers, {
+                  key: "",
+                  value: { label: "Project Member", value: "project_member" },
+                  error: "Please choose a user"
+                }]
+              });
+            }}
+            onRemoveButtonClick={(changeEvent) => {
+              const tmpItems = [...this.state.attachedUsers];
+              tmpItems.splice(changeEvent.detail.itemIndex, 1);
+              this.setState({attachedUsers: tmpItems});
+            }}
+            items={this.state.attachedUsers}
+            addButtonText={"Add user"}
+            disableAddButton={this.state.attachedUsers.length === this.state.availableUsers.length}
+            removeButtonText="Remove user"
+            empty="No users attached. Click 'Add user' below to get started."
+            definition={[
+              {
+                label: <FormField label="Users" description="Select applicable users for the Project"></FormField>,
+                control: (item: { key: string, value: OptionDefinition, error?: string }, itemIndex: number) => (
+                  <Select
+                    key={item.key}
+                    options={this.state.availableUsers}
+                    selectedOption={{value: item.key}}
+                    onChange={(e) => {
+                      if (this.state.attachedUsers.some(x => x.key === e.detail.selectedOption.value!)) {
+                        // we have already chosen this user, we can't assign a user
+                        // multiple times so we just leave
+                        return;
+                      }
+                      const tmp = [...this.state.attachedUsers];
+                      tmp[itemIndex].key = e.detail.selectedOption.value!;
+                      tmp[itemIndex].error = undefined;
+                      this.setState({ attachedUsers: tmp });
+                    }}
+                  ></Select>
+                ),
+                errorText: (item: {key: string, value: OptionDefinition, error?: string}) => { return item.error },
+              },
+              {
+                label: <FormField label="Role" description="Choose a role for the user"></FormField>,
+                control: (item: { key: string, value: OptionDefinition }, itemIndex: number) => (
+                  <Select
+                    key={item.key}
+                    selectedOption={item.value}
+                    options={this.getRoles()}
+                    placeholder="Choose role"
+                    onChange={(e) => {
+                      const tmp = [...this.state.attachedUsers];
+                      tmp[itemIndex].value = e.detail.selectedOption;
+                      this.setState({ attachedUsers: tmp });
+                    }}
+                  ></Select>
+                )
+              }
+            ]}
+          />
+        </SpaceBetween>
+    }
+
+    buildGroupParam(): React.ReactElement {
+      return <SpaceBetween size="m">
+              <AttributeEditor
+                key="GroupAttributeEditor"
+                onAddButtonClick={() => {
+                  this.setState({ attachedGroups: [...this.state.attachedGroups, {
+                    key: "",
+                    value: { label: "Project Member", value: "project_member" },
+                    error: "Please choose a group"
+                  }]});
+                }}
+                onRemoveButtonClick={(changeEvent) => {
+                  const tmpItems = [...this.state.attachedGroups];
+                  tmpItems.splice(changeEvent.detail.itemIndex, 1);
+                  this.setState({ attachedGroups: tmpItems });
+                }}
+                items={this.state.attachedGroups}
+                addButtonText={"Add group"}
+                removeButtonText="Remove group"
+                disableAddButton={this.state.attachedGroups.length === this.state.availableGroups.length}
+                empty="No groups attached. Click 'Add group' below to get started."
+                definition={[
+                  {
+                    label: <FormField label="Groups" description="Select applicable ldap groups for the Project"></FormField>,
+                    control: (item: { key: string, value: OptionDefinition, error?: string }, itemIndex: number) => (
+                      <Select
+                        key={item.key}
+                        options={this.state.availableGroups}
+                        selectedOption={{ value: item.key }}
+                        onChange={(e) => {
+                          if (this.state.attachedGroups.some(x => x.key === e.detail.selectedOption.value!)) {
+                            // we have already chosen this group, we can't assign a group
+                            // multiple times so we just leave
+                            return;
+                          }
+                          const tmp = [...this.state.attachedGroups];
+                          tmp[itemIndex].key = e.detail.selectedOption.value!;
+                          tmp[itemIndex].error = undefined;
+                          this.setState({ attachedGroups: tmp });
+                        }}
+                      ></Select>
+                    ),
+                    errorText: (item: {key: string, value: OptionDefinition, error?: string}) => { return item.error }
+                  },
+                  {
+                    label: <FormField label="Role" description="Choose a role for the group"></FormField>,
+                    constraintText: "",
+                    control: (item: { key: string, value: OptionDefinition }, itemIndex: number) => (
+                      <Select
+                        key={item.key}
+                        selectedOption={item.value}
+                        options={this.getRoles()}
+                        placeholder="Choose role"
+                        onChange={(e) => {
+                          const tmp = [...this.state.attachedGroups];
+                          tmp[itemIndex].value = e.detail.selectedOption;
+                          this.setState({ attachedGroups: tmp });
+                        }}
+                      ></Select>
+                    )
+                  }
+                ]}
+              />
+        </SpaceBetween>
     }
 
     buildAddFileSystemParam(isUpdate: boolean): SocaUserInputParamMetadata[] {
@@ -80,7 +426,8 @@ class ConfigureProject extends Component<ConfigureProjectProps, ConfigureProject
             data_type: "str",
             dynamic_choices: true,
             default: ["home"],
-            container_group_name: "resource_configurations"
+            container_group_name: "resource_configurations",
+            readonly: !this.isAdmin(),
         });
         return params;
     }
@@ -96,6 +443,7 @@ class ConfigureProject extends Component<ConfigureProjectProps, ConfigureProject
                 required: true,
             },
             default: false,
+            readonly: !this.isAdmin(),
         })
 
         formParams.push({
@@ -110,6 +458,7 @@ class ConfigureProject extends Component<ConfigureProjectProps, ConfigureProject
                 param: "advanced_options",
                 eq: true,
             },
+            readonly: !this.isAdmin(),
         });
 
         formParams.push({
@@ -124,6 +473,7 @@ class ConfigureProject extends Component<ConfigureProjectProps, ConfigureProject
                 param: "advanced_options",
                 eq: true,
             },
+            readonly: !this.isAdmin(),
         });
 
 
@@ -151,6 +501,7 @@ class ConfigureProject extends Component<ConfigureProjectProps, ConfigureProject
                 param: "advanced_options",
                 eq: true,
             },
+            readonly: !this.isAdmin(),
         })
         return [...formParams, ...this.buildScriptsInputParams("windows")]
     }
@@ -171,6 +522,7 @@ class ConfigureProject extends Component<ConfigureProjectProps, ConfigureProject
                 param: "advanced_options",
                 eq: true,
             },
+            readonly: !this.isAdmin(),
         })
         return [...formParams, ...this.buildScriptsInputParams("linux")]
     }
@@ -201,18 +553,21 @@ class ConfigureProject extends Component<ConfigureProjectProps, ConfigureProject
                     eq: true,
                 },
                 default: false,
-            })
+                readonly: !this.isAdmin(),
+          })
             const script: SocaUserInputParamMetadata = {
                 title: "Script",
                 param_type: "text",
                 data_type: "str",
-            };
+                readonly: !this.isAdmin(),
+          };
             const args: SocaUserInputParamMetadata = {
                 title: "Arguments",
                 description: "optional",
                 param_type: "text",
-                data_type: "str"
-            };
+                data_type: "str",
+                readonly: !this.isAdmin(),
+          };
             formParams.push({
                 name: `${osType}_${script_event}_scripts`,
                 param_type: "attribute_editor",
@@ -224,7 +579,8 @@ class ConfigureProject extends Component<ConfigureProjectProps, ConfigureProject
                     param: `${osType}_${script_event}_toggle`,
                     eq: true,
                 },
-            })
+                readonly: !this.isAdmin(),
+          })
         }
         return formParams
     }
@@ -247,99 +603,11 @@ class ConfigureProject extends Component<ConfigureProjectProps, ConfigureProject
                 ref={this.configureProjectForm}
                 modal={false}
                 showHeader={false}
-                showActions={true}
+                showActions={false}
                 useContainers={true}
                 values={values}
-                onSubmit={() => {
-                    if(!this.getConfigureProjectForm().validate()) {
-                        return;
-                    }
-                    const values = this.getConfigureProjectForm().getValues();
-                    let createOrUpdate;
-                    let filesystemNames;
-                    let scripts;
-                    if (isUpdate) {
-                        createOrUpdate = (request: any) => this.projects().updateProject(request);
-                            values.project_id = project?.project_id;
-                    } else {
-                        filesystemNames = dot.del("add_filesystems", values);
-                        filesystemNames = filesystemNames.filter((filesystemName: string) => filesystemName !== "home");
-                        createOrUpdate = (request: any) => this.projects().createProject(request);
-                    }
-                    const advanced_options_enabled = dot.del("advanced_options", values);
-                    if(advanced_options_enabled) {
-                        scripts = this.retrieveScripts(values)
-                        dot.set("scripts", scripts, values)
-                    }
-                    createOrUpdate({
-                        project: values,
-                        filesystem_names: filesystemNames,
-                    })
-                        .then(() => {
-                            this.props.navigate("/cluster/projects")
-                        })
-                        .catch((error) => {
-                            this.getConfigureProjectForm().setError(error.errorCode, error.message);
-                        });
-                }}
-                onCancel={() => this.props.navigate("/cluster/projects")}
                 onFetchOptions={(request) => {
-                    if (request.param === "ldap_groups") {
-                            return this.accounts()
-                                .listGroups({
-                                    filters: [
-                                        {
-                                            key: "group_type",
-                                            eq: "project",
-                                        },
-                                    ],
-                                })
-                                .then((result) => {
-                                    const listing = result.listing!;
-                                    if (listing.length === 0) {
-                                        return {
-                                            listing: [],
-                                        };
-                                    } else {
-                                        const choices: SocaUserInputChoice[] = [];
-                                        listing.forEach((value) => {
-                                            choices.push({
-                                                title: `${value.name} (${value.gid})`,
-                                                value: value.name,
-                                            });
-                                        });
-                                        return {
-                                            listing: choices,
-                                        };
-                                    }
-                                });
-                        }
-                    else if (request.param === "users") {
-                            return this.accounts()
-                                .listUsers()
-                                .then((result) => {
-                                    const listing = result.listing!;
-                                    if (listing.length === 0) {
-                                        return {
-                                            listing: [],
-                                        };
-                                    } else {
-                                        const choices: SocaUserInputChoice[] = [];
-                                        listing.forEach((value) => {
-                                            if (value.username !== "clusteradmin") {
-                                                choices.push({
-                                                    title: `${value.username} (${value.uid})`,
-                                                    value: value.username,
-                                                });
-                                            }
-                                        });
-                                        return {
-                                            listing: choices,
-                                        };
-                                    }
-                                });
-                        }
-                     else if (request.param === "add_filesystems") {
+                    if (request.param === "add_filesystems") {
                             let promises: Promise<any>[] = [];
                             promises.push(this.clusterSettings().getModuleSettings({ module_id: Constants.MODULE_SHARED_STORAGE }));
                             return Promise.all(promises).then((result) => {
@@ -367,6 +635,9 @@ class ConfigureProject extends Component<ConfigureProjectProps, ConfigureProject
                             });
                         }
                      else if (request.param === "security_groups") {
+                        if (!this.isAdmin()) {
+                          return Promise.resolve({ listing: [] });
+                        }
                         return this.projects().listSecurityGroups().then((result) => {
                             const security_groups = result.security_groups
                             if (!security_groups || security_groups?.length === 0) {
@@ -388,6 +659,9 @@ class ConfigureProject extends Component<ConfigureProjectProps, ConfigureProject
                         })
                     }
                      else if (request.param === "policy_arns") {
+                        if (!this.isAdmin()) {
+                          return Promise.resolve({ listing: [] });
+                        }
                          return this.projects().listPolicies().then((result) => {
                              const policies = result.policies
                              if(!policies || policies?.length === 0) {
@@ -424,10 +698,6 @@ class ConfigureProject extends Component<ConfigureProjectProps, ConfigureProject
                         title: "Resource Configurations",
                         name: "resource_configurations",
                     },
-                    {
-                        title: "Team Configurations",
-                        name: "team_configurations",
-                    },
                 ]}
                 params={[
                     {
@@ -439,20 +709,21 @@ class ConfigureProject extends Component<ConfigureProjectProps, ConfigureProject
                         validate: {
                             required: true,
                         },
-                        container_group_name: "project_definition"
+                        container_group_name: "project_definition",
+                        readonly: !this.isAdmin(),
                     },
                     {
                         name: "name",
                         title: "Project ID",
                         description: "Enter a project-id",
-                        help_text: "Project ID can only use lowercase alphabets, numbers, and hyphens (-). Must be between 3 and 18 characters long.",
+                        help_text: "Project ID can only use lowercase alphabets, numbers, hyphens (-), underscores (_), or periods (.). Must be between 3 and 40 characters long.",
                         data_type: "str",
                         param_type: "text",
                         readonly: isUpdate,
                         validate: {
                             required: true,
-                            regex: "^([a-z0-9-]+){3,18}$",
-                            message: "Only use lowercase alphabets, numbers, and hyphens (-). Must be between 3 and 18 characters long.",
+                            regex: "^[a-z0-9-_.]{3,40}$",
+                            message: "Only use lowercase alphabets, numbers, hyphens (-), underscores (_), or periods (.). Must be between 3 and 40 characters long.",
                         },
                         container_group_name: "project_definition"
                     },
@@ -463,22 +734,9 @@ class ConfigureProject extends Component<ConfigureProjectProps, ConfigureProject
                         data_type: "str",
                         param_type: "text",
                         multiline: true,
-                        container_group_name: "project_definition"
+                        container_group_name: "project_definition",
+                        readonly: !this.isAdmin(),
                     },
-                    {
-                        name: "ldap_groups",
-                        title: "Groups",
-                        description: "Select applicable ldap groups for the Project",
-                        param_type: "select",
-                        multiple: true,
-                        data_type: "str",
-                        validate: {
-                            required: true,
-                        },
-                        dynamic_choices: true,
-                        container_group_name: "team_configurations"
-                    },
-                    ...this.buildUserParam(),
                     ...this.buildAddFileSystemParam(isUpdate),
                     {
                         name: "enable_budgets",
@@ -489,7 +747,8 @@ class ConfigureProject extends Component<ConfigureProjectProps, ConfigureProject
                         validate: {
                             required: true,
                         },
-                        container_group_name: "project_definition"
+                        container_group_name: "project_definition",
+                        readonly: !this.isAdmin(),
                     },
                     {
                         name: "budget.budget_name",
@@ -504,11 +763,11 @@ class ConfigureProject extends Component<ConfigureProjectProps, ConfigureProject
                             param: "enable_budgets",
                             eq: true,
                         },
-                        container_group_name: "project_definition"
+                        container_group_name: "project_definition",
+                        readonly: !this.isAdmin(),
                     },
                     ...this.buildResourceConfigurationAdvancedOptions()
                 ]}
-
             />
         )
     }
@@ -568,6 +827,76 @@ class ConfigureProject extends Component<ConfigureProjectProps, ConfigureProject
 
     }
 
+    canSubmit(): boolean {
+      if(!this.configureProjectForm.current!.validate()) {
+        return false;
+      }
+      if (this.state.attachedGroups.length === 0) {
+          this.getConfigureProjectForm().setError("400", "No groups attached");
+          return false;
+      }
+      // If we have a new form
+      for (const group of this.state.attachedGroups) {
+        if (group.key.length === 0) {
+          this.getConfigureProjectForm().setError("400", "Invalid Group");
+          return false;
+        }
+      }
+      for (const user of this.state.attachedUsers) {
+        if (user.key.length === 0) {
+          this.getConfigureProjectForm().setError("400", "Invalid User");
+          return false;
+        }
+      }
+      return true;
+    }
+
+    submitForm() {
+        if (!this.canSubmit()) {
+          return;
+        }
+        const values = this.configureProjectForm.current!.getValues();
+        let createOrUpdate;
+        let filesystemNames;
+        let scripts;
+        if (this.state.isUpdate) {
+            createOrUpdate = async (request: any) => {
+              // Only admin can update project, project owners can only update role assignments
+              const updates = [];
+              if (this.isAdmin()) {
+                updates.push(this.projects().updateProject(request));
+              }
+              updates.push(Promise.resolve(this.updateRoleAssignments()));
+              return Promise.all(updates);
+            }
+            values.project_id = this.state.project?.project_id;
+        } else {
+            filesystemNames = dot.del("add_filesystems", values);
+            filesystemNames = filesystemNames.filter((filesystemName: string) => filesystemName !== "home");
+            createOrUpdate = async (request: any) => {
+                  this.projects().createProject(request)
+                  .then((result) => {
+                    return this.createRoleAssignments(result.project?.project_id!);
+                  });
+            }
+        }
+        const advanced_options_enabled = dot.del("advanced_options", values);
+        if(advanced_options_enabled) {
+            scripts = this.retrieveScripts(values)
+            dot.set("scripts", scripts, values)
+        }
+        createOrUpdate({
+            project: values,
+            filesystem_names: filesystemNames,
+        })
+            .then(() => {
+                this.props.navigate("/cluster/projects")
+            })
+            .catch((error) => {
+                this.getConfigureProjectForm().setError(error.errorCode, error.message);
+            });
+    }
+
     render() {
         return (
             <IdeaAppLayout
@@ -609,7 +938,21 @@ class ConfigureProject extends Component<ConfigureProjectProps, ConfigureProject
                 contentType={"default"}
                 content={
                     <div>
-                        {this.buildCreateProjectForm()}
+                        <SpaceBetween size="m">
+                          {this.buildCreateProjectForm()}
+                          <Container header={<Header variant="h3">Team Configurations</Header>}>
+                            <SpaceBetween size="m">
+                              {this.buildGroupParam()}
+                              {this.buildUserParam()}
+                            </SpaceBetween>
+                          </Container>
+                          <SpaceBetween size="m" direction="vertical" alignItems="end">
+                            <SpaceBetween size="m" direction="horizontal">
+                                <Button variant="normal" onClick={() => this.props.navigate("/cluster/projects")}>Cancel</Button>
+                                <Button variant="primary" onClick={() => this.submitForm()}>Submit</Button>
+                            </SpaceBetween>
+                          </SpaceBetween>
+                        </SpaceBetween>
                     </div>
                 }
             />

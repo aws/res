@@ -27,7 +27,7 @@ __all__ = (
 from ideadatamodel import (SocaBaseModel, SocaDateRange, SocaSortBy, SocaPaginator, SocaFilter)
 from ideadatamodel.model_utils import ModelUtils
 
-from typing import Optional, Union, TypeVar, Type, List, Any
+from typing import Optional, Union, TypeVar, Type, List, Any, Dict
 from types import SimpleNamespace
 from pydantic import Field
 from enum import Enum
@@ -141,7 +141,7 @@ class IdeaOpenAPISpecEntry(SocaBaseModel):
 
 class ApiAuthorizationType(str, Enum):
     ADMINISTRATOR = 'admin'
-    USER = 'user'
+    USER = 'user' # Could be project owner or project member. Further authz logic in individual service methods
     APP = 'app'
 
 class ApiAuthorization(SocaBaseModel):

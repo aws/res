@@ -29,6 +29,7 @@ import VirtualDesktopDCVClient from "./virtual-desktop-dcv-client";
 import { IdeaAuthenticationContext } from "../common/authentication-context";
 import IdeaBaseClient, { IdeaBaseClientProps } from "./base-client";
 import FileSystemClient from "./filesystem-client";
+import AuthzClient from "./authz-client";
 
 export interface IdeaClientsProps {
     appId: string;
@@ -39,6 +40,7 @@ export interface IdeaClientsProps {
 
 class IdeaClients {
     private readonly authClient: AuthClient;
+    private readonly authzClient: AuthzClient;
     private readonly authAdminClient: AccountsClient;
     private readonly snapshotsClient: SnapshotsClient;
     private readonly schedulerAdminClient: SchedulerAdminClient;
@@ -66,6 +68,15 @@ class IdeaClients {
             serviceWorkerRegistration: props.serviceWorkerRegistration,
         });
         this.clients.push(this.authClient);
+
+        this.authzClient = new AuthzClient({
+            name: "authz-client",
+            baseUrl: props.baseUrl,
+            authContext: props.authContext,
+            apiContextPath: Utils.getApiContextPath(Constants.MODULE_CLUSTER_MANAGER),
+            serviceWorkerRegistration: props.serviceWorkerRegistration,
+        });
+        this.clients.push(this.authzClient);
 
         this.authAdminClient = new AccountsClient({
             name: "accounts-client",
@@ -191,6 +202,10 @@ class IdeaClients {
 
     auth(): AuthClient {
         return this.authClient;
+    }
+
+    authz(): AuthzClient {
+        return this.authzClient;
     }
 
     accounts(): AccountsClient {

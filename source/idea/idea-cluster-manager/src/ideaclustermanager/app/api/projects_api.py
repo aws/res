@@ -128,11 +128,14 @@ class ProjectsAPI(BaseAPI):
 
     def get_user_projects(self, context: ApiInvocationContext):
         request = context.get_request_payload_as(GetUserProjectsRequest)
-        request.username = context.get_username()
+        request.username = context.get_username() if not Utils.is_empty(context.get_username()) else request.username
         result = self.context.projects.get_user_projects(request)
         context.success(result)
 
     def admin_get_user_projects(self, context: ApiInvocationContext):
+        if not context.is_administrator():
+            self.get_user_projects(context)
+            return
         request = context.get_request_payload_as(GetUserProjectsRequest)
         if Utils.is_empty(request.username):
             request.username = context.get_username()

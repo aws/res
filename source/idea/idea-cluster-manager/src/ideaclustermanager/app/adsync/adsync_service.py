@@ -41,7 +41,7 @@ class ADSyncService:
 
         while result.paginator.cursor:
             result = self.context.accounts.group_dao.list_groups(
-                ListGroupsRequest(paginator=SocaPaginator(start=result.paginator.cursor))
+                ListGroupsRequest(paginator=SocaPaginator(cursor=result.cursor))
             )
             res_identified_groups.extend(result.listing)
 
@@ -159,8 +159,9 @@ class ADSyncService:
 
         while result.paginator.cursor:
             result = self.context.accounts.user_dao.list_users(
-                ListUsersRequest(paginator=SocaPaginator(start=result.paginator.cursor))
+                ListUsersRequest(paginator=SocaPaginator(cursor=result.cursor))
             )
+
             res_identified_users.extend(result.listing)
 
         return res_identified_users

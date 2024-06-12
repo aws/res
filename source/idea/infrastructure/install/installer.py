@@ -15,10 +15,10 @@ from constructs import Construct, DependencyGroup
 
 from idea.batteries_included.parameters.parameters import BIParameters
 from idea.infrastructure.install import handlers, tasks
+from idea.infrastructure.install.constants import INSTALLER_ECR_REPO_NAME_SUFFIX
 from idea.infrastructure.install.parameters.common import CommonKey
 from idea.infrastructure.install.parameters.parameters import RESParameters
 
-INSTALLER_ECR_REPO_NAME_SUFFIX = "-installer-ecr"
 LAMBDA_RUNTIME = lambda_.Runtime.PYTHON_3_11
 
 

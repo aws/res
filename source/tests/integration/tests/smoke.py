@@ -78,9 +78,9 @@ class TestsSmoke(object):
                     name="res-integ-test" + os.environ.get("PYTEST_XDIST_WORKER", ""),
                     description="RES integ test project",
                     enable_budgets=False,
-                    ldap_groups=["RESAdministrators", "group_1", "group_2"],
                 ),
                 [],
+                ["RESAdministrators", "group_1", "group_2"],
             )
         ],
         indirect=True,

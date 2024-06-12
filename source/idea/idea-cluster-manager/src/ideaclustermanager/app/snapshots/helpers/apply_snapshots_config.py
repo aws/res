@@ -10,19 +10,28 @@
 #  and limitations under the License.
 
 from ideadatamodel.snapshots.snapshot_model import RESVersion, TableName, TableKeys
-from ideaclustermanager.app.snapshots.apply_snapshot_data_transformation_from_version import data_transformation_from_2023_11
+from ideaclustermanager.app.snapshots.apply_snapshot_data_transformation_from_version import data_transformation_from_2023_11, data_transformation_from_2024_04_02
 from ideaclustermanager.app.snapshots.apply_snapshot_merge_table import (
     merge_table,
     users_table_merger,
     permission_profiles_table_merger,
     projects_table_merger,
     filesystems_cluster_settings_table_merger,
-    software_stacks_table_merger
+    software_stacks_table_merger,
+    role_assignments_table_merger,
 )
 from typing import Dict, Type
 
 # This array should be updated each release to include the new RES version number
-RES_VERSION_IN_TOPOLOGICAL_ORDER = [RESVersion.v_2023_11, RESVersion.v_2024_01, RESVersion.v_2024_01_01, RESVersion.v_2024_04, RESVersion.v_2024_04_01, RESVersion.v_2024_04_02]
+RES_VERSION_IN_TOPOLOGICAL_ORDER = [
+    RESVersion.v_2023_11,
+    RESVersion.v_2024_01,
+    RESVersion.v_2024_01_01,
+    RESVersion.v_2024_04,
+    RESVersion.v_2024_04_01,
+    RESVersion.v_2024_04_02,
+    RESVersion.v_2024_06,
+]
 
 TABLE_TO_TABLE_KEYS_BY_VERSION: Dict[TableName, Dict[RESVersion, TableKeys]] = {
     TableName.CLUSTER_SETTINGS_TABLE_NAME: {
@@ -39,6 +48,9 @@ TABLE_TO_TABLE_KEYS_BY_VERSION: Dict[TableName, Dict[RESVersion, TableKeys]] = {
     },
     TableName.SOFTWARE_STACKS_TABLE_NAME: {
         RESVersion.v_2023_11: TableKeys(partition_key='base_os', sort_key='stack_id')
+    },
+    TableName.ROLE_ASSIGNMENTS_TABLE_NAME: {
+        RESVersion.v_2024_06: TableKeys(partition_key='actor_key', sort_key='resource_key')
     }
 }
 """
@@ -50,11 +62,12 @@ table's updated partition_key and sort_key.
 """
 
 RES_VERSION_TO_DATA_TRANSFORMATION_CLASS = {
-    RESVersion.v_2023_11: data_transformation_from_2023_11.TransformationFromVersion2023_11
+    RESVersion.v_2023_11: data_transformation_from_2023_11.TransformationFromVersion2023_11,
+    RESVersion.v_2024_04_02: data_transformation_from_2024_04_02.TransformationFromVersion2024_04_02
 }
 """
 - An entry must be added to this map when data transformation logic must be added for a version.
-- Data transformation class naming converntion: TransformationFromVersion<RES_Version>
+- Data transformation class naming convention: TransformationFromVersion<RES_Version>
 - If a RES version does not have any schema changes, an entry does not need to be created in this map.
 """
 
@@ -62,6 +75,7 @@ TABLES_IN_MERGE_DEPENDENCY_ORDER = [
     TableName.USERS_TABLE_NAME,
     TableName.PERMISSION_PROFILES_TABLE_NAME,
     TableName.PROJECTS_TABLE_NAME,
+    TableName.ROLE_ASSIGNMENTS_TABLE_NAME,
     TableName.SOFTWARE_STACKS_TABLE_NAME,
     TableName.CLUSTER_SETTINGS_TABLE_NAME,
 ]
@@ -72,6 +86,7 @@ TABLE_TO_MERGE_LOGIC_CLASS: Dict[TableName, Type[merge_table.MergeTable]] = {
     TableName.PROJECTS_TABLE_NAME: projects_table_merger.ProjectsTableMerger,
     TableName.CLUSTER_SETTINGS_TABLE_NAME: filesystems_cluster_settings_table_merger.FileSystemsClusterSettingTableMerger,
     TableName.SOFTWARE_STACKS_TABLE_NAME: software_stacks_table_merger.SoftwareStacksTableMerger,
+    TableName.ROLE_ASSIGNMENTS_TABLE_NAME: role_assignments_table_merger.RoleAssignmentsTableMerger,
 }
 """
 - An entry must be added to this map for all tables that must be applied from snapshot.

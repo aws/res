@@ -13,7 +13,7 @@
 
 import React, { Component, RefObject } from "react";
 
-import { Box, Button, Cards, Header, SegmentedControl, SpaceBetween } from "@cloudscape-design/components";
+import { Box, Button, Cards, Header, SegmentedControl, SpaceBetween, Toggle } from "@cloudscape-design/components";
 import { AppContext } from "../../common";
 import { Project, SocaUserInputChoice, VirtualDesktopBaseOS, VirtualDesktopSession, VirtualDesktopSessionPermission, VirtualDesktopSessionScreenshot, VirtualDesktopSoftwareStack } from "../../client/data-model";
 import { ProjectsClient, VirtualDesktopClient } from "../../client";
@@ -37,6 +37,7 @@ const CARD_HEADER_CLASS_NAME = "awsui_card-header_p8a6i_9tpvn_272";
 const OS_FILTER_LINUX_ID = "linux";
 const OS_FILTER_WINDOWS_ID = "windows";
 const OS_FILTER_ALL_ID = "$all";
+const AUTO_REFRESH_TIME_IN_MS = 15000;
 
 export interface MyVirtualDesktopSessionsProps extends IdeaAppLayoutProps, IdeaSideNavigationProps {}
 
@@ -69,6 +70,8 @@ export interface MyVirtualDesktopSessionsState {
     activeConnectionConfirmModalOnConfirm: () => void;
     userProjects: Project[];
     softwareStacks: { [k: string]: VirtualDesktopSoftwareStack };
+    autoRefreshIntervalId: NodeJS.Timer | undefined;
+    lastRefreshTimeInSec: number;
 }
 
 class MyVirtualDesktopSessions extends Component<MyVirtualDesktopSessionsProps, MyVirtualDesktopSessionsState> {
@@ -81,6 +84,7 @@ class MyVirtualDesktopSessions extends Component<MyVirtualDesktopSessionsProps, 
     refreshInterval: any;
     virtualDesktopSettings: any;
     componentMounted: boolean;
+    lastRefreshTime: Date;
 
     constructor(props: MyVirtualDesktopSessionsProps) {
         super(props);
@@ -92,6 +96,7 @@ class MyVirtualDesktopSessions extends Component<MyVirtualDesktopSessionsProps, 
         this.scheduleModal = React.createRef();
         this.componentMounted = true;
         this.virtualDesktopSettings = undefined;
+        this.lastRefreshTime = new Date();
 
         this.state = {
             selectedItems: [],
@@ -115,6 +120,8 @@ class MyVirtualDesktopSessions extends Component<MyVirtualDesktopSessionsProps, 
                 onCancel: () => {},
             },
             activeConnectionConfirmModalOnConfirm: () => {},
+            autoRefreshIntervalId: undefined,
+            lastRefreshTimeInSec: 0,
         };
     }
 
@@ -152,17 +159,14 @@ class MyVirtualDesktopSessions extends Component<MyVirtualDesktopSessionsProps, 
                 return Promise.resolve(true);
             }
 
-            return this.fetchSessions().then(() => {
-                this.fetchSessionScreenshots().finally();
+            this.setState({
+              lastRefreshTimeInSec: new Date().getSeconds() - this.lastRefreshTime.getSeconds(),
             });
         };
 
-        refresh().then(() =>
-            this.setState({
-                loading: false,
-            })
-        );
-        this.refreshInterval = setInterval(refresh, 30000);
+        this.refreshSessions();
+
+        this.refreshInterval = setInterval(refresh, AUTO_REFRESH_TIME_IN_MS);
     }
 
     componentWillUnmount() {
@@ -1034,6 +1038,34 @@ class MyVirtualDesktopSessions extends Component<MyVirtualDesktopSessionsProps, 
         return this.state.directoryServiceProvider === "activedirectory" || this.state.directoryServiceProvider === "aws_managed_activedirectory";
     }
 
+    refreshSessions(): void {
+      this.setState(
+          {
+              loading: true,
+          },
+          () => {
+              this.fetchSessions().then(() => {
+                  this.lastRefreshTime = new Date();
+                  this.setState({
+                      loading: false,
+                      lastRefreshTimeInSec: 0,
+                  });
+                  this.fetchSessionScreenshots().finally();
+              });
+          }
+      );
+    }
+
+    formatTimeDisplay(lastRefreshTimeInSec: number): string {
+      if (lastRefreshTimeInSec <= 60) {
+        return "Last refreshed less than a minute ago";
+      } else if (lastRefreshTimeInSec <= 60 * 60) {
+        return `Last refreshed ${Math.floor(lastRefreshTimeInSec / 60)} minutes ago`;
+      } else {
+        return `Last refreshed ${Math.floor(lastRefreshTimeInSec / 60 / 60)} hour(s) ago`;
+      }
+    }
+
     buildListing() {
         const getSessions = (): VirtualDesktopSession[] => {
             let sessions: VirtualDesktopSession[] = [];
@@ -1064,22 +1096,28 @@ class MyVirtualDesktopSessions extends Component<MyVirtualDesktopSessionsProps, 
                         variant="awsui-h1-sticky"
                         actions={
                             <SpaceBetween direction="horizontal" size="l">
+                                <Toggle
+                                  description={this.formatTimeDisplay(this.state.lastRefreshTimeInSec)}
+                                  checked={this.state.autoRefreshIntervalId !== undefined}
+                                  onChange={(changeEvent) => {
+                                    let intervalId: NodeJS.Timer | undefined = undefined;
+                                    if (changeEvent.detail.checked) {
+                                      intervalId = setInterval(() => this.refreshSessions(), AUTO_REFRESH_TIME_IN_MS);
+                                    } else {
+                                      clearInterval(this.state.autoRefreshIntervalId);
+                                    }
+                                    this.setState({
+                                      autoRefreshIntervalId: intervalId,
+                                    });
+                                  }}
+                                >
+                                  Auto-refresh
+                                </Toggle>
                                 <Button
                                     variant="normal"
                                     iconName="refresh"
                                     onClick={() => {
-                                        this.setState(
-                                            {
-                                                loading: true,
-                                            },
-                                            () => {
-                                                this.fetchSessions().then(() => {
-                                                    this.setState({
-                                                        loading: false,
-                                                    });
-                                                });
-                                            }
-                                        );
+                                        this.refreshSessions();
                                     }}
                                 />
                                 <SegmentedControl

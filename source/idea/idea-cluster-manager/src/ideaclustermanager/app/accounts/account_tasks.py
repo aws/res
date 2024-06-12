@@ -13,7 +13,6 @@ __all__ = (
     'SyncUserInDirectoryServiceTask',
     'CreateUserHomeDirectoryTask',
     'SyncGroupInDirectoryServiceTask',
-    'GroupMembershipUpdatedTask',
 )
 
 from ideasdk.utils import Utils
@@ -63,59 +62,6 @@ class SyncGroupInDirectoryServiceTask(BaseTask):
             self.logger.info(f'deleting group: {group_name} from directory service ...')
             if self.context.ldap_client.is_existing_group(group_name):
                 self.context.ldap_client.delete_group(group_name)
-
-
-class GroupMembershipUpdatedTask(BaseTask):
-
-    def __init__(self, context: ideaclustermanager.AppContext):
-        self.context = context
-        self.logger = context.logger(self.get_name())
-
-    def get_name(self) -> str:
-        return 'accounts.group-membership-updated'
-
-    def invoke(self, payload: Dict):
-        group_name = payload['group_name']
-        username = payload['username']
-        operation = payload['operation']
-        group = self.context.accounts.group_dao.get_group(group_name)
-        ds_readonly = self.context.ldap_client.is_readonly()
-
-        if group is None:
-            raise exceptions.soca_exception(
-                error_code=errorcodes.AUTH_GROUP_NOT_FOUND,
-                message=f'group not found: {group_name}'
-            )
-        if group['enabled']:
-            if operation == 'add':
-
-                if ds_readonly:
-                    self.logger.info(f'add member: {username} to group: {group_name} in READ-ONLY directory service ...')
-                else:
-                    self.logger.info(f'add member: {username} to group: {group_name} in directory service ...')
-                    self.context.ldap_client.add_user_to_group([username], group_name)
-
-                # update membership in user projects (DynamoDB)
-                self.logger.info(f'add member: {username} to group: {group_name} - DAO ...')
-                self.context.projects.user_projects_dao.group_member_added(
-                    group_name=group_name,
-                    username=username
-                )
-
-            else:
-
-                if ds_readonly:
-                    self.logger.info(f'NOOP - remove member: {username} from group: {group_name} in readonly directory service ...')
-                else:
-                    self.logger.info(f'remove member: {username} from group: {group_name} in directory service ...')
-                    self.context.ldap_client.remove_user_from_group([username], group_name)
-
-                # update membership in user projects
-                self.context.projects.user_projects_dao.group_member_removed(
-                    group_name=group_name,
-                    username=username
-                )
-
 
 class SyncUserInDirectoryServiceTask(BaseTask):
 

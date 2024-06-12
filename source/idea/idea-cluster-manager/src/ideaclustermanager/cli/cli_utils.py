@@ -19,10 +19,10 @@ from ideadatamodel import (
     CreateUserResult,
     GetUserRequest,
     GetUserResult,
+    constants,
     errorcodes,
     exceptions
 )
-from ideaclustermanager.app.accounts import auth_constants
 from ideaclustermanager.app.accounts.auth_utils import AuthUtils
 from rich.table import Table
 
@@ -170,8 +170,8 @@ class ClusterManagerUtils:
     def check_valid_username(username: str):
         if Utils.is_empty(username):
             raise exceptions.invalid_params("username is required")
-        elif not re.match(auth_constants.USERNAME_REGEX, username):
-            raise exceptions.invalid_params(f'user.username must match regex: {auth_constants.USERNAME_REGEX}')
+        elif not re.match(constants.USERNAME_REGEX, username):
+            raise exceptions.invalid_params(constants.USERNAME_ERROR_MESSAGE)
         elif username.strip().lower() in ('admin', 'administrator'):
             raise exceptions.invalid_params(f'invalid username: {username}. Change username to prevent conflicts with local or directory system users.')
 

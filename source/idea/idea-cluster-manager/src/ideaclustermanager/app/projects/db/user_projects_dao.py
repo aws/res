@@ -310,41 +310,6 @@ class UserProjectsDAO:
                 by_ldaps=[group_name]
             )
 
-    def project_disabled(self, project_id: str):
-        if Utils.are_empty(project_id):
-            raise exceptions.invalid_params('project_id is required')
-
-        project = self.projects_dao.get_project_by_id(project_id)
-        ldap_groups = project['ldap_groups']
-        usernames = project['users']
-
-        for ldap_group in ldap_groups:
-            self.ldap_group_removed(project_id=project_id, group_name=ldap_group)
-        for username in usernames:
-            self.delete_user_project(
-                project_id=project_id,
-                username=username,
-                by_ldaps=["SELF"]               
-            )
-
-    def project_enabled(self, project_id: str):
-        if Utils.are_empty(project_id):
-            raise exceptions.invalid_params('project_id is required')
-
-        project = self.projects_dao.get_project_by_id(project_id)
-        ldap_groups = project['ldap_groups']
-        users = project.get('users', [])
-
-        for ldap_group in ldap_groups:
-            self.ldap_group_added(project_id=project_id, group_name=ldap_group)
-
-        for user in users:
-            self.create_user_project(
-                project_id=project_id,
-                username=user,
-                by_ldaps=['SELF']
-            )
-
     def is_user_in_project(self, username: str, project_id: str):
         if Utils.is_empty(username):
             raise exceptions.invalid_params('username is required')

@@ -29,27 +29,34 @@ fi
 
 source "$SCRIPT_DIR/../common/bootstrap_common.sh"
 
-if [[ "$GPU_FAMILY" == "NVIDIA" ]]; then
-  if [[ $BASE_OS =~ ^(centos7|rhel7|rhel8|rhel9)$ ]]; then
-    grep -q "rdblacklist=nouveau" /etc/default/grub
-    if [[ "$?" != "0" ]]; then
-      log_info "Disabling the nouveau open source driver for NVIDIA graphics cards"
-    cat << EOF | tee --append /etc/modprobe.d/blacklist.conf
+if [[ "$GPU_FAMILY" =~ "AMD" && $BASE_OS =~ ^(rhel8|rhel9)$ ]]; then
+  log_warning "The latest AMD driver hasn't supported the current Linux version yet"
+  exit 0
+fi
+
+SUB_DIR=""
+if [[ $BASE_OS =~ ^(amzn2|centos7|rhel7|rhel8|rhel9)$ ]]; then
+  SUB_DIR="red_hat"
+elif [[ $BASE_OS =~ ^(ubuntu2204)$ ]]; then
+  SUB_DIR="debian"
+else
+  log_warning "Base OS not supported."
+  exit 1
+fi
+source "$SCRIPT_DIR/../nice-dcv-linux/$SUB_DIR/grub_configuration.sh"
+
+grep -q "rdblacklist=nouveau" /etc/default/grub
+if [[ "$?" != "0" ]]; then
+  log_info "Disabling the nouveau open source driver for NVIDIA graphics cards"
+  cat << EOF | tee --append /etc/modprobe.d/blacklist.conf
 blacklist vga16fb
 blacklist nouveau
 blacklist rivafb
 blacklist nvidiafb
 blacklist rivatv
 EOF
-      echo GRUB_CMDLINE_LINUX="rdblacklist=nouveau" >> /etc/default/grub
-      grub2-mkconfig -o /boot/grub2/grub.cfg
-
-      set_reboot_required "Disable NVIDIA Nouveau Drivers"
-    fi
-  elif [[ $BASE_OS =~ ^(amzn2)$ ]]; then
-    log_info "Not required for Amazon Linux 2."
-  else
-    log_warning "Base OS not supported."
-  fi
+  echo GRUB_CMDLINE_LINUX="rdblacklist=nouveau" >> /etc/default/grub
+  update_grub_configuration
+  set_reboot_required "Disable NVIDIA Nouveau Drivers"
 fi
 # End: Disable NVIDIA Nouveau Drivers

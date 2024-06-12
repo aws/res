@@ -64,10 +64,20 @@ def test_accounts_create_user_invalid_username_should_fail(context: AppContext):
     """
     create user with invalid username
     """
+    create_user_invalid_username(context, r"Invalid Username")
+    create_user_invalid_username(context, r"-InvalidUsername")
+    # Username with dollar sign at the end will be treated as service account by system.
+    # https://learn.microsoft.com/en-us/troubleshoot/windows-server/active-directory/compatibility-user-accounts-end-dollar-sign
+    create_user_invalid_username(context, r"InvalidUsername$")
+    # Special unicode characters are not allowed due to security concerns (similar to SQL injection or JS injection)
+    create_user_invalid_username(context, r"\u2460\u2461\u2462\u2463")
+
+
+def create_user_invalid_username(context: AppContext, username: str):
     with pytest.raises(exceptions.SocaException) as exc_info:
-        context.accounts.create_user(user=User(username="Invalid Username"))
+        context.accounts.create_user(user=User(username=username))
     assert exc_info.value.error_code == errorcodes.INVALID_PARAMS
-    assert "user.username must match regex" in exc_info.value.message
+    assert constants.USERNAME_ERROR_MESSAGE in exc_info.value.message
 
 
 def test_accounts_create_user_who_does_not_exist_in_AD_should_fail(context: AppContext):
@@ -228,6 +238,41 @@ def test_accounts_crud_create_user_ad_uid_and_gid(context: AppContext, monkeypat
 
     assert user.uid == 100
     assert user.gid == 100
+
+
+def test_accounts_crud_create_user_with_capital_letters_hyphen_and_period_in_sam_account_name(
+    context: AppContext, monkeypatch
+):
+    """
+    create user
+    """
+    monkeypatch.setattr(
+        context.accounts.sssd, "get_uid_and_gid_for_user", lambda x: (1000, 1000)
+    )
+
+    created_user = context.accounts.create_user(
+        user=User(
+            username="accounts_USER3.-",
+            email="accounts_user3@example.com",
+            password="MockPassword_123!%",
+            uid=1000,
+            gid=1000,
+            login_shell="/bin/bash",
+            home_dir="home/account_user3.-",
+            additional_groups=[],
+        ),
+        email_verified=True,
+    )
+
+    assert created_user.username is not None
+    assert created_user.email is not None
+
+    user = context.accounts.get_user(username=created_user.username)
+
+    assert user is not None
+    assert user.username is not None
+    assert user.email is not None
+    assert user.home_dir is not None and user.home_dir == created_user.home_dir
 
 
 def test_accounts_crud_get_user(context: AppContext):
@@ -874,29 +919,6 @@ def test_accounts_delete_group_should_raise_exception_for_users_in_group(
     assert exc_info.value.error_code == errorcodes.AUTH_INVALID_OPERATION
     assert (
         "Users associated to group. Group must be empty before it can be deleted."
-        in exc_info.value.message
-    )
-
-
-def test_accounts_delete_group_should_raise_exception_for_projects_mapped_to_group(
-    context: AppContext, monkeypatch
-):
-    """
-    delete group with projects in
-    """
-    monkeypatch.setattr(context.accounts.group_dao, "get_group", lambda x: "xyz")
-    monkeypatch.setattr(
-        context.accounts.context.projects.user_projects_dao,
-        "has_projects_in_group",
-        lambda x: True,
-    )
-    with pytest.raises(exceptions.SocaException) as exc_info:
-        context.accounts.delete_group(
-            group_name="xyz",
-        )
-    assert exc_info.value.error_code == errorcodes.AUTH_INVALID_OPERATION
-    assert (
-        "Projects associated to group. Group must not be mapped to any project before it can be deleted."
         in exc_info.value.message
     )
 

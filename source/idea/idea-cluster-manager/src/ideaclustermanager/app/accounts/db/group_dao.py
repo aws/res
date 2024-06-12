@@ -175,7 +175,7 @@ class GroupDAO:
         if Utils.is_not_empty(cursor):
             last_evaluated_key = Utils.from_json(Utils.base64_decode(cursor))
         if last_evaluated_key is not None:
-            scan_request['LastEvaluatedKey'] = last_evaluated_key
+            scan_request['ExclusiveStartKey'] = last_evaluated_key
 
         scan_filter = None
         if Utils.is_not_empty(request.filters):

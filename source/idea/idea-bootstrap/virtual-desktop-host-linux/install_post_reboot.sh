@@ -54,7 +54,6 @@ if [[ ! -f ${INSTALL_POST_REBOOT_FINISHED_LOCK} ]]; then
   source "${SCRIPT_DIR}/../common/bootstrap_common.sh"
 
   if [[ ! -f ${BOOTSTRAP_DIR}/res_installed_all_packages.log ]]; then
-
     # Begin: Install Nice DCV Server
     /bin/bash "${SCRIPT_DIR}/../nice-dcv-linux/dcv_server.sh" -o $RES_BASE_OS -r $AWS_REGION -n $IDEA_CLUSTER_NAME -g $GPU_FAMILY -s "${SCRIPT_DIR}"
     # End: Install Nice DCV Server
@@ -62,34 +61,6 @@ if [[ ! -f ${INSTALL_POST_REBOOT_FINISHED_LOCK} ]]; then
     # Begin: Install Nice DCV Session Manager Agent
     /bin/bash "${SCRIPT_DIR}/../nice-dcv-linux/dcv_session_manager_agent.sh" -o $RES_BASE_OS -r $AWS_REGION -n $IDEA_CLUSTER_NAME -s "${SCRIPT_DIR}"
     # End: Install Nice DCV Session Manager Agent
-
-    function install_microphone_redirect() {
-      if [[ -z "$(rpm -qa pulseaudio-utils)" ]]; then
-        echo "Installing microphone redirect..."
-        yum install -y pulseaudio-utils
-      else
-        log_info "Found pulseaudio-utils pre-installed... skipping installation..."
-      fi
-    }
-
-    function install_usb_support() {
-      if [[ -z "$(lsmod | grep eveusb)" ]]; then
-        echo "Installing usb support..."
-        DCV_USB_DRIVER_INSTALLER=$(which dcvusbdriverinstaller)
-        $DCV_USB_DRIVER_INSTALLER --quiet
-      else
-        log_info "Found eveusb kernel module pre-installed... skipping installation..."
-      fi
-
-      echo "# disable x11 display power management system"
-      echo -e '
-    Section "Extensions"
-        Option      "DPMS" "Disable"
-    EndSection' > /etc/X11/xorg.conf.d/99-disable-dpms.conf
-    }
-
-    install_usb_support
-    install_microphone_redirect
 
     echo "$(date)" >> /root/bootstrap/res_installed_all_packages.log
     set_reboot_required "DCV and any associated GPU drivers have been installed, reboot required for changes to take effect..."

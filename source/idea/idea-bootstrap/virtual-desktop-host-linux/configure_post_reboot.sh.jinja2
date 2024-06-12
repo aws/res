@@ -39,6 +39,8 @@ IDEA_SERVICES_LOGS_PATH="${IDEA_SERVICES_PATH}/logs"
 mkdir -p "${IDEA_SERVICES_LOGS_PATH}"
 AWS=$(command -v aws)
 echo """#!/bin/bash
+# Wait for dependent services to start
+sleep 15
 timestamp=\$(date)
 echo \"START\" >> ${IDEA_SERVICES_LOGS_PATH}/idea-reboot-do-not-edit-or-delete-idea-notif.log 2>&1
 echo \$(date) >> ${IDEA_SERVICES_LOGS_PATH}/idea-reboot-do-not-edit-or-delete-idea-notif.log 2>&1

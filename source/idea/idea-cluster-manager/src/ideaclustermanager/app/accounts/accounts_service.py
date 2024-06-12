@@ -11,7 +11,7 @@
 from ideasdk.client.evdi_client import EvdiClient
 from ideasdk.context import SocaContext
 from ideadatamodel import AuthResult
-from ideadatamodel.auth import (
+from ideadatamodel import (
     User,
     Group,
     InitiateAuthRequest,
@@ -24,7 +24,9 @@ from ideadatamodel.auth import (
     ListGroupsResult,
     ListUsersInGroupRequest,
     ListUsersInGroupResult,
-    ConfigureSSORequest
+    ConfigureSSORequest,
+    ListRoleAssignmentsRequest,
+    DeleteRoleAssignmentRequest
 )
 from ideadatamodel import exceptions, errorcodes, constants
 from ideasdk.utils import Utils, GroupNameHelper
@@ -48,7 +50,7 @@ import os
 import re
 import tempfile
 import time
-
+import json
 
 def nonce() -> str:
     return Utils.short_uuid()
@@ -97,7 +99,7 @@ class AccountsService:
         self.sso_state_dao.initialize()
 
         self.ds_automation_dir = self.context.config().get_string('directoryservice.automation_dir', required=True)
-
+        self.cluster_name = self.context.config().get_string('cluster.cluster_name', required=True)
 
     def is_cluster_administrator(self, username: str) -> bool:
         cluster_administrator = self.context.config().get_string('cluster.administrator_username', required=True)
@@ -244,15 +246,16 @@ class AccountsService:
                 )
 
         # Delete Project Group relation
-        if self.context.projects.user_projects_dao.has_projects_in_group(group_name):
+        role_assignments = self.context.authz.list_role_assignments(ListRoleAssignmentsRequest(actor_key=f"{group_name}:group")).items
+        project_groups = [role_assignment.resource_id for role_assignment in role_assignments if role_assignment.resource_type=='project']
+        if project_groups:
             if force:
-                project_ids = self.context.projects.user_projects_dao.get_projects_by_group_name(
-                    group_name)
                 try:
-                    self.context.projects.remove_projects_from_group(
-                        project_ids, group_name, force)
+                    for role_assignment in role_assignments:
+                        self.context.role_assignments_dao.delete_role_assignment(actor_key=role_assignment.actor_key, resource_key=role_assignment.resource_key)
                 except exceptions.SocaException as e:
                     self.logger.info(f"Error: {e}")
+                    raise e
             else:
                 raise exceptions.soca_exception(
                     error_code=errorcodes.AUTH_INVALID_OPERATION,
@@ -347,9 +350,6 @@ class AccountsService:
             if bypass_active_user_check or user['is_active'] or Utils.is_test_mode():
                 self.group_members_dao.create_membership(group_name, username)
 
-                self.logger.info(f'add user projects for user: {username} in group: {group_name} - DAO ...')
-                self.context.projects.user_projects_dao.group_member_added(group_name=group_name, username=username)
-
     def remove_user_from_groups(self, username: str, group_names: List[str]):
         """
         remove a user from multiple groups.
@@ -400,10 +400,6 @@ class AccountsService:
 
         self.user_dao.update_user({'username': username, 'additional_groups': additional_groups})
 
-        # removing user projects after updating the user object, to ensure updated user membership is accessible during user-project deletion.
-        for group_name in groups_to_remove:
-            self.logger.info(f"Removing user projects for user {username} in group {group_name}")
-            self.context.projects.user_projects_dao.group_member_removed(group_name=group_name, username=username)
 
     def remove_users_from_group(self, usernames: List[str], group_name: str, force: bool = False):
         """
@@ -451,10 +447,6 @@ class AccountsService:
 
                 self.group_members_dao.delete_membership(group_name, username)
 
-                self.context.projects.user_projects_dao.group_member_removed(
-                    group_name=group_name,
-                    username=username
-                )
         except exceptions.SocaException as e:
             if e.error_code == errorcodes.AUTH_GROUP_NOT_FOUND:
                 for username in usernames:
@@ -563,8 +555,8 @@ class AccountsService:
         username = AuthUtils.sanitize_username(username)
         if username == None or len(username.strip()) == 0:
             raise exceptions.invalid_params('user.username is required')
-        if not re.match(auth_constants.USERNAME_REGEX, username):
-            raise exceptions.invalid_params(f'user.username must match regex: {auth_constants.USERNAME_REGEX}')
+        if not re.match(constants.USERNAME_REGEX, username):
+            raise exceptions.invalid_params(constants.USERNAME_ERROR_MESSAGE)
         AuthUtils.check_allowed_username(username)
 
         bootstrap_user = self.is_cluster_administrator(user.username)
@@ -807,6 +799,16 @@ class AccountsService:
         self.logger.info(f'{log_tag} delete user in ddb')
         self.user_dao.delete_user(username=username)
 
+        role_assignments = self.context.authz.list_role_assignments(ListRoleAssignmentsRequest(actor_key=f"{username}:user")).items
+        project_id_links = [role_assignment.resource_id for role_assignment in role_assignments if role_assignment.resource_type=='project']
+        if project_id_links:
+            try:
+                for role_assignment in role_assignments:
+                    self.context.role_assignments_dao.delete_role_assignment(actor_key=role_assignment.actor_key, resource_key=role_assignment.resource_key)
+            except exceptions.SocaException as e:
+                self.logger.error(f"Error deleting user-project role association: {e}")
+                raise e
+
     def reset_password(self, username: str):
         username = AuthUtils.sanitize_username(username)
         if Utils.is_empty(username):
@@ -1045,8 +1047,28 @@ class AccountsService:
             self.logger.error(f"Error during clusteradmin user creation: {e}")
 
     def configure_sso(self, request: ConfigureSSORequest):
-        self.single_sign_on_helper.configure_sso(request)
-        self.context.ad_sync.sync_from_ad()  # submit ad_sync task after configuring SSO
+        self.logger.info(f"Configure sso request: {request}")
+        payload = json.dumps({ "configure_sso_request": request.dict(exclude_none=True, by_alias=True) })
+
+        response = self.context.aws().aws_lambda().invoke(
+            FunctionName=f"{self.cluster_name}-configure_sso",
+            Payload=payload,
+        )
+        self.logger.info(f"Configure sso response: {response}")
+        if 'FunctionError' in response:
+            response_payload = json.loads(response['Payload'].read())
+            if 'errorMessage' in response_payload:
+                raise exceptions.soca_exception(
+                    error_code=errorcodes.GENERAL_ERROR,
+                    message=response_payload['errorMessage']
+                )
+            raise exceptions.soca_exception(
+                    error_code=errorcodes.GENERAL_ERROR,
+                    message=response['FunctionError']
+            )
+        elif response['StatusCode'] == 200:
+            self.context.ad_sync.sync_from_ad() # submit ad_sync task after configuring SSO
+
 
     def update_quic(self, quic: bool) -> UpdateQuicResults:
         return self.quic_update_helper.update_quic_config(quic)

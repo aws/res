@@ -279,11 +279,3 @@ def convert_from_dynamodb_object:
 convert_from_dynamodb_object
 ' > /root/.convert_from_dynamodb_object.jq
 }
-
-function configure_amazon_ssm_agent () {
-  systemctl status amazon-ssm-agent
-  if [[ "$?" != "0" ]]; then
-    systemctl enable amazon-ssm-agent || true
-    systemctl restart amazon-ssm-agent
-  fi
-}

@@ -184,7 +184,7 @@ class VirtualDesktopControllerUtils:
     def _store_commands_as_linux_script(self, commands: List[str], scriptName: str) -> List[str]:
         begin = "#!/bin/bash"
         script = "\n".join([begin] + commands)
-        return [f'echo "{script}" > virtual-desktop-host-linux/{scriptName}.sh', f'chmod +x virtual-desktop-host/{scriptName}.sh']
+        return [f'echo "{script}" > virtual-desktop-host-linux/{scriptName}.sh']
 
     def _store_commands_as_windows_script(self, commands: List[str], scriptName: str) -> List[str]:
         script = "`n".join(commands)

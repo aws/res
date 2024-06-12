@@ -910,6 +910,10 @@ class ClusterStack(IdeaBaseStack):
         if internal_alb_enable_access_log:
             self.internal_alb.log_access_logs(access_log_destination, f'logs/{self.module_id}/alb-access-logs/internal-alb')
 
+        # Drop invalid headers from requests to the ALB as a security measure
+        self.external_alb.set_attribute('routing.http.drop_invalid_header_fields.enabled', 'true')
+        self.internal_alb.set_attribute('routing.http.drop_invalid_header_fields.enabled', 'true')
+
         elbv2.CfnListener(
             self.external_alb,
             'http-listener',

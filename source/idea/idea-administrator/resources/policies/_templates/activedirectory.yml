@@ -32,4 +32,8 @@
     Resource: '{{ context.config.get_string("directoryservice.tls_certificate_secret_arn") }}'
     Effect: Allow
   {%- endif %}
+  - Action:
+      - secretsmanager:GetSecretValue
+    Resource: '{{ context.config.get_string("directoryservice.root_password_secret_arn") }}'
+    Effect: Allow
   {%- endif %}

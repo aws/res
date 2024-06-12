@@ -19,6 +19,7 @@ idea.utils.update_source_paths([
     idea.props.cluster_manager_src,
     idea.props.virtual_desktop_src,
     idea.props.site_packages,
+    idea.props.lambda_functions_src
 ])
 
 import tasks.clean

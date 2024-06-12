@@ -57,6 +57,12 @@ def compare_instance_types(a: Dict[str, Any], b: Dict[str, Any]) -> int:
         return 1 if a_instance_family.lower() > b_instance_family.lower() else -1
 
 
+def delete_session(client: ResClient, session: VirtualDesktopSession) -> None:
+    session.force = True
+    client.delete_sessions(DeleteSessionRequest(sessions=[session]))
+    wait_for_deleting_session(client, session)
+
+
 @pytest.fixture
 def session(
     request: FixtureRequest, res_environment: ResEnvironment, non_admin: ClientAuth
@@ -82,12 +88,13 @@ def session(
         )
     ).listing
     if not allowed_instance_types:
-        logger.info("No allowed instance types are available")
-        return None
-    else:
-        allowed_instance_types = sorted(
-            allowed_instance_types, key=cmp_to_key(compare_instance_types)
+        pytest.skip(
+            f"No allowed instance types are available for software stack {software_stack.name}"
         )
+
+    allowed_instance_types = sorted(
+        allowed_instance_types, key=cmp_to_key(compare_instance_types)
+    )
     session.server = VirtualDesktopServer(
         instance_type=allowed_instance_types[-1].get("InstanceType", ""),
         root_volume_size=software_stack.min_storage,
@@ -97,7 +104,11 @@ def session(
         CreateSessionRequest(session=session)
     )
 
-    session = wait_for_launching_session(client, create_session_response.session)
+    try:
+        session = wait_for_launching_session(client, create_session_response.session)
+    except Exception as e:
+        delete_session(client, session)
+        raise e
 
     # Update the schedule to make sure that the virtual desktop session can be active every day.
     session.schedule = VirtualDesktopWeekSchedule(
@@ -127,9 +138,7 @@ def session(
     client.update_session(update_session_request)
 
     def tear_down() -> None:
-        session.force = True
-        client.delete_sessions(DeleteSessionRequest(sessions=[session]))
-        wait_for_deleting_session(client, session)
+        delete_session(client, session)
 
     request.addfinalizer(tear_down)
 

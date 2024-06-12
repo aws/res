@@ -151,6 +151,7 @@ dcv_session:
     allow: # Supports both instance families and types. E.g. specify t3 for family and t3.large for instance type
       - t3
       - g4dn
+      - g4ad
       - g5
       - m6a
       - m6g

@@ -221,7 +221,7 @@ class VirtualDesktopPermissionProfileDB(VirtualDesktopNotifiableDB):
         if Utils.is_not_empty(request.cursor):
             last_evaluated_key = Utils.from_json(Utils.base64_decode(request.cursor))
             if Utils.is_not_empty(last_evaluated_key):
-                list_request['LastEvaluatedKey'] = last_evaluated_key
+                list_request['ExclusiveStartKey'] = last_evaluated_key
 
         list_filter = None
         if Utils.is_not_empty(request.filters):

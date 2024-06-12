@@ -14,6 +14,7 @@ set -x
 
 SEMAPHORE_DIR="/root/bootstrap/semaphore"
 CONFIG_FINISHED_LOCK="${SEMAPHORE_DIR}/configure_finished.lock"
+SCRIPT_DIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
 
 if [[ ! -f ${CONFIG_FINISHED_LOCK} ]]; then
   curr_environment=$(echo -e "
@@ -42,8 +43,6 @@ if [[ ! -f ${CONFIG_FINISHED_LOCK} ]]; then
   ## [END] RES VDI Session
   ")
 
-  SCRIPT_DIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
-
   # Merge Environments
   /bin/bash  "${SCRIPT_DIR}/../common/merge_environments.sh" -r "${curr_environment}" -o /etc/environment
 
@@ -61,7 +60,7 @@ if [[ ! -f ${CONFIG_FINISHED_LOCK} ]]; then
   source "${SCRIPT_DIR}/../common/bootstrap_common.sh"
 
   # Begin: Configure AWS Systems Manager Agent
-  configure_amazon_ssm_agent
+  /bin/bash "${SCRIPT_DIR}/../common/configure_amazon_ssm_agent.sh" -o {{ context.base_os }} -s "${SCRIPT_DIR}"
   # End: Configure AWS Systems Manager Agent
 
   # Begin: Configure CloudWatch Agent
@@ -230,14 +229,14 @@ if [[ ! -f ${CONFIG_FINISHED_LOCK} ]]; then
   }
 
   function configure_x_server() {
+    # Configure the X server to start automatically when the Linux server boots
+    sudo systemctl set-default graphical.target
+
     {% if context.base_os == 'rhel9' -%}
 
       {#  rhel9 removed various x related resources and requires additional configuration #}
 
-       echo "OS is {{ context.base_os }}, configuring x windows server"
-
-      {# disable the wayland protocol https://docs.aws.amazon.com/dcv/latest/adminguide/setting-up-installing-linux-prereq.html #}
-      sed -i 's/^#WaylandEnable=false/WaylandEnable=false/' /etc/gdm/custom.conf
+      echo "OS is {{ context.base_os }}, configuring x windows server"
 
       {# create the dummmy x driver configuration file #}
       echo 'Section "Device"
@@ -269,52 +268,29 @@ if [[ ! -f ${CONFIG_FINISHED_LOCK} ]]; then
 
       {# install the x dummy drivers #}
       dnf install -y xorg-x11-drv-dummy
-
-      {# restart gdm #}
-      systemctl restart gdm
     {% else %}
       echo "OS is {{ context.base_os }}, no need for modified x configuration"
     {% endif -%}
+  }
+
+  function start_x_server() {
+    local output=$(x_server_validation_command)
+    if [[ ! "$output" == "SI:localuser:dcv" ]]; then
+      echo "# start x server ..."
+      sudo systemctl isolate graphical.target
+      echo "# wait for x server to start ..."
+    fi
   }
 
   function restart_x_server() {
     echo "# restart x server ..."
     sudo systemctl isolate multi-user.target
     sudo systemctl isolate graphical.target
-    sudo systemctl set-default graphical.target
     echo "# wait for x server to start ..."
   }
 
-  function configure_gl() {
-    {% if context.base_os == 'amazonlinux2' -%}
-      echo "OS is {{ context.base_os }}, no need for this configuration. NO-OP..."
-    {% elif context.is_gpu_instance_type() -%}
-      if [[ $machine == "x86_64" ]]; then
-        echo "Detected GPU instance, configuring GL..."
-        local IDEA_SERVICES_PATH="/opt/idea/.services"
-        local IDEA_SERVICES_LOGS_PATH="${IDEA_SERVICES_PATH}/logs"
-        mkdir -p "${IDEA_SERVICES_LOGS_PATH}"
-        DCVGLADMIN=$(which dcvgladmin)
-
-  echo """
-  echo \"GLADMIN START\" >> ${IDEA_SERVICES_LOGS_PATH}/idea-reboot-do-not-edit-or-delete-idea-gl.log 2>&1
-  echo \$(date) >> ${IDEA_SERVICES_LOGS_PATH}/idea-reboot-do-not-edit-or-delete-idea-gl.log 2>&1
-  ${DCVGLADMIN} disable >> ${IDEA_SERVICES_LOGS_PATH}/idea-reboot-do-not-edit-or-delete-idea-gl.log 2>&1
-  ${DCVGLADMIN} enable >> ${IDEA_SERVICES_LOGS_PATH}/idea-reboot-do-not-edit-or-delete-idea-gl.log 2>&1
-  echo \$(date) >> ${IDEA_SERVICES_LOGS_PATH}/idea-reboot-do-not-edit-or-delete-idea-gl.log 2>&1
-  echo \"GLADMIN END\" >> ${IDEA_SERVICES_LOGS_PATH}/idea-reboot-do-not-edit-or-delete-idea-gl.log 2>&1
-  """ >> /etc/rc.d/rc.local
-
-        chmod +x /etc/rc.d/rc.local
-        systemctl enable rc-local
-      fi
-    {% else %}
-      echo "OS is {{ context.base_os }}, BUT not a GL Machine. No need for this configuration. NO-OP..."
-    {% endif %}
-  }
-
   function start_and_validate_x_server() {
-    restart_x_server
+    start_x_server
     verify_x_server_is_up
   }
 
@@ -412,16 +388,22 @@ if [[ ! -f ${CONFIG_FINISHED_LOCK} ]]; then
         restart_x_server
       fi
     done
-    echo "x server is up an running...."
+    echo "x server is up and running...."
   }
 
   ## -- DCV RELATED EXECUTION BEGINS HERE -- ##
+
+  /bin/bash "${SCRIPT_DIR}/../nice-dcv-linux/disable_wayland_protocol.sh" -o {{ context.base_os }} -s "${SCRIPT_DIR}"
 
   download_broker_certificate
   configure_dcv_host
   configure_dcv_agent
   configure_usb_remotization
-  configure_gl
+  {% if context.is_gpu_instance_type() -%}
+    /bin/bash "${SCRIPT_DIR}/../nice-dcv-linux/configure_gl.sh" -o {{ context.base_os }} -s "${SCRIPT_DIR}"
+  {% else %}
+    echo "OS is {{ context.base_os }}, BUT not a GL Machine. No need for this configuration. NO-OP..."
+  {% endif %}
   machine=$(uname -m) #x86_64 or aarch64
   if [[ $machine == "x86_64" ]]; then
 
