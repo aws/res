@@ -43,6 +43,10 @@ package_config:
     x86_64: https://s3.amazonaws.com/ec2-downloads-windows/SSMAgent/latest/linux_amd64/amazon-ssm-agent.rpm
     aarch64: https://s3.amazonaws.com/ec2-downloads-windows/SSMAgent/latest/linux_arm64/amazon-ssm-agent.rpm
 
+  s3_mountpoint:
+    x86_64: https://s3.amazonaws.com/mountpoint-s3-release/latest/x86_64/mount-s3.rpm
+    aarch64: https://s3.amazonaws.com/mountpoint-s3-release/latest/arm64/mount-s3.rpm
+
   linux_packages:
     application:
       # Extra package to install on Scheduler host, including OpenPBS dependencies
@@ -174,7 +178,8 @@ package_config:
       - python-sssdconfig
 
     system:
-      # Default packages installed on all Linux systems
+      # Default packages installed on all Linux systems, kernel related packages' version is pinned to the running kernel's
+      # version to keep them synchronized.
       - chrony
       - cpp
       - e2fsprogs
@@ -188,9 +193,13 @@ package_config:
       - glibc-headers
       - gssproxy
       - htop
-      - kernel
-      - kernel-devel
-      - kernel-headers
+      - kernel-core-$(uname -r)
+      - kernel-devel-$(uname -r)
+      - kernel-headers-$(uname -r)
+      - kernel-modules-$(uname -r)
+      - kernel-modules-core-$(uname -r)
+      - kernel-tools-$(uname -r)
+      - kernel-tools-libs-$(uname -r)
       - keyutils
       - keyutils-libs-devel
       - krb5-devel
@@ -405,10 +414,10 @@ package_config:
           {%- endif %}
           {%- if 'ubuntu2204' in supported_base_os %}
           ubuntu2204:
-            version: 2023.0-14852-ubuntu2204-x86_64
-            tgz: nice-dcv-2023.0-14852-ubuntu2204-x86_64.tgz
-            url: https://d1uj6qtbmh3dt5.cloudfront.net/2023.0/Servers/nice-dcv-2023.0-14852-ubuntu2204-x86_64.tgz
-            sha256sum: 975b37eec1b260b6459400e38ad99c9c7b8bc6b4b0e095da7ed38d7653144fd8
+            version: 2023.1-16388-ubuntu2204-x86_64
+            tgz: nice-dcv-2023.1-16388-ubuntu2204-x86_64.tgz
+            url: https://d1uj6qtbmh3dt5.cloudfront.net/2023.1/Servers/nice-dcv-2023.1-16388-ubuntu2204-x86_64.tgz
+            sha256sum: 2b996c4a422adaa7912a59cca06f38fcc59451b927be0dc0f49b362ecfcc23fb
           {%- endif %}
       aarch64:
         linux:
@@ -501,9 +510,9 @@ package_config:
           {%- endif %}
           {%- if 'ubuntu2204' in supported_base_os %}
           ubuntu2204:
-            version: 2023.0.642-1_amd64.ubuntu2204
-            url: https://d1uj6qtbmh3dt5.cloudfront.net/2023.0/SessionManagerAgents/nice-dcv-session-manager-agent_2023.0.642-1_amd64.ubuntu2204.deb
-            sha256sum: f2577536d2b0e8bddf71cd257168e8d8ceb0814f4f5e02d4015776cdc8144fa1
+            version: 2023.1.732-1_amd64.ubuntu2204
+            url: https://d1uj6qtbmh3dt5.cloudfront.net/2023.1/SessionManagerAgents/nice-dcv-session-manager-agent_2023.1.732-1_amd64.ubuntu2204.deb
+            sha256sum: 8d19d296c9e05cb59984124444e64635382b7d8d1b276c1ad1037c803c6c3bd1
           {%- endif %}
       aarch64:
         linux:

@@ -153,6 +153,6 @@ def smoke(
         capture_output=capture_output,
         keywords=keywords,
         test_file="smoke.py",
-        num_workers=10,
+        num_workers=11,
     )
     raise SystemExit(exit_code)

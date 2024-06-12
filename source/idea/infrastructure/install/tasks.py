@@ -74,13 +74,15 @@ class Tasks(Construct):
         command: list[str],
         task_role: Optional[iam.Role] = None,
     ) -> ecs.FargateTaskDefinition:
+        task_definition_name = f"{name}TaskDef"
         task_definition = ecs.FargateTaskDefinition(
             self,
-            f"{name}TaskDef",
+            task_definition_name,
             task_role=task_role,
             execution_role=task_role,
             memory_limit_mib=4096,
             cpu=2048,
+            family=f"{self.params.get_str(CommonKey.CLUSTER_NAME)}{task_definition_name}",
         )
         commands = "\n".join(command)
         task_definition.add_container(

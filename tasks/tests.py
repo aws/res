@@ -152,6 +152,24 @@ def administrator(c, keywords=None, params=None, capture_output=False, cov_repor
     )
     raise SystemExit(exit_code)
 
+@task(iterable=['params'])
+def lambda_functions(c, keywords=None, params=None, capture_output=False, cov_report=None):
+    # type: (Context, str, List[str], bool, str) -> None
+    """
+    run administrator unit tests
+    """
+    exit_code = _run_unit_tests(
+        c=c,
+        component_name='lambda_functions',
+        component_src=idea.props.lambda_functions_src,
+        component_tests_src=idea.props.lambda_functions_tests_src,
+        package_name='lambda_functions',
+        params=params,
+        capture_output=capture_output,
+        keywords=keywords,
+        cov_report=cov_report
+    )
+    raise SystemExit(exit_code)
 
 @task(name='all', iterable=['params'], default=True)
 def run_all(c, keywords=None, params=None, capture_output=False, cov_report=None):
@@ -159,12 +177,12 @@ def run_all(c, keywords=None, params=None, capture_output=False, cov_report=None
     """
     run unit tests for all components
     """
-
     components = [
         sdk,
         administrator,
         cluster_manager,
-        virtual_desktop_controller
+        virtual_desktop_controller,
+        lambda_functions
     ]
 
     exit_code = 0

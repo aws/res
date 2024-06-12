@@ -81,9 +81,11 @@ def software_stack(
             if list_software_stacks_response.listing
             else []
         )
-        assert (
-            len(existing_software_stacks) > 0
-        ), f"Failed to find existing software stacks with base OS {base_os}, architecture {architecture} and GPU {gpu}"
+        if not len(existing_software_stacks):
+            pytest.skip(
+                f"Default software stack with base OS {base_os}, architecture {architecture} and GPU {gpu} doesn't exist in {res_environment.region}"
+            )
+
         # If no AMI ID is provided, use the AMI ID of an existing software stack that has the same base OS, architecture and GPU.
         software_stack.ami_id = existing_software_stacks[0].ami_id
 

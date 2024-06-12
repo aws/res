@@ -20,23 +20,18 @@ from ideasdk.client.vdc_client import SocaClientOptions, VirtualDesktopControlle
 import ideaclustermanager
 from ideaclustermanager.app.api.api_invoker import ClusterManagerApiInvoker
 from ideaclustermanager.app.projects.projects_service import ProjectsService
-from ideaclustermanager.app.projects.project_tasks import (
-    ProjectEnabledTask,
-    ProjectDisabledTask,
-    ProjectGroupsUpdatedTask
-)
 from ideaclustermanager.app.accounts.accounts_service import AccountsService
 from ideaclustermanager.app.adsync.adsync_service import ADSyncService
 from ideaclustermanager.app.accounts.cognito_user_pool import CognitoUserPool, CognitoUserPoolOptions
 
 from ideaclustermanager.app.accounts.ldapclient.ldap_client_factory import build_ldap_client
 from ideaclustermanager.app.auth.api_authorization_service import ClusterManagerApiAuthorizationService
+from ideaclustermanager.app.authz.role_assignments_service import RoleAssignmentsService
 from ideaclustermanager.app.accounts.ad_automation_agent import ADAutomationAgent
 from ideaclustermanager.app.accounts.account_tasks import (
     SyncUserInDirectoryServiceTask,
     CreateUserHomeDirectoryTask,
-    SyncGroupInDirectoryServiceTask,
-    GroupMembershipUpdatedTask
+    SyncGroupInDirectoryServiceTask
 )
 from ideaclustermanager.app.adsync.adsync_tasks import (
     SyncAllGroupsTask,
@@ -145,11 +140,7 @@ class ClusterManagerApp(ideasdk.app.SocaApp):
                 CreateUserHomeDirectoryTask(self.context),
                 SyncAllGroupsTask(self.context),
                 SyncAllUsersTask(self.context),
-                SyncFromAD(self.context),
-                GroupMembershipUpdatedTask(self.context),
-                ProjectEnabledTask(self.context),
-                ProjectDisabledTask(self.context),
-                ProjectGroupsUpdatedTask(self.context)
+                SyncFromAD(self.context)
             ]
         )
 
@@ -193,6 +184,11 @@ class ClusterManagerApp(ideasdk.app.SocaApp):
             accounts_service=self.context.accounts,
             task_manager=self.context.task_manager,
             vdc_client=self.context.vdc_client
+        )
+
+        # role assignments service
+        self.context.authz = RoleAssignmentsService(
+            context=self.context
         )
 
         # email templates

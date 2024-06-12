@@ -12,9 +12,13 @@
 import pytest
 
 from ideadatamodel import (  # type: ignore
+    BatchDeleteRoleAssignmentRequest,
+    BatchPutRoleAssignmentRequest,
     CreateProjectRequest,
     DeleteProjectRequest,
+    DeleteRoleAssignmentRequest,
     Project,
+    PutRoleAssignmentRequest,
 )
 from tests.integration.framework.client.res_client import ResClient
 from tests.integration.framework.fixtures.fixture_request import FixtureRequest
@@ -31,6 +35,7 @@ def project(
     """
     project = request.param[0]
     filesystem_names = request.param[1]
+    groups = request.param[2]
     create_project_request = CreateProjectRequest(
         project=project, filesystem_names=filesystem_names
     )
@@ -39,7 +44,34 @@ def project(
     client = ResClient(res_environment, admin, api_invoker_type)
     project = client.create_project(create_project_request).project
 
+    items = [
+        PutRoleAssignmentRequest(
+            resource_id=project.project_id,
+            resource_type="project",
+            actor_id=group,
+            actor_type="group",
+            role_id="project_member",
+            request_id="test",
+        )
+        for group in groups
+    ]
+    client.batch_put_role_assignment(BatchPutRoleAssignmentRequest(items=items))
+
     def tear_down() -> None:
+        items = [
+            DeleteRoleAssignmentRequest(
+                resource_id=project.project_id,
+                resource_type="project",
+                actor_id=group,
+                actor_type="group",
+                request_id="test",
+            )
+            for group in groups
+        ]
+        client.batch_delete_role_assignment(
+            BatchDeleteRoleAssignmentRequest(items=items)
+        )
+
         delete_project_request = DeleteProjectRequest(project_name=project.name)
         client.delete_project(delete_project_request)
 

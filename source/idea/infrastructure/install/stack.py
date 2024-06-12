@@ -72,15 +72,11 @@ class InstallStack(Stack):
         root_username_secret = self.get_directory_service_secret(
             DirectoryServiceKey.ROOT_USERNAME
         )
-        root_password_secret = self.get_directory_service_secret(
-            DirectoryServiceKey.ROOT_PASSWORD
-        )
         root_user_dn_secret = self.get_directory_service_secret(
             DirectoryServiceKey.ROOT_USER_DN
         )
 
         self.parameters.root_username_secret_arn = root_username_secret.secret_arn
-        self.parameters.root_password_secret_arn = root_password_secret.secret_arn
         self.parameters.root_user_dn_secret_arn = root_user_dn_secret.secret_arn
 
         dependency_group = DependencyGroup()

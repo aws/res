@@ -131,10 +131,19 @@ if [[ -z "$(rpm -qa lustre-client)" ]]; then
   kernel=$(uname -r)
   machine=$(uname -m)
   log_info "Found kernel version: $kernel running on: $machine"
-  if [[ $kernel == *"5.14.0-362"*$machine ]]; then
+  if [[ $kernel == *"5.14.0-427"*$machine ]]; then
     curl https://fsx-lustre-client-repo-public-keys.s3.amazonaws.com/fsx-rpm-public-key.asc -o /tmp/fsx-rpm-public-key.asc
     sudo rpm --import /tmp/fsx-rpm-public-key.asc
     sudo curl https://fsx-lustre-client-repo.s3.amazonaws.com/el/9/fsx-lustre-client.repo -o /etc/yum.repos.d/aws-fsx.repo
+    sudo sed -i 's#9#9.4#' /etc/yum.repos.d/aws-fsx.repo
+    sudo yum clean all
+    sudo yum install -y kmod-lustre-client lustre-client
+    set_reboot_required "FSx for Lustre client installed"
+  elif [[ $kernel == *"5.14.0-362"*$machine ]]; then
+    curl https://fsx-lustre-client-repo-public-keys.s3.amazonaws.com/fsx-rpm-public-key.asc -o /tmp/fsx-rpm-public-key.asc
+    sudo rpm --import /tmp/fsx-rpm-public-key.asc
+    sudo curl https://fsx-lustre-client-repo.s3.amazonaws.com/el/9/fsx-lustre-client.repo -o /etc/yum.repos.d/aws-fsx.repo
+    sudo sed -i 's#9#9.3#' /etc/yum.repos.d/aws-fsx.repo
     sudo yum clean all
     sudo yum install -y kmod-lustre-client lustre-client
     set_reboot_required "FSx for Lustre client installed"
@@ -150,6 +159,14 @@ if [[ -z "$(rpm -qa lustre-client)" ]]; then
     log_error "Can't install FSx for Lustre client as kernel version $kernel isn't matching expected versions: (x86_64: 5.14.0-362, -70)!"
   fi
 fi
+{%- endif %}
+{%- if context.base_os in ('ubuntu2204') %}
+  wget -O - https://fsx-lustre-client-repo-public-keys.s3.amazonaws.com/fsx-ubuntu-public-key.asc | gpg --dearmor | sudo tee /usr/share/keyrings/fsx-ubuntu-public-key.gpg >/dev/null
+  bash -c 'echo "deb [signed-by=/usr/share/keyrings/fsx-ubuntu-public-key.gpg] https://fsx-lustre-client-repo.s3.amazonaws.com/ubuntu jammy main" > /etc/apt/sources.list.d/fsxlustreclientrepo.list && apt-get update'
+
+  kernel=$(uname -r)
+  DEBIAN_FRONTEND=noninteractive apt install -y lustre-client-modules-$kernel
+  set_reboot_required "FSx for Lustre client installed"
 {%- endif %}
 # Performance tuning
 {% include '_templates/linux/fsx_lustre_client_tuning_prereboot.jinja2' %}

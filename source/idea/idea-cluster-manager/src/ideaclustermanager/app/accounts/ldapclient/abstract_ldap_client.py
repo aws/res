@@ -652,7 +652,7 @@ class AbstractLDAPClient:
                 filterstr=filterstr
             )
 
-            ldap_result = Utils.get_value_as_list('result', search_result, default=[])
+            ldap_result = search_result.get('result', [])
             total = len(ldap_result)
 
         else:
@@ -665,7 +665,7 @@ class AbstractLDAPClient:
                 start=start
             )
 
-            ldap_result = Utils.get_value_as_list('result', search_result)
+            ldap_result = search_result.get('result', [])
             total = Utils.get_value_as_int('total', search_result)
 
         for ldap_group in ldap_result:
@@ -798,7 +798,7 @@ class AbstractLDAPClient:
         if self.is_activedirectory():
             search_result = self.simple_paginated_search(base=ldap_base, filterstr=filter_str)
 
-            ldap_result = Utils.get_value_as_list('result', search_result)
+            ldap_result = search_result.get('result', [])
             total = len(ldap_result)
 
         else:
@@ -811,7 +811,7 @@ class AbstractLDAPClient:
                 start=start
             )
 
-            ldap_result = Utils.get_value_as_list('result', search_result)
+            ldap_result = search_result.get('result', [])
             total = Utils.get_value_as_int('total', search_result)
 
         for ldap_user in ldap_result:

@@ -237,6 +237,10 @@ class VirtualDesktopSessions extends Component<VirtualDesktopSessionsProps, Virt
         return this.sessionHealthModal.current!;
     }
 
+    isAdmin(): boolean {
+      return AppContext.get().auth().isAdmin();
+    }
+
     hideCreateSoftwareStackForm() {
         this.setState({
             sessionForSoftwareStack: undefined,
@@ -660,6 +664,7 @@ class VirtualDesktopSessions extends Component<VirtualDesktopSessionsProps, Virt
                         this.showCreateSessionForm();
                     },
                 }}
+                primaryActionDisabled={!this.isAdmin()}
                 secondaryActionsDisabled={!this.isSelected()}
                 secondaryActions={[
                     {

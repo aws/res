@@ -443,7 +443,7 @@ class FileSystems extends Component<FileSystemProps, FileSystemState> {
                 name: `${Constants.SHARED_STORAGE_PROVIDER_FSX_NETAPP_ONTAP}.mount_directory`,
                 title: "Mount Directory",
                 description: "Enter directory to mount the file system",
-                help_text: "Mount directory cannot contain white spaces or special characters. Only use lowercase alphabets, numbers, and hyphens (-). Must be between 3 and 18 characters long starting with '/'. Eg. /efs-01",
+                help_text: "Mount directory cannot contain white spaces or special characters. Only use lowercase alphabets, numbers, and hyphens (-). Must be between 3 and 18 characters long starting with '/'. Eg. /ontap-01",
                 data_type: "str",
                 param_type: "text",
                 validate: {

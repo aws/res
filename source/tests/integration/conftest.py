@@ -18,11 +18,15 @@ from tests.integration.framework.client.res_client import ResClient
 from tests.integration.framework.fixtures.res_environment import ResEnvironment
 from tests.integration.framework.model.client_auth import ClientAuth
 from tests.integration.framework.utils.ad_sync import ad_sync
+from tests.integration.framework.utils.alb_utils import (
+    update_alb_invalid_header_drop_flag,
+)
 from tests.integration.framework.utils.ec2_utils import (
     cluster_manager_instances,
     vdc_instances,
 )
 from tests.integration.framework.utils.test_mode import set_test_mode_for_all_servers
+from tests.integration.tests.config import TEST_SOFTWARE_STACKS
 
 logger = logging.getLogger(__name__)
 
@@ -94,11 +98,21 @@ def pytest_sessionstart(session: pytest.Session) -> None:
     logger.info("sync users and groups from AD")
     ad_sync(region, cluster_managers[0])
 
+    # Disable ALB attribute for dropping invalid headers
+    logger.info(
+        "disable ALB attribute for dropping invalid headers; needed for integration testing"
+    )
+    update_alb_invalid_header_drop_flag(session, value="false")
+
     logger.info("update allowed sessions per user")
     res_client(session).update_module_settings(
         UpdateModuleSettingsRequest(
             module_id="vdc",
-            settings={"dcv_session": {"allowed_sessions_per_user": "10"}},
+            settings={
+                "dcv_session": {
+                    "allowed_sessions_per_user": str(len(TEST_SOFTWARE_STACKS))
+                }
+            },
         )
     )
 
@@ -117,6 +131,12 @@ def pytest_sessionfinish(session: pytest.Session, exitstatus: int) -> None:
             settings={"dcv_session": {"allowed_sessions_per_user": "5"}},
         )
     )
+
+    # Enable ALB attribute for dropping invalid headers
+    logger.info(
+        "enable ALB attribute for dropping invalid headers; integration test finished"
+    )
+    update_alb_invalid_header_drop_flag(session, value="true")
 
     logger.info("disable server test mode")
     set_test_mode_for_all_servers(

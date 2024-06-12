@@ -26,8 +26,8 @@ npx cdk synth $INSTALL_STACK_NAME -c publish_templates=$PUBLISH_TEMPLATES -c fil
 ARTIFACT_FOLDER=$([ -z $RELEASE_VERSION ] && echo $COMMIT_ID || echo $RELEASE_VERSION)
 
 invoke package.infra-ami-deps
-infra_ami_package="dist/res-infra-dependencies-${RELEASE_VERSION}.tar.gz"
-package_name="res-infra-dependencies-${RELEASE_VERSION}.tar.gz"
+infra_ami_package="dist/res-infra-dependencies.tar.gz"
+package_name="res-infra-dependencies.tar.gz"
 
 IFS=',' read -r -a regions <<< "$ONBOARDED_REGIONS"
 for region in "${regions[@]}"

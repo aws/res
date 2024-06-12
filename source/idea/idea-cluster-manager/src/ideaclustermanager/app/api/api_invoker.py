@@ -42,6 +42,7 @@ from ideaclustermanager.app.api.filesystem_api import FileSystemAPI
 from ideaclustermanager.app.api.projects_api import ProjectsAPI
 from ideaclustermanager.app.api.accounts_api import AccountsAPI
 from ideaclustermanager.app.api.auth_api import AuthAPI
+from ideaclustermanager.app.api.authz_api import AuthzAPI
 from ideaclustermanager.app.api.email_templates_api import EmailTemplatesAPI
 from ideaclustermanager.app.api.snapshots_api import SnapshotsAPI
 from typing import Optional, Dict
@@ -57,6 +58,7 @@ class ClusterManagerApiInvoker(ApiInvokerProtocol):
         self.projects_api = ProjectsAPI(context)
         self.filesystem_api = FileSystemAPI(context)
         self.auth_api = AuthAPI(context)
+        self.authz_api = AuthzAPI(context)
         self.accounts_api = AccountsAPI(context)
         self.snapshots_api = SnapshotsAPI(context)
         self.email_templates_api = EmailTemplatesAPI(context)
@@ -192,6 +194,8 @@ class ClusterManagerApiInvoker(ApiInvokerProtocol):
             self.cluster_settings_api.invoke(context)
         elif namespace.startswith('Projects.'):
             self.projects_api.invoke(context)
+        elif namespace.startswith('Authz.'):
+            self.authz_api.invoke(context)
         elif namespace.startswith('FileSystem.'):
             self.filesystem_api.invoke(context)
         elif namespace.startswith('Accounts.'):

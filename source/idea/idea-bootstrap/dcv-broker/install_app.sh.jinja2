@@ -178,7 +178,21 @@ session-screenshot-max-width = 800
 function configure_dcv_broker() {
   echo "Configure dcv broker started"
   provider_url="{{ context.config.get_string('identity-provider.cognito.provider_url', required=True) }}"
-  dcv-session-manager-broker register-auth-server --url "${provider_url}/.well-known/jwks.json"
+  local list_servers_output=$(dcv-session-manager-broker list-auth-servers)
+  local max_retries=5
+  local retry_count=0
+  while [[ "${list_servers_output}" != *"${provider_url}/.well-known/jwks.json"* ]]
+  do
+    echo "DCV Broker configuration pending.. sleeping for 30 seconds."
+    dcv-session-manager-broker register-auth-server --url "${provider_url}/.well-known/jwks.json"
+    list_servers_output=$(dcv-session-manager-broker list-auth-servers)
+    if [[ "${retry_count}" -eq "${max_retries}" ]]; then
+      echo -e "FATAL ERROR: DCV Broker configuration failed."
+      exit 1
+    fi
+    sleep 30
+    ((retry_count++))
+  done
   echo "Configure dcv broker complete"
 }
 

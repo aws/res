@@ -30,31 +30,12 @@ fi
 
 source "$SCRIPT_DIR/../common/bootstrap_common.sh"
 
-function install_ssm_agent () {
-  systemctl status amazon-ssm-agent
-  if [[ "$?" != "0" ]]; then
-    local AWS=$(command -v aws)
-    machine=$(uname -m)
-    if [[ $machine == "x86_64" ]]; then
-      local aws_ssm_x86_64_link=$($AWS dynamodb get-item \
-                                --region "$AWS_REGION" \
-                                --table-name "$RES_ENVIRONMENT_NAME.cluster-settings" \
-                                --key '{"key": {"S": "global-settings.package_config.aws_ssm.x86_64"}}' \
-                                --output text \
-                                | awk '/VALUE/ {print $2}')
-      yum install -y $aws_ssm_x86_64_link
-    elif [[ $machine == "aarch64" ]]; then
-      local aws_ssm_aarch64_link=$($AWS dynamodb get-item \
-                                  --region "$AWS_REGION" \
-                                  --table-name "$RES_ENVIRONMENT_NAME.cluster-settings" \
-                                  --key '{"key": {"S": "global-settings.package_config.aws_ssm.aarch64"}}' \
-                                  --output text \
-                                  | awk '/VALUE/ {print $2}')
-      yum install -y $aws_ssm_aarch64_link
-    fi
-  fi
-}
-if [[ $BASE_OS =~ ^(amzn2|centos7|rhel7|rhel8|rhel9)$ ]]; then 
-  install_ssm_agent
+if [[ $BASE_OS =~ ^(amzn2|centos7|rhel7|rhel8|rhel9)$ ]]; then
+  /bin/bash "${SCRIPT_DIR}/../common/red_hat/aws_ssm.sh" -r $AWS_REGION -n $RES_ENVIRONMENT_NAME
+elif [[ $BASE_OS =~ ^(ubuntu2204)$ ]]; then
+  /bin/bash "${SCRIPT_DIR}/../common/debian/aws_ssm.sh"
+else
+  log_warning "Base OS not supported."
+  exit 1
 fi
 # End: AWS Systems Manager Agent

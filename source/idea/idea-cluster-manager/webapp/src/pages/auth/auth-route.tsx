@@ -22,6 +22,7 @@ import Utils from "../../common/utils";
 export interface IdeaAuthRouteProps extends IdeaAppNavigationProps {
     isLoggedIn: boolean;
     children: React.ReactNode;
+    isProjectOwner?: boolean;
 }
 
 class IdeaAuthenticatedRoute extends Component<IdeaAuthRouteProps> {
@@ -39,6 +40,9 @@ class IdeaAuthenticatedRoute extends Component<IdeaAuthRouteProps> {
             } else if (isVirtualDesktopAdminRoute && (!context.getClusterSettingsService().isVirtualDesktopDeployed() || !context.auth().isAdmin())) {
                 return <Navigate to="/" />;
             } else if (isClusterAdminRoute && !context.auth().isAdmin()) {
+                if (this.props.isProjectOwner) {
+                  return this.props.children;
+                }
                 return <Navigate to="/" />;
             } else {
                 return this.props.children;

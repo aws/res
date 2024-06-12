@@ -166,6 +166,17 @@ class BiStack(Stack):
 
         self.root_username.node.add_dependency(self.bi_stack)
 
+        self.root_password_secret_arn = aws_ssm.StringParameter(
+            self,
+            id=str(parameters.root_password_secret_arn),
+            parameter_name=str(parameters.root_password_secret_arn),
+            string_value=self.bi_stack.get_att(
+                "Outputs.ServiceAccountPasswordSecretArn"
+            ).to_string(),
+        )
+
+        self.root_password_secret_arn.node.add_dependency(self.bi_stack)
+
         self.root_user_dn = aws_ssm.StringParameter(
             self,
             id=str(parameters.root_user_dn),

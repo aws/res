@@ -244,9 +244,10 @@ OS_RHEL7 = 'rhel7'
 OS_RHEL8 = 'rhel8'
 OS_RHEL9 = 'rhel9'
 OS_CENTOS7 = 'centos7'
+OS_UBUNTU2204 = 'ubuntu2204'
 OS_WINDOWS = 'windows'
-SUPPORTED_OS = (OS_AMAZONLINUX2, OS_RHEL7, OS_RHEL8, OS_RHEL9, OS_CENTOS7, OS_WINDOWS)
-SUPPORTED_LINUX_OS = (OS_AMAZONLINUX2, OS_RHEL7, OS_RHEL8, OS_RHEL9, OS_CENTOS7)
+SUPPORTED_OS = (OS_AMAZONLINUX2, OS_RHEL7, OS_RHEL8, OS_RHEL9, OS_CENTOS7, OS_WINDOWS, OS_UBUNTU2204)
+SUPPORTED_LINUX_OS = (OS_AMAZONLINUX2, OS_RHEL7, OS_RHEL8, OS_RHEL9, OS_CENTOS7, OS_UBUNTU2204)
 
 # Platforms
 PLATFORM_LINUX = 'linux'
@@ -414,6 +415,12 @@ SSO_SOURCE_PROVIDER_NAME_ERROR_MESSAGE = "Only use word character or a single ch
     "Must be between 1 and 128 characters long." +\
     "SourceProviderName may not be Cognito"
 
+SCRIPT_LOCATION_ERROR_MESSAGE = 'Script location is incorrect. Script must be https://, s3://, or file://'
+
+SECURITY_GROUP_ERROR_MESSAGE = 'Security group is not valid'
+
+POLICY_ARN_ERROR_MESSAGE = 'Policy is not valid'
+
 # API Validation Regex and ErrorMessages
 FILE_SYSTEM_NAME_REGEX = "^[a-z0-9_]{3,18}$"
 FILE_SYSTEM_NAME_ERROR_MESSAGE = "Only use lowercase alphabets, numbers and underscore (_) for file system name. " +\
@@ -427,12 +434,49 @@ MOUNT_DRIVE_REGEX = "^[ABD-Z]{1}$"
 MOUNT_DRIVE_ERROR_MESSAGE = "Only use an uppercase alphabet for mount drive"
 ONTAP_STORAGE_CAPACITY_RANGE = (1024, 196608)
 
-PROJECT_ID_REGEX = "^[a-z0-9-]{3,18}$"
-PROJECT_ID_ERROR_MESSAGE = "Only use lowercase alphabets, numbers, and hyphens (-) for project id. " +\
-    "Must be between 3 and 18 characters long."
+PROJECT_ID_REGEX = "^[a-z0-9-_.]{3,40}$"
+PROJECT_ID_ERROR_MESSAGE = "Only use lowercase alphabets, numbers, hyphens (-), underscores (_), or periods (.) for project id. " +\
+    "Must be between 3 and 40 characters long."
 
 SOFTWARE_STACK_NAME_REGEX = SESSION_NAME_REGEX = "^.{3,50}$"
 SOFTWARE_STACK_NAME_ERROR_MESSAGE = SESSION_NAME_ERROR_MESSAGE = "Use any characters " +\
     "and form a name of length between 3 and 50 characters, inclusive for software stack name."
 
 INVALID_RANGE_ERROR_MESSAGE = "Input out of permitted range"
+
+VALID_ROLE_ASSIGNMENT_RESOURCE_TYPES = ["project"]
+VALID_ROLE_ASSIGNMENT_ACTOR_TYPES = ["user","group"]
+PROJECT_MEMBER_ROLE_ID = "project_member"
+PROJECT_OWNER_ROLE_ID = "project_owner"
+VALID_ROLE_ASSIGNMENT_ROLE_IDS = [PROJECT_MEMBER_ROLE_ID, PROJECT_OWNER_ROLE_ID]
+PROJECT_MEMBER_ROLE_NAME = "Project Member"
+PROJECT_OWNER_ROLE_NAME = "Project Owner"
+VALID_ROLE_ASSIGNMENT_ROLE_NAMES = [PROJECT_MEMBER_ROLE_NAME, PROJECT_OWNER_ROLE_NAME]
+INVALID_ROLE_ASSIGNMENT_RESOURCE_TYPE = "Resource type value is not recognized"
+INVALID_ROLE_ASSIGNMENT_ACTOR_TYPE = "Actor type value is not recognized"
+INVALID_ROLE_ASSIGNMENT_ROLE_ID = "Role ID value is not recognized"
+INVALID_ROLE_ASSIGNMENT_ROLE_NAME = "Role name value is not recognized"
+
+ROLE_ASSIGNMENT_RESOURCE_ID_REGEX = "^[a-z0-9-_]{3,36}$"
+ROLE_ASSIGNMENT_RESOURCE_ID_ERROR_MESSAGE = "Resource ID contains invalid characters"
+
+ROLE_ASSIGNMENT_RESOURCE_KEY_REGEX = f"^[a-z0-9-_]{{3,36}}:({'|'.join(VALID_ROLE_ASSIGNMENT_RESOURCE_TYPES)})$"
+ROLE_ASSIGNMENT_RESOURCE_KEY_ERROR_MESSAGE = "Resource key format was wrong, or contained invalid characters"
+
+# This regex is defined based on the POSIX username schema (https://systemd.io/USER_NAMES/) and
+# SAM-Account-Name schema (https://learn.microsoft.com/en-us/windows/win32/adschema/a-samaccountname).
+AD_SAM_ACCOUNT_NAME_MAX_LENGTH = 20
+AD_SAM_ACCOUNT_NAME_REGEX = rf'[a-zA-Z0-9_.][a-zA-Z0-9_.-]{{1,{AD_SAM_ACCOUNT_NAME_MAX_LENGTH}}}'
+
+USERNAME_REGEX = rf'^{AD_SAM_ACCOUNT_NAME_REGEX}$'
+USERNAME_ERROR_MESSAGE = (f"Username (SAM-Account-Name of the AD user) doesn't match the regex pattern {USERNAME_REGEX}. "
+                          f"Username may only contain lower and upper case ASCII letters, "
+                          f"digits, period, underscore, and hyphen, with the restriction that "
+                          f"hyphen is not allowed as first character of the username. "
+                          f"The maximum length of username is 20.")
+
+ROLE_ASSIGNMENT_ACTOR_ID_REGEX = rf'^{AD_SAM_ACCOUNT_NAME_REGEX}$'
+ROLE_ASSIGNMENT_ACTOR_ID_ERROR_MESSAGE = f"Actor ID doesn't match the regex pattern {ROLE_ASSIGNMENT_ACTOR_ID_REGEX}"
+
+ROLE_ASSIGNMENT_ACTOR_KEY_REGEX = rf"^{AD_SAM_ACCOUNT_NAME_REGEX}:({'|'.join(VALID_ROLE_ASSIGNMENT_ACTOR_TYPES)})$"
+ROLE_ASSIGNMENT_ACTOR_KEY_ERROR_MESSAGE = f"Actor key doesn't match the regex pattern {ROLE_ASSIGNMENT_ACTOR_KEY_REGEX}"

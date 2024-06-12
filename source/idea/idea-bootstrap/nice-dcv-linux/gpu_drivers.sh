@@ -64,6 +64,11 @@ function install_nvidia_grid_drivers () {
 
   /bin/sh NVIDIA-Linux-x86_64*.run --no-precompiled-interface --run-nvidia-xconfig --no-questions --accept-license --silent
   log_info "X server configuration for GPU start..."
+  # If you are using NVIDIA vGPU software version 14.x or greater on the G4dn, G5, or G5g instances, disable GSP with the following commands.
+  touch /etc/modprobe.d/nvidia.conf
+  echo "options nvidia NVreg_EnableGpuFirmware=0" | sudo tee --append /etc/modprobe.d/nvidia.conf
+
+  rm -rf /etc/X11/XF86Config*
   local NVIDIAXCONFIG=$(which nvidia-xconfig)
   $NVIDIAXCONFIG --preserve-busid --enable-all-gpus
   log_info "X server configuration for GPU end..."
@@ -88,7 +93,7 @@ function install_nvidia_public_drivers() {
   # P3        Tesla	        V-Series	      V100
   # P4d       Tesla	        A-Series	      A100 (320 GB HBM2 GPU memory)
   # P4de      Tesla	        A-Series	      A100 (640 GB HBM2e GPU memory)
-  
+
   local AWS=$(command -v aws)
   local INSTANCE_FAMILY=$(instance_family)
   local DRIVER_VERSION=$($AWS dynamodb get-item \
@@ -120,7 +125,7 @@ function install_nvidia_public_drivers() {
 }
 
 function install_amd_gpu_drivers() {
-  which -s /opt/amdgpu-pro/bin/clinfo
+  which -a /opt/amdgpu-pro/bin/clinfo
   if [[ "$?" == "0" ]]; then
     log_info "GPU driver already installed. Skip."
     return 0
@@ -129,28 +134,17 @@ function install_amd_gpu_drivers() {
   # Instance GPU
   # G4ad     Radeon Pro V520
   #
-  mkdir -p /root/bootstrap/gpu_drivers
-  pushd /root/bootstrap/gpu_drivers
-
-  local AWS=$(command -v aws)
-  local AMD_S3_BUCKET_URL=$($AWS dynamodb get-item \
-                      --region "$AWS_REGION" \
-                      --table-name "$RES_ENVIRONMENT_NAME.cluster-settings" \
-                      --key '{"key": {"S": "global-settings.gpu_settings.amd.s3_bucket_url"}}' \
-                      --output text \
-                      | awk '/VALUE/ {print $2}')
-  local DRIVER_BUCKET_REGION=$(curl -s --head $AMD_S3_BUCKET_URL | grep bucket-region | awk '{print $2}' | tr -d '\r\n')
-  local AMD_S3_BUCKET_PATH=$($AWS dynamodb get-item \
-                    --region "$AWS_REGION" \
-                    --table-name "$RES_ENVIRONMENT_NAME.cluster-settings" \
-                    --key '{"key": {"S": "global-settings.gpu_settings.amd.s3_bucket_path"}}' \
-                    --output text \
-                    | awk '/VALUE/ {print $2}')
-  $AWS --region ${DRIVER_BUCKET_REGION} s3 cp --quiet --recursive $AMD_S3_BUCKET_PATH .
-  tar -xf amdgpu-pro-*rhel*.tar.xz
-  cd amdgpu-pro*
-  rpm --import RPM-GPG-KEY-amdgpu
-  /bin/sh ./amdgpu-pro-install -y --opencl=pal,legacy
+  if [[ $BASE_OS =~ ^(amzn2|centos7|rhel7)$ ]]; then
+    /bin/bash "$SCRIPT_DIR/../nice-dcv-linux/red_hat/amd_gpu_driver.sh" -r $AWS_REGION -n $RES_ENVIRONMENT_NAME
+  elif [[ $BASE_OS =~ ^(rhel8|rhel9)$ ]]; then
+    log_warning "The latest AMD driver hasn't supported the current Linux version yet"
+    exit 0
+  elif [[ $BASE_OS =~ ^(ubuntu2204)$ ]]; then
+    /bin/bash "$SCRIPT_DIR/../nice-dcv-linux/debian/amd_gpu_driver.sh"
+  else
+    log_warning "Base OS not supported."
+    exit 1
+  fi
 
   set_reboot_required "Installed AMD GPU Driver"
 
@@ -210,7 +204,6 @@ Section \"Screen\"
     EndSubSection
 EndSection
 """> /etc/X11/xorg.conf
-  popd
 }
 
 function install_gpu_drivers () {

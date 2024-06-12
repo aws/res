@@ -28,6 +28,12 @@ if [ ! -f /root/bootstrap/semaphore/pre_install_finished.lock ]; then
   AWSCLI_X86_64_URL="https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip"
   AWSCLI_AARCH64_URL="https://awscli.amazonaws.com/awscli-exe-linux-aarch64.zip"
 
+  #If environment file is present, source it
+  #Environment file may have the proxy settings required for aws cli installation
+  if [[ -f /etc/environment ]]; then
+    source /etc/environment
+  fi
+
   echo "
   {% if proxy_config %}
   {% for key, value in proxy_config.items() %}
@@ -62,7 +68,11 @@ if [ ! -f /root/bootstrap/semaphore/pre_install_finished.lock ]; then
       fi
       which unzip > /dev/null 2>&1
       if [[ "$?" != "0" ]]; then
-        yum install -y unzip
+        if [[ $BASE_OS =~ ^(ubuntu2204)$ ]]; then
+          apt install -y unzip
+        else
+          yum install -y unzip
+        fi
       fi
       unzip -q awscliv2.zip
       ./aws/install --bin-dir /bin --update

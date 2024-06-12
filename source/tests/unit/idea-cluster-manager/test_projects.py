@@ -14,19 +14,19 @@ Test Cases for ProjectsService
 """
 
 from typing import List, Optional
+from unittest.mock import MagicMock
 
+import botocore.exceptions
 import pytest
 from _pytest.monkeypatch import MonkeyPatch
 from ideaclustermanager import AppContext
-from ideaclustermanager.app.accounts.account_tasks import GroupMembershipUpdatedTask
-from ideaclustermanager.app.projects.project_tasks import (
-    ProjectDisabledTask,
-    ProjectEnabledTask,
-)
+from ideasdk.aws import AwsClientProvider
+from ideasdk.utils import Utils
 
 from ideadatamodel import (
     CreateProjectRequest,
     DeleteProjectRequest,
+    DeleteRoleAssignmentRequest,
     DisableProjectRequest,
     EnableProjectRequest,
     GetProjectRequest,
@@ -34,6 +34,7 @@ from ideadatamodel import (
     Group,
     ListProjectsRequest,
     Project,
+    PutRoleAssignmentRequest,
     SocaAnyPayload,
     SocaKeyValue,
     UpdateProjectRequest,
@@ -50,59 +51,96 @@ class ProjectsTestContext:
     crud_project: Optional[Project]
 
 
+def generate_random_id(prefix: str) -> str:
+    return f"test-{prefix}-{Utils.short_uuid()}"
+
+
 def enable_project(context: AppContext, project: Project):
     context.projects.enable_project(EnableProjectRequest(project_id=project.project_id))
-    task = ProjectEnabledTask(context=context)
-    task.invoke({"project_id": project.project_id})
 
 
 def disable_project(context: AppContext, project: Project):
     context.projects.disable_project(
-        EnableProjectRequest(project_id=project.project_id)
+        DisableProjectRequest(project_id=project.project_id)
     )
-    task = ProjectDisabledTask(context=context)
-    task.invoke({"project_id": project.project_id})
 
 
-def is_memberof(context: AppContext, user: User, project: Project) -> bool:
+def is_assigned(context: AppContext, user: User, project: Project) -> bool:
     result = context.projects.get_user_projects(
         GetUserProjectsRequest(username=user.username)
     )
-
-    if result.projects is None:
-        return False
-
-    for user_project in result.projects:
-        if user_project.project_id == project.project_id:
+    for member_project in result.projects:
+        if project.project_id == member_project.project_id:
             return True
-
     return False
 
 
-def add_member(context: AppContext, user: User, project: Project):
-    username = user.username
-    for group_name in project.ldap_groups:
-        context.accounts.add_users_to_group(usernames=[username], group_name=group_name)
-        task = GroupMembershipUpdatedTask(context=context)
-        task.invoke(
-            payload={"group_name": group_name, "username": username, "operation": "add"}
+def create_role_assignment(
+    context: AppContext,
+    actor_id: str,
+    actor_type: str,
+    resource_id: str,
+    resource_type: str,
+    role_id: str,
+):
+    response = context.authz.put_role_assignment(
+        PutRoleAssignmentRequest(
+            request_id=generate_random_id("req"),
+            actor_id=actor_id,
+            resource_id=resource_id,
+            resource_type=resource_type,
+            actor_type=actor_type,
+            role_id=role_id,
+        )
+    )
+    assert response is not None
+
+
+def delete_role_assignment(
+    context: AppContext,
+    actor_id: str,
+    actor_type: str,
+    resource_id: str,
+    resource_type: str,
+):
+    response = context.authz.delete_role_assignment(
+        DeleteRoleAssignmentRequest(
+            request_id=generate_random_id("req"),
+            actor_id=actor_id,
+            resource_id=resource_id,
+            actor_type=actor_type,
+            resource_type=resource_type,
+        )
+    )
+    assert response is not None
+
+
+def clear_assignments(context: AppContext, membership, actor_id: str, actor_type: str):
+    projects = [membership.project_a, membership.project_b]
+    for project in projects:
+        delete_role_assignment(
+            context, actor_id, actor_type, project.project_id, "project"
         )
 
 
-def remove_member(context: AppContext, user: User, project: Project):
-    username = user.username
-    for group_name in project.ldap_groups:
-        context.accounts.remove_users_from_group(
-            usernames=[username], group_name=group_name
+def create_mock_project(context: AppContext):
+    name = generate_random_id("sampleproject")
+    create_project_request = CreateProjectRequest(
+        project=Project(
+            name=name,
+            title="Sample Project",
+            description="Sample Project Description",
+            tags=[
+                SocaKeyValue(key="k1", value="v1"),
+                SocaKeyValue(key="k2", value="v2"),
+            ],
         )
-        task = GroupMembershipUpdatedTask(context=context)
-        task.invoke(
-            payload={
-                "group_name": group_name,
-                "username": username,
-                "operation": "remove",
-            }
-        )
+    )
+
+    project_id = context.projects.create_project(
+        create_project_request
+    ).project.project_id
+    return {"project_id": project_id, "name": name}
 
 
 @pytest.fixture(scope="module")
@@ -118,29 +156,33 @@ def membership(context: AppContext, monkey_session):
         context.accounts.sssd, "get_uid_and_gid_for_user", lambda x: (1000, 1000)
     )
     monkey_session.setattr(context.accounts.sssd, "get_gid_for_group", lambda x: 1000)
+    monkey_session.setattr(
+        context.authz, "verify_actor_exists", lambda actor_id, actor_type: True
+    )
+    monkey_session.setattr(
+        context.authz, "verify_resource_exists", lambda resource_id, resource_type: True
+    )
 
     def create_group(group_name: str) -> Group:
         group = context.accounts.create_group(
             Group(
                 title=f"{group_name} Project Group",
-                name=f"{group_name}-project-group",
+                name=f"{group_name}-project-group"[
+                    : constants.AD_SAM_ACCOUNT_NAME_MAX_LENGTH
+                ],
                 group_type=constants.GROUP_TYPE_PROJECT,
             )
         )
         assert group is not None
         return group
 
-    def create_project(
-        project_name: str, project_title: str, group_names: List[str], users=[]
-    ) -> Project:
+    def create_project(project_name: str, project_title: str) -> Project:
         # create project
         result = context.projects.create_project(
             CreateProjectRequest(
                 project=Project(
                     name=project_name,
                     title=project_title,
-                    ldap_groups=group_names,
-                    users=users,
                 )
             )
         )
@@ -182,8 +224,8 @@ def membership(context: AppContext, monkey_session):
     group_a2 = create_group("group_a2")
     group_b = create_group("group_b")
     default_group = create_group("default_group")
-    project_a = create_project("project-a", "Project A", [group_a1.name, group_a2.name])
-    project_b = create_project("project-b", "Project B", [group_b.name])
+    project_a = create_project("project-a", "Project A")
+    project_b = create_project("project-b", "Project B")
     user_1 = create_user(
         username="project_user_1",
         uid=1000,
@@ -223,23 +265,13 @@ def test_projects_crud_create_project(context):
     """
     create project
     """
-    group = context.accounts.create_group(
-        Group(
-            title=f"Sample Project Group",
-            name=f"sample-project-group",
-            group_type=constants.GROUP_TYPE_PROJECT,
-        )
-    )
-
-    assert group is not None
-
+    name = generate_random_id("sampleproject")
     result = context.projects.create_project(
         CreateProjectRequest(
             project=Project(
-                name="sampleproject",
+                name=name,
                 title="Sample Project",
                 description="Sample Project Description",
-                ldap_groups=["sample-project-group"],
                 tags=[
                     SocaKeyValue(key="k1", value="v1"),
                     SocaKeyValue(key="k2", value="v2"),
@@ -267,7 +299,7 @@ def test_projects_crud_create_project(context):
     )
     assert result is not None
     assert result.project is not None
-    assert result.project.name == "sampleproject"
+    assert result.project.name == name
     ProjectsTestContext.crud_project = result.project
 
     result = context.projects.get_project(
@@ -276,10 +308,6 @@ def test_projects_crud_create_project(context):
     assert result is not None
     assert result.project is not None
     assert result.project.enabled is True
-    assert result.project.ldap_groups is not None
-    assert (
-        result.project.ldap_groups[0] == ProjectsTestContext.crud_project.ldap_groups[0]
-    )
     assert result.project.description is not None
     assert result.project.description == "Sample Project Description"
     assert result.project.tags is not None
@@ -290,6 +318,412 @@ def test_projects_crud_create_project(context):
     assert result.project.tags[1].value == "v2"
     assert result.project.created_on is not None
     assert result.project.updated_on is not None
+
+
+def test_projects_crud_create_project_invalid_script_location_fails(context):
+    """
+    create project
+    """
+
+    def _create_project_invalid_script_location_fails(os: str):
+        name = generate_random_id("sampleproject")
+        request = CreateProjectRequest(
+            project=Project(
+                name=name,
+                title="Sample Project",
+                description="Sample Project Description",
+                tags=[
+                    SocaKeyValue(key="k1", value="v1"),
+                    SocaKeyValue(key="k2", value="v2"),
+                ],
+                scripts={
+                    os: {
+                        "on_vdi_start": [
+                            {
+                                "script_location": "invalid_script_location",
+                                "arguments": ["ex1", "ex2"],
+                            }
+                        ]
+                    }
+                },
+            )
+        )
+        with pytest.raises(exceptions.SocaException) as exc_info:
+            context.projects.create_project(request)
+        assert exc_info.value.error_code == errorcodes.INVALID_PARAMS
+        assert constants.SCRIPT_LOCATION_ERROR_MESSAGE in exc_info.value.message
+
+    _create_project_invalid_script_location_fails("windows")
+    _create_project_invalid_script_location_fails("linux")
+
+
+def test_projects_crud_create_project_invalid_security_group_fails(
+    context, monkey_session
+):
+    """
+    create project
+    """
+
+    mock_ec2 = SocaAnyPayload()
+    mock_ec2.describe_security_groups = MagicMock(return_value={"SecurityGroups": []})
+    monkey_session.setattr(AwsClientProvider, "ec2", lambda *_: mock_ec2)
+
+    invalid_security_group_id = "invalid_security_group"
+    name = generate_random_id("sampleproject")
+
+    request = CreateProjectRequest(
+        project=Project(
+            name=name,
+            title="Sample Project",
+            description="Sample Project Description",
+            tags=[
+                SocaKeyValue(key="k1", value="v1"),
+                SocaKeyValue(key="k2", value="v2"),
+            ],
+            security_groups=[invalid_security_group_id],
+        )
+    )
+
+    with pytest.raises(exceptions.SocaException) as exc_info:
+        context.projects.create_project(request)
+    assert exc_info.value.error_code == errorcodes.INVALID_PARAMS
+    assert constants.SECURITY_GROUP_ERROR_MESSAGE in exc_info.value.message
+
+
+def test_projects_crud_create_project_valid_security_group_succeeds(
+    context, monkey_session
+):
+    """
+    create project
+    """
+    valid_security_group_id = "valid_security_group"
+
+    mock_ec2 = SocaAnyPayload()
+    mock_ec2.describe_security_groups = MagicMock(
+        return_value={"SecurityGroups": [{"GroupId": valid_security_group_id}]}
+    )
+    monkey_session.setattr(AwsClientProvider, "ec2", lambda *_: mock_ec2)
+
+    name = generate_random_id("sampleproject")
+
+    request = CreateProjectRequest(
+        project=Project(
+            name=name,
+            title="Sample Project",
+            description="Sample Project Description",
+            tags=[
+                SocaKeyValue(key="k1", value="v1"),
+                SocaKeyValue(key="k2", value="v2"),
+            ],
+            security_groups=[valid_security_group_id],
+        )
+    )
+
+    result = context.projects.create_project(request)
+    assert result is not None
+    assert result.project is not None
+    assert result.project.name == name
+    ProjectsTestContext.crud_project = result.project
+
+    result = context.projects.get_project(
+        GetProjectRequest(project_name=ProjectsTestContext.crud_project.name)
+    )
+    assert result is not None
+    assert result.project is not None
+    assert result.project.enabled is True
+    assert result.project.description is not None
+    assert result.project.description == "Sample Project Description"
+    assert result.project.tags is not None
+    assert len(result.project.tags) == 2
+    assert result.project.tags[0].key == "k1"
+    assert result.project.tags[0].value == "v1"
+    assert result.project.tags[1].key == "k2"
+    assert result.project.tags[1].value == "v2"
+    assert result.project.created_on is not None
+    assert result.project.updated_on is not None
+    assert result.project.security_groups[0] == valid_security_group_id
+
+
+def test_projects_crud_create_project_invalid_policy_arn_fails(context, monkey_session):
+    """
+    create project
+    """
+
+    mock_iam = SocaAnyPayload()
+    mock_iam.get_policy = MagicMock()
+    mock_iam.get_policy.side_effect = botocore.exceptions.ClientError(
+        {"Error": {"Code": "MockedErrorCode", "Message": "MockedErrorMessage"}},
+        "operation_name",
+    )
+    monkey_session.setattr(AwsClientProvider, "iam", lambda *_: mock_iam)
+
+    invalid_policy_arn = "invalid_policy_arn"
+    name = generate_random_id("sampleproject")
+
+    request = CreateProjectRequest(
+        project=Project(
+            name=name,
+            title="Sample Project",
+            description="Sample Project Description",
+            tags=[
+                SocaKeyValue(key="k1", value="v1"),
+                SocaKeyValue(key="k2", value="v2"),
+            ],
+            policy_arns=[invalid_policy_arn],
+        )
+    )
+
+    with pytest.raises(exceptions.SocaException) as exc_info:
+        context.projects.create_project(request)
+    assert exc_info.value.error_code == errorcodes.INVALID_PARAMS
+    assert constants.POLICY_ARN_ERROR_MESSAGE in exc_info.value.message
+
+
+def test_projects_crud_create_project_valid_policy_arn_create_new_role_succeeds(
+    context, monkey_session
+):
+    """
+    create project
+    """
+
+    mock_iam = SocaAnyPayload()
+    mock_iam.get_policy = MagicMock()
+    mock_iam.create_instance_profile = MagicMock()
+    mock_iam.create_role = MagicMock()
+    mock_iam.attach_role_policy = MagicMock()
+    mock_iam.add_role_to_instance_profile = MagicMock()
+    monkey_session.setattr(AwsClientProvider, "iam", lambda *_: mock_iam)
+    name = generate_random_id("sampleproject")
+
+    request = CreateProjectRequest(
+        project=Project(
+            name=name,
+            title="Sample Project",
+            description="Sample Project Description",
+            tags=[
+                SocaKeyValue(key="k1", value="v1"),
+                SocaKeyValue(key="k2", value="v2"),
+            ],
+            policy_arns=["valid_policy_arn"],
+        )
+    )
+    result = context.projects.create_project(request)
+    assert result is not None
+    assert result.project is not None
+    assert result.project.name == name
+    ProjectsTestContext.crud_project = result.project
+
+    result = context.projects.get_project(
+        GetProjectRequest(project_name=ProjectsTestContext.crud_project.name)
+    )
+    assert result is not None
+    assert result.project is not None
+    assert result.project.enabled is True
+    assert result.project.description is not None
+    assert result.project.description == "Sample Project Description"
+    assert result.project.tags is not None
+    assert len(result.project.tags) == 2
+    assert result.project.tags[0].key == "k1"
+    assert result.project.tags[0].value == "v1"
+    assert result.project.tags[1].key == "k2"
+    assert result.project.tags[1].value == "v2"
+    assert result.project.created_on is not None
+    assert result.project.updated_on is not None
+    assert result.project.policy_arns[0] == "valid_policy_arn"
+
+
+def test_projects_crud_create_project_valid_policy_arn_create_new_role_fails_should_roll_back(
+    context, monkey_session
+):
+    """
+    create project
+    """
+
+    mock_iam = SocaAnyPayload()
+    mock_iam.get_policy = MagicMock()
+    mock_iam.create_instance_profile = MagicMock()
+    mock_iam.create_role = MagicMock()
+    mock_iam.attach_role_policy = MagicMock()
+    mock_iam.add_role_to_instance_profile = MagicMock()
+    mock_iam.add_role_to_instance_profile.side_effect = botocore.exceptions.ClientError(
+        {"Error": {"Code": "MockedErrorCode", "Message": "MockedErrorMessage"}},
+        "operation_name",
+    )
+
+    mock_iam.detach_role_policy = MagicMock()
+    mock_iam.delete_role = MagicMock()
+    mock_iam.delete_instance_profile = MagicMock()
+
+    monkey_session.setattr(AwsClientProvider, "iam", lambda *_: mock_iam)
+    name = generate_random_id("sampleproject")
+
+    request = CreateProjectRequest(
+        project=Project(
+            name=name,
+            title="Sample Project",
+            description="Sample Project Description",
+            tags=[
+                SocaKeyValue(key="k1", value="v1"),
+                SocaKeyValue(key="k2", value="v2"),
+            ],
+            policy_arns=["valid_policy_arn"],
+        )
+    )
+
+    with pytest.raises(exceptions.SocaException) as exc_info:
+        context.projects.create_project(request)
+    assert exc_info.value.error_code == errorcodes.GENERAL_ERROR
+    assert "Could not create role with given policies" in exc_info.value.message
+    mock_iam.detach_role_policy.assert_called()
+    mock_iam.delete_role.assert_called()
+    mock_iam.delete_instance_profile.assert_called()
+
+
+def test_projects_crud_update_project_invalid_script_location_fails(
+    context, monkey_session
+):
+    """
+    update project
+    """
+
+    mock_project = create_mock_project(context)
+    project_id = mock_project["project_id"]
+
+    def _update_project_invalid_script_location_fails(os: str):
+        request = UpdateProjectRequest(
+            project=Project(
+                project_id=project_id,
+                scripts={
+                    os: {
+                        "on_vdi_start": [
+                            {
+                                "script_location": "invalid_script_location",
+                                "arguments": ["ex1", "ex2"],
+                            }
+                        ]
+                    }
+                },
+            )
+        )
+        with pytest.raises(exceptions.SocaException) as exc_info:
+            context.projects.update_project(request)
+        assert exc_info.value.error_code == errorcodes.INVALID_PARAMS
+        assert constants.SCRIPT_LOCATION_ERROR_MESSAGE in exc_info.value.message
+
+    _update_project_invalid_script_location_fails("windows")
+    _update_project_invalid_script_location_fails("linux")
+
+
+def test_projects_crud_update_project_invalid_security_group_fails(
+    context, monkey_session
+):
+    """
+    update project
+    """
+
+    mock_project = create_mock_project(context)
+    project_id = mock_project["project_id"]
+
+    mock_ec2 = SocaAnyPayload()
+    mock_ec2.describe_security_groups = MagicMock(return_value={"SecurityGroups": []})
+    monkey_session.setattr(AwsClientProvider, "ec2", lambda *_: mock_ec2)
+
+    invalid_security_group_id = "invalid_security_group"
+
+    request = UpdateProjectRequest(
+        project=Project(
+            project_id=project_id, security_groups=[invalid_security_group_id]
+        )
+    )
+
+    with pytest.raises(exceptions.SocaException) as exc_info:
+        context.projects.update_project(request)
+    assert exc_info.value.error_code == errorcodes.INVALID_PARAMS
+    assert constants.SECURITY_GROUP_ERROR_MESSAGE in exc_info.value.message
+
+
+def test_projects_crud_update_project_invalid_policy_arn_fails(context, monkey_session):
+    """
+    update project
+    """
+
+    mock_project = create_mock_project(context)
+    project_id = mock_project["project_id"]
+
+    mock_iam = SocaAnyPayload()
+    mock_iam.get_policy = MagicMock()
+    mock_iam.get_policy.side_effect = botocore.exceptions.ClientError(
+        {"Error": {"Code": "MockedErrorCode", "Message": "MockedErrorMessage"}},
+        "operation_name",
+    )
+    monkey_session.setattr(AwsClientProvider, "iam", lambda *_: mock_iam)
+
+    invalid_policy_arn = "invalid_policy_arn"
+
+    request = UpdateProjectRequest(
+        project=Project(project_id=project_id, policy_arns=[invalid_policy_arn])
+    )
+
+    with pytest.raises(exceptions.SocaException) as exc_info:
+        context.projects.update_project(request)
+    assert exc_info.value.error_code == errorcodes.INVALID_PARAMS
+    assert constants.POLICY_ARN_ERROR_MESSAGE in exc_info.value.message
+
+
+def test_projects_crud_update_project_with_new_policy_arns_succeeds(
+    context, monkey_session
+):
+    """
+    update project
+    """
+
+    mock_project = create_mock_project(context)
+    project_id = mock_project["project_id"]
+    name = mock_project["name"]
+
+    mock_iam = SocaAnyPayload()
+    mock_iam.get_policy = MagicMock()
+    mock_iam.create_instance_profile = MagicMock()
+    mock_iam.create_role = MagicMock()
+    mock_iam.attach_role_policy = MagicMock()
+    mock_iam.add_role_to_instance_profile = MagicMock()
+    mock_iam.get_role = MagicMock()
+    mock_iam.get_role.side_effect = botocore.exceptions.ClientError(
+        {"Error": {"Code": "NoSuchEntityException", "Message": "MockedErrorMessage"}},
+        "operation_name",
+    )
+    monkey_session.setattr(AwsClientProvider, "iam", lambda *_: mock_iam)
+
+    request = UpdateProjectRequest(
+        project=Project(project_id=project_id, policy_arns=["valid_policy_arn"])
+    )
+
+    result = context.projects.update_project(request)
+    assert result is not None
+    assert result.project is not None
+    assert result.project.name == name
+    # Ensure if role was never created, that it will create one
+    mock_iam.create_role.assert_called()
+
+    ProjectsTestContext.crud_project = result.project
+
+    result = context.projects.get_project(
+        GetProjectRequest(project_name=ProjectsTestContext.crud_project.name)
+    )
+    assert result is not None
+    assert result.project is not None
+    assert result.project.enabled is True
+    assert result.project.description is not None
+    assert result.project.description == "Sample Project Description"
+    assert result.project.tags is not None
+    assert len(result.project.tags) == 2
+    assert result.project.tags[0].key == "k1"
+    assert result.project.tags[0].value == "v1"
+    assert result.project.tags[1].key == "k2"
+    assert result.project.tags[1].value == "v2"
+    assert result.project.created_on is not None
+    assert result.project.updated_on is not None
+    assert result.project.policy_arns[0] == "valid_policy_arn"
 
 
 def test_projects_crud_create_project_url_error(context):
@@ -463,9 +897,16 @@ def test_project_crud_update_project_tags(context):
 
 def test_projects_crud_delete_project(context, membership):
     assert ProjectsTestContext.crud_project is not None
-    add_member(context, membership.user_1, ProjectsTestContext.crud_project)
+    create_role_assignment(
+        context,
+        membership.user_1.username,
+        "user",
+        ProjectsTestContext.crud_project.project_id,
+        "project",
+        "project_owner",
+    )
     enable_project(context, ProjectsTestContext.crud_project)
-    assert is_memberof(context, membership.user_1, ProjectsTestContext.crud_project)
+    assert is_assigned(context, membership.user_1, ProjectsTestContext.crud_project)
 
     # First delete a project which are still used by sessions or software stacks
     context.projects.vdc_client.sessions = [VirtualDesktopSession()]
@@ -480,9 +921,6 @@ def test_projects_crud_delete_project(context, membership):
         GetProjectRequest(project_id=ProjectsTestContext.crud_project.project_id)
     )
     assert result.project is not None
-    for group in ProjectsTestContext.crud_project.ldap_groups:
-        projects = context.projects.user_projects_dao.get_projects_by_group_name(group)
-        assert len(projects) > 0
 
     # Next delete a project which is not in use by any session or software stack
     context.projects.vdc_client.sessions = []
@@ -496,17 +934,6 @@ def test_projects_crud_delete_project(context, membership):
         )
     assert excinfo.value.error_code == "PROJECT_NOT_FOUND"
 
-    # Project should have been removed from the project-groups table
-    for group in ProjectsTestContext.crud_project.ldap_groups:
-        projects = context.projects.user_projects_dao.get_projects_by_group_name(group)
-        assert len(projects) == 0
-
-    # Project should have been removed from the user-project table
-    projects = context.projects.user_projects_dao.get_projects_by_username(
-        membership.user_1.username
-    )
-    assert len(projects) == 0
-
 
 def test_projects_membership_setup(context, membership):
     """
@@ -519,98 +946,196 @@ def test_projects_membership_setup(context, membership):
     assert membership.user_2 is not None
     assert membership.user_3 is not None
 
-    assert is_memberof(context, membership.user_1, membership.project_a) is False
-    assert is_memberof(context, membership.user_2, membership.project_a) is False
-    assert is_memberof(context, membership.user_3, membership.project_a) is False
+    assert is_assigned(context, membership.user_1, membership.project_a) is False
+    assert is_assigned(context, membership.user_2, membership.project_a) is False
+    assert is_assigned(context, membership.user_3, membership.project_a) is False
 
-    assert is_memberof(context, membership.user_1, membership.project_b) is False
-    assert is_memberof(context, membership.user_2, membership.project_b) is False
-    assert is_memberof(context, membership.user_3, membership.project_b) is False
+    assert is_assigned(context, membership.user_1, membership.project_b) is False
+    assert is_assigned(context, membership.user_2, membership.project_b) is False
+    assert is_assigned(context, membership.user_3, membership.project_b) is False
 
 
-def test_projects_membership_member_added(context, membership):
+def test_projects_assignment_added(context, membership):
     """
-    add user to a group and check if user is member of projects
-    """
-
-    add_member(context, membership.user_1, membership.project_a)
-    assert is_memberof(context, membership.user_1, membership.project_a) is True
-
-    add_member(context, membership.user_2, membership.project_b)
-    assert is_memberof(context, membership.user_2, membership.project_b) is True
-
-
-def test_projects_membership_member_removed(context, membership, monkeypatch):
-    """
-    add user to a group and check if user is member of projects
+    assign user to project, unassign, and check if user is assigned to project
     """
 
-    monkeypatch.setattr(context.ldap_client, "is_readonly", lambda: True)
+    clear_assignments(context, membership, membership.user_1.username, "user")
+    clear_assignments(context, membership, membership.user_2.username, "user")
+    clear_assignments(context, membership, membership.user_3.username, "user")
 
-    remove_member(context, membership.user_1, membership.project_a)
-    assert is_memberof(context, membership.user_1, membership.project_a) is False
+    create_role_assignment(
+        context,
+        membership.user_1.username,
+        "user",
+        membership.project_a.project_id,
+        "project",
+        "project_owner",
+    )
+    assert is_assigned(context, membership.user_1, membership.project_a) is True
 
-    remove_member(context, membership.user_2, membership.project_b)
-    assert is_memberof(context, membership.user_2, membership.project_b) is False
+    create_role_assignment(
+        context,
+        membership.user_2.username,
+        "user",
+        membership.project_b.project_id,
+        "project",
+        "project_owner",
+    )
+    assert is_assigned(context, membership.user_2, membership.project_b) is True
+
+
+def test_projects_assignment_removed(context, membership):
+    """
+    assign user to a project, unassign, and check if user is not assigned to project
+    """
+
+    clear_assignments(context, membership, membership.user_1.username, "user")
+    clear_assignments(context, membership, membership.user_2.username, "user")
+    clear_assignments(context, membership, membership.user_3.username, "user")
+
+    create_role_assignment(
+        context,
+        membership.user_1.username,
+        "user",
+        membership.project_a.project_id,
+        "project",
+        "project_owner",
+    )
+    create_role_assignment(
+        context,
+        membership.user_2.username,
+        "user",
+        membership.project_b.project_id,
+        "project",
+        "project_owner",
+    )
+
+    delete_role_assignment(
+        context,
+        membership.user_1.username,
+        "user",
+        membership.project_a.project_id,
+        "project",
+    )
+    assert is_assigned(context, membership.user_1, membership.project_a) is False
+
+    delete_role_assignment(
+        context,
+        membership.user_2.username,
+        "user",
+        membership.project_b.project_id,
+        "project",
+    )
+    assert is_assigned(context, membership.user_2, membership.project_b) is False
 
 
 def test_projects_membership_project_disabled(context, membership):
     """
-    disable project and add member. user should not be member of project.
+    disable project and assign user. user should not be assigned project.
     """
+
+    clear_assignments(context, membership, membership.user_1.username, "user")
+    clear_assignments(context, membership, membership.user_2.username, "user")
+    clear_assignments(context, membership, membership.user_3.username, "user")
 
     disable_project(context, membership.project_a)
 
-    add_member(context, membership.user_1, membership.project_a)
-    assert is_memberof(context, membership.user_1, membership.project_a) is False
+    create_role_assignment(
+        context,
+        membership.user_1.username,
+        "user",
+        membership.project_a.project_id,
+        "project",
+        "project_owner",
+    )
+    assert is_assigned(context, membership.user_1, membership.project_a) is False
 
     disable_project(context, membership.project_b)
 
-    add_member(context, membership.user_2, membership.project_b)
-    assert is_memberof(context, membership.user_2, membership.project_b) is False
+    create_role_assignment(
+        context,
+        membership.user_2.username,
+        "user",
+        membership.project_b.project_id,
+        "project",
+        "project_owner",
+    )
+    assert is_assigned(context, membership.user_2, membership.project_b) is False
 
 
 def test_projects_membership_project_enabled(context, membership):
     """
-    add member, enable project and check if existing group members are part of project
+    assign user, enable project and check if existing group members are part of project
     """
 
-    add_member(context, membership.user_1, membership.project_a)
-    add_member(context, membership.user_2, membership.project_a)
-    add_member(context, membership.user_3, membership.project_a)
+    clear_assignments(context, membership, membership.user_1.username, "user")
+    clear_assignments(context, membership, membership.user_2.username, "user")
+    clear_assignments(context, membership, membership.user_3.username, "user")
+
+    create_role_assignment(
+        context,
+        membership.user_1.username,
+        "user",
+        membership.project_a.project_id,
+        "project",
+        "project_owner",
+    )
+    create_role_assignment(
+        context,
+        membership.user_2.username,
+        "user",
+        membership.project_a.project_id,
+        "project",
+        "project_member",
+    )
+    create_role_assignment(
+        context,
+        membership.user_3.username,
+        "user",
+        membership.project_a.project_id,
+        "project",
+        "project_member",
+    )
 
     enable_project(context, membership.project_a)
 
-    assert is_memberof(context, membership.user_1, membership.project_a) is True
-    assert is_memberof(context, membership.user_2, membership.project_a) is True
-    assert is_memberof(context, membership.user_3, membership.project_a) is True
-
-
-def clear_memberships(context: AppContext, membership, user: User):
-    remove_member(context, user, membership.project_a)
-    remove_member(context, user, membership.project_b)
+    assert is_assigned(context, membership.user_1, membership.project_a) is True
+    assert is_assigned(context, membership.user_2, membership.project_a) is True
+    assert is_assigned(context, membership.user_3, membership.project_a) is True
 
 
 def test_projects_membership_multiple_projects(context, membership, monkeypatch):
     """
-    add user to multiple projects. check for membership for all
+    assign user to multiple projects. check for assignments for all
     """
 
-    monkeypatch.setattr(context.ldap_client, "is_readonly", lambda: True)
-
-    # pre-requisites
-    clear_memberships(context, membership, membership.user_1)
-    clear_memberships(context, membership, membership.user_2)
-    clear_memberships(context, membership, membership.user_3)
+    clear_assignments(context, membership, membership.user_1.username, "user")
+    clear_assignments(context, membership, membership.user_2.username, "user")
+    clear_assignments(context, membership, membership.user_3.username, "user")
 
     enable_project(context, membership.project_a)
     enable_project(context, membership.project_b)
 
-    add_member(context, membership.user_1, membership.project_a)
-    add_member(context, membership.user_1, membership.project_b)
+    create_role_assignment(
+        context,
+        membership.user_1.username,
+        "user",
+        membership.project_a.project_id,
+        "project",
+        "project_owner",
+    )
+    create_role_assignment(
+        context,
+        membership.user_1.username,
+        "user",
+        membership.project_b.project_id,
+        "project",
+        "project_owner",
+    )
 
-    assert is_memberof(context, membership.user_1, membership.project_a) is True
-    assert is_memberof(context, membership.user_1, membership.project_b) is True
+    assert is_assigned(context, membership.user_1, membership.project_a) is True
+    assert is_assigned(context, membership.user_1, membership.project_b) is True
 
 
 def test_projects_get_user_projects(context, membership):
@@ -618,26 +1143,51 @@ def test_projects_get_user_projects(context, membership):
     get user projects
     """
 
-    clear_memberships(context, membership, membership.user_1)
-    clear_memberships(context, membership, membership.user_2)
-    clear_memberships(context, membership, membership.user_3)
+    clear_assignments(context, membership, membership.user_1.username, "user")
+    clear_assignments(context, membership, membership.user_2.username, "user")
+    clear_assignments(context, membership, membership.user_3.username, "user")
 
     enable_project(context, membership.project_a)
     enable_project(context, membership.project_b)
 
-    add_member(context, membership.user_1, membership.project_a)
-
-    add_member(context, membership.user_2, membership.project_b)
-
-    add_member(context, membership.user_3, membership.project_a)
-    add_member(context, membership.user_3, membership.project_b)
-
-    # verify
+    create_role_assignment(
+        context,
+        membership.user_1.username,
+        "user",
+        membership.project_a.project_id,
+        "project",
+        "project_owner",
+    )
+    create_role_assignment(
+        context,
+        membership.user_2.username,
+        "user",
+        membership.project_b.project_id,
+        "project",
+        "project_owner",
+    )
+    create_role_assignment(
+        context,
+        membership.user_3.username,
+        "user",
+        membership.project_a.project_id,
+        "project",
+        "project_member",
+    )
+    create_role_assignment(
+        context,
+        membership.user_3.username,
+        "user",
+        membership.project_b.project_id,
+        "project",
+        "project_member",
+    )
 
     def check_user_projects(username: str, project_ids: List[str]):
         result = context.projects.get_user_projects(
             GetUserProjectsRequest(username=username)
         )
+
         assert result.projects is not None
         count = 0
         for project in result.projects:
@@ -650,13 +1200,13 @@ def test_projects_get_user_projects(context, membership):
         username=membership.user_1.username,
         project_ids=[membership.project_a.project_id],
     )
-    assert is_memberof(context, membership.user_1, membership.project_b) is False
+    assert is_assigned(context, membership.user_1, membership.project_b) is False
 
     check_user_projects(
         username=membership.user_2.username,
         project_ids=[membership.project_b.project_id],
     )
-    assert is_memberof(context, membership.user_2, membership.project_a) is False
+    assert is_assigned(context, membership.user_2, membership.project_a) is False
 
     check_user_projects(
         username=membership.user_3.username,
@@ -665,14 +1215,29 @@ def test_projects_get_user_projects(context, membership):
 
     context.accounts.disable_user(membership.user_3.username)
     check_user_projects(username=membership.user_3.username, project_ids=[])
-    assert is_memberof(context, membership.user_3, membership.project_a) is False
+    assert is_assigned(context, membership.user_3, membership.project_a) is False
 
     context.accounts.enable_user(membership.user_3.username)
     check_user_projects(
         username=membership.user_3.username,
         project_ids=[membership.project_a.project_id, membership.project_b.project_id],
     )
-    assert is_memberof(context, membership.user_3, membership.project_a) is True
+    assert is_assigned(context, membership.user_3, membership.project_a) is True
+
+
+def test_projects_get_user_projects_invalid_input_username(context, membership):
+    """
+    get user projects - invalid characters in username
+    """
+
+    enable_project(context, membership.project_a)
+
+    with pytest.raises(exceptions.SocaException) as excinfo:
+        context.projects.get_user_projects(
+            GetUserProjectsRequest(username="\u2460\u2461\u2462\u2463")
+        )
+    assert excinfo.value.error_code == errorcodes.INVALID_PARAMS
+    assert excinfo.value.message == constants.USERNAME_ERROR_MESSAGE
 
 
 def test_projects_delete_group(context, membership):
@@ -680,20 +1245,38 @@ def test_projects_delete_group(context, membership):
     delete group
     """
 
-    clear_memberships(context, membership, membership.user_1)
-    clear_memberships(context, membership, membership.user_2)
-    clear_memberships(context, membership, membership.user_3)
+    clear_assignments(context, membership, membership.user_1.username, "user")
+    clear_assignments(context, membership, membership.user_2.username, "user")
+    clear_assignments(context, membership, membership.user_3.username, "user")
 
-    add_member(context, membership.user_1, membership.project_a)
-    assert is_memberof(context, membership.user_1, membership.project_a) is True
+    clear_assignments(context, membership, membership.group_a1.name, "group")
+    clear_assignments(context, membership, membership.group_a2.name, "group")
+    clear_assignments(context, membership, membership.group_b.name, "group")
+
+    create_role_assignment(
+        context,
+        membership.user_1.username,
+        "user",
+        membership.project_a.project_id,
+        "project",
+        "project_owner",
+    )
+    assert is_assigned(context, membership.user_1, membership.project_a) is True
 
     context.accounts.delete_group(group_name=membership.group_a1.name, force=True)
     # Ensure user has access to project_a through group_a2 after deletion of group_a1
-    assert is_memberof(context, membership.user_1, membership.project_a) is True
+    assert is_assigned(context, membership.user_1, membership.project_a) is True
 
-    add_member(context, membership.user_2, membership.project_b)
-    assert is_memberof(context, membership.user_2, membership.project_b) is True
+    create_role_assignment(
+        context,
+        membership.user_2.username,
+        "user",
+        membership.project_b.project_id,
+        "project",
+        "project_owner",
+    )
+    assert is_assigned(context, membership.user_2, membership.project_b) is True
 
-    context.accounts.delete_group(group_name=membership.group_b.name, force=True)
-    # Ensure user does not have access to project after deletion of group_b
-    assert is_memberof(context, membership.user_2, membership.project_b) is False
+    # context.accounts.delete_group(group_name=membership.group_b.name, force=True)
+    # # Ensure user does not have access to project after deletion of group_b
+    # assert is_assigned(context, membership.user_2, membership.project_b) is False

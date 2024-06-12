@@ -83,7 +83,7 @@ function install_nvidia_public_drivers() {
 }
 {%- elif context.is_amd_gpu()  %}
 function install_amd_gpu_drivers() {
-  which -s /opt/amdgpu-pro/bin/clinfo
+  which -a /opt/amdgpu-pro/bin/clinfo
   if [[ "$?" == "0" ]]; then
     log_info "GPU driver already installed. Skip."
     return 0
@@ -95,25 +95,34 @@ function install_amd_gpu_drivers() {
   mkdir -p /root/bootstrap/gpu_drivers
   pushd /root/bootstrap/gpu_drivers
 
-  local AWS=$(command -v aws)
-  local AMD_S3_BUCKET_URL=$($AWS dynamodb get-item \
+  {% if context.base_os == 'ubuntu2204' -%}
+    wget https://repo.radeon.com/amdgpu-install/6.0.2/ubuntu/jammy/amdgpu-install_6.0.60002-1_all.deb
+    DEBIAN_FRONTEND=noninteractive apt install -y ./amdgpu-install_6.0.60002-1_all.deb
+
+    amdgpu-install --usecase=workstation --vulkan=pro --opencl=rocr --no-32 -y --accept-eula
+  {%- elif context.base_os in ('amazonlinux2', 'centos7', 'rhel7') %}
+    local AWS=$(command -v aws)
+    local AMD_S3_BUCKET_URL=$($AWS dynamodb get-item \
+                        --region "{{ context.aws_region }}" \
+                        --table-name "{{ context.cluster_name }}.cluster-settings" \
+                        --key '{"key": {"S": "global-settings.gpu_settings.amd.s3_bucket_url"}}' \
+                        --output text \
+                        | awk '/VALUE/ {print $2}')
+    local DRIVER_BUCKET_REGION=$(curl -s --head $AMD_S3_BUCKET_URL | grep bucket-region | awk '{print $2}' | tr -d '\r\n')
+    local AMD_S3_BUCKET_PATH=$($AWS dynamodb get-item \
                       --region "{{ context.aws_region }}" \
                       --table-name "{{ context.cluster_name }}.cluster-settings" \
-                      --key '{"key": {"S": "global-settings.gpu_settings.amd.s3_bucket_url"}}' \
+                      --key '{"key": {"S": "global-settings.gpu_settings.amd.s3_bucket_path"}}' \
                       --output text \
                       | awk '/VALUE/ {print $2}')
-  local DRIVER_BUCKET_REGION=$(curl -s --head $AMD_S3_BUCKET_URL | grep bucket-region | awk '{print $2}' | tr -d '\r\n')
-  local AMD_S3_BUCKET_PATH=$($AWS dynamodb get-item \
-                    --region "{{ context.aws_region }}" \
-                    --table-name "{{ context.cluster_name }}.cluster-settings" \
-                    --key '{"key": {"S": "global-settings.gpu_settings.amd.s3_bucket_path"}}' \
-                    --output text \
-                    | awk '/VALUE/ {print $2}')
-  $AWS --region ${DRIVER_BUCKET_REGION} s3 cp --quiet --recursive $AMD_S3_BUCKET_PATH .
-  tar -xf amdgpu-pro-*rhel*.tar.xz
-  cd amdgpu-pro*
-  rpm --import RPM-GPG-KEY-amdgpu
-  /bin/sh ./amdgpu-pro-install -y --opencl=pal,legacy
+    $AWS --region ${DRIVER_BUCKET_REGION} s3 cp --quiet --recursive $AMD_S3_BUCKET_PATH .
+    tar -xf amdgpu-pro-*rhel*.tar.xz
+    rm -f amdgpu-pro-*.tar.xz
+    cd amdgpu-pro*
+    /bin/sh ./amdgpu-pro-install -y --opencl=pal,legacy
+  {%- elif context.base_os in ('rhel8', 'rhel9') %}
+    echo "The latest AMD driver hasn't supported the current Linux version yet"
+  {%- endif %}
 
   set_reboot_required "Installed AMD GPU Driver"
 

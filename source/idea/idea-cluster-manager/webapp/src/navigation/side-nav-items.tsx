@@ -60,7 +60,6 @@ export const IdeaSideNavItems = (context: AppContext): SideNavigationProps.Item[
         });
     }
 
-
     // start admin section
 
     adminNavItems.push({

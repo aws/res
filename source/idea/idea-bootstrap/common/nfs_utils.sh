@@ -27,23 +27,23 @@ fi
 
 source "$SCRIPT_DIR/../common/bootstrap_common.sh"
 
-if [[ $BASE_OS =~ ^(centos7|rhel7|rhel8|rhel9)$ ]]; then 
-  if [[ -z "$(rpm -qa nfs-utils)" ]]; then
-    log_info "# installing nfs-utils"
-    yum install -y nfs-utils
-  fi
+SUB_DIR=""
+if [[ $BASE_OS =~ ^(amzn2|centos7|rhel7|rhel8|rhel9)$ ]]; then
+  SUB_DIR="red_hat"
+elif [[ $BASE_OS =~ ^(ubuntu2204)$ ]]; then
+  SUB_DIR="debian"
+else
+  log_warning "Base OS not supported."
+  exit 1
 fi
+source "$SCRIPT_DIR/../common/$SUB_DIR/nfs_utils.sh"
 
 function install_stunnel () {
-  if [[ $BASE_OS =~ ^(amzn2)$ ]]; then 
-    STUNNEL_CMD='stunnel5'
-  elif [[ $BASE_OS =~ ^(centos7|rhel7|rhel8|rhel9)$ ]]; then
-    STUNNEL_CMD='stunnel'
-  fi
+  STUNNEL_CMD=$(get_stunnel_package_name $BASE_OS)
   which ${STUNNEL_CMD} > /dev/null 2>&1
   if [[ "$?" != "0" ]]; then
     log_info "Installing stunnel"
-    yum install -y ${STUNNEL_CMD}
+    install_stunnel_impl
   else
     log_info "Found existing stunnel on system"
   fi
@@ -58,27 +58,17 @@ function install_stunnel () {
   fi
 }
 
-function install_efs_mount_helper () {
+function install_efs_mount_helper() {
     which amazon-efs-mount-watchdog > /dev/null 2>&1
     if [[ "$?" != "0" ]]; then
       log_info "Installing Amazon EFS Mount Helper"
-      if [[ $BASE_OS =~ ^(amzn2)$ ]]; then 
-        yum install -y amazon-efs-utils
-      elif [[ $BASE_OS =~ ^(centos7|rhel7|rhel8|rhel9)$ ]]; then
-        log_info "Installing Amazon EFS Mount Helper from Github"
-        git clone https://github.com/aws/efs-utils
-        cd efs-utils
-        make rpm
-        yum -y install build/amazon-efs-utils*rpm
-        cd ..
-      fi
+      install_efs_mount_helper_impl ${BASE_OS}
   else
     log_info "Found existing Amazon EFS Mount Helper on system"
   fi
 }
 
-if [[ $BASE_OS =~ ^(amzn2|centos7|rhel7|rhel8|rhel9)$ ]]; then 
-  install_stunnel
-  install_efs_mount_helper
-fi
+install_nfs_utils
+install_stunnel
+install_efs_mount_helper
 # End: NFS Utils

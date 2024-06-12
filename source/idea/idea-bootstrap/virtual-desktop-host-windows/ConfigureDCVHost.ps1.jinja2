@@ -19,6 +19,7 @@ function Bootstrap-DCV-WindowsHost {
   $BrokerAgentConnectionPort = "{{ context.config.get_int('virtual-desktop-controller.dcv_broker.agent_communication_port', required=True) }}"
   $IdleTimeout = "{{ context.config.get_string('virtual-desktop-controller.dcv_session.idle_timeout', required=True) }}"
   $IdleTimeoutWarning = "{{ context.config.get_string('virtual-desktop-controller.dcv_session.idle_timeout_warning', required=True) }}"
+  $DCVSelfSignedCertificateDir = "C:\Windows\system32\config\systemprofile\AppData\Local\NICE\dcv"
 
   # On Windows Machines a Console Session with session-id = console IS ALWAYS CREATED by default. That we need to close.
   $CurrentLocation = Get-Location
@@ -126,6 +127,12 @@ Unregister-ScheduledTask -TaskName PostBootstrapRebootExecuteOnce -Confirm:`$fal
   New-Item -Path $IdeaScriptsDirectory -Name "PostBootstrapRebootExecuteOnce.ps1" -ItemType File -Force -Value "$PostBootstrapRebootExecuteOnceContent"
   Register-ScheduledTask -TaskName PostBootstrapRebootExecuteOnce -AtStartup -User Administrator
 {%- endif %}
+
+  # Remove the existing self-signed certificate that's used to secure traffic between the NICE DCV client and NICE DCV server
+  # since the cert from base AMI might have been expired. The DCV server will regenerate the cert at launch.
+  if (Test-Path -LiteralPath $DCVSelfSignedCertificateDir) {
+    Remove-Item -LiteralPath $DCVSelfSignedCertificateDir -Recurse
+  }
 
   # Restart Services
   Start-Service dcvserver

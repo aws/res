@@ -4,6 +4,7 @@
 from aws_cdk.assertions import Match, Template
 
 from idea.infrastructure.install import handlers
+from idea.infrastructure.install.parameters.common import CommonKey
 from idea.infrastructure.install.stack import InstallStack
 from tests.unit.infrastructure.install import util
 
@@ -118,3 +119,27 @@ def test_custom_resource_creation(stack: InstallStack, template: Template) -> No
             "DependsOn": [util.get_logical_id(stack, ["Installer", "Installer"])],
         },
     )
+
+
+def test_task_definition_resource_family_name(
+    stack: InstallStack, template: Template
+) -> None:
+    task_definitions = ["CreateTaskDef", "UpdateTaskDef", "DeleteTaskDef"]
+
+    for task_definition in task_definitions:
+        util.assert_resource_name_has_correct_type_and_props(
+            stack,
+            template,
+            resources=["Installer", "Tasks", task_definition],
+            cfn_type="AWS::ECS::TaskDefinition",
+            props={
+                "Properties": {
+                    "Family": {
+                        "Fn::Join": [
+                            "",
+                            [{"Ref": CommonKey.CLUSTER_NAME}, task_definition],
+                        ]
+                    }
+                }
+            },
+        )

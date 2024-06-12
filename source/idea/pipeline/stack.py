@@ -41,6 +41,7 @@ UNITTESTS = [
     "tests.sdk",
     "tests.pipeline",
     "tests.infrastructure",
+    "tests.lambda-functions",
 ]
 COVERAGEREPORTS = ["coverage"]
 COMPONENT_INTEG_TESTS = ["integ-tests.cluster-manager"]
@@ -495,6 +496,15 @@ class PipelineStack(Stack):
                     {
                         "Effect": "Allow",
                         "Action": [
+                            "elasticloadbalancing:ModifyLoadBalancerAttributes",
+                        ],
+                        "Resource": f"arn:{self.partition}:elasticloadbalancing:{self.region}:{self.account}:loadbalancer/app/{self.params.cluster_name}-external-alb/*",
+                    }
+                ),
+                iam.PolicyStatement.from_json(
+                    {
+                        "Effect": "Allow",
+                        "Action": [
                             "autoscaling:DescribeAutoScalingGroups",
                         ],
                         "Resource": "*",
@@ -660,6 +670,9 @@ class PipelineStack(Stack):
                 CLUSTER_NAME=self.params.cluster_name,
                 AWS_REGION=self.region,
                 BATTERIES_INCLUDED="true" if self._bi else "false",
+                USE_BI_PARAMETERS_FROM_SSM=(
+                    "true" if self._use_bi_parameters_from_ssm else "false"
+                ),
                 DESTROY_BATTERIES_INCLUDED="true" if self._destroy_bi else "false",
                 VPC_ID=self.params.vpc_id,
                 INSTALL_STACK_NAME=INSTALL_STACK_NAME,

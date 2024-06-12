@@ -79,12 +79,16 @@ source "${SCRIPT_DIR}/../common/bootstrap_common.sh"
 
 # Begin: Install and Configure AWS Systems Manager Agent
 /bin/bash "${SCRIPT_DIR}/../common/aws_ssm.sh" -o $RES_BASE_OS -r $AWS_REGION -n $IDEA_CLUSTER_NAME -s "${SCRIPT_DIR}"
-configure_amazon_ssm_agent
+/bin/bash "${SCRIPT_DIR}/../common/configure_amazon_ssm_agent.sh" -o $RES_BASE_OS -s "${SCRIPT_DIR}"
 # End: Install and Configure AWS Systems Manager Agent
 
 # Begin: Install EPEL Repo
 /bin/bash "${SCRIPT_DIR}/../common/epel_repo.sh" -o $RES_BASE_OS -s "${SCRIPT_DIR}"
 # End: Install EPEL Repo
+
+# Begin: Install jq
+/bin/bash "${SCRIPT_DIR}/../common/jq.sh" -o $RES_BASE_OS -s "${SCRIPT_DIR}"
+# End: Install jq
 
 # Begin: Install System Packages
 /bin/bash "${SCRIPT_DIR}/../common/system_packages.sh" -o $RES_BASE_OS -r $AWS_REGION -n $IDEA_CLUSTER_NAME -s "${SCRIPT_DIR}"

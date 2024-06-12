@@ -21,6 +21,7 @@ class DirectoryServiceKey(Key):
     SUDOERS_GROUP_NAME = "SudoersGroupName"
     ROOT_USERNAME = "ServiceAccountUsername"
     ROOT_PASSWORD = "ServiceAccountPassword"
+    ROOT_PASSWORD_SECRET_ARN = "ServiceAccountPasswordSecretArn"
     DOMAIN_TLS_CERTIFICATE_SECRET_ARN = "DomainTLSCertificateSecretArn"
     ENABLE_LDAP_ID_MAPPING = "EnableLdapIDMapping"
     DISABLE_AD_JOIN = "DisableADJoin"
@@ -114,6 +115,13 @@ class DirectoryServiceParameters(Base):
             no_echo=True,
         )
     )
+    root_password_secret_arn: str = Base.parameter(
+        Attributes(
+            id=DirectoryServiceKey.ROOT_PASSWORD_SECRET_ARN,
+            type="AWS::SSM::Parameter::Value<String>",
+            description="Please provide Directory Service Root (Service Account) Password Secret ARN",
+        )
+    )
     domain_tls_certificate_secret_arn: str = Base.parameter(
         Attributes(
             id=DirectoryServiceKey.DOMAIN_TLS_CERTIFICATE_SECRET_ARN,
@@ -149,7 +157,6 @@ class DirectoryServiceParameters(Base):
 
     # These will be populated after the secrets are created from the above parameters
     root_username_secret_arn: Optional[str] = None
-    root_password_secret_arn: Optional[str] = None
     root_user_dn_secret_arn: Optional[str] = None
 
 
@@ -163,6 +170,7 @@ class DirectoryServiceParameterGroups:
             DirectoryServiceKey.LDAP_CONNECTION_URI,
             DirectoryServiceKey.ROOT_USERNAME,
             DirectoryServiceKey.ROOT_PASSWORD,
+            DirectoryServiceKey.ROOT_PASSWORD_SECRET_ARN,
             DirectoryServiceKey.USERS_OU,
             DirectoryServiceKey.GROUPS_OU,
             DirectoryServiceKey.SUDOERS_OU,

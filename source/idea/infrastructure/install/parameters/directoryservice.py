@@ -20,7 +20,7 @@ class DirectoryServiceKey(Key):
     SUDOERS_OU = "SudoersOU"
     SUDOERS_GROUP_NAME = "SudoersGroupName"
     ROOT_USERNAME = "ServiceAccountUsername"
-    ROOT_PASSWORD = "ServiceAccountPassword"
+    ROOT_PASSWORD_SECRET_ARN = "ServiceAccountPasswordSecretArn"
     DOMAIN_TLS_CERTIFICATE_SECRET_ARN = "DomainTLSCertificateSecretArn"
     ENABLE_LDAP_ID_MAPPING = "EnableLdapIDMapping"
     DISABLE_AD_JOIN = "DisableADJoin"
@@ -111,13 +111,12 @@ class DirectoryServiceParameters(Base):
             allowed_pattern=".+",
         )
     )
-    root_password: str = Base.parameter(
+    root_password_secret_arn: str = Base.parameter(
         Attributes(
-            id=DirectoryServiceKey.ROOT_PASSWORD,
+            id=DirectoryServiceKey.ROOT_PASSWORD_SECRET_ARN,
             type="String",
-            description="Directory Service Root (Service Account) password",
-            no_echo=True,
-            allowed_pattern=".+",
+            description="Directory Service Root (Service Account) Password Secret ARN",
+            allowed_pattern="^(?:arn:(?:aws|aws-us-gov|aws-cn):secretsmanager:[a-z0-9-]{1,20}:[0-9]{12}:secret:[A-Za-z0-9\-\_\+\=\,\.\@]{1,128})?$",
         )
     )
     domain_tls_certificate_secret_arn: str = Base.parameter(
@@ -155,7 +154,6 @@ class DirectoryServiceParameters(Base):
 
     # These will be populated after the secrets are created from the above parameters
     root_username_secret_arn: Optional[str] = None
-    root_password_secret_arn: Optional[str] = None
     root_user_dn_secret_arn: Optional[str] = None
 
 
@@ -168,7 +166,7 @@ class DirectoryServiceParameterGroups:
             DirectoryServiceKey.LDAP_BASE,
             DirectoryServiceKey.LDAP_CONNECTION_URI,
             DirectoryServiceKey.ROOT_USERNAME,
-            DirectoryServiceKey.ROOT_PASSWORD,
+            DirectoryServiceKey.ROOT_PASSWORD_SECRET_ARN,
             DirectoryServiceKey.USERS_OU,
             DirectoryServiceKey.GROUPS_OU,
             DirectoryServiceKey.SUDOERS_OU,

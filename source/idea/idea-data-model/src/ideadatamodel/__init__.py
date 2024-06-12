@@ -15,6 +15,7 @@ from .api import *
 from .app import *
 from .aws import *
 from .auth import *
+from .authz import *
 from .projects import *
 from .filesystem import *
 from .user_input import *

@@ -8,8 +8,8 @@ export AWS_ACCOUNT=$(echo $CODEBUILD_BUILD_ARN | cut -f5 -d ':')
 COMMIT_ID=$(echo $CODEBUILD_RESOLVED_SOURCE_VERSION | cut -b -8)
 RELEASE_VERSION=$(echo "$(<RES_VERSION.txt )" | xargs)
 
-# Run tests as defined by `env_list` in tox.ini
-tox -- --junitxml=pytest-report.xml
+# Run lint and type checks here to make the build fail early
+tox -e lint,type
 
 # Set the CDK context based on the environment variables
 python -c "import os; import json; print(json.dumps(dict(os.environ)))" | tee cdk.context.json

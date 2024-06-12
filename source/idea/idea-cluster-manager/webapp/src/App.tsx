@@ -63,6 +63,8 @@ export interface IdeaWebPortalAppState {
     toolsOpen: boolean;
     tools: React.ReactNode;
     flashbarItems: FlashbarProps.MessageDefinition[];
+    isProjectOwner?: boolean;
+    projectOwnerRoles?: string[];
 }
 
 export interface OnToolsChangeEvent {
@@ -93,6 +95,8 @@ class IdeaWebPortalApp extends Component<IdeaWebPortalAppProps, IdeaWebPortalApp
             toolsOpen: false,
             tools: null,
             flashbarItems: [],
+            isProjectOwner: false,
+            projectOwnerRoles: [],
         };
     }
 
@@ -104,6 +108,65 @@ class IdeaWebPortalApp extends Component<IdeaWebPortalAppProps, IdeaWebPortalApp
             .isLoggedIn()
             .then((loginStatus) => {
                 const init = () => {
+                    if (!context.auth().isAdmin()) {
+                      const isProjectOwner = async (): Promise<boolean> => {
+                          const username: string = context.auth().getUsername();
+                          const groups: string[] = await new Promise(resolve => {
+                              context.client().accounts().listGroups({
+                                  username,
+                              })
+                              .then((result) => {
+                                resolve(result.listing?.map(x => `${x.name!}:group`) || []);
+                              });
+                          });
+                          const userGroupRoleAssignments: Promise<boolean>[] = [];
+                          const ownerKeys: string[] = [];
+                          for (const actor_key of [...groups, `${username}:user`]) {
+                            // resolves to true if one of the returned roles is project_owner
+                            userGroupRoleAssignments.push(new Promise(resolve => {
+                              context.client().authz().listRoleAssignments({
+                                actor_key,
+                              })
+                              .then((result) => {
+                                let isOwner = false;
+                                for (const roleAssignment of result.items) {
+                                  if (roleAssignment.role_id === "project_owner") {
+                                    ownerKeys.push(roleAssignment.actor_id);
+                                    isOwner = true;
+                                  }
+                                }
+                                resolve(isOwner);
+                              });
+                            }));
+                          }
+                          this.setState({ projectOwnerRoles: ownerKeys });
+                          const result = await Promise.all(userGroupRoleAssignments);
+                          // If any promise resolved to true, the user is a project owner
+                          return result.includes(true);
+                      };
+                      isProjectOwner()
+                      .then((isProjectOwner) => {
+                          if (!isProjectOwner)
+                              return;
+                          const result: SideNavigationProps.Item[] = [...this.state.sideNavItems];
+                          result.push({
+                              type: "divider",
+                          });
+                          result.push({
+                              type: "section",
+                              text: "Environment Management",
+                              defaultExpanded: true,
+                              items: [
+                                  {
+                                      type: "link",
+                                      text: "Projects",
+                                      href: "#/cluster/projects",
+                                  },
+                              ]
+                          });
+                          this.setState( { sideNavItems: result, isProjectOwner: isProjectOwner });
+                      });
+                    }
                     this.setState({
                         isInitialized: true,
                         isLoggedIn: loginStatus,
@@ -661,7 +724,7 @@ class IdeaWebPortalApp extends Component<IdeaWebPortalAppProps, IdeaWebPortalApp
                     <Route
                         path="/cluster/projects"
                         element={
-                            <IdeaAuthenticatedRoute isLoggedIn={this.state.isLoggedIn}>
+                            <IdeaAuthenticatedRoute isLoggedIn={this.state.isLoggedIn} isProjectOwner={this.state.isProjectOwner || false}>
                                 <Projects
                                     ideaPageId="projects"
                                     toolsOpen={this.state.toolsOpen}
@@ -673,6 +736,7 @@ class IdeaWebPortalApp extends Component<IdeaWebPortalAppProps, IdeaWebPortalApp
                                     onSideNavChange={this.onSideNavChange}
                                     onFlashbarChange={this.onFlashbarChange}
                                     flashbarItems={this.state.flashbarItems}
+                                    projectOwnerRoles={this.state.projectOwnerRoles}
                                 />
                             </IdeaAuthenticatedRoute>
                         }
@@ -680,7 +744,7 @@ class IdeaWebPortalApp extends Component<IdeaWebPortalAppProps, IdeaWebPortalApp
                      <Route
                         path="/cluster/projects/configure"
                         element={
-                            <IdeaAuthenticatedRoute isLoggedIn={this.state.isLoggedIn}>
+                            <IdeaAuthenticatedRoute isLoggedIn={this.state.isLoggedIn} isProjectOwner={this.state.isProjectOwner}>
                                 <ConfigureProject
                                     ideaPageId="configure-project"
                                     toolsOpen={this.state.toolsOpen}

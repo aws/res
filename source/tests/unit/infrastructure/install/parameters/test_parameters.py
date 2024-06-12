@@ -82,8 +82,5 @@ def test_secrets_use_no_echo(
     stack: InstallStack,
     template: Template,
 ) -> None:
-    for parameter in (
-        DirectoryServiceKey.ROOT_USERNAME,
-        DirectoryServiceKey.ROOT_PASSWORD,
-    ):
+    for parameter in (DirectoryServiceKey.ROOT_USERNAME,):
         template.has_parameter(parameter, props={"NoEcho": True})

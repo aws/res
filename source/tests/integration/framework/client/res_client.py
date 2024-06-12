@@ -16,6 +16,10 @@ from selenium import webdriver
 from selenium.webdriver.chrome.webdriver import WebDriver
 
 from ideadatamodel import (  # type: ignore
+    BatchDeleteRoleAssignmentRequest,
+    BatchDeleteRoleAssignmentResponse,
+    BatchPutRoleAssignmentRequest,
+    BatchPutRoleAssignmentResponse,
     CreateProjectRequest,
     CreateProjectResult,
     CreateSessionRequest,
@@ -36,12 +40,15 @@ from ideadatamodel import (  # type: ignore
     GetUserResult,
     ListAllowedInstanceTypesRequest,
     ListAllowedInstanceTypesResponse,
+    ListRoleAssignmentsRequest,
+    ListRoleAssignmentsResponse,
     ListSessionsRequest,
     ListSessionsResponse,
     ListSoftwareStackRequest,
     ListSoftwareStackResponse,
     ModifyUserRequest,
     ModifyUserResult,
+    RoleAssignment,
     SocaEnvelope,
     SocaHeader,
     SocaPayload,
@@ -177,6 +184,42 @@ class ResClient:
             "vdc",
             request,
             CreateSessionResponse,
+        )
+
+    def batch_put_role_assignment(
+        self, request: BatchPutRoleAssignmentRequest
+    ) -> BatchPutRoleAssignmentResponse:
+        logger.info(f"entering role assignments {request.items}...")
+
+        return self._invoke(
+            "Authz.BatchPutRoleAssignment",
+            "cluster-manager",
+            request,
+            BatchPutRoleAssignmentResponse,
+        )
+
+    def batch_delete_role_assignment(
+        self, request: BatchDeleteRoleAssignmentRequest
+    ) -> BatchDeleteRoleAssignmentResponse:
+        logger.info(f"deleting role assignments {request.items}...")
+
+        return self._invoke(
+            "Authz.BatchDeleteRoleAssignment",
+            "cluster-manager",
+            request,
+            BatchDeleteRoleAssignmentResponse,
+        )
+
+    def list_role_assignment(
+        self, request: ListRoleAssignmentsRequest
+    ) -> ListRoleAssignmentsResponse:
+        logger.info(f"listing  role assignments {request.items}...")
+
+        return self._invoke(
+            "Authz.ListRoleAssignments",
+            "cluster-manager",
+            request,
+            ListRoleAssignmentsResponse,
         )
 
     def get_session_info(

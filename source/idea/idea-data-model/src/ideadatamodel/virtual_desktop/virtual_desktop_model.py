@@ -92,6 +92,7 @@ class VirtualDesktopBaseOS(str, Enum):
     RHEL7 = constants.OS_RHEL7
     RHEL8 = constants.OS_RHEL8
     RHEL9 = constants.OS_RHEL9
+    UBUNTU2204 = constants.OS_UBUNTU2204
     WINDOWS = constants.OS_WINDOWS
 
 

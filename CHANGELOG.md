@@ -1,6 +1,25 @@
 # Change Log
 This file is used to list changes made in each release of Research and Engineering Studio (RES).
 
+2024.06
+------
+
+**BUG FIXES**
+
+- Resolved an issue where permission boundaries were not correctly applied to virtual desktop infrastructure (VDI) policies
+- Resolved an issue where RES fails to sync AD users if there are no users in the AD
+- Fixed pagination when reading large numbers of RES users from Amazon DynamoDB
+- Resolved an issue where RES fails to sync an AD user whose SAMAccountName attribute includes capital letters or special characters
+- Resolved an issue where Linux desktop sessions can become stuck in the "RESUMING" state on reboot
+- Resolved an issue where RHEL 8 and RHEL 9 desktop sessions end up in an error state if the DisableADJoin input parameter is set to True
+- Resolved an issue where Lustre file systems fail to mount when using RHEL 9.4
+
+**ENHANCEMENTS**
+
+- Project owner and project member roles can now be assigned to users and groups a in project. Project owners have the ability to manage user and group access to a project
+- Added support for launching virtual desktop sessions with Ubuntu 22.04.3
+- The ServiceAccountPassword input parameter now only accepts a secret ARN
+
 2024.04.02
 ------
 

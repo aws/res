@@ -30,77 +30,12 @@ fi
 
 source "$SCRIPT_DIR/../common/bootstrap_common.sh"
 
-function install_system_packages () {
-  IFS=$'\n'
-  local AWS=$(command -v aws)
-  local SYSTEM_PKGS=($($AWS dynamodb get-item \
-                          --region "$AWS_REGION" \
-                          --table-name "$RES_ENVIRONMENT_NAME.cluster-settings" \
-                          --key '{"key": {"S": "global-settings.package_config.linux_packages.system"}}' \
-                          --output text \
-                          | awk '/L/ {print $2}'))
-  local APPLICATION_PKGS=($($AWS dynamodb get-item \
-                          --region "$AWS_REGION" \
-                          --table-name "$RES_ENVIRONMENT_NAME.cluster-settings" \
-                          --key '{"key": {"S": "global-settings.package_config.linux_packages.application"}}' \
-                          --output text \
-                          | awk '/L/ {print $2}'))
-  local SSSD_PKGS=($($AWS dynamodb get-item \
-                          --region "$AWS_REGION" \
-                          --table-name "$RES_ENVIRONMENT_NAME.cluster-settings" \
-                          --key '{"key": {"S": "global-settings.package_config.linux_packages.sssd"}}' \
-                          --output text \
-                          | awk '/L/ {print $2}'))
-  local OPENLDAP_CLIENT_PKGS=($($AWS dynamodb get-item \
-                          --region "$AWS_REGION" \
-                          --table-name "$RES_ENVIRONMENT_NAME.cluster-settings" \
-                          --key '{"key": {"S": "global-settings.package_config.linux_packages.openldap_client"}}' \
-                          --output text \
-                          | awk '/L/ {print $2}'))
-
-  local SYSTEM_PKGS_7=()
-  local SSSD_PKGS_7=()
-
-  if [[ "$BASE_OS" == "rhel7" ]]; then 
-    SYSTEM_PKGS_7=($($AWS dynamodb get-item \
-                            --region "$AWS_REGION" \
-                            --table-name "$RES_ENVIRONMENT_NAME.cluster-settings" \
-                            --key '{"key": {"S": "global-settings.package_config.linux_packages.system_rhel7"}}' \
-                            --output text \
-                            | awk '/L/ {print $2}'))
-    SSSD_PKGS_7=($($AWS dynamodb get-item \
-                            --region "$AWS_REGION" \
-                            --table-name "$RES_ENVIRONMENT_NAME.cluster-settings" \
-                            --key '{"key": {"S": "global-settings.package_config.linux_packages.sssd_rhel7"}}' \
-                            --output text \
-                            | awk '/L/ {print $2}'))
-  fi
-
-  case $BASE_OS in
-    amzn2|centos7)
-      yum install -y ${SYSTEM_PKGS[*]} ${APPLICATION_PKGS[*]} ${SSSD_PKGS[*]} ${OPENLDAP_CLIENT_PKGS[*]}
-      ;;
-    rhel7)
-      yum install -y ${SYSTEM_PKGS[*]} ${SYSTEM_PKGS_7[*]} ${APPLICATION_PKGS[*]} ${SSSD_PKGS[*]} ${SSSD_PKGS_7[*]} ${OPENLDAP_CLIENT_PKGS[*]} --enablerepo rhel-7-server-rhui-optional-rpms
-      yum install -y ${SYSTEM_PKGS[*]} ${APPLICATION_PKGS[*]} ${SSSD_PKGS[*]} ${OPENLDAP_CLIENT_PKGS[*]}
-      ;;
-    rhel8)
-      dnf install -y dnf-plugins-core
-      dnf config-manager --set-enabled codeready-builder-for-rhel-8-rhui-rpms
-      sss_cache -E
-      dnf install -y ${SYSTEM_PKGS[*]} ${APPLICATION_PKGS[*]} ${SSSD_PKGS[*]} ${OPENLDAP_CLIENT_PKGS[*]} --enablerepo codeready-builder-for-rhel-8-rhui-rpms
-      ;;
-    rhel9)
-      dnf install -y dnf-plugins-core
-      dnf config-manager --set-enabled codeready-builder-for-rhel-9-rhui-rpms
-      sss_cache -E
-      dnf install -y ${SYSTEM_PKGS[*]} ${APPLICATION_PKGS[*]} ${SSSD_PKGS[*]} ${OPENLDAP_CLIENT_PKGS[*]} --enablerepo codeready-builder-for-rhel-9-rhui-rpms
-      ;;
-    *)
-      log_warning "Base OS not supported."
-      ;;
-  esac
-  unset IFS
-}
-install_system_packages
+if [[ $BASE_OS =~ ^(amzn2|centos7|rhel7|rhel8|rhel9)$ ]]; then
+  /bin/bash "${SCRIPT_DIR}/../common/red_hat/system_packages.sh" -o $BASE_OS -r $AWS_REGION -n $RES_ENVIRONMENT_NAME -s "${SCRIPT_DIR}"
+elif [[ $BASE_OS =~ ^(ubuntu2204)$ ]]; then
+  /bin/bash "${SCRIPT_DIR}/../common/debian/system_packages.sh"
+else
+  log_warning "Base OS not supported."
+  exit 1
+fi
 # End: System Packages Install

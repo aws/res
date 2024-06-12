@@ -54,6 +54,11 @@ if [[ ! -f ${INSTALL_FINISHED_LOCK} ]]; then
     OS_RELEASE_ID=$(grep -E '^(ID)=' /etc/os-release | awk -F'"' '{print $2}')
     OS_RELEASE_VERSION_ID=$(grep -E '^(VERSION_ID)=' /etc/os-release | awk -F'"' '{print $2}')
     BASE_OS=$(echo $OS_RELEASE_ID${OS_RELEASE_VERSION_ID%%.*})
+    if [[ -z "${OS_RELEASE_ID}" ]]; then
+      # Base OS is Ubuntu
+      OS_RELEASE_ID=$(grep -E '^(ID)=' /etc/os-release | awk -F'=' '{print $2}')
+      BASE_OS=$(echo $OS_RELEASE_ID$OS_RELEASE_VERSION_ID | sed -e 's/\.//g')
+    fi
   elif [[ -f /usr/lib/os-release ]]; then
     OS_RELEASE_ID=$(grep -E '^(ID)=' /usr/lib/os-release | awk -F'"' '{print $2}')
     OS_RELEASE_VERSION_ID=$(grep -E '^(VERSION_ID)=' /usr/lib/os-release | awk -F'"' '{print $2}')
@@ -68,7 +73,7 @@ if [[ ! -f ${INSTALL_FINISHED_LOCK} ]]; then
   echo "Installing...."
   exec > /root/bootstrap/logs/install.log.${timestamp} 2>&1
 
-  if [[ ! $BASE_OS =~ ^(amzn2|centos7|rhel7|rhel8|rhel9)$ ]]; then
+  if [[ ! $BASE_OS =~ ^(amzn2|centos7|rhel7|rhel8|rhel9|ubuntu2204)$ ]]; then
     echo "ERROR: Base OS not supported."
     exit 1
   fi
@@ -97,17 +102,30 @@ if [[ ! -f ${INSTALL_FINISHED_LOCK} ]]; then
   echo -n "no" > ${BOOTSTRAP_DIR}/reboot_required.txt
 
   if [[ ! -f ${BOOTSTRAP_DIR}/res_installed_all_packages.log ]]; then
+    # Complete unfinished transactions
+    /bin/bash  "${SCRIPT_DIR}/../common/complete_unfinished_transactions.sh" -o $RES_BASE_OS -s "${SCRIPT_DIR}"
+
+    if [[ $BASE_OS =~ ^(ubuntu2204)$ ]]; then
+      apt update
+    else
+      yum install -y deltarpm
+
+      # Begin: Install EPEL Repo
+      /bin/bash "${SCRIPT_DIR}/../common/epel_repo.sh" -o $RES_BASE_OS -s "${SCRIPT_DIR}"
+      # End: Install EPEL Repo
+
+      # Begin: Install S3 Mountpoint
+      /bin/bash "${SCRIPT_DIR}/../common/s3_mountpoint.sh" -o $RES_BASE_OS -r $AWS_REGION -n $RES_ENVIRONMENT_NAME -s "${SCRIPT_DIR}"
+      # End: Install S3 Mountpoint
+    fi
 
     # Begin: Install AWS Systems Manager Agent
     /bin/bash "${SCRIPT_DIR}/../common/aws_ssm.sh" -o $RES_BASE_OS -r $AWS_REGION -n $RES_ENVIRONMENT_NAME -s "${SCRIPT_DIR}"
     # End: Install AWS Systems Manager Agent
 
-    yum install -y deltarpm
-    yum -y upgrade
-
-    # Begin: Install EPEL Repo
-    /bin/bash "${SCRIPT_DIR}/../common/epel_repo.sh" -o $RES_BASE_OS -s "${SCRIPT_DIR}"
-    # End: Install EPEL Repo
+    # Begin: Install jq
+    /bin/bash "${SCRIPT_DIR}/../common/jq.sh" -o $RES_BASE_OS -s "${SCRIPT_DIR}"
+    # End: Install jq
 
     # Begin: Install System Packages
     /bin/bash "${SCRIPT_DIR}/../common/system_packages.sh" -o $RES_BASE_OS -r $AWS_REGION -n $RES_ENVIRONMENT_NAME -s "${SCRIPT_DIR}"
@@ -120,14 +138,6 @@ if [[ ! -f ${INSTALL_FINISHED_LOCK} ]]; then
     # Begin: Install CloudWatch Agent
     /bin/bash "${SCRIPT_DIR}/../common/cloudwatch_agent.sh" -o $RES_BASE_OS -r $AWS_REGION -n $RES_ENVIRONMENT_NAME -s "${SCRIPT_DIR}"
     # End: Install CloudWatch Agent
-
-    # Begin: Install S3 Mountpoint
-    /bin/bash "${SCRIPT_DIR}/../common/s3_mountpoint.sh" -o $RES_BASE_OS -r $AWS_REGION -n $RES_ENVIRONMENT_NAME -s "${SCRIPT_DIR}"
-    # End: Install S3 Mountpoint
-
-    # Begin: Install jq
-    /bin/bash "${SCRIPT_DIR}/../common/jq.sh" -o $RES_BASE_OS -s "${SCRIPT_DIR}"
-    # End: Install jq
 
     # Begin: Disable SE Linux
     /bin/bash "${SCRIPT_DIR}/../common/disable_se_linux.sh" -o $RES_BASE_OS -s "${SCRIPT_DIR}"

@@ -113,6 +113,15 @@ TEST_SOFTWARE_STACKS = [
         min_ram=MIN_RAM,
         gpu=VirtualDesktopGPU.AMD,
     ),
+    VirtualDesktopSoftwareStack(
+        name=f"res-integ-test-stack-{VirtualDesktopBaseOS.UBUNTU2204}-{VirtualDesktopArchitecture.X86_64}",
+        description="RES integ test software stack",
+        base_os=VirtualDesktopBaseOS.UBUNTU2204,
+        architecture=VirtualDesktopArchitecture.X86_64,
+        min_storage=MIN_WINDOWS_STORAGE,
+        min_ram=MIN_RAM,
+        gpu=VirtualDesktopGPU.NO_GPU,
+    ),
 ]
 
 TEST_SOFTWARE_STACKS_GOVCLOUD = [

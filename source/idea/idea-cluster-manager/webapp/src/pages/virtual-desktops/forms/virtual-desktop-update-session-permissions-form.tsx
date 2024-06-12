@@ -340,33 +340,38 @@ class UpdateSessionPermissionModal extends Component<UpdateSessionPermissionModa
     }
 
     componentDidMount() {
-        this.getProjectsClient()
-            .getProject({
-                project_id: this.props.session.project?.project_id,
-            })
-            .then((response) => {
-                let users: User[] = [];
-                this.getAuthClient()
-                    .listUsersInGroup({
-                        group_names: response.project?.ldap_groups!,
-                    })
-                    .then((group_response) => {
-                        group_response.listing?.forEach((user) => {
-                            if (AppContext.get().auth().getUsername() === user.username) {
-                                return;
-                            }
-                            users.push(user);
-                        });
-                        this.setState(
-                            {
-                                users: users,
-                                userListLoaded: true,
-                            },
-                            () => {
-                                this.createInitRows();
-                            }
-                        );
+        AppContext.get().client().authz().listRoleAssignments({
+            resource_key: `${this.props.session.project?.project_id}:project`
+        }).then((response) => {
+            const groups: string[] = [];
+            const users: User[] = [];
+            for (const assignment of response.items) {
+                if (assignment.actor_type === "group") {
+                    groups.push(assignment.actor_id);
+                }
+            }
+            
+            this.getAuthClient()
+                .listUsersInGroup({
+                    group_names: groups,
+                })
+                .then((group_response) => {
+                    group_response.listing?.forEach((user) => {
+                        if (AppContext.get().auth().getUsername() === user.username) {
+                            return;
+                        }
+                        users.push(user);
                     });
+                    this.setState(
+                        {
+                            users: users,
+                            userListLoaded: true,
+                        },
+                        () => {
+                            this.createInitRows();
+                        }
+                    );
+                });
             });
 
         this.getVirtualDesktopUtilsClient()

@@ -28,11 +28,20 @@ fi
 
 source "$SCRIPT_DIR/../common/bootstrap_common.sh"
 
-if [[ $BASE_OS =~ ^(amzn2|centos7|rhel7|rhel8|rhel9)$ ]]; then 
-  which jq > /dev/null 2>&1
-  if [[ "$?" != "0" ]]; then
-    log_info "installing jq"
-    yum install -y jq
-  fi
+SUB_DIR=""
+if [[ $BASE_OS =~ ^(amzn2|centos7|rhel7|rhel8|rhel9)$ ]]; then
+  SUB_DIR="red_hat"
+elif [[ $BASE_OS =~ ^(ubuntu2204)$ ]]; then
+  SUB_DIR="debian"
+else
+  log_warning "Base OS not supported."
+  exit 1
+fi
+source "$SCRIPT_DIR/../common/$SUB_DIR/jq.sh"
+
+which jq > /dev/null 2>&1
+if [[ "$?" != "0" ]]; then
+  log_info "installing jq"
+  install_jq
 fi
 # End: Install jq

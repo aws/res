@@ -174,6 +174,14 @@ class SocaDevelopmentProps:
         return os.path.join(self.project_unit_tests_dir, 'idea-administrator')
 
     @property
+    def lambda_functions_src(self) -> str:
+        return os.path.join(self.administrator_project_dir, 'resources')
+
+    @property
+    def lambda_functions_tests_src(self) -> str:
+        return os.path.join(self.project_unit_tests_dir, 'lambda_functions')
+
+    @property
     def virtual_desktop_project_dir(self) -> str:
         return os.path.join(self.project_source_dir, 'idea-virtual-desktop-controller')
 

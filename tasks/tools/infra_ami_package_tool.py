@@ -29,7 +29,7 @@ class InfraAmiPackageTool:
 
     @property
     def output_archive_basename(self) -> str:
-        return f'res-infra-dependencies-{idea.props.idea_release_version}'
+        return 'res-infra-dependencies'
 
     @property
     def requirements_file_name(self) -> str:

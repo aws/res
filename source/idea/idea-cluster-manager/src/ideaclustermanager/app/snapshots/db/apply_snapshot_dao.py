@@ -59,7 +59,7 @@ class ApplySnapshotDAO:
             'created_on',
             'failure_reason',
         ]
-        return ApplySnapshot(**{k: apply_snapshot.get(k) for k in keys})
+        return ApplySnapshot(**{k: apply_snapshot.get(k) for k in keys if k})
 
     @staticmethod
     def convert_to_db(apply_snapshot: ApplySnapshot) -> Dict:
