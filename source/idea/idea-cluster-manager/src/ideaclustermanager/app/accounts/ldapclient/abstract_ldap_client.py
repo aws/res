@@ -117,6 +117,26 @@ class AbstractLDAPClient:
             use_pool=Utils.get_as_bool(options.connection_pool_enabled, DEFAULT_LDAP_ENABLE_CONNECTION_POOL)
         )
 
+    def filter_out_referrals_from_response(self, results):
+        # Response might contain search_ref results based on AD configuration. 
+        # This result item does not correspond to a user in the AD instead corresponds to alternate location in which the client may search for additional matching entries.
+        # Below logic filters out references from the results
+        # https://ldapwiki.com/wiki/Wiki.jsp?page=Search%20Responses
+        
+        filter_criteria = lambda x: x[0] != None
+        search_results = []
+        referrals = []
+        
+        for result in results: 
+            if filter_criteria(result):
+                search_results.append(result)
+            else:
+                referrals.append(result)
+        
+        if(referrals): self.logger.debug(f"Referrals skipped in result response: {referrals}")
+        
+        return search_results
+
     # ldap wrapper methods
     def add_s(self, dn, modlist):
         trace_message = f'ldapadd -x -D "{self.ldap_root_bind}" -H {self.ldap_uri} "{dn}"'
@@ -158,7 +178,8 @@ class AbstractLDAPClient:
             self.logger.info(f'> {trace_message}')
 
         with self.get_ldap_root_connection() as conn:
-            return conn.search_s(base, scope, filterstr, attrlist, attrsonly)
+            results = conn.search_s(base, scope, filterstr, attrlist, attrsonly)
+            return self.filter_out_referrals_from_response(results)
 
     def simple_paginated_search(
         self,
@@ -198,7 +219,9 @@ class AbstractLDAPClient:
                 serverctrls.cookie = controls[0].cookie
                 message_id = conn.search_ext(base, scope, filterstr, attrlist, attrsonly, [serverctrls], None, timeout)
 
-            return {'result': result, 'total': None, 'cookie': None}
+
+            filtered_result = self.filter_out_referrals_from_response(result)
+            return {'result': filtered_result, 'total': None, 'cookie': None}
 
     def sssvlv_paginated_search(self,
                                 base,
@@ -450,7 +473,7 @@ class AbstractLDAPClient:
         results = self.search_s(
             base=self.ldap_base,
             filterstr=self.build_user_filterstr(username),
-            attrlist=['cn']
+            attrlist=['sAMAccountName']
         )
 
         return len(results) > 0
@@ -459,7 +482,7 @@ class AbstractLDAPClient:
         results = self.search_s(
             base=self.ldap_sudoers_base,
             filterstr=self.build_sudoer_filterstr(username),
-            attrlist=['cn']
+            attrlist=['sAMAccountName']
         )
 
         return len(results) > 0
@@ -487,7 +510,7 @@ class AbstractLDAPClient:
         return f'cn={username},{self.ldap_user_base}'
 
     def build_user_filterstr(self, username: str) -> str:
-        return f'(&{self.ldap_user_filterstr}(cn={username}))'
+        return f'(&{self.ldap_user_filterstr}(sAMAccountName={username}))'
 
     @property
     @abstractmethod
@@ -525,7 +548,7 @@ class AbstractLDAPClient:
         ...
 
     def build_sudoer_filterstr(self, username: str) -> str:
-        return f'(&{self.ldap_sudoer_filterstr}(cn={username}))'
+        return f'(&{self.ldap_sudoer_filterstr}(sAMAccountName={username}))'
 
     @property
     @abstractmethod
@@ -714,12 +737,12 @@ class AbstractLDAPClient:
         ldap_result = self.search_s(
             base=self.ldap_sudoers_base,
             filterstr=self.ldap_sudoer_filterstr,
-            attrlist=['cn']
+            attrlist=['sAMAccountName']
         )
 
         for entry in ldap_result:
             sudo_user = entry[1]
-            username = LdapUtils.get_string_value('cn', sudo_user)
+            username = LdapUtils.get_string_value('sAMAccountName', sudo_user)
             result.append(username)
 
         return result

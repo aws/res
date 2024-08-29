@@ -63,6 +63,10 @@ if [[ ! -f ${CONFIG_FINISHED_LOCK} ]]; then
   /bin/bash "${SCRIPT_DIR}/../common/configure_amazon_ssm_agent.sh" -o {{ context.base_os }} -s "${SCRIPT_DIR}"
   # End: Configure AWS Systems Manager Agent
 
+  # Begin: Enable executable on custom-credential-broker.py
+  chmod +x ${SCRIPT_DIR}/custom-credential-broker/custom_credential_broker.py
+  # End: Enable executable on custom-credential-broker.py
+
   # Begin: Configure CloudWatch Agent
   {%- set cloudwatch_agent_config = context.get_cloudwatch_agent_config(additional_log_files=additional_log_files) %}
   {%- if cloudwatch_agent_config %}

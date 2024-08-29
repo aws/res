@@ -19,7 +19,7 @@ import dot from "dot-object";
 import { GetParamChoicesRequest, GetParamChoicesResult, SocaUserInputGroupMetadata, SocaUserInputParamMetadata } from "../../client/data-model";
 import { IdeaFormFieldStateChangeEventHandler } from "../form-field";
 import { ModalProps } from "@cloudscape-design/components/modal/interfaces";
-
+import { OnToolsChangeEvent } from "../../App";
 
 export interface IdeaFormContainerGroup {
     title: string
@@ -50,6 +50,9 @@ export interface IdeaFormProps {
     loadingText?: string;
     useContainers?: boolean;
     containerGroups?: ReadonlyArray<IdeaFormContainerGroup>;
+    toolsOpen?: boolean;
+    tools?: React.ReactNode; 
+    onToolsChange?: (event: OnToolsChangeEvent) => void;
 }
 
 export interface IdeaFormState {
@@ -357,6 +360,9 @@ class IdeaForm extends Component<IdeaFormProps, IdeaFormState> {
                                                                 onKeyEnter={() => {
                                                                     this.handleOnSubmit();
                                                                 }}
+                                                                toolsOpen={this.props.toolsOpen} 
+                                                                tools={this.props.tools}
+                                                                onToolsChange={this.props.onToolsChange}
                                                             />
                                                         )
                                                     )
@@ -381,6 +387,9 @@ class IdeaForm extends Component<IdeaFormProps, IdeaFormState> {
                                                         onKeyEnter={() => {
                                                             this.handleOnSubmit();
                                                         }}
+                                                        toolsOpen={this.props.toolsOpen} 
+                                                        tools={this.props.tools}
+                                                        onToolsChange={this.props.onToolsChange}
                                                     />
                                                 )
                                             );

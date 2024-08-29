@@ -15,7 +15,7 @@ import React, { Component, RefObject } from "react";
 
 import { Box, Button, Cards, Header, SegmentedControl, SpaceBetween, Toggle } from "@cloudscape-design/components";
 import { AppContext } from "../../common";
-import { Project, SocaUserInputChoice, VirtualDesktopBaseOS, VirtualDesktopSession, VirtualDesktopSessionPermission, VirtualDesktopSessionScreenshot, VirtualDesktopSoftwareStack } from "../../client/data-model";
+import { Project, SocaUserInputChoice, VDIPermissions, VirtualDesktopBaseOS, VirtualDesktopSession, VirtualDesktopSessionPermission, VirtualDesktopSessionScreenshot, VirtualDesktopSoftwareStack } from "../../client/data-model";
 import { ProjectsClient, VirtualDesktopClient } from "../../client";
 import IdeaForm from "../../components/form";
 import Utils from "../../common/utils";
@@ -32,6 +32,7 @@ import UpdateSessionPermissionModal from "./forms/virtual-desktop-update-session
 import dot from "dot-object";
 import VirtualDesktopCreateSessionForm from "./forms/virtual-desktop-create-session-form";
 import VirtualDesktopUtilsClient from "../../client/virtual-desktop-utils-client";
+import AuthzClient from "../../client/authz-client";
 
 const CARD_HEADER_CLASS_NAME = "awsui_card-header_p8a6i_9tpvn_272";
 const OS_FILTER_LINUX_ID = "linux";
@@ -39,7 +40,7 @@ const OS_FILTER_WINDOWS_ID = "windows";
 const OS_FILTER_ALL_ID = "$all";
 const AUTO_REFRESH_TIME_IN_MS = 15000;
 
-export interface MyVirtualDesktopSessionsProps extends IdeaAppLayoutProps, IdeaSideNavigationProps {}
+export interface MyVirtualDesktopSessionsProps extends IdeaAppLayoutProps, IdeaSideNavigationProps { }
 
 export interface MyVirtualDesktopConfirmModalActionProps {
     actionTitle: string;
@@ -116,10 +117,10 @@ class MyVirtualDesktopSessions extends Component<MyVirtualDesktopSessionsProps, 
             confirmAction: {
                 actionTitle: "",
                 actionText: "",
-                onConfirm: () => {},
-                onCancel: () => {},
+                onConfirm: () => { },
+                onCancel: () => { },
             },
-            activeConnectionConfirmModalOnConfirm: () => {},
+            activeConnectionConfirmModalOnConfirm: () => { },
             autoRefreshIntervalId: undefined,
             lastRefreshTimeInSec: 0,
         };
@@ -144,14 +145,11 @@ class MyVirtualDesktopSessions extends Component<MyVirtualDesktopSessionsProps, 
                 this.virtualDesktopSettings = settings;
             });
 
-        this.getProjectsClient()
-            .getUserProjects({
-                username: AppContext.get().auth().getUsername(),
-            })
-            .then((result) => {
-                this.setState({
-                    userProjects: result.projects!,
-                });
+        Utils.fetchProjectsFilteredByVDIPermissions(this.isAdmin(), "create_sessions")
+            .then((userProjects) => {
+              this.setState({
+                  userProjects,
+              });
             });
 
         const refresh = () => {
@@ -160,7 +158,7 @@ class MyVirtualDesktopSessions extends Component<MyVirtualDesktopSessionsProps, 
             }
 
             this.setState({
-              lastRefreshTimeInSec: new Date().getSeconds() - this.lastRefreshTime.getSeconds(),
+                lastRefreshTimeInSec: new Date().getSeconds() - this.lastRefreshTime.getSeconds(),
             });
         };
 
@@ -210,6 +208,22 @@ class MyVirtualDesktopSessions extends Component<MyVirtualDesktopSessionsProps, 
         return this.scheduleModal.current!;
     }
 
+    getAuthzClient(): AuthzClient {
+        return AppContext.get().client().authz();
+    }
+
+    isAdmin(): boolean {
+        return AppContext.get().auth().isAdmin();
+    }
+
+    canCreateSession(): boolean {
+      if (this.isAdmin()) {
+        return true;
+      } else {
+        return this.state.userProjects.length > 0;
+      }
+    }
+
     fetchSessions(): Promise<boolean> {
         return AppContext.get()
             .client()
@@ -220,6 +234,10 @@ class MyVirtualDesktopSessions extends Component<MyVirtualDesktopSessionsProps, 
                         key: "base_os",
                         value: this.state.osFilter,
                     },
+                    {
+                        key: "owner",
+                        value: AppContext.get().auth().getUsername(),
+                    }
                 ],
                 paginator: {
                     page_size: 100,
@@ -393,7 +411,7 @@ class MyVirtualDesktopSessions extends Component<MyVirtualDesktopSessionsProps, 
                 let os_filters: VirtualDesktopBaseOS[] = ["windows"];
 
                 if (os_filter === OS_FILTER_LINUX_ID) {
-                    os_filters = ["amazonlinux2", "centos7", "rhel7", "rhel8", "rhel9"];
+                    os_filters = ["amazonlinux2", "rhel8", "rhel9"];
                 }
 
                 if (!os_filters?.includes(session?.base_os)) {
@@ -438,6 +456,10 @@ class MyVirtualDesktopSessions extends Component<MyVirtualDesktopSessionsProps, 
                                         {
                                             idea_session_id: this.state.selectedSession?.idea_session_id,
                                             dcv_session_id: this.state.selectedSession?.dcv_session_id,
+                                            owner: AppContext.get().auth().getUsername(),
+                                            project: {
+                                              project_id: this.state.selectedSession?.project?.project_id,
+                                            },
                                         },
                                     ],
                                 })
@@ -770,6 +792,10 @@ class MyVirtualDesktopSessions extends Component<MyVirtualDesktopSessionsProps, 
     }
 
     showCreateSessionForm() {
+        if (!this.isAdmin() && this.state.userProjects.length === 0) {
+            // we don't have permissions to create our own sessions
+            return;
+        }
         this.setState(
             {
                 showCreateSessionForm: true,
@@ -1039,31 +1065,31 @@ class MyVirtualDesktopSessions extends Component<MyVirtualDesktopSessionsProps, 
     }
 
     refreshSessions(): void {
-      this.setState(
-          {
-              loading: true,
-          },
-          () => {
-              this.fetchSessions().then(() => {
-                  this.lastRefreshTime = new Date();
-                  this.setState({
-                      loading: false,
-                      lastRefreshTimeInSec: 0,
-                  });
-                  this.fetchSessionScreenshots().finally();
-              });
-          }
-      );
+        this.setState(
+            {
+                loading: true,
+            },
+            () => {
+                this.fetchSessions().then(() => {
+                    this.lastRefreshTime = new Date();
+                    this.setState({
+                        loading: false,
+                        lastRefreshTimeInSec: 0,
+                    });
+                    this.fetchSessionScreenshots().finally();
+                });
+            }
+        );
     }
 
     formatTimeDisplay(lastRefreshTimeInSec: number): string {
-      if (lastRefreshTimeInSec <= 60) {
-        return "Last refreshed less than a minute ago";
-      } else if (lastRefreshTimeInSec <= 60 * 60) {
-        return `Last refreshed ${Math.floor(lastRefreshTimeInSec / 60)} minutes ago`;
-      } else {
-        return `Last refreshed ${Math.floor(lastRefreshTimeInSec / 60 / 60)} hour(s) ago`;
-      }
+        if (lastRefreshTimeInSec <= 60) {
+            return "Last refreshed less than a minute ago";
+        } else if (lastRefreshTimeInSec <= 60 * 60) {
+            return `Last refreshed ${Math.floor(lastRefreshTimeInSec / 60)} minutes ago`;
+        } else {
+            return `Last refreshed ${Math.floor(lastRefreshTimeInSec / 60 / 60)} hour(s) ago`;
+        }
     }
 
     buildListing() {
@@ -1097,21 +1123,21 @@ class MyVirtualDesktopSessions extends Component<MyVirtualDesktopSessionsProps, 
                         actions={
                             <SpaceBetween direction="horizontal" size="l">
                                 <Toggle
-                                  description={this.formatTimeDisplay(this.state.lastRefreshTimeInSec)}
-                                  checked={this.state.autoRefreshIntervalId !== undefined}
-                                  onChange={(changeEvent) => {
-                                    let intervalId: NodeJS.Timer | undefined = undefined;
-                                    if (changeEvent.detail.checked) {
-                                      intervalId = setInterval(() => this.refreshSessions(), AUTO_REFRESH_TIME_IN_MS);
-                                    } else {
-                                      clearInterval(this.state.autoRefreshIntervalId);
-                                    }
-                                    this.setState({
-                                      autoRefreshIntervalId: intervalId,
-                                    });
-                                  }}
+                                    description={this.formatTimeDisplay(this.state.lastRefreshTimeInSec)}
+                                    checked={this.state.autoRefreshIntervalId !== undefined}
+                                    onChange={(changeEvent) => {
+                                        let intervalId: NodeJS.Timer | undefined = undefined;
+                                        if (changeEvent.detail.checked) {
+                                            intervalId = setInterval(() => this.refreshSessions(), AUTO_REFRESH_TIME_IN_MS);
+                                        } else {
+                                            clearInterval(this.state.autoRefreshIntervalId);
+                                        }
+                                        this.setState({
+                                            autoRefreshIntervalId: intervalId,
+                                        });
+                                    }}
                                 >
-                                  Auto-refresh
+                                    Auto-refresh
                                 </Toggle>
                                 <Button
                                     variant="normal"
@@ -1141,6 +1167,7 @@ class MyVirtualDesktopSessions extends Component<MyVirtualDesktopSessionsProps, 
                                 <Button
                                     key="launch-new-virtual-desktop"
                                     variant="primary"
+                                    disabled={!this.canCreateSession()}
                                     onClick={() => {
                                         this.showCreateSessionForm();
                                     }}
@@ -1248,7 +1275,7 @@ class MyVirtualDesktopSessions extends Component<MyVirtualDesktopSessionsProps, 
                         <Box padding={{ top: "xxxl", bottom: "s" }} variant="p" color="inherit">
                             Click the button below to create a new virtual desktop.
                         </Box>
-                        <Button onClick={() => this.showCreateSessionForm()}>Launch New Virtual Desktop</Button>
+                        <Button disabled={!this.canCreateSession()} onClick={() => this.showCreateSessionForm()}>Launch New Virtual Desktop</Button>
                     </Box>
                 }
                 items={getSessions()}

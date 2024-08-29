@@ -5,9 +5,6 @@ __pycache__/
 
 # IDEA Specific
 deployment/ecr/idea-administrator/*.tar.gz
-open-source/
-deployment/global-s3-assets/
-deployment/regional-s3-assets/
 
 # C extensions
 *.so

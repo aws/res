@@ -115,5 +115,6 @@ logging:
     tags:
       - actor
       - auth_type
-      # - client_id
+      - protocol
+      - client_id
       # - request_id

@@ -20,12 +20,8 @@ function update_cloudwatch_agent_download_link_txt() {
       sed -i 's/%os%/amazon_linux/g' $DOWNLOAD_LINK_TXT
       sed -i 's/%ext%/rpm/g' $DOWNLOAD_LINK_TXT
       ;;
-    rhel7|rhel8|rhel9)
+    rhel8|rhel9)
       sed -i 's/%os%/redhat/g' $DOWNLOAD_LINK_TXT
-      sed -i 's/%ext%/rpm/g' $DOWNLOAD_LINK_TXT
-      ;;
-    centos7)
-      sed -i 's/%os%/centos/g' $DOWNLOAD_LINK_TXT
       sed -i 's/%ext%/rpm/g' $DOWNLOAD_LINK_TXT
       ;;
   esac

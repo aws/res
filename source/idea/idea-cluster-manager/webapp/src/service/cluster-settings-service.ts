@@ -87,11 +87,11 @@ class ClusterSettingsService {
         });
     }
 
-    getVirtualDesktopSettings(): Promise<any> {
+    getVirtualDesktopSettings(cached: boolean = true): Promise<any> {
         if (!this.isVirtualDesktopDeployed()) {
             return Promise.resolve({});
         }
-        return this.getModuleSettings(Constants.MODULE_VIRTUAL_DESKTOP_CONTROLLER);
+        return this.getModuleSettings(Constants.MODULE_VIRTUAL_DESKTOP_CONTROLLER, cached);
     }
 
     getSchedulerSettings(): Promise<any> {
@@ -236,10 +236,6 @@ class ClusterSettingsService {
         return this.isModuleDeployed(Constants.MODULE_BASTION_HOST);
     }
 
-    isMetricsEnabled(): boolean {
-        return this.isModuleEnabled(Constants.MODULE_METRICS);
-    }
-
     getInstanceTypes(): Promise<any[]> {
         if (this.instanceTypes.length > 0) {
             return Promise.resolve(this.instanceTypes);
@@ -249,8 +245,8 @@ class ClusterSettingsService {
         });
     }
 
-    getClusterSettings(): Promise<any> {
-        return this.getModuleSettings(Constants.MODULE_CLUSTER);
+    getClusterSettings(cached: boolean = true): Promise<any> {
+        return this.getModuleSettings(Constants.MODULE_CLUSTER, cached);
     }
 
     getClusterManagerSettings(cached: boolean = true): Promise<any> {
@@ -267,10 +263,6 @@ class ClusterSettingsService {
 
     getSharedStorageSettings(): Promise<any> {
         return this.getModuleSettings(Constants.MODULE_SHARED_STORAGE);
-    }
-
-    getMetricsSettings(): Promise<any> {
-        return this.getModuleSettings(Constants.MODULE_METRICS);
     }
 
     getClusterHomeDir(): string {

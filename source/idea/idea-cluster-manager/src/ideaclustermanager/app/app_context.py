@@ -14,6 +14,7 @@ from ideasdk.utils import GroupNameHelper
 from ideasdk.client.vdc_client import AbstractVirtualDesktopControllerClient
 
 from ideaclustermanager.app.authz.role_assignments_service import RoleAssignmentsService
+from ideaclustermanager.app.authz.roles_service import RolesService
 from ideaclustermanager.app.projects.projects_service import ProjectsService
 from ideaclustermanager.app.accounts.accounts_service import AccountsService
 from ideaclustermanager.app.adsync.adsync_service import ADSyncService
@@ -38,7 +39,8 @@ class ClusterManagerAppContext(SocaContext):
 
         self.token_service: Optional[TokenService] = None
         self.api_authorization_service: Optional[ApiAuthorizationServiceBase] = None
-        self.authz: Optional[RoleAssignmentsService] = None
+        self.roles: Optional[RolesService] = None
+        self.role_assignments: Optional[RoleAssignmentsService] = None
         self.projects: Optional[ProjectsService] = None
         self.user_pool: Optional[CognitoUserPool] = None
         self.ldap_client: Optional[Union[OpenLDAPClient, ActiveDirectoryClient]] = None

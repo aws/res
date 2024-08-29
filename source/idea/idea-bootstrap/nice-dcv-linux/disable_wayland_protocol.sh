@@ -25,7 +25,7 @@ if [[ -z "$BASE_OS" || -z "$SCRIPT_DIR" ]]; then
   exit 1
 fi
 
-if [[ $BASE_OS =~ ^(amzn2|centos7|rhel7|rhel8|rhel9)$ ]]; then
+if [[ $BASE_OS =~ ^(amzn2|rhel8|rhel9)$ ]]; then
   /bin/bash "${SCRIPT_DIR}/../nice-dcv-linux/red_hat/disable_wayland_protocol.sh" -o $BASE_OS
 else
   /bin/bash "${SCRIPT_DIR}/../nice-dcv-linux/debian/disable_wayland_protocol.sh"

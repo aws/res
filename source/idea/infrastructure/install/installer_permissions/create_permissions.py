@@ -25,6 +25,7 @@ class CreatePermissions:
         statements.extend(self.get_s3_access())
         statements.extend(self.get_ssm_access())
         statements.extend(self.get_sts_access())
+        statements.extend(self.get_ec2_access())
 
         return statements
 
@@ -51,6 +52,19 @@ class CreatePermissions:
                     "cloudformation:ListStacks",
                 ],
             ),
+        ]
+
+    def get_ec2_access(self) -> List[iam.PolicyStatement]:
+        return [
+            iam.PolicyStatement(
+                effect=iam.Effect.ALLOW,
+                resources=[
+                    "*",
+                ],
+                actions=[
+                    "ec2:DescribeSubnets",
+                ],
+            )
         ]
 
     def get_dynamodb_access(self) -> List[iam.PolicyStatement]:
@@ -148,9 +162,13 @@ class CreatePermissions:
                 effect=iam.Effect.ALLOW,
                 resources=[
                     f"arn:{aws_cdk.Aws.PARTITION}:s3:::{self.environment_name}-cluster-{aws_cdk.Aws.REGION}-{aws_cdk.Aws.ACCOUNT_ID}",
+                    f"arn:{aws_cdk.Aws.PARTITION}:s3:::log-{self.environment_name}-cluster-{aws_cdk.Aws.REGION}-{aws_cdk.Aws.ACCOUNT_ID}",
                 ],
                 actions=[
                     "s3:CreateBucket",
+                    "s3:GetBucketAcl",
+                    "s3:PutBucketAcl",
+                    "s3:PutBucketLogging",
                     "s3:GetAccelerateConfiguration",
                     "s3:GetAnalyticsConfiguration",
                     "s3:GetBucketCORS",
@@ -180,6 +198,7 @@ class CreatePermissions:
                 effect=iam.Effect.ALLOW,
                 resources=[
                     f"arn:{aws_cdk.Aws.PARTITION}:s3:::{self.environment_name}-cluster-{aws_cdk.Aws.REGION}-{aws_cdk.Aws.ACCOUNT_ID}/*",
+                    f"arn:{aws_cdk.Aws.PARTITION}:s3:::log-{self.environment_name}-cluster-{aws_cdk.Aws.REGION}-{aws_cdk.Aws.ACCOUNT_ID}/*",
                 ],
                 actions=[
                     "s3:PutObject",

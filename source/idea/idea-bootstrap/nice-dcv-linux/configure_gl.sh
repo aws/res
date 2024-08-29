@@ -25,7 +25,7 @@ if [[ -z "$BASE_OS" || -z "$SCRIPT_DIR" ]]; then
   exit 1
 fi
 
-if [[ $BASE_OS =~ ^(amzn2|centos7|rhel7|rhel8|rhel9)$ ]]; then
+if [[ $BASE_OS =~ ^(amzn2|rhel8|rhel9)$ ]]; then
   /bin/bash "${SCRIPT_DIR}/../nice-dcv-linux/red_hat/configure_gl.sh" -o $BASE_OS
 elif [[ $BASE_OS =~ ^(ubuntu2204)$ ]]; then
   /bin/bash "${SCRIPT_DIR}/../nice-dcv-linux/debian/configure_gl.sh"

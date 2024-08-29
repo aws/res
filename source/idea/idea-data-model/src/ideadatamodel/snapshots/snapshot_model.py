@@ -69,6 +69,7 @@ class TableName(str, Enum):
     PERMISSION_PROFILES_TABLE_NAME = "vdc.controller.permission-profiles"
     SOFTWARE_STACKS_TABLE_NAME = "vdc.controller.software-stacks"
     ROLE_ASSIGNMENTS_TABLE_NAME = "authz.role-assignments"
+    ROLES_TABLE_NAME = "authz.roles"
 
 
 class RESVersion(str, Enum):
@@ -79,3 +80,4 @@ class RESVersion(str, Enum):
     v_2024_04_01 = "2024.04.01"
     v_2024_04_02 = "2024.04.02"
     v_2024_06 = "2024.06"
+    v_2024_08 = "2024.08"

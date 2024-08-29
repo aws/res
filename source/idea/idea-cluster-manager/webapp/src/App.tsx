@@ -34,6 +34,9 @@ import ClusterStatus from "./pages/cluster-admin/cluster-status";
 import Projects from "./pages/cluster-admin/projects";
 import ConfigureProject from "./pages/cluster-admin/configure-project";
 import FileSystems from "./pages/cluster-admin/filesystem";
+import S3Buckets from "./pages/cluster-admin/s3-bucket";
+import AddS3Bucket from "./pages/cluster-admin/add-s3-bucket";
+import EditS3Bucket from "./pages/cluster-admin/edit-s3-bucket";
 import { Box, HelpPanel, SideNavigationProps, StatusIndicator } from "@cloudscape-design/components";
 import { NonCancelableCustomEvent } from "@cloudscape-design/components/internal/events";
 import { FlashbarProps } from "@cloudscape-design/components/flashbar/interfaces";
@@ -52,6 +55,10 @@ import { Routes, Route, Navigate } from "react-router-dom";
 import IdeaLogTail from "./pages/home/log-tail";
 import Utils from "./common/utils";
 import SnapshotManagement from "./pages/snapshots/snapshot-management"
+import PermissionProfilesDashboard from "./pages/permission-profiles/permission-profiles-dashboard";
+import PermissionProfilesView from "./pages/permission-profiles/view-permission-profile";
+import ConfigurePermissionProfile from "./pages/permission-profiles/configure-permission-profile";
+import AuthzClient from "./client/authz-client";
 
 export interface IdeaWebPortalAppProps extends IdeaAppNavigationProps {}
 
@@ -63,7 +70,7 @@ export interface IdeaWebPortalAppState {
     toolsOpen: boolean;
     tools: React.ReactNode;
     flashbarItems: FlashbarProps.MessageDefinition[];
-    isProjectOwner?: boolean;
+    hasProjects?: boolean;
     projectOwnerRoles?: string[];
 }
 
@@ -95,7 +102,7 @@ class IdeaWebPortalApp extends Component<IdeaWebPortalAppProps, IdeaWebPortalApp
             toolsOpen: false,
             tools: null,
             flashbarItems: [],
-            isProjectOwner: false,
+            hasProjects: false,
             projectOwnerRoles: [],
         };
     }
@@ -109,49 +116,75 @@ class IdeaWebPortalApp extends Component<IdeaWebPortalAppProps, IdeaWebPortalApp
             .then((loginStatus) => {
                 const init = () => {
                     if (!context.auth().isAdmin()) {
-                      const isProjectOwner = async (): Promise<boolean> => {
-                          const username: string = context.auth().getUsername();
-                          const groups: string[] = await new Promise(resolve => {
-                              context.client().accounts().listGroups({
-                                  username,
-                              })
-                              .then((result) => {
-                                resolve(result.listing?.map(x => `${x.name!}:group`) || []);
-                              });
-                          });
-                          const userGroupRoleAssignments: Promise<boolean>[] = [];
-                          const ownerKeys: string[] = [];
-                          for (const actor_key of [...groups, `${username}:user`]) {
-                            // resolves to true if one of the returned roles is project_owner
-                            userGroupRoleAssignments.push(new Promise(resolve => {
-                              context.client().authz().listRoleAssignments({
-                                actor_key,
-                              })
-                              .then((result) => {
-                                let isOwner = false;
-                                for (const roleAssignment of result.items) {
-                                  if (roleAssignment.role_id === "project_owner") {
-                                    ownerKeys.push(roleAssignment.actor_id);
-                                    isOwner = true;
-                                  }
-                                }
-                                resolve(isOwner);
-                              });
-                            }));
+                      const isInProject = async (): Promise<{
+                          isInProject: boolean;
+                          canCreateSession: boolean;
+                      }> => {
+                          const output = {
+                              isInProject: false,
+                              canCreateSession: false,
                           }
-                          this.setState({ projectOwnerRoles: ownerKeys });
-                          const result = await Promise.all(userGroupRoleAssignments);
-                          // If any promise resolved to true, the user is a project owner
-                          return result.includes(true);
+                          const user = await context.auth().getUser();
+                          const authzClient: AuthzClient = context.client().authz();
+                          const projects = await context.client().projects().getUserProjects({ username: user.username });
+                          if (!projects.projects || projects.projects.length === 0) {
+                              return output;
+                          }
+                          output.isInProject = true;
+                          const rolePermissions = await authzClient.listRoles({
+                              include_permissions: true,
+                          });
+                          const projectRoleAssignments: Promise<void>[] = [];
+                          
+                          // for every project, we check if the user has permission to create sessions
+                          // in that project
+                          for (const project of projects.projects!) {
+                              const resource_key = `${project.project_id!}:project`;
+                              projectRoleAssignments.push(Promise.resolve(
+                                  authzClient.listRoleAssignments({ resource_key })
+                                  .then(async (result) => {
+                                      for (const roleAssignment of result.items) {
+                                          let currentUserIsInRole = user.additional_groups?.includes(roleAssignment.actor_id) || roleAssignment.actor_id === user.username!;
+
+                                          if (currentUserIsInRole) {
+                                              const rolePermission = rolePermissions.items.find(perm => perm.role_id === roleAssignment.role_id);
+                                              if (rolePermission && rolePermission.vdis?.create_terminate_others_sessions) {
+                                                  output.canCreateSession = true;
+                                                  return; // we only need to know if one of the roles allows creating sessions
+                                              }
+                                          }
+                                      }
+
+                                  })
+                              ));
+                          }
+                          await Promise.all(projectRoleAssignments);
+
+                          return output;
                       };
-                      isProjectOwner()
-                      .then((isProjectOwner) => {
-                          if (!isProjectOwner)
+                      isInProject()
+                      .then((hasProjects) => {
+                          // user is not assigned to any projects, don't render projects page
+                          if (!hasProjects.isInProject)
                               return;
                           const result: SideNavigationProps.Item[] = [...this.state.sideNavItems];
                           result.push({
                               type: "divider",
                           });
+                          if (hasProjects.canCreateSession) {
+                              result.push({
+                                  type: "section",
+                                  text: "Session Management",
+                                  defaultExpanded: true,
+                                  items: [
+                                      {
+                                        type: "link",
+                                        text: "Sessions",
+                                        href: "#/virtual-desktop/sessions",
+                                      }
+                                  ]
+                              });
+                          }
                           result.push({
                               type: "section",
                               text: "Environment Management",
@@ -161,10 +194,10 @@ class IdeaWebPortalApp extends Component<IdeaWebPortalAppProps, IdeaWebPortalApp
                                       type: "link",
                                       text: "Projects",
                                       href: "#/cluster/projects",
-                                  },
+                                  }
                               ]
                           });
-                          this.setState( { sideNavItems: result, isProjectOwner: isProjectOwner });
+                          this.setState( { sideNavItems: result, hasProjects: hasProjects.isInProject });
                       });
                     }
                     this.setState({
@@ -590,7 +623,7 @@ class IdeaWebPortalApp extends Component<IdeaWebPortalAppProps, IdeaWebPortalApp
                     <Route
                         path="/virtual-desktop/sessions"
                         element={
-                            <IdeaAuthenticatedRoute isLoggedIn={this.state.isLoggedIn}>
+                            <IdeaAuthenticatedRoute isLoggedIn={this.state.isLoggedIn} isProjectOwner={this.state.hasProjects}>
                                 <VirtualDesktopSessions
                                     ideaPageId="virtual-desktop-sessions"
                                     toolsOpen={this.state.toolsOpen}
@@ -724,7 +757,7 @@ class IdeaWebPortalApp extends Component<IdeaWebPortalAppProps, IdeaWebPortalApp
                     <Route
                         path="/cluster/projects"
                         element={
-                            <IdeaAuthenticatedRoute isLoggedIn={this.state.isLoggedIn} isProjectOwner={this.state.isProjectOwner || false}>
+                            <IdeaAuthenticatedRoute isLoggedIn={this.state.isLoggedIn} isProjectOwner={this.state.hasProjects || false}>
                                 <Projects
                                     ideaPageId="projects"
                                     toolsOpen={this.state.toolsOpen}
@@ -744,7 +777,7 @@ class IdeaWebPortalApp extends Component<IdeaWebPortalAppProps, IdeaWebPortalApp
                      <Route
                         path="/cluster/projects/configure"
                         element={
-                            <IdeaAuthenticatedRoute isLoggedIn={this.state.isLoggedIn} isProjectOwner={this.state.isProjectOwner}>
+                            <IdeaAuthenticatedRoute isLoggedIn={this.state.isLoggedIn} isProjectOwner={this.state.hasProjects}>
                                 <ConfigureProject
                                     ideaPageId="configure-project"
                                     toolsOpen={this.state.toolsOpen}
@@ -804,6 +837,120 @@ class IdeaWebPortalApp extends Component<IdeaWebPortalAppProps, IdeaWebPortalApp
                             <IdeaAuthenticatedRoute isLoggedIn={this.state.isLoggedIn}>
                                 <FileSystems
                                     ideaPageId="filesystem"
+                                    toolsOpen={this.state.toolsOpen}
+                                    tools={this.state.tools}
+                                    onToolsChange={this.onToolsChange}
+                                    onPageChange={this.onPageChange}
+                                    sideNavItems={this.state.sideNavItems}
+                                    sideNavHeader={this.state.sideNavHeader}
+                                    onSideNavChange={this.onSideNavChange}
+                                    onFlashbarChange={this.onFlashbarChange}
+                                    flashbarItems={this.state.flashbarItems}
+                                />
+                            </IdeaAuthenticatedRoute>
+                        }
+                    />
+                    <Route
+                        path="/cluster/s3-bucket"
+                        element={
+                            <IdeaAuthenticatedRoute isLoggedIn={this.state.isLoggedIn}>
+                                <S3Buckets
+                                    ideaPageId="s3-bucket"
+                                    toolsOpen={this.state.toolsOpen}
+                                    tools={this.state.tools}
+                                    onToolsChange={this.onToolsChange}
+                                    onPageChange={this.onPageChange}
+                                    sideNavItems={this.state.sideNavItems}
+                                    sideNavHeader={this.state.sideNavHeader}
+                                    onSideNavChange={this.onSideNavChange}
+                                    onFlashbarChange={this.onFlashbarChange}
+                                    flashbarItems={this.state.flashbarItems}
+                                />
+                            </IdeaAuthenticatedRoute>
+                        }
+                    />
+                    <Route
+                        path="/cluster/s3-bucket/add-bucket"
+                        element={
+                            <IdeaAuthenticatedRoute isLoggedIn={this.state.isLoggedIn}>
+                                <AddS3Bucket
+                                    ideaPageId="add-bucket"
+                                    toolsOpen={this.state.toolsOpen}
+                                    tools={this.state.tools}
+                                    onToolsChange={this.onToolsChange}
+                                    onPageChange={this.onPageChange}
+                                    sideNavItems={this.state.sideNavItems}
+                                    sideNavHeader={this.state.sideNavHeader}
+                                    onSideNavChange={this.onSideNavChange}
+                                    onFlashbarChange={this.onFlashbarChange}
+                                    flashbarItems={this.state.flashbarItems}
+                                />
+                            </IdeaAuthenticatedRoute>
+                        }
+                    />
+                    <Route
+                        path="/cluster/s3-bucket/edit-bucket"
+                        element={
+                            <IdeaAuthenticatedRoute isLoggedIn={this.state.isLoggedIn}>
+                                <EditS3Bucket
+                                    ideaPageId="edit-bucket"
+                                    toolsOpen={this.state.toolsOpen}
+                                    tools={this.state.tools}
+                                    onToolsChange={this.onToolsChange}
+                                    onPageChange={this.onPageChange}
+                                    sideNavItems={this.state.sideNavItems}
+                                    sideNavHeader={this.state.sideNavHeader}
+                                    onSideNavChange={this.onSideNavChange}
+                                    onFlashbarChange={this.onFlashbarChange}
+                                    flashbarItems={this.state.flashbarItems}
+                                />
+                            </IdeaAuthenticatedRoute>
+                        }
+                    />
+                    <Route
+                        path="/cluster/permission-profiles"
+                        element={
+                            <IdeaAuthenticatedRoute isLoggedIn={this.state.isLoggedIn}>
+                                <PermissionProfilesDashboard
+                                    ideaPageId="permission-profiles"
+                                    toolsOpen={this.state.toolsOpen}
+                                    tools={this.state.tools}
+                                    onToolsChange={this.onToolsChange}
+                                    onPageChange={this.onPageChange}
+                                    sideNavItems={this.state.sideNavItems}
+                                    sideNavHeader={this.state.sideNavHeader}
+                                    onSideNavChange={this.onSideNavChange}
+                                    onFlashbarChange={this.onFlashbarChange}
+                                    flashbarItems={this.state.flashbarItems}
+                                />
+                            </IdeaAuthenticatedRoute>
+                        }
+                    />
+                    <Route
+                        path="/cluster/permission-profiles/:profile_id"
+                        element={
+                            <IdeaAuthenticatedRoute isLoggedIn={this.state.isLoggedIn}>
+                                <PermissionProfilesView
+                                    ideaPageId="permission-profiles-view-detail"
+                                    toolsOpen={this.state.toolsOpen}
+                                    tools={this.state.tools}
+                                    onToolsChange={this.onToolsChange}
+                                    onPageChange={this.onPageChange}
+                                    sideNavItems={this.state.sideNavItems}
+                                    sideNavHeader={this.state.sideNavHeader}
+                                    onSideNavChange={this.onSideNavChange}
+                                    onFlashbarChange={this.onFlashbarChange}
+                                    flashbarItems={this.state.flashbarItems}
+                                />
+                            </IdeaAuthenticatedRoute>
+                        }
+                    />
+                    <Route
+                        path="/cluster/permission-profiles/configure"
+                        element={
+                            <IdeaAuthenticatedRoute isLoggedIn={this.state.isLoggedIn}>
+                                <ConfigurePermissionProfile
+                                    ideaPageId="permission-profiles-configure"
                                     toolsOpen={this.state.toolsOpen}
                                     tools={this.state.tools}
                                     onToolsChange={this.onToolsChange}

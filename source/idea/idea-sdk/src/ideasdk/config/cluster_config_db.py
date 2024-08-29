@@ -569,11 +569,33 @@ class ClusterConfigDB(DynamoDBStreamSubscriber):
             }
         )
 
+    def convert_to_dynamodb_type(self, value):
+        """
+        Converts a value to the appropriate DynamoDB type.
+        """
+        if type(value) is int:
+            return 'N', str(value)
+        elif type(value) is str:
+            if value.isdigit():
+                return 'N', value
+            return 'S', value
+        elif type(value) is bool:
+            return 'BOOL', value
+        elif value is None:
+            return 'NULL', True
+        elif type(value) is list:
+            db_list = []
+            for v in value:
+                item_type, item_value = self.convert_to_dynamodb_type(v)
+                db_list.append({item_type: item_value})
+            return 'L', db_list
+        else:
+            raise exceptions.invalid_params(f'Unsupported type: {type(value)} for value: {value}')
+
     def transact_set_cluster_settings(self, module_id, settings):
         """
         Calls DDB TransactWriteItems for cluster settings table.
         Currently cannot support the following as values:
-          * Lists
           * Maps
         """
         cluster_settings_table_name = self.get_cluster_settings_table_name()
@@ -581,12 +603,9 @@ class ClusterConfigDB(DynamoDBStreamSubscriber):
         for setting in settings:
             item_key = f'{module_id}.{setting}'
             item_value = settings[setting]
-            if type(item_value) is dict or type(item_value) is list:
-                raise exceptions.invalid_params(f'Unable to support map or list setting: {setting}')
-            item_type = "S"
-            if type(item_value) is int or item_value.isdigit():
-                item_value = str(item_value)
-                item_type = "N"
+            if type(item_value) is dict:
+                raise exceptions.invalid_params(f'Unable to support map setting: {setting}')
+            item_type, item_value = self.convert_to_dynamodb_type(item_value)
             key = {
                 'S': item_key
             }
@@ -620,7 +639,7 @@ class ClusterConfigDB(DynamoDBStreamSubscriber):
             self.aws.dynamodb().transact_write_items(TransactItems=items)
         except Exception as e:
             # TODO: once logging is instrumented, log the exception message
-            raise exceptions.general_exception('Something went wrong.')
+            raise exceptions.general_exception(f'Something went wrong: {e}')
 
     def get_cluster_s3_bucket(self) -> str:
         cluster_modules = self.get_cluster_modules()

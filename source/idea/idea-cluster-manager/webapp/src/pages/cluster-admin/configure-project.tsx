@@ -1,12 +1,12 @@
 import React, {Component, RefObject} from "react";
 import IdeaAppLayout, {IdeaAppLayoutProps} from "../../components/app-layout";
 import {IdeaSideNavigationProps} from "../../components/side-navigation";
-import { AttributeEditor, Button, Container, FormField, Header, Select, SpaceBetween} from "@cloudscape-design/components";
+import { AttributeEditor, Box, Button, Container, Header, Icon, Popover, Select, SpaceBetween } from "@cloudscape-design/components";
 import IdeaForm from "../../components/form";
 import {withRouter} from "../../navigation/navigation-utils";
 import Utils from "../../common/utils";
 import {AppContext} from "../../common";
-import {BatchPutRoleAssignmentResponse, DeleteRoleAssignmentRequest, Project, PutRoleAssignmentRequest, RoleAssignment, ScriptEvents, Scripts, SocaUserInputChoice, SocaUserInputParamMetadata} from "../../client/data-model";
+import {BatchPutRoleAssignmentResponse, DeleteRoleAssignmentRequest, Project, ProjectPermissions, PutRoleAssignmentRequest, Role, RoleAssignment, ScriptEvents, Scripts, SocaUserInputChoice, SocaUserInputParamMetadata} from "../../client/data-model";
 import {AccountsClient, ClusterSettingsClient} from "../../client";
 import {Constants} from "../../common/constants";
 import dot from "dot-object";
@@ -21,6 +21,8 @@ export interface ConfigureProjectState {
     availableUsers: OptionDefinition[];
     attachedGroups: { key: string, value: OptionDefinition, error?: string }[];
     availableGroups: OptionDefinition[];
+    permissionProfiles: Map<string, Role>;
+    permissionForProject?: ProjectPermissions;
 }
 
 export interface ConfigureProjectProps extends IdeaAppLayoutProps, IdeaSideNavigationProps {
@@ -37,52 +39,42 @@ class ConfigureProject extends Component<ConfigureProjectProps, ConfigureProject
             isUpdate: state ? state.isUpdate ?? false : false,
             project: state ? state.project : null,
             projectRoles: state ? state.projectRoles : [],
-            attachedUsers: this.getDefaultUsers(state ? state.projectRoles : []),
+            attachedUsers: [],
             availableUsers: [],
-            attachedGroups: this.getDefaultGroups(state ? state.projectRoles : []),
+            attachedGroups: [],
             availableGroups: [],
+            permissionProfiles: new Map(),
+            permissionForProject: state ? state.projectPermission : undefined,
         };
         this.getUsers();
         this.getGroups();
+        this.getPermissionProfiles();
     }
 
-    getRoles(): OptionDefinition[] {
-      return [
-        {
-          label: "Project Owner",
-          value: "project_owner",
-        },
-        {
-          label: "Project Member",
-          value: "project_member",
-        }
-      ]
-    }
-
-    getDefaultUsers(projectRoles?: RoleAssignment[]): { key: string; value: OptionDefinition; error?: string }[] {
+    getDefaultUsers(profileMap: Map<string, Role>): { key: string; value: OptionDefinition; error?: string }[] {
       const defaults = [];
-      for (const existingMapping of projectRoles ?? []) {
+      for (const existingMapping of this.state.projectRoles ?? []) {
         if (existingMapping.actor_type === "user")
           defaults.push({
             key: existingMapping.actor_id,
             value: {
               value: existingMapping.role_id!,
-              label: existingMapping.role_id === "project_owner" ? "Project Owner" : "Project Member",
+              label: (profileMap.get(existingMapping.role_id!)?.name || existingMapping.role_id!),
             },
           });
       }
       return defaults;
     }
 
-    getDefaultGroups(projectRoles?: RoleAssignment[]): { key: string; value: OptionDefinition; error?: string }[] {
+    getDefaultGroups(profileMap: Map<string, Role>): { key: string; value: OptionDefinition; error?: string }[] {
       const defaults = [];
-      for (const existingMapping of projectRoles ?? []) {
+      for (const existingMapping of this.state.projectRoles ?? []) {
         if (existingMapping.actor_type === "group")
           defaults.push({
             key: existingMapping.actor_id,
             value: {
               value: existingMapping.role_id!,
-              label: existingMapping.role_id === "project_owner" ? "Project Owner" : "Project Member",
+              label: (profileMap.get(existingMapping.role_id!)?.name || existingMapping.role_id!),
             },
           });
       }
@@ -137,7 +129,7 @@ class ConfigureProject extends Component<ConfigureProjectProps, ConfigureProject
                 actor_type: existingMapping.actor_type,
                 resource_type: "project",
                 resource_id: projectId,
-                role_id: actor.value.value ?? "project_member",
+                role_id: actor.value.value!,
                 request_id: Utils.getUUID(),    
               });
             }
@@ -165,7 +157,7 @@ class ConfigureProject extends Component<ConfigureProjectProps, ConfigureProject
             actor_type: "user",
             resource_type: "project",
             resource_id: projectId,
-            role_id: user.value.value ?? "project_member",
+            role_id: user.value.value!,
             request_id: Utils.getUUID(),    
           });
         }
@@ -180,7 +172,7 @@ class ConfigureProject extends Component<ConfigureProjectProps, ConfigureProject
             actor_type: "group",
             resource_type: "project",
             resource_id: projectId,
-            role_id: group.value.value ?? "project_member",
+            role_id: group.value.value!,
             request_id: Utils.getUUID(),    
           });
         }
@@ -191,7 +183,7 @@ class ConfigureProject extends Component<ConfigureProjectProps, ConfigureProject
           items: toDelete,
         }));
       }
-      
+
       if (toUpdate.length > 0) {
         await Promise.resolve(authzClient.batchPutRoleAssignment({
           items: toUpdate,
@@ -212,7 +204,7 @@ class ConfigureProject extends Component<ConfigureProjectProps, ConfigureProject
           actor_type: "group",
           resource_type: "project",
           resource_id: projectId,
-          role_id: groupRoleMapping.value.value ?? "project_member",
+          role_id: groupRoleMapping.value.value!,
           request_id: Utils.getUUID(),    
         });
       }
@@ -222,7 +214,7 @@ class ConfigureProject extends Component<ConfigureProjectProps, ConfigureProject
           actor_type: "user",
           resource_type: "project",
           resource_id: projectId,
-          role_id: userRoleMapping.value.value ?? "project_member",
+          role_id: userRoleMapping.value.value!,
           request_id: Utils.getUUID(),    
         });
       }
@@ -279,6 +271,33 @@ class ConfigureProject extends Component<ConfigureProjectProps, ConfigureProject
       });
     }
 
+    getPermissionProfiles() {
+      this.authz().listRoles({
+        include_permissions: true,
+      })
+      .then((response) => {
+        const profileMap = new Map();
+        response.items.forEach(profile => {
+          profileMap.set(profile.role_id, profile);
+        })
+        this.setState({
+          permissionProfiles: profileMap,
+          attachedGroups: this.getDefaultGroups(profileMap),
+          attachedUsers: this.getDefaultUsers(profileMap),
+        });
+      });
+    }
+
+    getPermissionProfileOptions(): OptionDefinition[] {
+      const permissionProfiles = Array.from(this.state.permissionProfiles.values());
+      return permissionProfiles.map(profile => {
+        return {
+          value: profile.role_id,
+          label: profile.name,
+        }
+      });
+    }
+
     buildUserParam(): React.ReactElement {
         return <SpaceBetween size="m">
           <AttributeEditor
@@ -288,7 +307,7 @@ class ConfigureProject extends Component<ConfigureProjectProps, ConfigureProject
                 attachedUsers: [...this.state.attachedUsers, {
                   key: "",
                   value: { label: "Project Member", value: "project_member" },
-                  error: "Please choose a user"
+                  error: "Please choose a user."
                 }]
               });
             }}
@@ -299,17 +318,25 @@ class ConfigureProject extends Component<ConfigureProjectProps, ConfigureProject
             }}
             items={this.state.attachedUsers}
             addButtonText={"Add user"}
-            disableAddButton={this.state.attachedUsers.length === this.state.availableUsers.length}
-            removeButtonText="Remove user"
+            disableAddButton={
+              (this.state.attachedUsers.length === this.state.availableUsers.length) || 
+              (this.state.permissionForProject ? !this.state.permissionForProject.update_personnel : !this.isAdmin())
+            }
+            removeButtonText="Remove"
             empty="No users attached. Click 'Add user' below to get started."
+            isItemRemovable={(_) => {
+              return (this.state.permissionForProject ? this.state.permissionForProject.update_personnel : this.isAdmin())
+            }}
             definition={[
               {
-                label: <FormField label="Users" description="Select applicable users for the Project"></FormField>,
+                label: "Users",
+                info: <Popover content="Select applicable users for the Project.">Info</Popover>,
                 control: (item: { key: string, value: OptionDefinition, error?: string }, itemIndex: number) => (
                   <Select
                     key={item.key}
                     options={this.state.availableUsers}
                     selectedOption={{value: item.key}}
+                    disabled={this.state.permissionForProject ? !this.state.permissionForProject.update_personnel : !this.isAdmin()}
                     onChange={(e) => {
                       if (this.state.attachedUsers.some(x => x.key === e.detail.selectedOption.value!)) {
                         // we have already chosen this user, we can't assign a user
@@ -326,20 +353,37 @@ class ConfigureProject extends Component<ConfigureProjectProps, ConfigureProject
                 errorText: (item: {key: string, value: OptionDefinition, error?: string}) => { return item.error },
               },
               {
-                label: <FormField label="Role" description="Choose a role for the user"></FormField>,
+                label: "Permission profile",
+                info: <Popover content="Choose a permission profile for the user.">Info</Popover>,
                 control: (item: { key: string, value: OptionDefinition }, itemIndex: number) => (
                   <Select
                     key={item.key}
                     selectedOption={item.value}
-                    options={this.getRoles()}
+                    options={this.getPermissionProfileOptions()}
+                    disabled={this.state.permissionForProject ? !this.state.permissionForProject.update_personnel : !this.isAdmin()}
                     placeholder="Choose role"
+                    errorText=""
                     onChange={(e) => {
                       const tmp = [...this.state.attachedUsers];
                       tmp[itemIndex].value = e.detail.selectedOption;
                       this.setState({ attachedUsers: tmp });
                     }}
                   ></Select>
-                )
+                ),
+                constraintText: (item: { key: string, value: OptionDefinition, error?: string }) => {
+                  if (this.state.permissionProfiles.has(item.value.value!)) {
+                    if (this.state.permissionProfiles.get(item.value.value!)?.projects.update_personnel) {
+                      return <Box color="text-status-error" variant="p">
+                        <Icon name="status-warning" /> Users/groups assigned
+                        to this permission profile can grant themselves or
+                        others higher privileges for this project by
+                        re-assigning personnel to a different permission
+                        profile
+                      </Box>
+                    }
+                  }
+                  return null;
+                },
               }
             ]}
           />
@@ -362,19 +406,27 @@ class ConfigureProject extends Component<ConfigureProjectProps, ConfigureProject
                   tmpItems.splice(changeEvent.detail.itemIndex, 1);
                   this.setState({ attachedGroups: tmpItems });
                 }}
+                isItemRemovable={(_) => {
+                  return (this.state.permissionForProject ? this.state.permissionForProject.update_personnel : this.isAdmin())
+                }}
                 items={this.state.attachedGroups}
                 addButtonText={"Add group"}
-                removeButtonText="Remove group"
-                disableAddButton={this.state.attachedGroups.length === this.state.availableGroups.length}
+                removeButtonText="Remove"
+                disableAddButton={
+                  (this.state.attachedGroups.length === this.state.availableGroups.length) || 
+                  (this.state.permissionForProject ? !this.state.permissionForProject.update_personnel : !this.isAdmin())
+                }
                 empty="No groups attached. Click 'Add group' below to get started."
                 definition={[
                   {
-                    label: <FormField label="Groups" description="Select applicable ldap groups for the Project"></FormField>,
+                    label: "Groups",
+                    info: <Popover content="Select applicable ldap groups for the Project.">Info</Popover>,
                     control: (item: { key: string, value: OptionDefinition, error?: string }, itemIndex: number) => (
                       <Select
                         key={item.key}
                         options={this.state.availableGroups}
                         selectedOption={{ value: item.key }}
+                        disabled={this.state.permissionForProject ? !this.state.permissionForProject.update_personnel : !this.isAdmin()}
                         onChange={(e) => {
                           if (this.state.attachedGroups.some(x => x.key === e.detail.selectedOption.value!)) {
                             // we have already chosen this group, we can't assign a group
@@ -391,21 +443,36 @@ class ConfigureProject extends Component<ConfigureProjectProps, ConfigureProject
                     errorText: (item: {key: string, value: OptionDefinition, error?: string}) => { return item.error }
                   },
                   {
-                    label: <FormField label="Role" description="Choose a role for the group"></FormField>,
-                    constraintText: "",
+                    label: "Permission profile",
+                    info: <Popover content="Choose a permission profile for the group.">Info</Popover>,
                     control: (item: { key: string, value: OptionDefinition }, itemIndex: number) => (
                       <Select
                         key={item.key}
                         selectedOption={item.value}
-                        options={this.getRoles()}
+                        options={this.getPermissionProfileOptions()}
                         placeholder="Choose role"
+                        disabled={this.state.permissionForProject ? !this.state.permissionForProject.update_personnel : !this.isAdmin()}
                         onChange={(e) => {
                           const tmp = [...this.state.attachedGroups];
                           tmp[itemIndex].value = e.detail.selectedOption;
                           this.setState({ attachedGroups: tmp });
                         }}
                       ></Select>
-                    )
+                    ),
+                    constraintText: (item: { key: string, value: OptionDefinition, error?: string }) => {
+                      if (this.state.permissionProfiles.has(item.value.value!)) {
+                        if (this.state.permissionProfiles.get(item.value.value!)?.projects.update_personnel) {
+                          return <Box color="text-status-error" variant="p">
+                            <Icon name="status-warning" /> Users/groups assigned
+                            to this permission profile can grant themselves or
+                            others higher privileges for this project by
+                            re-assigning personnel to a different permission
+                            profile
+                          </Box>
+                        }
+                      }
+                      return null;
+                    },
                   }
                 ]}
               />
@@ -419,8 +486,8 @@ class ConfigureProject extends Component<ConfigureProjectProps, ConfigureProject
         }
         params.push({
             name: "add_filesystems",
-            title: "Add file systems",
-            description: "Select applicable file systems for the Project",
+            title: "Storage resources",
+            description: "Add file systems and/or S3 buckets to the project.",
             param_type: "select",
             multiple: true,
             data_type: "str",
@@ -560,6 +627,7 @@ class ConfigureProject extends Component<ConfigureProjectProps, ConfigureProject
                 param_type: "text",
                 data_type: "str",
                 readonly: !this.isAdmin(),
+                markdown: "configure-project",
           };
             const args: SocaUserInputParamMetadata = {
                 title: "Arguments",
@@ -567,6 +635,7 @@ class ConfigureProject extends Component<ConfigureProjectProps, ConfigureProject
                 param_type: "text",
                 data_type: "str",
                 readonly: !this.isAdmin(),
+                markdown: "configure-project",
           };
             formParams.push({
                 name: `${osType}_${script_event}_scripts`,
@@ -613,19 +682,21 @@ class ConfigureProject extends Component<ConfigureProjectProps, ConfigureProject
                             return Promise.all(promises).then((result) => {
                                 const choices: SocaUserInputChoice[] = [];
                                 const sharedFileSystem = result[0].settings;
-                                Object.keys(sharedFileSystem).forEach((key) => {
-                                    const storage = dot.pick(key, sharedFileSystem);
+                                Object.keys(sharedFileSystem).forEach((name) => {
+                                    const storage = dot.pick(name, sharedFileSystem);
+                                    const title = dot.pick("title", storage);
                                     const provider = dot.pick("provider", storage);
                                     if (Utils.isEmpty(provider)) {
                                         return true;
                                     }
-                                    const isInternal = key === "internal";
+                                    const isInternal = name === "internal";
                                     if (!isInternal) {
                                         let choice: SocaUserInputChoice = {
-                                            title: `${key} [${provider}]`,
-                                            value: `${key}`,
+                                            title: `${title} [${provider}]`,
+                                            description: `${name}`,
+                                            value: `${name}`,
                                         };
-                                        if (key === "home") {
+                                        if (name === "home") {
                                             choice.disabled = true;
                                         }
                                         choices.push(choice);
@@ -768,6 +839,9 @@ class ConfigureProject extends Component<ConfigureProjectProps, ConfigureProject
                     },
                     ...this.buildResourceConfigurationAdvancedOptions()
                 ]}
+                toolsOpen={this.props.toolsOpen} 
+                tools={this.props.tools}
+                onToolsChange={this.props.onToolsChange}
             />
         )
     }
@@ -861,7 +935,8 @@ class ConfigureProject extends Component<ConfigureProjectProps, ConfigureProject
         let scripts;
         if (this.state.isUpdate) {
             createOrUpdate = async (request: any) => {
-              // Only admin can update project, project owners can only update role assignments
+              // Only admin can update project
+              // users with other permissions can only update role assignments
               const updates = [];
               if (this.isAdmin()) {
                 updates.push(this.projects().updateProject(request));

@@ -151,19 +151,7 @@ def process_vdi_yaml(config_info, region):
                         f"Could not get the latest AMI ID for {platform} {arch} from SSM public parameters"
                     )
 
-        elif platform == "centos7":
-            for arch in config_info[platform].keys():
-                arch_identifier = (
-                    "aarch64" if arch == "arm64" else arch.replace("-", "_")
-                )
-                base_ami_id = get_latest_ami_id_by_ami_name(
-                    ec2_client, f"CentOS 7.* {arch_identifier}"
-                )
-                add_or_update_ami_info(
-                    config_info[platform][arch], region, base_ami_id, "base"
-                )
-
-        elif platform in ["rhel7", "rhel8", "rhel9"]:
+        elif platform in ["rhel8", "rhel9"]:
             # Only x86-64 architecture is supported currently.
             rhel_version = platform.replace("rhel", "")
             base_ami_id = get_latest_ami_id_by_ami_name(
@@ -206,6 +194,17 @@ def process_vdi_yaml(config_info, region):
                 "Windows - NVIDIA",
                 "NVIDIA",
                 "Windows - NVIDIA",
+            )
+
+        elif platform == "ubuntu2204":
+            # Only x86-64 architecture is supported currently.
+            base_ami_id = get_latest_ami_id_by_ami_name(
+                ec2_client,
+                f"ubuntu/images/hvm-ssd/ubuntu-jammy-22.04-amd64-server-20240125",
+            )
+
+            add_or_update_ami_info(
+                config_info[platform]["x86-64"], region, base_ami_id, "base"
             )
 
 

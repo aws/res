@@ -18,6 +18,7 @@ from ideadatamodel import (
     ListSoftwareStackResponse,
     ListPermissionsRequest,
     ListPermissionsResponse,
+    Project,
     UpdateSessionPermissionRequest,
     VirtualDesktopSessionState,
     VirtualDesktopSessionType,
@@ -244,7 +245,11 @@ class VirtualDesktopAPI(BaseAPI):
         if Utils.is_empty(session.idea_session_id):
             exceptions.invalid_params('missing session.res_session_id')
         return True
-
+    
+    # Get a list of projects where the current user is linked
+    def get_user_projects(self, username: str) -> List[Project]:
+        return self.context.projects_client.get_user_projects(username=username)
+    
     def validate_create_session_request(self, session: VirtualDesktopSession) -> (VirtualDesktopSession, bool):
         if Utils.is_empty(session.project) or Utils.is_empty(session.project.project_id):
             session.failure_reason = 'missing session.project.project_id'
@@ -252,7 +257,7 @@ class VirtualDesktopAPI(BaseAPI):
 
         # validate if the user belongs to this project
         is_user_part_of_project = False
-        user_projects = self.context.projects_client.get_user_projects(username=session.owner)
+        user_projects = self.get_user_projects(username=session.owner)
         for project in user_projects:
             if project.project_id == session.project.project_id:
                 is_user_part_of_project = True
@@ -260,7 +265,7 @@ class VirtualDesktopAPI(BaseAPI):
                 break
 
         if not is_user_part_of_project:
-            session.failure_reason = f'User {session.owner} does not belong in project_id {session.project.project_id}'
+            session.failure_reason = f'User {session.owner} does not belong in the selected project.'
             return session, False
 
         # Validate Software Stack Object
@@ -339,7 +344,7 @@ class VirtualDesktopAPI(BaseAPI):
             return session, False
 
         # Technical Validation for Hibernation.
-        if session.hibernation_enabled and session.software_stack.base_os in {VirtualDesktopBaseOS.RHEL7, VirtualDesktopBaseOS.RHEL8, VirtualDesktopBaseOS.RHEL9, VirtualDesktopBaseOS.CENTOS7}:
+        if session.hibernation_enabled and session.software_stack.base_os in {VirtualDesktopBaseOS.RHEL8, VirtualDesktopBaseOS.RHEL9}:
             session.failure_reason = f'OS {session.software_stack.base_os} does not support Instance Hibernation'
             return session, False
         elif session.hibernation_enabled and session.software_stack.base_os is VirtualDesktopBaseOS.WINDOWS:

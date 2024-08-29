@@ -1,46 +1,36 @@
-af-south-1:
-  amazonlinux2: ami-0227908b0a0e8f097
-ap-east-1:
-  amazonlinux2: ami-0a2944230de004ad2
 ap-northeast-1:
-  amazonlinux2: ami-0220a6b98b70e1279
+  amazonlinux2: ami-029dc392355a76964
 ap-northeast-2:
-  amazonlinux2: ami-05f0b456179f64cce
+  amazonlinux2: ami-0ebb3f23647161078
 ap-south-1:
-  amazonlinux2: ami-0ff36e1c9fc87b74b
+  amazonlinux2: ami-09859101d317198f9
 ap-southeast-1:
-  amazonlinux2: ami-0cf829f9c4973625a
+  amazonlinux2: ami-03137560e4bb69bbe
 ap-southeast-2:
-  amazonlinux2: ami-0b6e1baf8051c736d
-ap-southeast-3:
-  amazonlinux2: ami-0ab7e9ed84451c9a5
+  amazonlinux2: ami-03724927d4f98e431
 ca-central-1:
-  amazonlinux2: ami-08a859076e1aadedb
+  amazonlinux2: ami-0c2fab732e3eb14fe
 eu-central-1:
-  amazonlinux2: ami-0812d7c8f1abc0e24
+  amazonlinux2: ami-00e89f3f4910f40a1
 eu-north-1:
-  amazonlinux2: ami-0bfa1e6c61e82e4b6
+  amazonlinux2: ami-0d515288ba362764e
 eu-south-1:
-  amazonlinux2: ami-04154c8a5ee61adbc
+  amazonlinux2: ami-0bf64d8ea6e33c1ed
 eu-west-1:
-  amazonlinux2: ami-076c9bc5be2893a11
+  amazonlinux2: ami-0ed1631076fb35bc2
 eu-west-2:
-  amazonlinux2: ami-05e4ed86eaaac596f
+  amazonlinux2: ami-08b2435fa0ac624f9
 eu-west-3:
-  amazonlinux2: ami-09f63a3a06d08cac1
+  amazonlinux2: ami-0228728ec42e7a4ad
 il-central-1:
-  amazonlinux2: ami-051fd5c7084d435c4
-me-south-1:
-  amazonlinux2: ami-0d7f2bd7b639a7bdf
-sa-east-1:
-  amazonlinux2: ami-020689e1463efba96
+  amazonlinux2: ami-0b4cc68647f9c5675
 us-east-1:
-  amazonlinux2: ami-076c7acfc9e8ee57d
+  amazonlinux2: ami-0b3aef6bc281a13b2
 us-east-2:
-  amazonlinux2: ami-048b22ce7dcf74123
+  amazonlinux2: ami-0389762a69bab925a
 us-gov-west-1:
-  amazonlinux2: ami-0fc9f447d5d08b588
+  amazonlinux2: ami-06c442589e803c7ab
 us-west-1:
-  amazonlinux2: ami-06c8c34275c6770cf
+  amazonlinux2: ami-0358d6db3187f001b
 us-west-2:
-  amazonlinux2: ami-094a0fafc1bf73bd6
+  amazonlinux2: ami-0acb9a8339ab465bd

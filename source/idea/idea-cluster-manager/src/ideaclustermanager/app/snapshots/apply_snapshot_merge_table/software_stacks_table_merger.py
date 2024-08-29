@@ -81,6 +81,9 @@ class SoftwareStacksTableMerger(MergeTable):
                     continue
                 raise e
             except Exception as e:
+                if "is not a valid VirtualDesktopBaseOS" in str(e):
+                    logger.debug(TABLE_NAME, stack_name, ApplyResourceStatus.SKIPPED, f"{str(e)}. Base OS is no longer supported.")
+                    continue
                 logger.error(TABLE_NAME, stack_name, ApplyResourceStatus.FAILED_APPLY, str(e))
                 return record_deltas, False
 

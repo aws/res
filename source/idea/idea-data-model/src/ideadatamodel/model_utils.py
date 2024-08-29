@@ -11,7 +11,7 @@
 
 from ideadatamodel import constants, exceptions, errorcodes
 from typing import Optional, Union, Any, List, Tuple, Set, Dict, TypeVar, Mapping
-import orjson
+import json
 import hashlib
 from decimal import Decimal
 from pydantic import BaseModel
@@ -432,13 +432,13 @@ class ModelUtils:
                 return payload.json(exclude_none=True, by_alias=True)
         else:
             if indent:
-                return ModelUtils.from_bytes(orjson.dumps(payload, option=orjson.OPT_INDENT_2, default=json_serializer))
+                return json.dumps(payload, default=str, indent=2, separators=(',', ':'))
             else:
-                return ModelUtils.from_bytes(orjson.dumps(payload, default=json_serializer))
+                return json.dumps(payload, default=str, separators=(',', ':'))
 
     @staticmethod
     def from_json(data: str) -> Union[Dict, List]:
-        return orjson.loads(data)
+        return json.loads(data)
 
     @staticmethod
     def shake_256(data: str, num_bytes: int = 5) -> str:

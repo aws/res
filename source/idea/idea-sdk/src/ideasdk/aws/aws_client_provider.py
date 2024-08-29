@@ -22,6 +22,7 @@ from botocore.client import Config
 
 AWS_CLIENT_S3 = 's3'
 AWS_CLIENT_EC2 = 'ec2'
+AWS_CLIENT_LAMBDA = 'lambda'
 AWS_CLIENT_ELBV2 = 'elbv2'
 AWS_CLIENT_IAM = 'iam'
 AWS_CLIENT_CLOUDFORMATION = 'cloudformation'
@@ -57,6 +58,7 @@ SUPPORTED_CLIENTS = {
     AWS_CLIENT_S3,
     AWS_RESOURCE_S3_BUCKET,
     AWS_CLIENT_EC2,
+    AWS_CLIENT_LAMBDA,
     AWS_CLIENT_ELBV2,
     AWS_CLIENT_IAM,
     AWS_CLIENT_CLOUDFORMATION,
@@ -270,6 +272,9 @@ class AwsClientProvider(AwsClientProviderProtocol):
 
     def ec2(self):
         return self.get_client(service_name=AWS_CLIENT_EC2)
+
+    def lambda_(self):
+        return self.get_client(service_name=AWS_CLIENT_LAMBDA)
 
     def elbv2(self):
         return self.get_client(service_name=AWS_CLIENT_ELBV2)

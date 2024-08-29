@@ -14,7 +14,7 @@
 import React, { Component, RefObject } from "react";
 import { Box, Button, Container, Form, Grid, Header, Modal, SpaceBetween } from "@cloudscape-design/components";
 import { ModalProps } from "@cloudscape-design/components/modal/interfaces";
-import { SocaUserInputChoice, SocaUserInputParamMetadata, User, VirtualDesktopPermissionProfile, VirtualDesktopSession, VirtualDesktopSessionPermission } from "../../../client/data-model";
+import { GetUserResult, SocaUserInputChoice, SocaUserInputParamMetadata, User, VirtualDesktopPermissionProfile, VirtualDesktopSession, VirtualDesktopSessionPermission } from "../../../client/data-model";
 import { AuthClient, ProjectsClient, VirtualDesktopClient } from "../../../client";
 import { AppContext } from "../../../common";
 import { IdeaFormField, IdeaFormFieldLifecycleEvent, IdeaFormFieldStateChangeEvent, IdeaFormFieldStateChangeEventHandler } from "../../../components/form-field";
@@ -340,41 +340,8 @@ class UpdateSessionPermissionModal extends Component<UpdateSessionPermissionModa
     }
 
     componentDidMount() {
-        AppContext.get().client().authz().listRoleAssignments({
-            resource_key: `${this.props.session.project?.project_id}:project`
-        }).then((response) => {
-            const groups: string[] = [];
-            const users: User[] = [];
-            for (const assignment of response.items) {
-                if (assignment.actor_type === "group") {
-                    groups.push(assignment.actor_id);
-                }
-            }
-            
-            this.getAuthClient()
-                .listUsersInGroup({
-                    group_names: groups,
-                })
-                .then((group_response) => {
-                    group_response.listing?.forEach((user) => {
-                        if (AppContext.get().auth().getUsername() === user.username) {
-                            return;
-                        }
-                        users.push(user);
-                    });
-                    this.setState(
-                        {
-                            users: users,
-                            userListLoaded: true,
-                        },
-                        () => {
-                            this.createInitRows();
-                        }
-                    );
-                });
-            });
-
-        this.getVirtualDesktopUtilsClient()
+      this.buildUserList();
+      this.getVirtualDesktopUtilsClient()
             .listPermissionProfiles({})
             .then((response) => {
                 this.setState(
@@ -419,6 +386,49 @@ class UpdateSessionPermissionModal extends Component<UpdateSessionPermissionModa
 
     getVirtualDesktopUtilsClient(): VirtualDesktopUtilsClient {
         return AppContext.get().client().virtualDesktopUtils();
+    }
+
+    buildUserList(): void {
+        AppContext.get().client().authz().listRoleAssignments({
+            resource_key: `${this.props.session.project?.project_id}:project`
+        }).then(async (response) => {
+            const groups: string[] = [];
+            const userSet: Set<string> = new Set<string>();
+            const users: User[] = [];
+            const username = AppContext.get().auth().getUsername();
+            for (const assignment of response.items) {
+                if (assignment.actor_type === "group") {
+                    groups.push(assignment.actor_id);
+                }
+                if (assignment.actor_type === "user" && assignment.actor_id !== username) {
+                    userSet.add(assignment.actor_id);
+                    users.push({
+                        username: assignment.actor_id,
+                    });
+                }
+            }
+
+            const group_response = await this.getAuthClient()
+                .listUsersInGroup({
+                    group_names: groups,
+                });
+            group_response.listing?.forEach((user) => {
+                if (username === user.username || userSet.has(user.username!)) {
+                    return;
+                }
+                userSet.add(user.username!);
+                users.push(user);
+            });
+            this.setState(
+                {
+                    users: users,
+                    userListLoaded: true,
+                },
+                () => {
+                    this.createInitRows();
+                }
+            );
+        });
     }
 
     handleRowDeleteButtonClicked(row_id: string, buttonState: "delete" | "undo") {
@@ -528,7 +538,7 @@ class UpdateSessionPermissionModal extends Component<UpdateSessionPermissionModa
                 <Form
                     header={
                         <Header
-                            description={"Select the username, permission profile and the expiry date of the rules"}
+                            description={"Select the username, desktop shared setting and the expiry date of the rules"}
                             actions={
                                 <Button
                                     variant={"normal"}

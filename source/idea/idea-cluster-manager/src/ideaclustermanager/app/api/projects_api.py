@@ -26,7 +26,7 @@ from ideadatamodel.projects import (
     ListFileSystemsForProjectRequest,
     ListFileSystemsForProjectResult
 )
-from ideadatamodel import exceptions, constants, errorcodes, ListSecurityGroupsRequest
+from ideadatamodel import exceptions, constants
 from ideasdk.utils import Utils, ApiUtils
 
 
@@ -91,9 +91,8 @@ class ProjectsAPI(BaseAPI):
                                 constants.PROJECT_ID_REGEX,
                                 constants.PROJECT_ID_ERROR_MESSAGE)
         result = self.context.projects.create_project(request)
-        if not Utils.is_empty(request.filesystem_names):
-            for fs_name in request.filesystem_names:
-                self.context.shared_filesystem.update_filesystem_to_project_mapping(fs_name, request.project.name)
+        if request.filesystem_names is not None:
+            result.filesystem_names = self.context.shared_filesystem.update_filesystems_to_project_mappings(request.filesystem_names, request.project.name)
         context.success(result)
 
     def delete_project(self, context: ApiInvocationContext):
@@ -113,6 +112,8 @@ class ProjectsAPI(BaseAPI):
     def update_project(self, context: ApiInvocationContext):
         request = context.get_request_payload_as(UpdateProjectRequest)
         result = self.context.projects.update_project(request)
+        if request.filesystem_names is not None:
+            result.filesystem_names = self.context.shared_filesystem.update_filesystems_to_project_mappings(request.filesystem_names, request.project.name)
         context.success(result)
 
     def list_projects(self, context: ApiInvocationContext):
@@ -129,6 +130,7 @@ class ProjectsAPI(BaseAPI):
     def get_user_projects(self, context: ApiInvocationContext):
         request = context.get_request_payload_as(GetUserProjectsRequest)
         request.username = context.get_username() if not Utils.is_empty(context.get_username()) else request.username
+        request.exclude_disabled = Utils.get_as_bool(request.exclude_disabled, True)
         result = self.context.projects.get_user_projects(request)
         context.success(result)
 
@@ -195,5 +197,20 @@ class ProjectsAPI(BaseAPI):
         if is_authenticated_user and namespace in ('Projects.GetUserProjects', 'Projects.GetProject'):
             acl_entry['method'](context)
             return
+        
+        # Conditional permissions for non-admins
+        
+        if namespace == 'Projects.EnableProject':
+            request = context.get_request_payload_as(EnableProjectRequest)
+            # Current user must have "update_status" permission for all projects in the request
+            if not Utils.is_empty(request.project_id) and context.is_authorized(elevated_access=False, scopes=[acl_entry_scope], role_assignment_resource_key=f"{request.project_id}:project"):
+                acl_entry['method'](context)
+                return
+        elif namespace == 'Projects.DisableProject':
+            request = context.get_request_payload_as(DisableProjectRequest)
+            # Current user must have "update_status" permission for all projects in the request
+            if not Utils.is_empty(request.project_id) and context.is_authorized(elevated_access=False, scopes=[acl_entry_scope], role_assignment_resource_key=f"{request.project_id}:project"):
+                acl_entry['method'](context)
+                return
 
         raise exceptions.unauthorized_access()

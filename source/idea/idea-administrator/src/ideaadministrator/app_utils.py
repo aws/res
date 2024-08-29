@@ -68,10 +68,7 @@ class AdministratorUtils:
 
     @staticmethod
     def get_ec2_username(os_: str) -> str:
-        if os_ == constants.OS_CENTOS7:
-            return 'centos7'
-        else:
-            return 'ec2-user'
+        return 'ec2-user'
 
     @staticmethod
     def get_session_manager_url(aws_partition: str, aws_region: str, instance_id: str) -> str:

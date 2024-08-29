@@ -116,7 +116,10 @@ class DirectoryServiceParameters(Base):
             id=DirectoryServiceKey.ROOT_PASSWORD_SECRET_ARN,
             type="String",
             description="Directory Service Root (Service Account) Password Secret ARN",
-            allowed_pattern="^(?:arn:(?:aws|aws-us-gov|aws-cn):secretsmanager:[a-z0-9-]{1,20}:[0-9]{12}:secret:[A-Za-z0-9\-\_\+\=\,\.\@]{1,128})?$",
+            allowed_pattern="^(?:arn:(?:aws|aws-us-gov|aws-cn):secretsmanager:[a-z0-9-]+:[0-9]{12}:secret:[A-Za-z0-9\-\_\+\=\/\.\@]{1,519})?$",
+            # Secret name can be 512 characters long and may include letters, numbers, and the following characters: /_+=.@-.
+            # Secrets Manager automatically adds a hyphen and six random characters after the secret name at the end of the ARN.
+            # https://docs.aws.amazon.com/secretsmanager/latest/apireference/API_CreateSecret.html#SecretsManager-CreateSecret-request-Name
         )
     )
     domain_tls_certificate_secret_arn: str = Base.parameter(

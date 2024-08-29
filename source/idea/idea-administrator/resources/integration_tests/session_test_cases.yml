@@ -20,55 +20,6 @@ testcases:
     instance_type: g4ad.xlarge
     storage_size: 500
 
-  - name: rhel7-x86_64
-    base_os: rhel7
-    software_stack_id: ss-base-rhel7-x86-64-base
-    hibernation_enabled: false
-    instance_type: t3.xlarge
-    storage_size: 500
-
-  - name: rhel7-gpu-nvidia
-    base_os: rhel7
-    software_stack_id: ss-base-rhel7-x86-64-base
-    hibernation_enabled: false
-    instance_type: g4dn.xlarge
-    storage_size: 500
-
-  - name: rhel7-gpu-amd
-    base_os: rhel7
-    software_stack_id: ss-base-rhel7-x86-64-base
-    hibernation_enabled: false
-    instance_type: g4ad.xlarge
-    storage_size: 500
-
-  - name: centos7-x86_64
-    base_os: centos7
-    software_stack_id: ss-base-centos7-x86-64-base
-    hibernation_enabled: False
-    instance_type: t3.xlarge
-    storage_size: 500
-
-  - name: centos7-arm
-    base_os: centos7
-    software_stack_id: ss-base-centos7-arm64-base
-    hibernation_enabled: False
-    instance_type: m6g.2xlarge
-    storage_size: 500
-
-  - name: centos7-gpu-nvidia
-    base_os: centos7
-    software_stack_id: ss-base-centos7-x86-64-base
-    hibernation_enabled: False
-    instance_type: g4dn.xlarge
-    storage_size: 500
-
-  - name: centos7-gpu-amd
-    base_os: centos7
-    software_stack_id: ss-base-centos7-x86-64-base
-    hibernation_enabled: False
-    instance_type: g4ad.xlarge
-    storage_size: 500
-
   - name: amazon-linux2-x86_64
     base_os: amazonlinux2
     software_stack_id: ss-base-amazonlinux2-x86-64-base

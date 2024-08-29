@@ -382,10 +382,6 @@ SocaInputParamSpec:
       choices:
         - title: Amazon Linux 2
           value: amazonlinux2
-        - title: CentOS 7
-          value: centos7
-        - title: Red Hat Enterprise Linux 7
-          value: rhel7
       tag: default
       markdown: ~
 

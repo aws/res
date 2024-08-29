@@ -24,3 +24,15 @@ LOG_RETENTION_ROLE_NAME = 'log-retention'
 
 DEPLOYMENT_OPTION_INSTALL_IDEA = 'install-idea'
 DEPLOYMENT_OPTION_INSTALL_IDEA_USING_EXISTING_RESOURCES = 'install-idea-using-existing-resources'
+
+S3_MOUNT_BUCKET_READ_ONLY_ROLE_NAME = 's3-mount-bucket-read-only'
+S3_MOUNT_BUCKET_READ_WRITE_ROLE_NAME = 's3-mount-bucket-read-write'
+CUSTOM_CREDENTIAL_BROKER_ROLE_NAME = 'custom-credential-broker-lambda-role'
+
+USER_SESSION_DB_HASH_KEY = 'owner'
+USER_SESSION_DB_RANGE_KEY = 'idea_session_id'
+
+DCV_HOST_DB_HASH_KEY = 'instance_id'
+DCV_HOST_DB_IDEA_SESSION_ID_KEY = 'idea_session_id'
+DCV_HOST_DB_IDEA_SESSION_OWNER_KEY = 'idea_session_owner'
+

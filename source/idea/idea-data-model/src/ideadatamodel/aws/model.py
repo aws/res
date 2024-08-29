@@ -27,7 +27,8 @@ __all__ = (
     'EC2PrefixListEntry',
     'CognitoUser',
     'CognitoUserMFAOptions',
-    'CognitoUserPoolPasswordPolicy'
+    'CognitoUserPoolPasswordPolicy',
+    'AWSTag'
 )
 
 from ideadatamodel.aws import EC2Instance
@@ -253,3 +254,8 @@ class CognitoUserPoolPasswordPolicy(SocaBaseModel):
     require_numbers: Optional[bool]
     require_symbols: Optional[bool]
     temporary_password_validity_days: Optional[int]
+
+
+class AWSTag(SocaBaseModel):
+    Key: str
+    Value: str

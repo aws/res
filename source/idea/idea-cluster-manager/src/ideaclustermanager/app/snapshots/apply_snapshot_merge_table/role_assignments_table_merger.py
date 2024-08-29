@@ -85,7 +85,7 @@ class RoleAssignmentsTableMerger(MergeTable):
                         actor_type = role_assignment.actor_type,
                         role_id = role_assignment.role_id,
                         )
-                    response = context.authz.put_role_assignment(put_role_assignment_request)
+                    response = context.role_assignments.put_role_assignment(put_role_assignment_request)
                     if isinstance(response, PutRoleAssignmentErrorResponse):
                         if response.error_code in [errorcodes.AUTH_USER_NOT_FOUND, errorcodes.AUTH_GROUP_NOT_FOUND]:
                             logger.warning(TABLE_NAME, composite_key, None, "Actor not found. Skipping migration for this record")
@@ -119,7 +119,7 @@ class RoleAssignmentsTableMerger(MergeTable):
                         resource_type = role_assignment.resource_type,
                         actor_type = role_assignment.actor_type,
                         )
-                    response = context.authz.delete_role_assignment(delete_role_assignment_request)
+                    response = context.role_assignments.delete_role_assignment(delete_role_assignment_request)
                     if isinstance(response, DeleteRoleAssignmentErrorResponse):
                         raise exceptions.SocaException(response.error_code, response.message)
                 except Exception as e:
@@ -135,7 +135,7 @@ class RoleAssignmentsTableMerger(MergeTable):
         role_assignment_resource_key = db_entry[db_utils.ROLE_ASSIGNMENT_DB_RESOURCE_KEY]
         
         try:
-            existing_role_assignment = context.authz.get_role_assignment(actor_key = role_assignment_actor_key, resource_key = role_assignment_resource_key)
+            existing_role_assignment = context.role_assignments.get_role_assignment(actor_key = role_assignment_actor_key, resource_key = role_assignment_resource_key)
             if not existing_role_assignment:
                 # Corresponding snapshot entry does not exist in DB. Create a new role assignment in DB
                 return db_entry, MergedRecordActionType.CREATE

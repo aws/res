@@ -290,6 +290,7 @@ class IdeaFormBuilderField extends Component<IdeaFormBuilderFieldProps, IdeaForm
                 };
             }
 
+            param.optional = Utils.asBoolean(param.optional);
             param.multiple = Utils.asBoolean(param.multiple);
             param.multiline = Utils.asBoolean(param.multiline);
             param.readonly = Utils.asBoolean(param.readonly);

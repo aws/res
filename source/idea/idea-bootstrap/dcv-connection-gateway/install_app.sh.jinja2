@@ -40,7 +40,6 @@ tar -xvf ${BOOTSTRAP_DIR}/${PACKAGE_ARCHIVE} -C ${APP_DIR}
 {%- if context.base_os in ('rhel9') %}
 
   DCV_GPG_KEY="{{ context.config.get_string('global-settings.package_config.dcv.gpg_key', required=True) }}"
-  DCV_CONNECTION_GATEWAY_VERSION="{{ context.config.get_string('global-settings.package_config.dcv.connection_gateway.x86_64.linux.rhel_centos_rocky9.version', required=True) }}"
   DCV_CONNECTION_GATEWAY_URL="{{ context.config.get_string('global-settings.package_config.dcv.connection_gateway.x86_64.linux.rhel_centos_rocky9.url', required=True) }}"
   DCV_CONNECTION_GATEWAY_SHA256_URL="{{ context.config.get_string('global-settings.package_config.dcv.connection_gateway.x86_64.linux.rhel_centos_rocky9.sha256sum', required=True) }}"
 
@@ -48,37 +47,28 @@ tar -xvf ${BOOTSTRAP_DIR}/${PACKAGE_ARCHIVE} -C ${APP_DIR}
   GATEWAY_TO_BROKER_PORT="{{ context.config.get_string("virtual-desktop-controller.dcv_broker.gateway_communication_port", required=True) }}"
 
   DCV_SERVER_X86_64_URL="{{ context.config.get_string('global-settings.package_config.dcv.host.x86_64.linux.rhel_centos_rocky9.url', required=True) }}"
-  DCV_SERVER_X86_64_TGZ="{{ context.config.get_string('global-settings.package_config.dcv.host.x86_64.linux.rhel_centos_rocky9.tgz', required=True) }}"
-  DCV_SERVER_X86_64_VERSION="{{ context.config.get_string('global-settings.package_config.dcv.host.x86_64.linux.rhel_centos_rocky9.version', required=True) }}"
-  DCV_SERVER_X86_64_SHA256_HASH="{{ context.config.get_string('global-settings.package_config.dcv.host.x86_64.linux.rhel_centos_rocky9.sha256sum', required=True) }}"
+  DCV_SERVER_X86_64_SHA256_URL="{{ context.config.get_string('global-settings.package_config.dcv.host.x86_64.linux.rhel_centos_rocky9.sha256sum', required=True) }}"
 
   DCV_SERVER_AARCH64_URL="{{ context.config.get_string('global-settings.package_config.dcv.host.aarch64.linux.rhel_centos_rocky9.url', required=True) }}"
-  DCV_SERVER_AARCH64_TGZ="{{ context.config.get_string('global-settings.package_config.dcv.host.aarch64.linux.rhel_centos_rocky9.tgz', required=True) }}"
-  DCV_SERVER_AARCH64_VERSION="{{ context.config.get_string('global-settings.package_config.dcv.host.aarch64.linux.rhel_centos_rocky9.version', required=True) }}"
-  DCV_SERVER_AARCH64_SHA256_HASH="{{ context.config.get_string('global-settings.package_config.dcv.host.aarch64.linux.rhel_centos_rocky9.sha256sum', required=True) }}"
+  DCV_SERVER_AARCH64_SHA256_URL="{{ context.config.get_string('global-settings.package_config.dcv.host.aarch64.linux.rhel_centos_rocky9.sha256sum', required=True) }}"
 
 {%- endif %}
 
 
-{%- if context.base_os in ('amazonlinux2', 'centos7', 'rhel7', 'rhel8') %}
+{%- if context.base_os in ('amazonlinux2', 'rhel8') %}
 
   DCV_GPG_KEY="{{ context.config.get_string('global-settings.package_config.dcv.gpg_key', required=True) }}"
-  DCV_CONNECTION_GATEWAY_VERSION="{{ context.config.get_string('global-settings.package_config.dcv.connection_gateway.x86_64.linux.al2_rhel_centos7.version', required=True) }}"
-  DCV_CONNECTION_GATEWAY_URL="{{ context.config.get_string('global-settings.package_config.dcv.connection_gateway.x86_64.linux.al2_rhel_centos7.url', required=True) }}"
-  DCV_CONNECTION_GATEWAY_SHA256_URL="{{ context.config.get_string('global-settings.package_config.dcv.connection_gateway.x86_64.linux.al2_rhel_centos7.sha256sum', required=True) }}"
+  DCV_CONNECTION_GATEWAY_URL="{{ context.config.get_string('global-settings.package_config.dcv.connection_gateway.x86_64.linux.al2.url', required=True) }}"
+  DCV_CONNECTION_GATEWAY_SHA256_URL="{{ context.config.get_string('global-settings.package_config.dcv.connection_gateway.x86_64.linux.al2.sha256sum', required=True) }}"
 
   INTERNAL_ALB_ENDPOINT="{{ context.config.get_cluster_internal_endpoint() }}"
   GATEWAY_TO_BROKER_PORT="{{ context.config.get_string("virtual-desktop-controller.dcv_broker.gateway_communication_port", required=True) }}"
 
-  DCV_SERVER_X86_64_URL="{{ context.config.get_string('global-settings.package_config.dcv.host.x86_64.linux.al2_rhel_centos7.url', required=True) }}"
-  DCV_SERVER_X86_64_TGZ="{{ context.config.get_string('global-settings.package_config.dcv.host.x86_64.linux.al2_rhel_centos7.tgz', required=True) }}"
-  DCV_SERVER_X86_64_VERSION="{{ context.config.get_string('global-settings.package_config.dcv.host.x86_64.linux.al2_rhel_centos7.version', required=True) }}"
-  DCV_SERVER_X86_64_SHA256_HASH="{{ context.config.get_string('global-settings.package_config.dcv.host.x86_64.linux.al2_rhel_centos7.sha256sum', required=True) }}"
+  DCV_SERVER_X86_64_URL="{{ context.config.get_string('global-settings.package_config.dcv.host.x86_64.linux.al2.url', required=True) }}"
+  DCV_SERVER_X86_64_SHA256_URL="{{ context.config.get_string('global-settings.package_config.dcv.host.x86_64.linux.al2.sha256sum', required=True) }}"
 
-  DCV_SERVER_AARCH64_URL="{{ context.config.get_string('global-settings.package_config.dcv.host.aarch64.linux.al2_rhel_centos7.url', required=True) }}"
-  DCV_SERVER_AARCH64_TGZ="{{ context.config.get_string('global-settings.package_config.dcv.host.aarch64.linux.al2_rhel_centos7.tgz', required=True) }}"
-  DCV_SERVER_AARCH64_VERSION="{{ context.config.get_string('global-settings.package_config.dcv.host.aarch64.linux.al2_rhel_centos7.version', required=True) }}"
-  DCV_SERVER_AARCH64_SHA256_HASH="{{ context.config.get_string('global-settings.package_config.dcv.host.aarch64.linux.al2_rhel_centos7.sha256sum', required=True) }}"
+  DCV_SERVER_AARCH64_URL="{{ context.config.get_string('global-settings.package_config.dcv.host.aarch64.linux.al2.url', required=True) }}"
+  DCV_SERVER_AARCH64_SHA256_URL="{{ context.config.get_string('global-settings.package_config.dcv.host.aarch64.linux.al2.sha256sum', required=True) }}"
 
 {%- endif %}
 
@@ -108,42 +98,40 @@ function install_dcv_web_viewer() {
 
   local machine=$(uname -m) #x86_64 or aarch64
   local DCV_SERVER_URL=""
-  local DCV_SERVER_TGZ=""
-  local DCV_SERVER_VERSION=""
-  local DCV_SERVER_SHA256_HASH=""
+  local DCV_SERVER_SHA256_URL=""
   if [[ $machine == "x86_64" ]]; then
     # x86_64
     DCV_SERVER_URL=${DCV_SERVER_X86_64_URL}
-    DCV_SERVER_TGZ=${DCV_SERVER_X86_64_TGZ}
-    DCV_SERVER_VERSION=${DCV_SERVER_X86_64_VERSION}
-    DCV_SERVER_SHA256_HASH=${DCV_SERVER_X86_64_SHA256_HASH}
+    DCV_SERVER_SHA256_URL=${DCV_SERVER_X86_64_SHA256_URL}
   else
     # aarch64
     DCV_SERVER_URL=${DCV_SERVER_AARCH64_URL}
-    DCV_SERVER_TGZ=${DCV_SERVER_AARCH64_TGZ}
-    DCV_SERVER_VERSION=${DCV_SERVER_AARCH64_VERSION}
-    DCV_SERVER_SHA256_HASH=${DCV_SERVER_AARCH64_SHA256_HASH}
+    DCV_SERVER_SHA256_URL=${DCV_SERVER_AARCH64_SHA256_URL}
   fi
 
   rpm -q nice-dcv-web-viewer
   if [[ "$?" != "0"  ]]; then
     wget ${DCV_SERVER_URL}
+    fileName=$(basename ${DCV_SERVER_URL})
+    urlSha256Sum=$(wget -O - ${DCV_SERVER_SHA256_URL})
 
-    if [[ $(sha256sum ${DCV_SERVER_TGZ} | awk '{print $1}') != ${DCV_SERVER_SHA256_HASH} ]];  then
+    if [[ $(sha256sum ${fileName} | awk '{print $1}') != ${urlSha256Sum} ]];  then
         echo -e "FATAL ERROR: Checksum for DCV Server failed. File may be compromised." > /etc/motd
         exit 1
     fi
-    tar zxvf ${DCV_SERVER_TGZ}
+    extractDir=$(echo ${fileName} |  sed 's/\.tgz$//')
+    mkdir -p ${extractDir}
+    tar zxvf ${fileName} -C ${extractDir} --strip-components 1
 
-    pushd nice-dcv-${DCV_SERVER_VERSION}
+    pushd ${extractDir}
     {% if context.base_os == 'amazonlinux2' -%}
       rpm -ivh nice-dcv-web-viewer-*.${machine}.rpm
-    {% elif context.base_os in ('rhel7', 'rhel8', 'rhel9', 'centos7') -%}
+    {% elif context.base_os in ('rhel8', 'rhel9') -%}
       rpm -ivh nice-dcv-web-viewer-*.${machine}.rpm --nodeps
     {% endif -%}
     popd
-    rm -rf nice-dcv-${DCV_SERVER_VERSION}
-    rm -rf ${DCV_SERVER_TGZ}
+    rm -rf ${extractDir}
+    rm -rf ${fileName}
   fi
 
   yes | cp -a ${APP_DIR}/static_resources/. ${DCV_WEB_VIEWER_INSTALL_LOCATION}

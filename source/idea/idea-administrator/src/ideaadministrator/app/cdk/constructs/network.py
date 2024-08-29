@@ -26,7 +26,8 @@ __all__ = (
     'VpcInterfaceEndpoint',
     'DefaultClusterSecurityGroup',
     'VirtualDesktopPublicLoadBalancerAccessSecurityGroup',
-    'VirtualDesktopBastionAccessSecurityGroup'
+    'VirtualDesktopBastionAccessSecurityGroup',
+    'VirtualDesktopCustomCredentialBrokerSecurityGroup',
 )
 
 from typing import List, Optional, Dict
@@ -567,6 +568,29 @@ class VirtualDesktopPublicLoadBalancerAccessSecurityGroup(SecurityGroup):
     def setup_egress(self):
         self.add_outbound_traffic_rule()
 
+class VirtualDesktopCustomCredentialBrokerSecurityGroup(SecurityGroup):
+    """
+    Virtual Desktop Security Group for Custom Credential Broker with internal HTTPS traffic access for Virtual Desktop Infrastructure (VDI) hosts
+    """
+    component_name: str
+
+    def __init__(self, context: AdministratorContext, name: str, scope: constructs.Construct,
+                 vpc: ec2.IVpc, component_name: str, vdi_cidr_blocks: List[str]):
+        super().__init__(context, name, scope, vpc, description='Virtual Desktop Controller Credential Broker Lambda Function Security Group')
+        self.component_name = component_name
+        self.setup_ingress(vdi_cidr_blocks)
+        self.setup_egress()
+
+    def setup_ingress(self, vdi_cidr_blocks: List[str]):
+        for cidr in vdi_cidr_blocks:
+            self.add_ingress_rule(
+                ec2.Peer.ipv4(cidr),
+                ec2.Port.tcp(443),
+                description=f'Allow internal HTTPS traffic for Virtual Desktop Infrastructure (VDI) hosts to {self.component_name}'
+            )
+
+    def setup_egress(self):
+        self.add_outbound_traffic_rule()
 
 class VpcEndpointSecurityGroup(SecurityGroup):
 
@@ -611,7 +635,10 @@ class VpcInterfaceEndpoint(SocaBaseConstruct):
                  service: str,
                  vpc: ec2.IVpc,
                  vpc_endpoint_security_group: ec2.ISecurityGroup,
-                 create_tags: CreateTagsCustomResource):
+                 create_tags: CreateTagsCustomResource,
+                 lookup_supported_azs=True,
+                 subnets: ec2.SubnetSelection = None,
+                 ):
         super().__init__(context, f'{service}-vpc-endpoint')
         self.scope = scope
 
@@ -625,8 +652,10 @@ class VpcInterfaceEndpoint(SocaBaseConstruct):
                                                    open=True,
                                                    # setting private_dns_enabled = True can be problem in GovCloud where Route53 and in turn Private Hosted Zones is not supported.
                                                    private_dns_enabled=True,
-                                                   lookup_supported_azs=True,
-                                                   security_groups=[vpc_endpoint_security_group])
+                                                   lookup_supported_azs=lookup_supported_azs,
+                                                   security_groups=[vpc_endpoint_security_group],
+                                                   subnets=subnets
+                                                   )
 
         create_tags.apply(
             name=self.name,
@@ -641,6 +670,8 @@ class VpcInterfaceEndpoint(SocaBaseConstruct):
         dns = cdk.Fn.select(1, cdk.Fn.split(':', cdk.Fn.select(0, self.endpoint.vpc_endpoint_dns_entries)))
         return f'https://{dns}'
 
+    def get_endpoint(self) -> ec2.InterfaceVpcEndpoint:
+        return self.endpoint
 
 class DefaultClusterSecurityGroup(SecurityGroup):
     """

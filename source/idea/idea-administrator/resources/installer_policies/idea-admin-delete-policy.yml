@@ -50,6 +50,9 @@ Statement:
       - iam:DetachRolePolicy
       - iam:RemoveRoleFromInstanceProfile
       - kinesis:DeleteStream
+      - lambda:ListFunctions
+      - lambda:ListTags
+      - lambda:UpdateFunctionConfiguration
       - lambda:DeleteFunction
       - lambda:RemovePermission
       - logs:DescribeLogGroups

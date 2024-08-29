@@ -1677,7 +1677,7 @@ def test_accounts_initiate_auth_user_password_auth_flow_fail(context: AppContext
             ),
         )
     assert exc_info.value.error_code == errorcodes.INVALID_PARAMS
-    assert "Invalid params: password is required" in exc_info.value.message
+    assert "Invalid parameters: password is required" in exc_info.value.message
 
 
 def test_accounts_initiate_auth_refresh_token_auth_flow(

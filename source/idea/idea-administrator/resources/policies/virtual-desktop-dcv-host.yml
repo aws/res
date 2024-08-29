@@ -65,6 +65,12 @@ Statement:
           - global-settings.gpu_settings.*
 
   - Action:
+      - execute-api:Invoke
+    Resource:
+      - '{{ context.arns.custom_credential_broker_api_gateway_execute_api_arn("*") }}'
+    Effect: Allow
+
+  - Action:
       - logs:PutRetentionPolicy
     Resource: '*'
     Effect: Allow

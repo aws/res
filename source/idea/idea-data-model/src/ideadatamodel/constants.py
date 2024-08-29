@@ -27,6 +27,7 @@ STORAGE_PROVIDER_FSX_LUSTRE = 'fsx_lustre'
 STORAGE_PROVIDER_FSX_NETAPP_ONTAP = 'fsx_netapp_ontap'
 STORAGE_PROVIDER_FSX_OPENZFS = 'fsx_openzfs'
 STORAGE_PROVIDER_FSX_WINDOWS_FILE_SERVER = 'fsx_windows_file_server'
+STORAGE_PROVIDER_S3_BUCKET = 's3_bucket'
 DEFAULT_STORAGE_PROVIDER = STORAGE_PROVIDER_EFS
 SUPPORTED_STORAGE_PROVIDERS = [
     STORAGE_PROVIDER_EFS,
@@ -34,7 +35,8 @@ SUPPORTED_STORAGE_PROVIDERS = [
     STORAGE_PROVIDER_FSX_LUSTRE,
     STORAGE_PROVIDER_FSX_NETAPP_ONTAP,
     STORAGE_PROVIDER_FSX_OPENZFS,
-    STORAGE_PROVIDER_FSX_WINDOWS_FILE_SERVER
+    STORAGE_PROVIDER_FSX_WINDOWS_FILE_SERVER,
+    STORAGE_PROVIDER_S3_BUCKET
 ]
 
 # Volume Type strings
@@ -75,7 +77,7 @@ SCALING_MODE_SINGLE_JOB = 'single-job'
 SCALING_MODE_MULTIPLE_JOBS = 'batch'
 DEFAULT_SCALING_MODE = SCALING_MODE_SINGLE_JOB
 
-ALLOWED_BASEOS = ['rhel7', 'rhel8', 'rhel9', 'centos7', 'amazonlinux2']
+ALLOWED_BASEOS = ['rhel8', 'rhel9', 'amazonlinux2']
 
 TOPIC_BROADCAST = 'idea.app.broadcast'
 MESSAGE_RELOAD = 'app.reload'
@@ -240,14 +242,12 @@ SELECT_CHOICE_OTHER = 'other'
 
 # Supported OS
 OS_AMAZONLINUX2 = 'amazonlinux2'
-OS_RHEL7 = 'rhel7'
 OS_RHEL8 = 'rhel8'
 OS_RHEL9 = 'rhel9'
-OS_CENTOS7 = 'centos7'
 OS_UBUNTU2204 = 'ubuntu2204'
 OS_WINDOWS = 'windows'
-SUPPORTED_OS = (OS_AMAZONLINUX2, OS_RHEL7, OS_RHEL8, OS_RHEL9, OS_CENTOS7, OS_WINDOWS, OS_UBUNTU2204)
-SUPPORTED_LINUX_OS = (OS_AMAZONLINUX2, OS_RHEL7, OS_RHEL8, OS_RHEL9, OS_CENTOS7, OS_UBUNTU2204)
+SUPPORTED_OS = (OS_AMAZONLINUX2, OS_RHEL8, OS_RHEL9, OS_WINDOWS, OS_UBUNTU2204)
+SUPPORTED_LINUX_OS = (OS_AMAZONLINUX2, OS_RHEL8, OS_RHEL9, OS_UBUNTU2204)
 
 # Platforms
 PLATFORM_LINUX = 'linux'
@@ -273,7 +273,6 @@ MODULE_SCHEDULER = 'scheduler'
 MODULE_CLUSTER_MANAGER = 'cluster-manager'
 MODULE_VIRTUAL_DESKTOP_CONTROLLER = 'virtual-desktop-controller'
 MODULE_BASTION_HOST = 'bastion-host'
-MODULE_METRICS = 'metrics'
 ALL_MODULES = [
     MODULE_BOOTSTRAP,
     MODULE_GLOBAL_SETTINGS,
@@ -284,8 +283,7 @@ ALL_MODULES = [
     MODULE_SCHEDULER,
     MODULE_CLUSTER_MANAGER,
     MODULE_VIRTUAL_DESKTOP_CONTROLLER,
-    MODULE_BASTION_HOST,
-    MODULE_METRICS
+    MODULE_BASTION_HOST
 ]
 
 # module types
@@ -426,9 +424,41 @@ FILE_SYSTEM_NAME_REGEX = "^[a-z0-9_]{3,18}$"
 FILE_SYSTEM_NAME_ERROR_MESSAGE = "Only use lowercase alphabets, numbers and underscore (_) for file system name. " +\
             "Must be between 3 and 18 characters long."
 
+FILE_SYSTEM_TITLE_REGEX = "^[a-zA-Z0-9\s_-]{3,48}$"
+FILE_SYSTEM_TITLE_ERROR_MESSAGE = "Only use valid alphanumeric, hyphens (-), underscores (_), and spaces ( ) characters for the file system title. " +\
+            "Must be between 3 and 48 characters long."
+
+FILE_SYSTEM_TITLE_KEY = "title"
+FILE_SYSTEM_PROVIDER_KEY = "provider"
+FILE_SYSTEM_PROJECTS_KEY = "projects"
+FILE_SYSTEM_ALLOWED_KEYS_TO_UPDATE = [FILE_SYSTEM_TITLE_KEY, FILE_SYSTEM_PROJECTS_KEY]
+FILE_SYSTEM_VALID_FILTER_KEYS = [FILE_SYSTEM_TITLE_KEY, FILE_SYSTEM_PROVIDER_KEY, FILE_SYSTEM_PROJECTS_KEY]
+
+FILE_SYSTEM_FILTER_KEY_REGEX = f"^({'|'.join(FILE_SYSTEM_VALID_FILTER_KEYS)})$"
+FILE_SYSTEM_FILTER_KEY_ERROR_MESSAGE = "Only use valid filter keys for file systems."
+
+FILE_SYSTEM_FILTER_TITLE_REGEX = "^[a-zA-Z0-9\s_-]*$"
+FILE_SYSTEM_FILTER_TITLE_ERROR_MESSAGE = "Only use valid alphanumeric, hyphens (-), underscores (_), and spaces ( ) characters for the file system title."
+
+FILE_SYSTEM_FILTER_PROVIDERS_REGEX = f"^({'|'.join([STORAGE_PROVIDER_EFS, STORAGE_PROVIDER_FSX_LUSTRE, STORAGE_PROVIDER_FSX_NETAPP_ONTAP, STORAGE_PROVIDER_S3_BUCKET])})$"
+FILE_SYSTEM_FILTER_PROVIDERS_ERROR_MESSAGE = "Only use supported storage providers."
+
 MOUNT_DIRECTORY_REGEX = "^/[a-z0-9-]{3,18}$"
 MOUNT_DIRECTORY_ERROR_MESSAGE = "Only use lowercase alphabets, numbers, " +\
     "and hyphens (-) for mount directory. Must be between 3 and 18 characters long."
+
+S3_BUCKET_ARN_REGEX = "^(?:arn:(?:aws(?:-cn|-us-gov)?)):s3:::([a-z0-9][a-z0-9-.]{1,61}[a-z0-9])(?:/[a-z0-9-.]+)*/?$"
+S3_BUCKET_ARN_ERROR_MESSAGE = "The provided ARN does not adhere to the required format for an Amazon S3 bucket ARN. A properly formatted bucket ARN should follow the pattern 'arn:aws:s3:::bucket-name', where 'bucket-name' is the name of the S3 bucket."
+
+S3_BUCKET_ARN_PREFIX_REGEX = "^arn:aws(?:-cn|-us-gov)?:s3:::[^/]+/(.*)"
+
+IAM_ROLE_ARN_REGEX = "^(?:arn:(?:aws(?:-cn|-us-gov)?)):iam::\\d{12}:role/[/a-zA-Z0-9+=,.@_-]{0,511}[a-zA-Z0-9+=,.@_-]{1,64}$"
+IAM_ROLE_ARN_ERROR_MESSAGE = "The provided ARN does not adhere to the required format for an IAM role ARN. A properly formatted IAM role ARN should follow the pattern 'arn:aws:iam::account-id:role/optional-path-prefix/role-name', where 'account-id' is your AWS account ID and 'role-name' is the name of the IAM role."
+
+IAM_ROLE_NAME_CAPTURE_GROUP_REGEX = "^(?:arn:(?:aws(?:-cn|-us-gov)?)):iam::\\d{12}:role/(?:[a-zA-Z0-9+=,.@_-]+/)*([a-zA-Z0-9+=,.@_-]+)$"
+
+IAM_ROLE_NAME_REGEX = "^[a-zA-Z0-9+=,.@_-]{1,64}$"
+IAM_ROLE_NAME_ERROR_MESSAGE = "The provided IAM role name does not adhere to the required format. IAM role names can contain alphanumeric characters and the following special characters: +=,.@_- They must be between 1 and 64 characters long."
 
 MOUNT_DRIVE_REGEX = "^[ABD-Z]{1}$"
 MOUNT_DRIVE_ERROR_MESSAGE = "Only use an uppercase alphabet for mount drive"
@@ -448,7 +478,6 @@ VALID_ROLE_ASSIGNMENT_RESOURCE_TYPES = ["project"]
 VALID_ROLE_ASSIGNMENT_ACTOR_TYPES = ["user","group"]
 PROJECT_MEMBER_ROLE_ID = "project_member"
 PROJECT_OWNER_ROLE_ID = "project_owner"
-VALID_ROLE_ASSIGNMENT_ROLE_IDS = [PROJECT_MEMBER_ROLE_ID, PROJECT_OWNER_ROLE_ID]
 PROJECT_MEMBER_ROLE_NAME = "Project Member"
 PROJECT_OWNER_ROLE_NAME = "Project Owner"
 VALID_ROLE_ASSIGNMENT_ROLE_NAMES = [PROJECT_MEMBER_ROLE_NAME, PROJECT_OWNER_ROLE_NAME]
@@ -468,6 +497,9 @@ ROLE_ASSIGNMENT_RESOURCE_KEY_ERROR_MESSAGE = "Resource key format was wrong, or 
 AD_SAM_ACCOUNT_NAME_MAX_LENGTH = 20
 AD_SAM_ACCOUNT_NAME_REGEX = rf'[a-zA-Z0-9_.][a-zA-Z0-9_.-]{{1,{AD_SAM_ACCOUNT_NAME_MAX_LENGTH}}}'
 
+# The total allowable number of characters for group name is 65.
+GROUP_NAME_REGEX = rf'[a-zA-Z0-9_. -]{{1,65}}'
+
 USERNAME_REGEX = rf'^{AD_SAM_ACCOUNT_NAME_REGEX}$'
 USERNAME_ERROR_MESSAGE = (f"Username (SAM-Account-Name of the AD user) doesn't match the regex pattern {USERNAME_REGEX}. "
                           f"Username may only contain lower and upper case ASCII letters, "
@@ -475,8 +507,36 @@ USERNAME_ERROR_MESSAGE = (f"Username (SAM-Account-Name of the AD user) doesn't m
                           f"hyphen is not allowed as first character of the username. "
                           f"The maximum length of username is 20.")
 
-ROLE_ASSIGNMENT_ACTOR_ID_REGEX = rf'^{AD_SAM_ACCOUNT_NAME_REGEX}$'
+ROLE_ASSIGNMENT_ACTOR_ID_REGEX = rf'^({AD_SAM_ACCOUNT_NAME_REGEX}|{GROUP_NAME_REGEX})$'
 ROLE_ASSIGNMENT_ACTOR_ID_ERROR_MESSAGE = f"Actor ID doesn't match the regex pattern {ROLE_ASSIGNMENT_ACTOR_ID_REGEX}"
 
-ROLE_ASSIGNMENT_ACTOR_KEY_REGEX = rf"^{AD_SAM_ACCOUNT_NAME_REGEX}:({'|'.join(VALID_ROLE_ASSIGNMENT_ACTOR_TYPES)})$"
+ROLE_ASSIGNMENT_ACTOR_KEY_REGEX = rf"^({AD_SAM_ACCOUNT_NAME_REGEX}:user|{GROUP_NAME_REGEX}:group)$"
 ROLE_ASSIGNMENT_ACTOR_KEY_ERROR_MESSAGE = f"Actor key doesn't match the regex pattern {ROLE_ASSIGNMENT_ACTOR_KEY_REGEX}"
+
+S3_BUCKET_IAM_ROLE_RESOURCE_TAG_KEY = "res:Resource"
+S3_BUCKET_IAM_ROLE_RESOURCE_TAG_VALUE = "s3-bucket-iam-role"
+
+S3_BUCKET_IAM_ROLE_ERROR_MESSAGE = "The provided role either does not exist or lacks proper tagging for RES."
+
+API_GATEWAY_CUSTOM_CREDENTIAL_BROKER_STAGE = "prod"
+API_GATEWAY_CUSTOM_CREDENTIAL_BROKER_RESOURCE = "ObjectStorageTempCredentials"
+
+OBJECT_STORAGE_CUSTOM_PROJECT_NAME_PREFIX = "PROJECT_NAME_PREFIX"
+OBJECT_STORAGE_CUSTOM_PROJECT_NAME_AND_USERNAME_PREFIX = "PROJECT_NAME_AND_USERNAME_PREFIX"
+OBJECT_STORAGE_NO_CUSTOM_PREFIX = "NO_CUSTOM_PREFIX"
+
+ROLE_ID_REGEX = "^[a-z0-9_]{3,36}$"
+ROLE_ID_ERROR_MESSAGE = "Only use lowercase alphabets, numbers, or underscores (_) for role id. " +\
+    "Must be between 3 and 36 characters long."
+
+ROLE_NAME_REGEX = "^[a-zA-Z0-9-_ ]{3,36}$"
+ROLE_NAME_ERROR_MESSAGE = "Only use alphabets, numbers, spaces, dashes (-), or underscores (_) for role name. " +\
+    "Must be between 3 and 36 characters long."
+
+ROLE_DESC_REGEX = "^[a-zA-Z0-9-_ ]{0,50}$"
+ROLE_DESC_ERROR_MESSAGE = "Only use alphabets, numbers, spaces, dashes (-), or underscores (_) for role description. " +\
+    "Can be up to 50 characters long."
+
+# Since role assignment objects are small in size (~300 bytes) and we want to conserve DDB RCUs, we query/get role assignments based on number of groups
+# https://stackoverflow.com/questions/73452943/what-count-as-one-read-in-dynamodb
+CONSERVE_DDB_RCU_LIST_GROUP_ROLES = 3

@@ -17,11 +17,11 @@ import { GetParamChoicesRequest, GetParamChoicesResult, GetParamDefaultRequest, 
 import Utils from "../../common/utils";
 import Input, { InputProps } from "@cloudscape-design/components/input";
 import FormField, { FormFieldProps } from "@cloudscape-design/components/form-field";
-import {AttributeEditor, Autosuggest, Button, ColumnLayout, DatePicker, ExpandableSection, FileUpload, Grid, HelpPanel, Link, Multiselect, RadioGroup, Select, SelectProps, SpaceBetween, Textarea, Tiles, Toggle} from "@cloudscape-design/components";
+import {AttributeEditor, Autosuggest, Button, ColumnLayout, DatePicker, ExpandableSection, FileUpload, Grid, Link, Multiselect, RadioGroup, Select, SelectProps, SpaceBetween, Textarea, Tiles, Toggle} from "@cloudscape-design/components";
 import { BaseKeyDetail } from "@cloudscape-design/components/internal/events";
 import { faAdd, faRemove } from "@fortawesome/free-solid-svg-icons";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
-import ReactMarkdown from "react-markdown";
+import { OnToolsChangeEvent } from "../../App";
 
 export interface IdeaFormFieldSyncAPI {
     getParamDefault(req: GetParamDefaultRequest): Promise<GetParamDefaultResult>;
@@ -54,6 +54,9 @@ export interface IdeaFormFieldProps {
     onFetchOptions?: (req: GetParamChoicesRequest) => Promise<GetParamChoicesResult>;
     customActionProvider?: IdeaFormFieldCustomActionProvider;
     stretch?: boolean;
+    toolsOpen?: boolean | null;
+    tools?: React.ReactNode| null;
+    onToolsChange?: (event: OnToolsChangeEvent) => void | null;
 }
 
 export interface IdeaFormFieldState {
@@ -980,23 +983,24 @@ class IdeaFormField extends Component<IdeaFormFieldProps, IdeaFormFieldState> {
         return Utils.isNotEmpty(this.props.param.markdown);
     }
 
-    buildHelpPanel() {
-        return (
-            <HelpPanel header={<h2>{this.props.param.title}</h2>}>
-                <ReactMarkdown children={this.props.param.markdown!} />
-            </HelpPanel>
-        );
+    handleToolsOpen(markdown?: string) {
+        if (this.props.onToolsChange && markdown) {
+            this.props.onToolsChange({
+                open: true,
+                pageId: markdown,
+            })
+        }
     }
 
     buildFormField(field: React.ReactNode, props?: FormFieldProps, key?: string): React.ReactNode {
-        let label: React.ReactNode = this.props.param.title;
+        let label: React.ReactNode = this.props.param.optional ?  <span>{this.props.param.title} <i>- optional</i></span> : this.props.param.title;
         let description: React.ReactNode = this.props.param.description;
         let constraintText: React.ReactNode = this.props.param.help_text;
         let stretch = false;
         let secondaryControl = null;
         if (props != null) {
             if (props.label != null) {
-                label = props.label;
+                label = this.props.param.optional ?  <span>{props.label} <i>- optional</i></span> : props.label;
             }
             if (props.description != null) {
                 description = props.description;
@@ -1028,9 +1032,7 @@ class IdeaFormField extends Component<IdeaFormFieldProps, IdeaFormFieldState> {
                         <Link
                             variant="info"
                             onFollow={() => {
-                                if (this.props.updateTools) {
-                                    this.props.updateTools(this.buildHelpPanel());
-                                }
+                                this.handleToolsOpen(this.props.param.markdown)
                             }}
                         >
                             Info
@@ -1571,7 +1573,7 @@ class IdeaFormField extends Component<IdeaFormFieldProps, IdeaFormFieldState> {
     buildExpandable(props: FormFieldProps) {
         return (
             <ExpandableSection
-                headerText={this.props.param.title}
+                headerText={this.props.param.optional ?  <span>{this.props.param.title} <i>- optional</i></span> : this.props.param.title}
                 expanded={this.state.booleanVal()}
                 onChange={(event) => {
                     this.onToggleStateChange(event.detail.expanded);
@@ -1677,7 +1679,7 @@ class IdeaFormField extends Component<IdeaFormFieldProps, IdeaFormFieldState> {
 
     buildMultiSelect(props: FormFieldProps) {
         let secondaryControl = this.buildFormFieldSecondaryControl();
-        return this.buildFormField(<Multiselect selectedOptions={this.state.selectedOptions} options={this.state.options} disabled={this.state.disabled} onChange={(event) => this.onMultiSelectStateChange(event.detail.selectedOptions)} />, {
+        return this.buildFormField(<Multiselect selectedOptions={this.state.selectedOptions} options={this.state.options} filteringType="auto" disabled={this.state.disabled} onChange={(event) => this.onMultiSelectStateChange(event.detail.selectedOptions)} />, {
             ...props,
             secondaryControl: secondaryControl,
         });
@@ -1878,6 +1880,9 @@ class IdeaFormField extends Component<IdeaFormFieldProps, IdeaFormFieldState> {
                                                 }}
                                                 onFetchOptions={this.props.onFetchOptions}
                                                 stretch={props.stretch}
+                                                toolsOpen={this.props.toolsOpen} 
+                                                tools={this.props.tools}
+                                                onToolsChange={this.props.onToolsChange}
                                             />)
                                         ))
                                         return container;
@@ -1952,10 +1957,10 @@ class IdeaFormField extends Component<IdeaFormFieldProps, IdeaFormFieldState> {
                     if (container_items?.length === 2) {
                         const key = container_items[0]
                         const value = container_items[1]
-
+  
                         return [
                             {
-                                label: <FormField label={<span>{key.title}{key.description ? <i> - {key.description}</i> : ""}</span>} info={<Link href={key.help_url} variant="info">Info</Link>}></FormField>,
+                                label: <FormField label={<span>{key.title}{key.description ? <i> - {key.description}</i> : ""}</span>} info={key.markdown && <Link variant="info" onFollow={() => this.handleToolsOpen(key.markdown)}>Info</Link>}></FormField>,
                                 control: (item: { key: string, value: string, error?: string }, itemIndex: number) => (
                                     <Input
                                         value={item.key}
@@ -1972,7 +1977,7 @@ class IdeaFormField extends Component<IdeaFormFieldProps, IdeaFormFieldState> {
                                 errorText: (item: {key: string, value: string, error?: string}) => { return item.error }
                             },
                             {
-                                label: <FormField label={<span>{value.title}{value.description ? <i> - {value.description}</i> : ""}</span>} info={<Link href={value.help_url} variant="info">Info</Link>}></FormField>,
+                                label: <FormField label={<span>{value.title}{value.description ? <i> - {value.description}</i> : ""}</span>} info={value.markdown && <Link variant="info" onFollow={() => this.handleToolsOpen(value.markdown)}>Info</Link>}></FormField>,
                                 control: (item: { key: string, value: string, error?: string }, itemIndex: number) => (
                                     <Input
                                         value={item.value}

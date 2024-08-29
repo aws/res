@@ -246,7 +246,7 @@ class AccountsService:
                 )
 
         # Delete Project Group relation
-        role_assignments = self.context.authz.list_role_assignments(ListRoleAssignmentsRequest(actor_key=f"{group_name}:group")).items
+        role_assignments = self.context.role_assignments.list_role_assignments(ListRoleAssignmentsRequest(actor_key=f"{group_name}:group")).items
         project_groups = [role_assignment.resource_id for role_assignment in role_assignments if role_assignment.resource_type=='project']
         if project_groups:
             if force:
@@ -798,8 +798,8 @@ class AccountsService:
         # delete user from db
         self.logger.info(f'{log_tag} delete user in ddb')
         self.user_dao.delete_user(username=username)
-
-        role_assignments = self.context.authz.list_role_assignments(ListRoleAssignmentsRequest(actor_key=f"{username}:user")).items
+        
+        role_assignments = self.context.role_assignments.list_role_assignments(ListRoleAssignmentsRequest(actor_key=f"{username}:user")).items
         project_id_links = [role_assignment.resource_id for role_assignment in role_assignments if role_assignment.resource_type=='project']
         if project_id_links:
             try:

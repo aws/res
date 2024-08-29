@@ -18,7 +18,8 @@ import { ProjectsClient, VirtualDesktopAdminClient } from "../../client";
 import { AppContext } from "../../common";
 import { TableProps } from "@cloudscape-design/components/table/interfaces";
 import IdeaForm from "../../components/form";
-import { Project, SocaUserInputChoice, VirtualDesktopBaseOS, VirtualDesktopSoftwareStack } from "../../client/data-model";
+import IdeaConfirm from "../../components/modals";
+import { Project, SocaFilter, SocaUserInputChoice, VirtualDesktopBaseOS, VirtualDesktopSession, VirtualDesktopSoftwareStack } from "../../client/data-model";
 import Utils from "../../common/utils";
 import { IdeaSideNavigationProps } from "../../components/side-navigation";
 import IdeaAppLayout, { IdeaAppLayoutProps } from "../../components/app-layout";
@@ -27,7 +28,7 @@ import VirtualDesktopSoftwareStackEditForm from "./forms/virtual-desktop-softwar
 import { withRouter } from "../../navigation/navigation-utils";
 import VirtualDesktopUtilsClient from "../../client/virtual-desktop-utils-client";
 
-export interface VirtualDesktopSoftwareStacksProps extends IdeaAppLayoutProps, IdeaSideNavigationProps {}
+export interface VirtualDesktopSoftwareStacksProps extends IdeaAppLayoutProps, IdeaSideNavigationProps { }
 
 export interface VirtualDesktopSoftwareStacksState {
     softwareStackSelected: boolean;
@@ -36,6 +37,8 @@ export interface VirtualDesktopSoftwareStacksState {
     projectChoices: SocaUserInputChoice[];
     showRegisterSoftwareStackForm: boolean;
     showEditSoftwareStackForm: boolean;
+    showDeleteStackConfirmModal: boolean;
+    selectedSoftwareStackSessionsList: VirtualDesktopSession[];
 }
 
 const VIRTUAL_DESKTOP_SOFTWARE_STACKS_TABLE_COLUMN_DEFINITIONS: TableProps.ColumnDefinition<VirtualDesktopSoftwareStack>[] = [
@@ -85,12 +88,14 @@ class VirtualDesktopSoftwareStacks extends Component<VirtualDesktopSoftwareStack
     listing: RefObject<IdeaListView>;
     registerSoftwareStackForm: RefObject<IdeaForm>;
     editSoftwareStackForm: RefObject<VirtualDesktopSoftwareStackEditForm>;
+    deleteStackConfirmModal: RefObject<IdeaConfirm>;
 
     constructor(props: VirtualDesktopSoftwareStacksProps) {
         super(props);
         this.listing = React.createRef();
         this.registerSoftwareStackForm = React.createRef();
         this.editSoftwareStackForm = React.createRef();
+        this.deleteStackConfirmModal = React.createRef();
         this.state = {
             softwareStackSelected: false,
             supportedOsChoices: [],
@@ -98,6 +103,8 @@ class VirtualDesktopSoftwareStacks extends Component<VirtualDesktopSoftwareStack
             projectChoices: [],
             showRegisterSoftwareStackForm: false,
             showEditSoftwareStackForm: false,
+            showDeleteStackConfirmModal: false,
+            selectedSoftwareStackSessionsList: [],
         };
     }
 
@@ -363,6 +370,21 @@ class VirtualDesktopSoftwareStacks extends Component<VirtualDesktopSoftwareStack
         return this.editSoftwareStackForm.current!;
     }
 
+    showDeleteSoftwareStackConfirmModal() {
+        this.setState(
+            {
+                showDeleteStackConfirmModal: true,
+            },
+            () => {
+                this.getDeleteSoftwareStackConfirmModal().show();
+            }
+        );
+    }
+
+    getDeleteSoftwareStackConfirmModal() {
+        return this.deleteStackConfirmModal.current!;
+    }
+
     buildEditSoftwareStackForm() {
         return (
             <VirtualDesktopSoftwareStackEditForm
@@ -396,11 +418,93 @@ class VirtualDesktopSoftwareStacks extends Component<VirtualDesktopSoftwareStack
         );
     }
 
+    buildDeleteStackConfirmModal() {
+        const selectedSoftwareStack = this.getSelectedSoftwareStack();
+        const infoMsg =  "This stack is currently used by above live sessions. " +
+            "Deleting this stack does not terminate any live sessions currently using the stack, " +
+            "but you will not be able to launch new sessions with this stack.";
+        return (
+            <IdeaConfirm
+                ref={this.deleteStackConfirmModal}
+                title={"Delete Software Stack: " + selectedSoftwareStack?.name}
+                onConfirm={() => {
+                    this.getVirtualDesktopAdminClient()
+                        .deleteSoftwareStack({
+                            software_stack: selectedSoftwareStack,
+                        })
+                        .then((_) => {
+                            this.setState(
+                                {
+                                    softwareStackSelected: false,
+                                    selectedSoftwareStackSessionsList: []
+                                },
+                                () => {
+                                    this.setFlashMessage(<p key={selectedSoftwareStack?.stack_id}>Software Stack: {selectedSoftwareStack?.name}, Delete Successfully</p>, "success");
+                                    this.getListing().fetchRecords();
+                                }
+                            );
+                        })
+                        .catch((error) => {
+                            this.setFlashMessage(error.message, "error");
+                        });
+                }}
+                onCancel={() => {
+                    this.setState({
+                        showDeleteStackConfirmModal: false,
+                        selectedSoftwareStackSessionsList: []
+                    });
+                }}
+            >
+            {
+             this.state.selectedSoftwareStackSessionsList.length > 0 &&
+                <div>
+                    <b>Current Live Sessions Using this Software Stack:</b>
+                    {this.state.selectedSoftwareStackSessionsList.map((session, index) => (
+                        <li key={index}>
+                            {session.name} (Owner: {session.owner})
+                        </li>
+                    ))}
+                <p>{infoMsg}</p>
+                </div>
+            }
+            <p>Are you sure you want to delete this stack? This action cannot be undone.</p>
+            </IdeaConfirm>
+        );
+    }
+
     getSelectedSoftwareStack(): VirtualDesktopSoftwareStack | undefined {
         if (this.getListing() == null) {
             return undefined;
         }
         return this.getListing().getSelectedItems()[0];
+    }
+
+    convertSoftwareStackObjectToSocaFilter(): SocaFilter {
+        const softwareStack = this.getSelectedSoftwareStack();
+        let eq = {};
+        if (softwareStack != null) {
+            eq = {
+                'base_os': softwareStack.base_os,
+                'stack_id': softwareStack.stack_id,
+                'name': softwareStack.name,
+                'description': softwareStack.description,
+                'created_on': softwareStack.created_on? new Date(softwareStack.created_on).getTime():0,
+                'updated_on': softwareStack.updated_on? new Date(softwareStack.updated_on).getTime():0,
+                'ami_id': softwareStack.ami_id,
+                'enabled': softwareStack.enabled ?? null,
+                'min_storage_value': String(softwareStack.min_storage?.value.toFixed(1) ?? ''),
+                'min_storage_unit': softwareStack.min_storage?.unit,
+                'min_ram_value': String(softwareStack.min_ram?.value.toFixed(1) ?? ''),
+                'min_ram_unit': softwareStack.min_ram?.unit,
+                'architecture': softwareStack.architecture,
+                'gpu': softwareStack.gpu,
+                'projects': softwareStack.projects?.map((project) => project.project_id)
+            }
+        }
+        return {
+            key: 'software_stack',
+            eq: eq,
+        }
     }
 
     buildListing() {
@@ -436,6 +540,30 @@ class VirtualDesktopSoftwareStacks extends Component<VirtualDesktopSoftwareStack
                             );
                         },
                     },
+                    {
+                        id: "delete-software-stack",
+                        text: "Delete Stack",
+                        disabled: !this.isSelected(),
+                        onClick: () => {
+                            this.getVirtualDesktopAdminClient()
+                            .listSessions({
+                                filters: [this.convertSoftwareStackObjectToSocaFilter()]
+                            })
+                            .then((result) => {
+                                this.setState(
+                                    {
+                                        selectedSoftwareStackSessionsList: result.listing!
+                                    },
+                                    () => {
+                                        this.showDeleteSoftwareStackConfirmModal();
+                                    }
+                                )
+                            })
+                            .catch((error) => {
+                                this.setFlashMessage(error.message, "error");
+                            });
+                        },
+                    },
                 ]}
                 showPaginator={true}
                 showFilters={true}
@@ -458,14 +586,6 @@ class VirtualDesktopSoftwareStacks extends Component<VirtualDesktopSoftwareStack
                             {
                                 title: "Windows",
                                 value: "windows",
-                            },
-                            {
-                                title: "CentOS 7",
-                                value: "centos7",
-                            },
-                            {
-                                title: "RHEL 7",
-                                value: "rhel7",
                             },
                             {
                                 title: "RHEL 8",
@@ -552,6 +672,7 @@ class VirtualDesktopSoftwareStacks extends Component<VirtualDesktopSoftwareStack
                     <div>
                         {this.state.showRegisterSoftwareStackForm && this.buildRegisterSoftwareStackForm()}
                         {this.state.showEditSoftwareStackForm && this.buildEditSoftwareStackForm()}
+                        {this.state.showDeleteStackConfirmModal && this.buildDeleteStackConfirmModal()}
                         {this.buildListing()}
                     </div>
                 }

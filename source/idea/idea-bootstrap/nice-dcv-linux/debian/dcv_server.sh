@@ -49,19 +49,7 @@ function install_nice_dcv_server () {
                               --key '{"key": {"S": "global-settings.package_config.dcv.host.'$machine'.ubuntu.'$BASE_OS'.url"}}' \
                               --output text \
                               | awk '/VALUE/ {print $2}')
-  local DCV_SERVER_TGZ=$($AWS dynamodb get-item \
-                              --region "$AWS_REGION" \
-                              --table-name "$RES_ENVIRONMENT_NAME.cluster-settings" \
-                              --key '{"key": {"S": "global-settings.package_config.dcv.host.'$machine'.ubuntu.'$BASE_OS'.tgz"}}' \
-                              --output text \
-                              | awk '/VALUE/ {print $2}')
-  local DCV_SERVER_VERSION=$($AWS dynamodb get-item \
-                              --region "$AWS_REGION" \
-                              --table-name "$RES_ENVIRONMENT_NAME.cluster-settings" \
-                              --key '{"key": {"S": "global-settings.package_config.dcv.host.'$machine'.ubuntu.'$BASE_OS'.version"}}' \
-                              --output text \
-                              | awk '/VALUE/ {print $2}')
-  local DCV_SERVER_SHA256_HASH=$($AWS dynamodb get-item \
+  local DCV_SERVER_SHA256_URL=$($AWS dynamodb get-item \
                               --region "$AWS_REGION" \
                               --table-name "$RES_ENVIRONMENT_NAME.cluster-settings" \
                               --key '{"key": {"S": "global-settings.package_config.dcv.host.'$machine'.ubuntu.'$BASE_OS'.sha256sum"}}' \
@@ -72,14 +60,18 @@ function install_nice_dcv_server () {
   gpg --import NICE-GPG-KEY
 
   wget ${DCV_SERVER_URL}
-  if [[ $(sha256sum ${DCV_SERVER_TGZ} | awk '{print $1}') != ${DCV_SERVER_SHA256_HASH} ]];  then
+  fileName=$(basename ${DCV_SERVER_URL})
+  urlSha256Sum=$(wget -O - ${DCV_SERVER_SHA256_URL})
+  if [[ $(sha256sum ${fileName} | awk '{print $1}') != ${urlSha256Sum} ]];  then
     echo -e "FATAL ERROR: Checksum for DCV Server failed. File may be compromised." > /etc/motd
     exit 1
   fi
-  tar zxvf ${DCV_SERVER_TGZ}
-
+  extractDir=$(echo ${fileName} |  sed 's/\.tgz$//')
+  mkdir -p ${extractDir}
+  tar zxvf ${fileName} -C ${extractDir} --strip-components 1
+  
   local machine=$(uname -m)
-  pushd nice-dcv-${DCV_SERVER_VERSION}
+  pushd ${extractDir}
 
   if [[ "$machine" == "x86_64" ]]; then
     DEBIAN_FRONTEND=noninteractive apt install -y ./nice-dcv-server_*_amd64.$BASE_OS.deb
@@ -97,8 +89,8 @@ function install_nice_dcv_server () {
   fi
 
   popd
-  rm -rf nice-dcv-${DCV_SERVER_VERSION}
-  rm -rf ${DCV_SERVER_TGZ}
+  rm -rf ${extractDir}
+  rm -rf ${fileName}
 }
 
 function install_gpu_driver_prerequisites() {

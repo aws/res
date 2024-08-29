@@ -43,13 +43,7 @@ function install_nice_dcv_session_manager_agent () {
                           --key '{"key": {"S": "global-settings.package_config.dcv.agent.'$machine'.ubuntu.'$BASE_OS'.url"}}' \
                           --output text \
                           | awk '/VALUE/ {print $2}')
-  local AGENT_VERSION=$($AWS dynamodb get-item \
-                          --region "$AWS_REGION" \
-                          --table-name "$RES_ENVIRONMENT_NAME.cluster-settings" \
-                          --key '{"key": {"S": "global-settings.package_config.dcv.agent.'$machine'.ubuntu.'$BASE_OS'.version"}}' \
-                          --output text \
-                          | awk '/VALUE/ {print $2}')
-  local AGENT_SHA256_HASH=$($AWS dynamodb get-item \
+  local AGENT_SHA256_URL=$($AWS dynamodb get-item \
                           --region "$AWS_REGION" \
                           --table-name "$RES_ENVIRONMENT_NAME.cluster-settings" \
                           --key '{"key": {"S": "global-settings.package_config.dcv.agent.'$machine'.ubuntu.'$BASE_OS'.sha256sum"}}' \
@@ -60,12 +54,14 @@ function install_nice_dcv_session_manager_agent () {
   gpg --import NICE-GPG-KEY
 
   wget ${AGENT_URL}
-  if [[ $(sha256sum nice-dcv-session-manager-agent_${AGENT_VERSION}.deb | awk '{print $1}') != ${AGENT_SHA256_HASH} ]];  then
+  fileName=$(basename ${AGENT_URL})
+  urlSha256Sum=$(wget -O - ${AGENT_SHA256_URL})
+  if [[ $(sha256sum ${fileName} | awk '{print $1}') != ${urlSha256Sum} ]];  then
     echo -e "FATAL ERROR: Checksum for DCV Session Manager Agent failed. File may be compromised." > /etc/motd
     exit 1
   fi
 
-  DEBIAN_FRONTEND=noninteractive apt install -y ./nice-dcv-session-manager-agent_${AGENT_VERSION}.deb
+  DEBIAN_FRONTEND=noninteractive apt install -y ./${fileName}
   log_info "# installing dcv agent complete ..."
-  rm -rf ./nice-dcv-session-manager-agent_${AGENT_VERSION}.deb
+  rm -rf ./${fileName}
 }

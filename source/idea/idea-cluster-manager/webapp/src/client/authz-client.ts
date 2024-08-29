@@ -18,6 +18,16 @@ import {
   BatchDeleteRoleAssignmentResponse,
   ListRoleAssignmentsRequest,
   ListRoleAssignmentsResponse,
+  ListRolesRequest,
+  ListRolesResponse,
+  GetRoleRequest,
+  GetRoleResponse,
+  CreateRoleRequest,
+  CreateRoleResponse,
+  DeleteRoleRequest,
+  DeleteRoleResponse,
+  UpdateRoleRequest,
+  UpdateRoleResponse,
 } from "./data-model";
 
 import IdeaBaseClient, { IdeaBaseClientProps } from "./base-client";
@@ -40,6 +50,26 @@ class AuthzClient extends IdeaBaseClient<AuthzClientProps> {
 
   listRoleAssignments(request: ListRoleAssignmentsRequest): Promise<ListRoleAssignmentsResponse> {
     return this.apiInvoker.invoke_alt<ListRoleAssignmentsRequest, ListRoleAssignmentsResponse>("Authz.ListRoleAssignments", request);
+  }
+
+  listRoles(request: ListRolesRequest): Promise<ListRolesResponse> {
+    return this.apiInvoker.invoke_alt<ListRolesRequest, ListRolesResponse>("Authz.ListRoles", request);
+  }
+  
+  getRole(request: GetRoleRequest): Promise<GetRoleResponse> {
+    return this.apiInvoker.invoke_alt<GetRoleRequest, GetRoleResponse>("Authz.GetRole", request);
+  }
+
+  createRole(request: CreateRoleRequest): Promise<CreateRoleResponse> {
+    return this.apiInvoker.invoke_alt<CreateRoleRequest, CreateRoleResponse>("Authz.CreateRole", request);
+  }
+
+  deleteRole(request: DeleteRoleRequest): Promise<DeleteRoleResponse> {
+    return this.apiInvoker.invoke_alt<DeleteRoleRequest, DeleteRoleResponse>("Authz.DeleteRole", request);
+  }
+
+  updateRole(request: UpdateRoleRequest): Promise<UpdateRoleResponse> {
+    return this.apiInvoker.invoke_alt<UpdateRoleRequest, UpdateRoleResponse>("Authz.UpdateRole", request);
   }
 }
 

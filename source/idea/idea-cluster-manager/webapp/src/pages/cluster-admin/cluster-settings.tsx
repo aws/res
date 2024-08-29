@@ -33,7 +33,6 @@ export interface ClusterSettingsState {
     identityProvider: any;
     directoryservice: any;
     clusterManager: any;
-    metrics: any;
     activeTabId: string;
 }
 
@@ -51,7 +50,6 @@ class ClusterSettings extends Component<ClusterSettingsProps, ClusterSettingsSta
             identityProvider: {},
             directoryservice: {},
             clusterManager: {},
-            metrics: {},
             activeTabId: DEFAULT_ACTIVE_TAB_ID,
         };
         this.updateWebPortalSettingsForm = React.createRef();
@@ -147,10 +145,6 @@ class ClusterSettings extends Component<ClusterSettingsProps, ClusterSettingsSta
         promises.push(clusterSettingsService.getDirectoryServiceSettings());
         // 3
         promises.push(clusterSettingsService.getClusterManagerSettings(false));
-        // 4
-        if (clusterSettingsService.isMetricsEnabled()) {
-            promises.push(clusterSettingsService.getMetricsSettings());
-        }
         const queryParams = new URLSearchParams(this.props.location.search);
         const activeTabId = Utils.asString(queryParams.get("tab"), DEFAULT_ACTIVE_TAB_ID);
         Promise.all(promises).then((result) => {
@@ -159,7 +153,6 @@ class ClusterSettings extends Component<ClusterSettingsProps, ClusterSettingsSta
                 identityProvider: result[1],
                 directoryservice: result[2],
                 clusterManager: result[3],
-                metrics: clusterSettingsService.isMetricsEnabled() ? result[5] : {},
                 activeTabId: activeTabId,
             }, () => {
                 this.updateWebPortalSettingsForm.current?.registry.list().map((field) => {
@@ -497,22 +490,6 @@ class ClusterSettings extends Component<ClusterSettingsProps, ClusterSettingsSta
             return provider === "activedirectory" || provider === "aws_managed_activedirectory";
         };
 
-        const isMetricsEnabled = () => {
-            return AppContext.get().getClusterSettingsService().isMetricsEnabled();
-        };
-
-        const isMetricsProviderCloudWatch = () => {
-            return dot.pick("provider", this.state.metrics) === "cloudwatch";
-        };
-
-        const isMetricsProviderPrometheus = () => {
-            return dot.pick("provider", this.state.metrics) === "prometheus";
-        };
-
-        const isMetricsProviderAmazonManagedPrometheus = () => {
-            return dot.pick("provider", this.state.metrics) === "amazon_managed_prometheus";
-        };
-
         const getClusterManagerOpenAPISpecUrl = () => {
             return `${AppContext.get().getHttpEndpoint()}${Utils.getApiContextPath(Constants.MODULE_CLUSTER_MANAGER)}/openapi.yml`;
         };
@@ -790,60 +767,6 @@ class ClusterSettings extends Component<ClusterSettingsProps, ClusterSettingsSta
                                                         <KeyValue title="AD Automation SQS Queue Url" value={dot.pick("ad_automation.sqs_queue_url", this.state.directoryservice)} clipboard={true} />
                                                         <KeyValue title="AD Automation DynamoDB Table Name" value={`${AppContext.get().getClusterName()}.ad-automation`} clipboard={true} />
                                                     </ColumnLayout>
-                                                </Container>
-                                            )}
-                                        </SpaceBetween>
-                                    ),
-                                },
-                                {
-                                    label: "Metrics",
-                                    id: "metrics",
-                                    content: (
-                                        <SpaceBetween size={"l"}>
-                                            <Container header={<Header variant={"h2"}>Metrics</Header>}>
-                                                <ColumnLayout variant={"text-grid"} columns={3}>
-                                                    <KeyValue title="Status" value={<EnabledDisabledStatusIndicator enabled={isMetricsEnabled()} />} type={"react-node"} />
-                                                    <KeyValue title="Provider Name" value={dot.pick("provider", this.state.metrics)} />
-                                                </ColumnLayout>
-                                            </Container>
-                                            {isMetricsProviderCloudWatch() && (
-                                                <Container header={<Header variant={"h2"}>CloudWatch Metrics</Header>}>
-                                                    <SpaceBetween size={"m"}>
-                                                        <ColumnLayout variant={"text-grid"} columns={3}>
-                                                            <KeyValue title="Metrics Collection Interval" value={dot.pick("cloudwatch.metrics_collection_interval", this.state.metrics)} suffix={"seconds"} />
-                                                            <KeyValue title="Force Flush Interval" value={dot.pick("cloudwatch.force_flush_interval", this.state.metrics)} suffix={"seconds"} />
-                                                        </ColumnLayout>
-                                                        <Box>
-                                                            <h4>CloudWatch Dashboard</h4>
-                                                            <ColumnLayout variant={"text-grid"} columns={2}>
-                                                                <KeyValue title="Dashboard ARN" value={dot.pick("cloudwatch.dashboard_arn", this.state.metrics)} clipboard={true} />
-                                                                <KeyValue title="Dashboard Name" value={dot.pick("cloudwatch.dashboard_name", this.state.metrics)} clipboard={true} />
-                                                            </ColumnLayout>
-                                                        </Box>
-                                                    </SpaceBetween>
-                                                </Container>
-                                            )}
-                                            {isMetricsProviderAmazonManagedPrometheus() && (
-                                                <Container header={<Header variant={"h2"}>Amazon Managed Prometheus</Header>}>
-                                                    <SpaceBetween size={"m"}>
-                                                        <ColumnLayout variant={"text-grid"} columns={3}>
-                                                            <KeyValue title="Workspace Name" value={dot.pick("amazon_managed_prometheus.workspace_name", this.state.metrics)} />
-                                                            <KeyValue title="Workspace ID" value={dot.pick("amazon_managed_prometheus.workspace_id", this.state.metrics)} />
-                                                            <KeyValue title="Workspace ARN" value={dot.pick("amazon_managed_prometheus.workspace_arn", this.state.metrics)} />
-                                                            <KeyValue title="Remote Write Url" value={dot.pick("prometheus.remote_write.url", this.state.metrics)} />
-                                                            <KeyValue title="Remote Read Url" value={dot.pick("prometheus.remote_read.url", this.state.metrics)} />
-                                                        </ColumnLayout>
-                                                    </SpaceBetween>
-                                                </Container>
-                                            )}
-                                            {isMetricsProviderPrometheus() && (
-                                                <Container header={<Header variant={"h2"}>Custom Prometheus</Header>}>
-                                                    <SpaceBetween size={"m"}>
-                                                        <ColumnLayout variant={"text-grid"} columns={3}>
-                                                            <KeyValue title="Remote Write Url" value={dot.pick("prometheus.remote_write.url", this.state.metrics)} />
-                                                            <KeyValue title="Remote Read Url" value={dot.pick("prometheus.remote_read.url", this.state.metrics)} />
-                                                        </ColumnLayout>
-                                                    </SpaceBetween>
                                                 </Container>
                                             )}
                                         </SpaceBetween>

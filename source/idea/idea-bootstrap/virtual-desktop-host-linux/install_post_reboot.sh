@@ -62,6 +62,11 @@ if [[ ! -f ${INSTALL_POST_REBOOT_FINISHED_LOCK} ]]; then
     /bin/bash "${SCRIPT_DIR}/../nice-dcv-linux/dcv_session_manager_agent.sh" -o $RES_BASE_OS -r $AWS_REGION -n $IDEA_CLUSTER_NAME -s "${SCRIPT_DIR}"
     # End: Install Nice DCV Session Manager Agent
 
+    # Begin: Install AWS Systems Manager Agent
+    # Install SSM agent at the end to avoid unexpected reboot for security patching
+    /bin/bash "${SCRIPT_DIR}/../common/aws_ssm.sh" -o $RES_BASE_OS -r $AWS_REGION -n $IDEA_CLUSTER_NAME -s "${SCRIPT_DIR}"
+    # End: Install AWS Systems Manager Agent
+
     echo "$(date)" >> /root/bootstrap/res_installed_all_packages.log
     set_reboot_required "DCV and any associated GPU drivers have been installed, reboot required for changes to take effect..."
   else

@@ -14,10 +14,10 @@
 import React, { Component, RefObject } from "react";
 import { TableProps } from "@cloudscape-design/components/table/interfaces";
 import { Link } from "@cloudscape-design/components";
-import { SocaUserInputChoice, VirtualDesktopSession, VirtualDesktopSessionBatchResponsePayload } from "../../client/data-model";
+import { Project, SocaUserInputChoice, VirtualDesktopSession, VirtualDesktopSessionBatchResponsePayload } from "../../client/data-model";
 import IdeaListView from "../../components/list-view";
 import { AppContext } from "../../common";
-import { ProjectsClient, VirtualDesktopAdminClient } from "../../client";
+import { ProjectsClient, VirtualDesktopAdminClient, VirtualDesktopClient } from "../../client";
 import { IdeaSideNavigationProps } from "../../components/side-navigation";
 import IdeaConfirm from "../../components/modals";
 import ReactJson from "react-json-view";
@@ -32,7 +32,7 @@ import VirtualDesktopCreateSessionForm from "./forms/virtual-desktop-create-sess
 import { withRouter } from "../../navigation/navigation-utils";
 import VirtualDesktopDCVClient from "../../client/virtual-desktop-dcv-client";
 
-export interface VirtualDesktopSessionsProps extends IdeaAppLayoutProps, IdeaSideNavigationProps {}
+export interface VirtualDesktopSessionsProps extends IdeaAppLayoutProps, IdeaSideNavigationProps { }
 
 export interface VirtualDesktopSessionsState {
     showCreateSoftwareStackFromSessionForm: boolean;
@@ -43,6 +43,7 @@ export interface VirtualDesktopSessionsState {
     forceTerminate: boolean;
     sessionHealth: any;
     showCreateSessionForm: boolean;
+    projects: Project[] | undefined;
 }
 
 const VIRTUAL_DESKTOP_SESSIONS_TABLE_COLUMN_DEFINITIONS: TableProps.ColumnDefinition<VirtualDesktopSession>[] = [
@@ -148,6 +149,7 @@ class VirtualDesktopSessions extends Component<VirtualDesktopSessionsProps, Virt
             forceTerminate: false,
             sessionHealth: {},
             showCreateSessionForm: false,
+            projects: [],
         };
 
         // Hide the Join Session button since it does not work consistently
@@ -155,11 +157,10 @@ class VirtualDesktopSessions extends Component<VirtualDesktopSessionsProps, Virt
     }
 
     componentDidMount() {
-        this.getProjectsClient()
-            .getUserProjects({})
+        Utils.fetchProjectsFilteredByVDIPermissions(this.isAdmin(), "create_terminate_others_sessions")
             .then((result) => {
                 let projectChoices: SocaUserInputChoice[] = [];
-                result.projects?.forEach((project) => {
+                result.forEach((project) => {
                     projectChoices.push({
                         title: project.title,
                         value: project.project_id,
@@ -169,11 +170,7 @@ class VirtualDesktopSessions extends Component<VirtualDesktopSessionsProps, Virt
                 this.setState(
                     {
                         projectChoices: projectChoices,
-                    },
-                    () => {
-                        this.getCreateSoftwareStackForm()?.getFormField("projects")?.setOptions({
-                            listing: this.state.projectChoices,
-                        });
+                        projects: result,
                     }
                 );
             });
@@ -214,6 +211,10 @@ class VirtualDesktopSessions extends Component<VirtualDesktopSessionsProps, Virt
         return AppContext.get().client().virtualDesktopAdmin();
     }
 
+    getVirtualDesktopClient(): VirtualDesktopClient {
+        return AppContext.get().client().virtualDesktop();
+    }
+
     getSelectedSessions(): VirtualDesktopSession[] {
         if (this.getListing() == null) {
             return [];
@@ -238,7 +239,7 @@ class VirtualDesktopSessions extends Component<VirtualDesktopSessionsProps, Virt
     }
 
     isAdmin(): boolean {
-      return AppContext.get().auth().isAdmin();
+        return AppContext.get().auth().isAdmin();
     }
 
     hideCreateSoftwareStackForm() {
@@ -470,11 +471,14 @@ class VirtualDesktopSessions extends Component<VirtualDesktopSessionsProps, Virt
                         toDelete.push({
                             idea_session_id: session.idea_session_id,
                             dcv_session_id: session.dcv_session_id,
+                            project: {
+                              project_id: session.project?.project_id,
+                            },
                             owner: session.owner,
                             force: this.state.forceTerminate,
                         })
                     );
-                    this.getVirtualDesktopAdminClient()
+                    (this.isAdmin() ? this.getVirtualDesktopAdminClient() : this.getVirtualDesktopClient())
                         .deleteSessions({
                             sessions: toDelete,
                         })
@@ -605,8 +609,9 @@ class VirtualDesktopSessions extends Component<VirtualDesktopSessionsProps, Virt
                 ref={this.createSessionForm}
                 maxRootVolumeMemory={this.virtualDesktopSettings?.dcv_session.max_root_volume_memory}
                 isAdminView={true}
+                userProjects={this.state.projects}
                 onSubmit={(session_name, username, project_id, base_os, software_stack_id, session_type, instance_type, storage_size, hibernation_enabled, vpc_subnet_id, tags) => {
-                    return this.getVirtualDesktopAdminClient()
+                    return (this.isAdmin() ? this.getVirtualDesktopAdminClient() : this.getVirtualDesktopClient())
                         .createSession({
                             session: {
                                 name: session_name,
@@ -664,13 +669,12 @@ class VirtualDesktopSessions extends Component<VirtualDesktopSessionsProps, Virt
                         this.showCreateSessionForm();
                     },
                 }}
-                primaryActionDisabled={!this.isAdmin()}
                 secondaryActionsDisabled={!this.isSelected()}
                 secondaryActions={[
                     {
                         id: "resume-session",
                         text: "Resume Session(s)",
-                        disabled: !this.isSelected(),
+                        disabled: !this.isSelected() || !this.isAdmin(),
                         onClick: () => {
                             this.setState(
                                 {
@@ -685,7 +689,7 @@ class VirtualDesktopSessions extends Component<VirtualDesktopSessionsProps, Virt
                     {
                         id: "stop-session",
                         text: "Stop/Hibernate Session(s)",
-                        disabled: !this.isSelected(),
+                        disabled: !this.isSelected() || !this.isAdmin(),
                         onClick: () => {
                             this.setState(
                                 {
@@ -700,7 +704,7 @@ class VirtualDesktopSessions extends Component<VirtualDesktopSessionsProps, Virt
                     {
                         id: "force-stop-session",
                         text: "Force Stop/Hibernate Session(s)",
-                        disabled: !this.isSelected(),
+                        disabled: !this.isSelected() || !this.isAdmin(),
                         onClick: () => {
                             this.setState(
                                 {
@@ -745,7 +749,7 @@ class VirtualDesktopSessions extends Component<VirtualDesktopSessionsProps, Virt
                     {
                         id: "get-session-health",
                         text: "Session(s) Health",
-                        disabled: !this.isSelected(),
+                        disabled: !this.isSelected() || !this.isAdmin(),
                         onClick: () => {
                             let sessions: VirtualDesktopSession[] = [];
                             this.getSelectedSessions().forEach((session) => {
@@ -777,7 +781,7 @@ class VirtualDesktopSessions extends Component<VirtualDesktopSessionsProps, Virt
                     {
                         id: "create-software-stack",
                         text: "Create Software Stack",
-                        disabled: !this.canCreateSoftwareStack(),
+                        disabled: !this.canCreateSoftwareStack() || !this.isAdmin(),
                         disabledReason: "Select exactly 1 session to enable this Action",
                         onClick: () => {
                             // we know that there is exactly 1 session
@@ -875,14 +879,6 @@ class VirtualDesktopSessions extends Component<VirtualDesktopSessionsProps, Virt
                                 value: "windows",
                             },
                             {
-                                title: "CentOS 7",
-                                value: "centos7",
-                            },
-                            {
-                                title: "RHEL 7",
-                                value: "rhel7",
-                            },
-                            {
                                 title: "RHEL 8",
                                 value: "rhel8"
                             },
@@ -902,7 +898,7 @@ class VirtualDesktopSessions extends Component<VirtualDesktopSessionsProps, Virt
                     });
                 }}
                 onFetchRecords={() => {
-                    return this.getVirtualDesktopAdminClient()
+                    return (this.isAdmin() ? this.getVirtualDesktopAdminClient() : this.getVirtualDesktopClient())
                         .listSessions({
                             filters: this.getListing().getFilters(),
                             paginator: { page_size: 100 },

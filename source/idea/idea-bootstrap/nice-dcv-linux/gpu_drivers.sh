@@ -134,7 +134,7 @@ function install_amd_gpu_drivers() {
   # Instance GPU
   # G4ad     Radeon Pro V520
   #
-  if [[ $BASE_OS =~ ^(amzn2|centos7|rhel7)$ ]]; then
+  if [[ $BASE_OS =~ ^(amzn2)$ ]]; then
     /bin/bash "$SCRIPT_DIR/../nice-dcv-linux/red_hat/amd_gpu_driver.sh" -r $AWS_REGION -n $RES_ENVIRONMENT_NAME
   elif [[ $BASE_OS =~ ^(rhel8|rhel9)$ ]]; then
     log_warning "The latest AMD driver hasn't supported the current Linux version yet"

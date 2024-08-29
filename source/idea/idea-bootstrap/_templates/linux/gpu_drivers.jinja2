@@ -100,7 +100,7 @@ function install_amd_gpu_drivers() {
     DEBIAN_FRONTEND=noninteractive apt install -y ./amdgpu-install_6.0.60002-1_all.deb
 
     amdgpu-install --usecase=workstation --vulkan=pro --opencl=rocr --no-32 -y --accept-eula
-  {%- elif context.base_os in ('amazonlinux2', 'centos7', 'rhel7') %}
+  {%- elif context.base_os in ('amazonlinux2') %}
     local AWS=$(command -v aws)
     local AMD_S3_BUCKET_URL=$($AWS dynamodb get-item \
                         --region "{{ context.aws_region }}" \

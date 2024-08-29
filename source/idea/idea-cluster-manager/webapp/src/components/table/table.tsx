@@ -25,6 +25,7 @@ export interface IdeaTableProps<T = any> {
     header: React.ReactNode;
     selectedItems?: T[];
     selectionType?: TableProps.SelectionType;
+    empty?: React.ReactNode;
     showPreferences?: boolean;
     preferencesKey?: string;
     onPreferenceChange?: (detail: CollectionPreferencesProps.Preferences<T>) => void;
@@ -34,6 +35,8 @@ export interface IdeaTableProps<T = any> {
     showFilters?: boolean;
     filterType?: "text" | "property" | "select";
     filters?: SocaFilter[];
+    filteringPlaceholder?: string;
+    defaultFilteringText?: string;
     selectFilters?: SocaUserInputParamMetadata[];
     onFilter?: (filters: SocaFilter[]) => void;
     filteringOptions?: PropertyFilterProps.FilteringOption[];
@@ -62,6 +65,7 @@ export interface IdeaTableState<T = any> {
 export interface IdeaTableSelectFiltersProps {
     onFilter: (filters: SocaFilter[]) => void;
     params: SocaUserInputParamMetadata[];
+    filteringPlaceholder?: string;
 }
 
 interface IdeaTableSelectFiltersState {
@@ -129,7 +133,7 @@ class IdeaTableSelectFilters extends Component<IdeaTableSelectFiltersProps, Idea
                     key={`table-filter-all`}
                     className="idea-list-view-text-filter"
                     filteringText={this.state.textFilterValue}
-                    filteringPlaceholder="Search"
+                    filteringPlaceholder={this.props.filteringPlaceholder ?? "Search"}
                     onChange={(event) => {
                         this.setState({
                             textFilterValue: event.detail.filteringText,
@@ -175,7 +179,7 @@ class IdeaTable extends Component<IdeaTableProps, IdeaTableState> {
         super(props);
         this.state = {
             selectedItems: this.props.selectedItems ? this.props.selectedItems : [],
-            filteringText: "",
+            filteringText: this.props.defaultFilteringText ? this.props.defaultFilteringText : "",
             selectFilterValues: {},
             propertyFilterQuery: {
                 tokens: [],
@@ -224,7 +228,7 @@ class IdeaTable extends Component<IdeaTableProps, IdeaTableState> {
                     i18nStrings={{
                         filteringAriaLabel: "your choice",
                         dismissAriaLabel: "Dismiss",
-                        filteringPlaceholder: "Search",
+                        filteringPlaceholder: this.props.filteringPlaceholder ?? "Search",
                         groupValuesText: "Values",
                         groupPropertiesText: "Properties",
                         operatorsText: "Operators",
@@ -272,12 +276,12 @@ class IdeaTable extends Component<IdeaTableProps, IdeaTableState> {
                 />
             );
         } else if (this.getFilterType() === "select") {
-            return <IdeaTableSelectFilters onFilter={this.props.onFilter!} params={this.props.selectFilters!} />;
+            return <IdeaTableSelectFilters onFilter={this.props.onFilter!} params={this.props.selectFilters!} filteringPlaceholder={this.props.filteringPlaceholder}/>;
         } else {
             return (
                 <TextFilter
                     filteringText={this.state.filteringText}
-                    filteringPlaceholder="Search"
+                    filteringPlaceholder={this.props.filteringPlaceholder ?? "Search"}
                     onChange={(event) => {
                         this.setState({
                             filteringText: event.detail.filteringText,
@@ -442,7 +446,7 @@ class IdeaTable extends Component<IdeaTableProps, IdeaTableState> {
                         }
                     );
                 }}
-                pageSizePreference={{
+                pageSizePreference={this.showPaginator() ? {
                     title: "Select page size",
                     options: [
                         { value: 10, label: "10 resources" },
@@ -450,12 +454,12 @@ class IdeaTable extends Component<IdeaTableProps, IdeaTableState> {
                         { value: 50, label: "50 resources" },
                         { value: 100, label: "100 resources" },
                     ],
-                }}
+                } : undefined}
                 visibleContentPreference={{
                     title: "Select visible content",
                     options: [
                         {
-                            label: "Table Columns",
+                            label: "Table columns",
                             options: columnPreferences,
                         },
                     ],
@@ -492,6 +496,7 @@ class IdeaTable extends Component<IdeaTableProps, IdeaTableState> {
                 columnDefinitions={this.props.columnDefinitions!}
                 items={this.props.listing}
                 empty={
+                    this.props.empty ??
                     <Box textAlign="center" color="inherit">
                         <b>No records</b>
                     </Box>

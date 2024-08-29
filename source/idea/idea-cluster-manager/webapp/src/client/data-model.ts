@@ -44,7 +44,7 @@ export type SocaUserInputParamType =
     | "container"
     | "expandable"
     | "attribute_editor";
-export type VirtualDesktopBaseOS = "amazonlinux2" | "centos7" | "rhel7" | "rhel8" | "rhel9" | "windows";
+export type VirtualDesktopBaseOS = "amazonlinux2" | "rhel8" | "rhel9" | "windows";
 export type SocaMemoryUnit = "bytes" | "kib" | "mib" | "gib" | "tib" | "kb" | "mb" | "gb" | "tb";
 export type VirtualDesktopArchitecture = "x86_64" | "arm64";
 export type VirtualDesktopGPU = "NO_GPU" | "NVIDIA" | "AMD";
@@ -194,9 +194,10 @@ export interface SocaUserInputSectionReview {
 export interface SocaUserInputParamMetadata {
     name?: string;
     template?: string;
+    optional?: boolean;
     title?: string;
     prompt?: boolean;
-    description?: string;
+    description?: React.ReactNode;
     description2?: string;
     help_text?: string;
     help_url?: string;
@@ -437,6 +438,23 @@ export interface FSxONTAPFileSystem {
 
 export interface FSxLUSTREFileSystem {
     filesystem?: any;
+}
+
+export interface S3Bucket {
+    name: string
+    storage: {
+        title: string;
+        provider: string;
+        scope: string[];
+        projects?: string[];
+        mount_dir: string;
+        s3_bucket: {
+            bucket_arn: string;
+            read_only: boolean;
+            custom_bucket_prefix?: string;
+            iam_role_arn?: string;
+        }
+    }
 }
 
 export interface AwsProjectBudget {
@@ -726,6 +744,53 @@ export interface RoleAssignment {
 export interface ListRoleAssignmentsResponse {
     items: RoleAssignment[];
 }
+export interface ProjectPermissions {
+  update_personnel: boolean;
+  update_status: boolean;
+};
+export interface VDIPermissions {
+  create_terminate_others_sessions: boolean;
+  create_sessions: boolean;
+}
+export interface Role {
+    role_id: string;
+    name: string;
+    description: string;
+    projects: ProjectPermissions;
+    vdis?: VDIPermissions;
+    created_on: string | undefined;
+    updated_on: string | undefined;
+}
+export interface ListRolesRequest {
+    paginator?: SocaPaginator;
+    include_permissions?: boolean;
+}
+export interface ListRolesResponse {
+    paginator?: SocaPaginator;
+    items: Role[];
+}
+export interface GetRoleRequest {
+    role_id?: string;
+}
+export interface GetRoleResponse {
+    role: Role;
+}
+export interface CreateRoleRequest {
+    role: Role;
+}
+export interface CreateRoleResponse {
+  role: Role;
+}
+export interface DeleteRoleRequest {
+  role_id?: string;
+}
+export interface DeleteRoleResponse {}
+export interface UpdateRoleRequest {
+  role: Role;
+}
+export interface UpdateRoleResponse {
+  role: Role;
+}
 export interface CreateFileSystemRequest {
     filesystem?: FileSystem;
 }
@@ -817,8 +882,7 @@ export interface ListProjectsResult {
     listing?: Project[];
     filters?: SocaFilter[];
 }
-export interface ListFileSystemsResult {
-    paginator?: SocaPaginator;
+export interface ListOnboardedFileSystemsResult {
     sort_by?: SocaSortBy;
     date_range?: SocaDateRange;
     listing?: FileSystem[];
@@ -1074,6 +1138,9 @@ export interface GetSessionConnectionInfoResponse {
 export interface UpdateSoftwareStackRequest {
     software_stack?: VirtualDesktopSoftwareStack;
 }
+export interface DeleteSoftwareStackRequest {
+    software_stack?: VirtualDesktopSoftwareStack;
+}
 export interface DeleteEmailTemplateRequest {
     name?: string;
 }
@@ -1255,6 +1322,7 @@ export interface VirtualDesktopSessionScreenshot {
 export interface UpdateSoftwareStackResponse {
     software_stack?: VirtualDesktopSoftwareStack;
 }
+export interface DeleteSoftwareStackResponse {}
 export interface GetProjectRequest {
     project_name?: string;
     project_id?: string;
@@ -1453,6 +1521,7 @@ export enum UpdateModuleSettingsValuesDCVSession {
     CPU_UTILIZATION_THRESHOLD = "cpu_utilization_threshold",
     ALLOWED_SESSIONS_PER_USER = "allowed_sessions_per_user",
     MAX_ROOT_VOLUME_MEMORY = "max_root_volume_memory",
+    ALLOWED_INSTANCE_TYPES = "instance_types.allow",
 }
 
 export type UpdateModuleSettingsVDC = {
@@ -1621,7 +1690,9 @@ export interface UpdateProjectRequest {
     project?: Project;
 }
 export interface UpdateFileSystemRequest {
-    filesystem?: FileSystem;
+    filesystem_name: string;
+    filesystem_title?: string;
+    projects?: string[];
 }
 export interface ListSupportedOSRequest {}
 export interface ListUsersInGroupResult {
@@ -1730,9 +1801,7 @@ export interface UpdatePermissionProfileRequest {
 export interface UpdateProjectResult {
     project?: Project;
 }
-export interface UpdateFileSystemResult {
-    filesystem?: FileSystem;
-}
+export interface UpdateFileSystemResult {}
 export interface AddAdminUserRequest {
     username?: string;
 }
@@ -1778,6 +1847,7 @@ export interface UpdateSessionRequest {
 }
 export interface GetUserProjectsRequest {
     username?: string;
+    exclude_disabled?: boolean;
 }
 export interface CreateEmailTemplateResult {
     template?: EmailTemplate;
@@ -2194,8 +2264,7 @@ export interface ListProjectsRequest {
     listing?: (SocaBaseModel | unknown)[];
     filters?: SocaFilter[];
 }
-export interface ListFileSystemsRequest {
-    paginator?: SocaPaginator;
+export interface ListOnboardedFileSystemsRequest {
     sort_by?: SocaSortBy;
     date_range?: SocaDateRange;
     listing?: (SocaBaseModel | unknown)[];
@@ -2327,11 +2396,31 @@ export interface OnboardONTAPFileSystemRequest extends CommonOnboardFileSystemRe
     volume_id: string;
     file_share_name?: string;
 }
-
 export interface OnboardLUSTREFileSystemRequest extends CommonOnboardFileSystemRequest {
     mount_directory: string;
 }
+
+export interface OnboardS3BucketRequest  {
+    object_storage_title: string;
+    bucket_arn: string;
+    read_only: boolean;
+    custom_bucket_prefix?: string;
+    mount_directory: string;
+    iam_role_arn?: string;
+    projects?: string[];
+}
+
+export interface OnboardS3BucketResult  {
+    filesystem_name: string;
+}
+
 export interface OnboardFileSystemResult {}
+
+export interface RemoveFileSystemRequest  {
+    filesystem_name: string;
+}
+
+export interface RemoveFileSystemResult  {}
 
 export interface ConfigureQUICRequest {
     enable: boolean;

@@ -1,5 +1,5 @@
 # Begin: Disable ulimit
-{%- if context.base_os in ('amazonlinux2', 'centos7', 'rhel7', 'rhel8', 'rhel9') %}
+{%- if context.base_os in ('amazonlinux2', 'rhel8', 'rhel9') %}
 echo -e "
 * hard memlock unlimited
 * soft memlock unlimited

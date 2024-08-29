@@ -25,7 +25,7 @@ import { EnabledDisabledStatusIndicator } from "../../components/common";
 import { Constants } from "../../common/constants";
 import { withRouter } from "../../navigation/navigation-utils";
 import ConfigUtils from "../../common/config-utils";
-import { UpdateModuleSettingsRequestVDC, UpdateModuleSettingsValuesDCVSession } from "../../client/data-model";
+import { SocaUserInputChoice, UpdateModuleSettingsRequestVDC, UpdateModuleSettingsValuesDCVSession } from "../../client/data-model";
 
 export interface VirtualDesktopSettingsProps extends IdeaAppLayoutProps, IdeaSideNavigationProps {}
 
@@ -35,6 +35,7 @@ export interface VirtualDesktopSettingsState {
     clusterManager: any;
     clusterSettings: any;
     activeTabId: string;
+    instanceTypeAndFamilyChoices: SocaUserInputChoice[];
 }
 
 const DEFAULT_ACTIVE_TAB_ID = "general";
@@ -56,6 +57,7 @@ class VirtualDesktopSettings extends Component<VirtualDesktopSettingsProps, Virt
             clusterManager: {},
             clusterSettings: {},
             activeTabId: DEFAULT_ACTIVE_TAB_ID,
+            instanceTypeAndFamilyChoices: []
         };
     }
 
@@ -188,6 +190,8 @@ class VirtualDesktopSettings extends Component<VirtualDesktopSettingsProps, Virt
                         updateSettings.settings.dcv_session[UpdateModuleSettingsValuesDCVSession.MAX_ROOT_VOLUME_MEMORY] = values.max_root_volume_memory;
                     }
 
+                    updateSettings.settings.dcv_session[UpdateModuleSettingsValuesDCVSession.ALLOWED_INSTANCE_TYPES] = values.allowed_instance_types;
+
                     if (Object.keys(updateSettings.settings.dcv_session).length > 0) {
                         AppContext.get()
                             .client()
@@ -227,24 +231,48 @@ class VirtualDesktopSettings extends Component<VirtualDesktopSettingsProps, Virt
                         },
                         default: dot.pick("dcv_session.max_root_volume_memory", this.state.vdcSettings),
                     },
+                    {
+                        name: "allowed_instance_types",
+                        title: "Allowed Instance Types",
+                        data_type: "str",
+                        param_type: "select",
+                        multiple: true,
+                        choices: this.state.instanceTypeAndFamilyChoices,
+                        default: dot.pick("dcv_session.instance_types.allow", this.state.vdcSettings),
+                    },
                 ]}
             />
         );
     }
+
     componentDidMount() {
         this.loadSettings();
+    }
+
+    getInstanceChoices(inputList: any[]): String[] {
+        const instanceChoices: Set<string> = new Set<string>();
+        inputList.forEach((item) => {
+            const instanceType = item.InstanceType;
+            const instanceFamily = instanceType.split('.')[0];
+            instanceChoices.add(instanceType);
+            instanceChoices.add(instanceFamily);
+        });
+        return Array.from(instanceChoices).sort();
     }
 
     loadSettings() {
         let promises: Promise<any>[] = [];
         const clusterSettingsService = AppContext.get().getClusterSettingsService();
         //0
-        promises.push(clusterSettingsService.getClusterSettings());
+        promises.push(clusterSettingsService.getClusterSettings(false));
         //1
-        promises.push(clusterSettingsService.getVirtualDesktopSettings());
+        promises.push(clusterSettingsService.getVirtualDesktopSettings(false));
         //2
         promises.push(clusterSettingsService.getClusterManagerSettings(false));
+        //3
+        promises.push(clusterSettingsService.getInstanceTypes());
         Promise.all(promises).then((result) => {
+            const instanceChoices = this.getInstanceChoices(result[3]);
             const queryParams = new URLSearchParams(this.props.location.search);
             this.setState(
                 {
@@ -252,13 +280,21 @@ class VirtualDesktopSettings extends Component<VirtualDesktopSettingsProps, Virt
                     vdcSettings: result[1],
                     clusterManager: result[2],
                     clusterSettings: result[0],
+                    instanceTypeAndFamilyChoices: instanceChoices.map((instanceChoice: any) => ({
+                        title: instanceChoice,
+                        value: instanceChoice,
+                    })),
                     activeTabId: Utils.asString(queryParams.get("tab"), DEFAULT_ACTIVE_TAB_ID),
                 },
                 () => {
                     this.updateDCVSessionSettingsForm.current?.registry.list().map((field) => {
                         field.setState({ default: field.props.param.default });
                     });
+                    this.updateDCVHostSettingsForm.current?.registry.list().map((field) => {
+                        field.setState({ default: field.props.param.default });
+                    });
                     this.updateDCVSessionSettingsForm.current?.reset();
+                    this.updateDCVHostSettingsForm.current?.reset();
                 }
             );
         });

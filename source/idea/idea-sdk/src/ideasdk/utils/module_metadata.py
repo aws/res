@@ -31,7 +31,6 @@ MODULE_METADATA = [
     ModuleMetadata(name=constants.MODULE_GLOBAL_SETTINGS, title='Global Settings', type=constants.MODULE_TYPE_CONFIG, deployment_priority=0),
     ModuleMetadata(name=constants.MODULE_BOOTSTRAP, title='Bootstrap', type=constants.MODULE_TYPE_STACK, deployment_priority=1),
     ModuleMetadata(name=constants.MODULE_CLUSTER, title='Cluster', type=constants.MODULE_TYPE_STACK, deployment_priority=2),
-    ModuleMetadata(name=constants.MODULE_METRICS, title='Metrics & Monitoring', type=constants.MODULE_TYPE_STACK, deployment_priority=3),
     ModuleMetadata(name=constants.MODULE_IDENTITY_PROVIDER, title='Identity Provider', type=constants.MODULE_TYPE_STACK, deployment_priority=3),
     ModuleMetadata(name=constants.MODULE_DIRECTORYSERVICE, title='Directory Service', type=constants.MODULE_TYPE_STACK, deployment_priority=3),
     ModuleMetadata(name=constants.MODULE_SHARED_STORAGE, title='Shared Storage', type=constants.MODULE_TYPE_STACK, deployment_priority=4),

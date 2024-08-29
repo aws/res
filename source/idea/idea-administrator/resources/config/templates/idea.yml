@@ -53,14 +53,6 @@ modules:
       - settings.yml
     {% endif %}
 
-    {% if 'metrics' in enabled_modules %}
-  - name: metrics
-    id: metrics
-    type: stack
-    config_files:
-      - settings.yml
-    {% endif %}
-
     {% if 'bastion-host' in enabled_modules %}
   - name: bastion-host
     id: bastion-host

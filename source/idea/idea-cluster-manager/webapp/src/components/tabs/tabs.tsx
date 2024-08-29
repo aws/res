@@ -20,13 +20,32 @@ export interface IdeaTabsProps {
     refresh?: boolean;
     headerText?: string;
     tabs: ReadonlyArray<TabsProps.Tab>;
+    activeTabId?: string | undefined;
 }
 
-export interface IdeaTabsState {}
+export interface IdeaTabsState {
+  activeTabId?: string | undefined;
+}
 
 class IdeaTabs extends Component<IdeaTabsProps, IdeaTabsState> {
+
+    constructor(props: IdeaTabsProps) {
+      super(props);
+      this.state = {
+        activeTabId: this.props.activeTabId ?? undefined
+      }
+    }
+
     render() {
-        return <Tabs tabs={this.props.tabs} />;
+        return <Tabs 
+          tabs={this.props.tabs}
+          activeTabId={this.state.activeTabId}
+          onChange={(changeEvent) => {
+            this.setState({
+              activeTabId: changeEvent.detail.activeTabId,
+            });
+          }}
+        />;
     }
 }
 

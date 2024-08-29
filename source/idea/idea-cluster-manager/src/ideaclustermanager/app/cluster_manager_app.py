@@ -26,6 +26,7 @@ from ideaclustermanager.app.accounts.cognito_user_pool import CognitoUserPool, C
 
 from ideaclustermanager.app.accounts.ldapclient.ldap_client_factory import build_ldap_client
 from ideaclustermanager.app.auth.api_authorization_service import ClusterManagerApiAuthorizationService
+from ideaclustermanager.app.authz.roles_service import RolesService
 from ideaclustermanager.app.authz.role_assignments_service import RoleAssignmentsService
 from ideaclustermanager.app.accounts.ad_automation_agent import ADAutomationAgent
 from ideaclustermanager.app.accounts.account_tasks import (
@@ -155,8 +156,18 @@ class ClusterManagerApp(ideasdk.app.SocaApp):
             token_service=self.context.token_service
         )
 
+        # roles service
+        self.context.roles = RolesService(
+            context=self.context
+        )
+
+        # role assignments service
+        self.context.role_assignments = RoleAssignmentsService(
+            context=self.context
+        )
+
         #api authorization service
-        self.context.api_authorization_service = ClusterManagerApiAuthorizationService(accounts=self.context.accounts)
+        self.context.api_authorization_service = ClusterManagerApiAuthorizationService(accounts=self.context.accounts, roles=self.context.roles, role_assignments=self.context.role_assignments)
 
         # adsync service
         self.context.ad_sync = ADSyncService(
@@ -184,11 +195,6 @@ class ClusterManagerApp(ideasdk.app.SocaApp):
             accounts_service=self.context.accounts,
             task_manager=self.context.task_manager,
             vdc_client=self.context.vdc_client
-        )
-
-        # role assignments service
-        self.context.authz = RoleAssignmentsService(
-            context=self.context
         )
 
         # email templates
@@ -224,6 +230,7 @@ class ClusterManagerApp(ideasdk.app.SocaApp):
         try:
             self.context.distributed_lock().acquire(key='initialize-defaults')
             self.context.accounts.create_defaults()
+            self.context.roles.create_defaults()
             self.context.email_templates.create_defaults()
             self.context.ad_sync.sync_from_ad()  # submit ad_sync task after creation of defaults
         finally:

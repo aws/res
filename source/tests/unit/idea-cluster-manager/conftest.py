@@ -25,6 +25,7 @@ from ideaclustermanager.app.auth.api_authorization_service import (
     ClusterManagerApiAuthorizationService,
 )
 from ideaclustermanager.app.authz.role_assignments_service import RoleAssignmentsService
+from ideaclustermanager.app.authz.roles_service import RolesService
 from ideaclustermanager.app.projects.projects_service import ProjectsService
 from ideaclustermanager.app.shared_filesystem.shared_filesystem_service import (
     SharedFilesystemService,
@@ -319,9 +320,20 @@ def context(ddb_local):
     )
     context.accounts.create_defaults()
 
+    context.roles = RolesService(
+        context=context,
+    )
+    context.roles.create_defaults()
+
+    context.role_assignments = RoleAssignmentsService(
+        context=context,
+    )
+
     # api authorization service
     context.api_authorization_service = ClusterManagerApiAuthorizationService(
-        accounts=context.accounts
+        accounts=context.accounts,
+        roles=context.roles,
+        role_assignments=context.role_assignments,
     )
 
     context.vdc_client = MockVirtualDesktopControllerClient()
@@ -333,7 +345,9 @@ def context(ddb_local):
         vdc_client=context.vdc_client,
     )
 
-    context.authz = RoleAssignmentsService(context=context)
+    context.roles = RolesService(context=context)
+
+    context.role_assignments = RoleAssignmentsService(context=context)
 
     context.snapshots = SnapshotsService(context=context)
 

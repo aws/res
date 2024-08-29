@@ -37,12 +37,6 @@ if [[ ! -f "/etc/yum.repos.d/epel.repo" ]]; then
         yum update --security -y
       fi
       ;;
-    centos7)
-      yum -y install epel-release
-      ;;
-    rhel7)
-      yum -y install https://dl.fedoraproject.org/pub/epel/epel-release-latest-7.noarch.rpm
-      ;;
     rhel8)
       yum -y install https://dl.fedoraproject.org/pub/epel/epel-release-latest-8.noarch.rpm
       ;;

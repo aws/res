@@ -45,12 +45,15 @@ export interface IdeaListViewProps<T = any> {
     selectedItems?: T[];
     selectionType?: TableProps.SelectionType;
     onFetchRecords?: () => Promise<SocaListingPayload>;
+    empty?: React.ReactNode;
     showPreferences?: boolean;
     onPreferenceChange?: (detail: CollectionPreferencesProps.Preferences<T>) => void;
     preferencesKey?: string;
     showFilters?: boolean;
     filterType?: "text" | "property" | "select";
     filters?: SocaFilter[];
+    filteringPlaceholder?: string;
+    defaultFilteringText?: string;
     selectFilters?: SocaUserInputParamMetadata[];
     onFilter?: (filters: SocaFilter[]) => SocaFilter[];
     filteringOptions?: PropertyFilterProps.FilteringOption[];
@@ -118,6 +121,9 @@ class IdeaListView extends Component<IdeaListViewProps, IdeaListViewState> {
     }
 
     private defaultFilters = () => {
+        if (this.props?.filters && this.props?.filters.every((filter) => 'key' in filter && Object.keys(filter).some(key => key !== 'key'))) {
+            return this.props.filters;
+        }
         return [];
     };
 
@@ -508,11 +514,14 @@ class IdeaListView extends Component<IdeaListViewProps, IdeaListViewState> {
                 stickyHeader={this.props.stickyHeader}
                 loading={this.state.loading}
                 listing={this.state.listing}
+                empty={this.props.empty}
                 selectedItems={this.props.selectedItems}
                 selectionType={this.props.selectionType}
                 showFilters={this.props.showFilters}
                 filterType={this.props.filterType}
                 filters={this.props.filters}
+                filteringPlaceholder={this.props.filteringPlaceholder}
+                defaultFilteringText={this.props.defaultFilteringText}
                 selectFilters={this.props.selectFilters}
                 filteringProperties={this.props.filteringProperties}
                 filteringOptions={this.props.filteringOptions}

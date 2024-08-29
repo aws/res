@@ -58,7 +58,13 @@ def test_role_creation(
                 "RoleName": {
                     "Fn::Join": [
                         "",
-                        ["Admin-", {"Ref": CommonKey.CLUSTER_NAME}, f"-PipelineRole"],
+                        [
+                            "Admin-",
+                            {"Ref": CommonKey.CLUSTER_NAME},
+                            "-",
+                            {"Ref": "AWS::Region"},
+                            f"-PipelineRole",
+                        ],
                     ]
                 },
             },

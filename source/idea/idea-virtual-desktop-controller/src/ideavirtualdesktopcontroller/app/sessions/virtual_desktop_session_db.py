@@ -8,7 +8,7 @@
 #  or in the 'license' file accompanying this file. This file is distributed on an 'AS IS' BASIS, WITHOUT WARRANTIES
 #  OR CONDITIONS OF ANY KIND, express or implied. See the License for the specific language governing permissions
 #  and limitations under the License.
-from typing import Dict, Optional
+from typing import Dict, Optional, Set
 
 import ideavirtualdesktopcontroller
 from ideadatamodel import (
@@ -284,6 +284,31 @@ class VirtualDesktopSessionDB(VirtualDesktopNotifiableDB):
                 cursor=response_cursor
             )
         )
+    
+    def list_all_for_user_and_managed_sessions(self, request: ListSessionsRequest, username: str, projects_to_manage_sessions: Set[str]) -> ListSessionsResponse:
+        '''
+        When a user has permissions to manage (ie. create/terminate) others' VDI sessions in any project(s),
+        then they should be able to see all sessions in those projects, along with the sessions that they own themselves.
+        '''
+        if Utils.is_empty(request):
+            request = ListSessionsRequest()
+
+        list_result = scan_db_records(request, self._table)
+        session_entries = list_result.get('Items', [])
+        result = [self.convert_db_dict_to_session_object(session) for session in session_entries 
+                  if session.get(sessions_constants.USER_SESSION_DB_FILTER_OWNER_KEY, None)==username or 
+                  session.get(sessions_constants.USER_SESSION_DB_PROJECT_KEY, {}).get(sessions_constants.USER_SESSION_DB_PROJECT_ID_KEY, None) in projects_to_manage_sessions]
+
+        exclusive_start_key = list_result.get("LastEvaluatedKey")
+        response_cursor = Utils.base64_encode(Utils.to_json(exclusive_start_key)) if exclusive_start_key else None
+
+        return SocaListingPayload(
+            listing=result,
+            paginator=SocaPaginator(
+                page_size=request.page_size,
+                cursor=response_cursor
+            )
+        )
 
     def list_all_for_user(self, request: ListSessionsRequest, username: str) -> ListSessionsResponse:
         if Utils.is_empty(request):
@@ -291,7 +316,7 @@ class VirtualDesktopSessionDB(VirtualDesktopNotifiableDB):
 
         if Utils.is_empty(request.filters):
             request.filters = []
-
+            
         request.filters.append(SocaFilter(
             key=sessions_constants.USER_SESSION_DB_FILTER_OWNER_KEY,
             value=username

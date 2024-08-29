@@ -667,6 +667,20 @@ class Utils:
                 'Value': Utils.get_as_string(value)
             })
         return result
+    
+    @staticmethod
+    def convert_to_dict(obj):
+        """
+        Recursively converts an object to a dictionary.
+        """
+        if isinstance(obj, dict):
+            return {k: Utils.convert_to_dict(v) for k, v in obj.items()}
+        elif hasattr(obj, "__dict__"):
+            return {key: Utils.convert_to_dict(value) for key, value in obj.__dict__.items() if not key.startswith("_")}
+        elif isinstance(obj, list):
+            return [Utils.convert_to_dict(item) for item in obj]
+        else:
+            return obj
 
     @staticmethod
     def convert_tags_list_of_dict_to_tags_dict(list: list[dict]) -> dict:

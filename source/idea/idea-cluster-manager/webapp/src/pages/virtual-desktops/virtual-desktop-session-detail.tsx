@@ -115,7 +115,7 @@ class VirtualDesktopSessionDetail extends Component<VirtualDesktopSessionDetailP
                 return (
                     <Grid gridDefinition={[{ colspan: 4 }, { colspan: 4 }, { colspan: 4 }]}>
                         <KeyValue title={"Actor"} value={permission.actor_name} />
-                        <KeyValue title={"Permission Profile"} value={permission.permission_profile?.profile_id} />
+                        <KeyValue title={"Desktop Shared Setting"} value={permission.permission_profile?.profile_id} />
                         <KeyValue title={"Expiry"} value={permission.expiry_date} type={"date"} />
                     </Grid>
                 );

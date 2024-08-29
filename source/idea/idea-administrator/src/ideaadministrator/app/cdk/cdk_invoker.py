@@ -166,7 +166,6 @@ class CdkInvoker:
             constants.MODULE_SCHEDULER: self.invoke_scheduler,
             constants.MODULE_BASTION_HOST: self.invoke_bastion_host,
             constants.MODULE_VIRTUAL_DESKTOP_CONTROLLER: self.invoke_virtual_desktop_controller,
-            constants.MODULE_METRICS: self.invoke_metrics
         }
 
     def log(self, message: str):
@@ -551,16 +550,6 @@ class CdkInvoker:
 
     def invoke_shared_storage(self, **_):
         outputs_file = os.path.join(self.deployment_dir, 'shared-storage-outputs.json')
-        cdk_app_cmd = self.get_cdk_app_cmd()
-        cdk_cmd = self.get_cdk_command('deploy', [
-            f"--app '{cdk_app_cmd}' ",
-            f'--outputs-file {outputs_file}',
-            '--require-approval never'
-        ])
-        self.exec_shell(cdk_cmd)
-
-    def invoke_metrics(self, **_):
-        outputs_file = os.path.join(self.deployment_dir, 'metrics-outputs.json')
         cdk_app_cmd = self.get_cdk_app_cmd()
         cdk_cmd = self.get_cdk_command('deploy', [
             f"--app '{cdk_app_cmd}' ",

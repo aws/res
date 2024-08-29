@@ -31,7 +31,7 @@ fi
 source "$SCRIPT_DIR/../common/bootstrap_common.sh"
 
 SUB_DIR=""
-if [[ $BASE_OS =~ ^(amzn2|centos7|rhel7|rhel8|rhel9)$ ]]; then
+if [[ $BASE_OS =~ ^(amzn2|rhel8|rhel9)$ ]]; then
   SUB_DIR="red_hat"
 elif [[ $BASE_OS =~ ^(ubuntu2204)$ ]]; then
   SUB_DIR="debian"

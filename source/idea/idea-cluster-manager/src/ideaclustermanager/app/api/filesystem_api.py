@@ -17,7 +17,11 @@ from ideadatamodel.shared_filesystem import (
     OnboardLUSTREFileSystemRequest,
     OnboardFileSystemResult,
     CreateEFSFileSystemRequest,
-    CreateONTAPFileSystemRequest
+    CreateONTAPFileSystemRequest,
+    OnboardS3BucketRequest,
+    ListOnboardedFileSystemsRequest,
+    UpdateFileSystemRequest,
+    RemoveFileSystemRequest,
 )
 from ideadatamodel import (
     exceptions
@@ -50,6 +54,18 @@ class FileSystemAPI(BaseAPI):
                 "scope": self.SCOPE_WRITE,
                 "method": self.create_filesystem,
             },
+            "FileSystem.UpdateFileSystem": {
+                "scope": self.SCOPE_WRITE,
+                "method": self.update_filesystem
+            },
+            "FileSystem.RemoveFileSystem": {
+                "scope": self.SCOPE_WRITE,
+                "method": self.remove_filesystem,
+            },
+            "FileSystem.ListOnboardedFileSystems": {
+                "scope": self.SCOPE_READ,
+                "method": self.list_onboarded_file_systems,
+            },
             "FileSystem.ListFSinVPC": {
                 "scope": self.SCOPE_READ,
                 "method": self.list_file_systems_in_vpc,
@@ -65,7 +81,11 @@ class FileSystemAPI(BaseAPI):
             "FileSystem.OnboardLUSTREFileSystem": {
                 "scope": self.SCOPE_WRITE,
                 "method": self.onboard_filesystem,
-            }
+            },
+            "FileSystem.OnboardS3Bucket": {
+                "scope": self.SCOPE_WRITE,
+                "method": self.onboard_filesystem
+            },
         }
 
     def create_filesystem(self, context: ApiInvocationContext):
@@ -83,6 +103,16 @@ class FileSystemAPI(BaseAPI):
             raise exceptions.general_exception(str(e.errors()))
 
         context.success(CreateFileSystemResult())
+    
+    def update_filesystem(self, context: ApiInvocationContext):
+        request = context.get_request_payload_as(UpdateFileSystemRequest)
+        result = self.context.shared_filesystem.update_filesystem(request)
+        context.success(result)
+    
+    def remove_filesystem(self, context: ApiInvocationContext):
+        request = context.get_request_payload_as(RemoveFileSystemRequest)
+        result = self.context.shared_filesystem.remove_filesystem(request)
+        context.success(result)
 
     def add_filesystem_to_project(self, context: ApiInvocationContext):
         request = context.get_request_payload_as(AddFileSystemToProjectRequest)
@@ -93,6 +123,11 @@ class FileSystemAPI(BaseAPI):
         request = context.get_request_payload_as(RemoveFileSystemFromProjectRequest)
         self.context.shared_filesystem.remove_filesystem_from_project(request)
         context.success(RemoveFileSystemFromProjectResult())
+
+    def list_onboarded_file_systems(self, context: ApiInvocationContext):
+        request = context.get_request_payload_as(ListOnboardedFileSystemsRequest)
+        result = self.context.shared_filesystem.list_onboarded_file_systems(request)
+        context.success(result)
 
     def list_file_systems_in_vpc(self, context: ApiInvocationContext):
         result = self.context.shared_filesystem.list_file_systems_in_vpc()
@@ -107,6 +142,9 @@ class FileSystemAPI(BaseAPI):
 
         elif context.namespace == 'FileSystem.OnboardLUSTREFileSystem':
             self.context.shared_filesystem.onboard_lustre_filesystem(context.get_request_payload_as(OnboardLUSTREFileSystemRequest))
+
+        elif context.namespace == 'FileSystem.OnboardS3Bucket':
+            self.context.shared_filesystem.onboard_s3_bucket(context.get_request_payload_as(OnboardS3BucketRequest))
 
         context.success(OnboardFileSystemResult())
 

@@ -103,9 +103,10 @@ def session(
     create_session_response = client.create_session(
         CreateSessionRequest(session=session)
     )
+    session = create_session_response.session
 
     try:
-        session = wait_for_launching_session(client, create_session_response.session)
+        session = wait_for_launching_session(client, session)
     except Exception as e:
         delete_session(client, session)
         raise e

@@ -29,7 +29,7 @@ class OpenLDAPClient(AbstractLDAPClient):
 
     @property
     def ldap_root_bind(self) -> str:
-        return f'cn={self.ldap_root_username},{self.ldap_base}'
+        return f'sAMAccountName={self.ldap_root_username},{self.ldap_base}'
 
     @property
     def ldap_user_base(self) -> str:

@@ -676,6 +676,10 @@ class ApiAuthorizationServiceProtocol(SocaBaseProtocol):
     @abstractmethod
     def get_username(self, decoded_token: str) -> Optional[str]:
         ...
+    
+    @abstractmethod
+    def get_roles_for_user(self, user: User, role_assignment_resource_key: Optional[str]) -> List[Dict]:
+        ...
 
 
 class TokenServiceProtocol(SocaBaseProtocol):

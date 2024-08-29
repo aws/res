@@ -1,5 +1,5 @@
 # Begin: Install Prometheus Node Exporter
-{%- if context.base_os in ('amazonlinux2', 'centos7', 'rhel7', 'rhel8', 'rhel9') and context.is_prometheus_exporter_enabled('node_exporter') %}
+{%- if context.base_os in ('amazonlinux2', 'rhel8', 'rhel9') and context.is_prometheus_exporter_enabled('node_exporter') %}
 function install_prometheus_node_exporter () {
   local AWS=$(command -v aws)
   local MACHINE=$(uname -m)

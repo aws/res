@@ -10,6 +10,8 @@ __all__ = (
     "CreateEFSFileSystemRequest",
     "CreateONTAPFileSystemRequest",
     "CreateFileSystemResult",
+    "UpdateFileSystemRequest",
+    "UpdateFileSystemResult",
     "ListFileSystemInVPCRequest",
     "ListFileSystemInVPCResult",
     'CommonOnboardFileSystemRequest',
@@ -17,14 +19,20 @@ __all__ = (
     'OnboardONTAPFileSystemRequest',
     'OnboardLUSTREFileSystemRequest',
     'OnboardFileSystemResult',
-    'OffboardFileSystemRequest',
+    'RemoveFileSystemRequest',
+    'RemoveFileSystemResult',
+    "OnboardS3BucketRequest",
+    "OnboardS3BucketResult",
+    "ListOnboardedFileSystemsRequest",
+    "ListOnboardedFileSystemsResult",
     "OPEN_API_SPEC_ENTRIES_FILESYSTEM",
 )
 
 from enum import Enum
 
-from ideadatamodel.api import SocaPayload, IdeaOpenAPISpecEntry
-from ideadatamodel.shared_filesystem import EFSFileSystem, FSxONTAPFileSystem, FSxLUSTREFileSystem
+from ideadatamodel import constants
+from ideadatamodel.api import SocaPayload, SocaListingPayload, IdeaOpenAPISpecEntry
+from ideadatamodel.shared_filesystem import FileSystem, EFSFileSystem, FSxONTAPFileSystem, FSxLUSTREFileSystem
 from typing import Optional, List
 
 
@@ -38,9 +46,13 @@ class FSxVolumeONTAPSecurityStyle(str, Enum):
     NTFS = 'NTFS'
     MIXED = 'MIXED'
 
+
+class CustomBucketPrefixTypes(str, Enum):
+    ProjectNamePrefix = constants.OBJECT_STORAGE_CUSTOM_PROJECT_NAME_PREFIX
+    ProjectNameUsernamePrefix = constants.OBJECT_STORAGE_CUSTOM_PROJECT_NAME_AND_USERNAME_PREFIX
+    NoCustomPrefix = constants.OBJECT_STORAGE_NO_CUSTOM_PREFIX
+
 # CreateFileSystemRequest
-
-
 class CommonCreateFileSystemRequest(SocaPayload):
     filesystem_name: Optional[str]
     filesystem_title: Optional[str]
@@ -65,6 +77,19 @@ class CreateONTAPFileSystemRequest(CommonCreateFileSystemRequest):
 
 
 class CreateFileSystemResult(SocaPayload):
+    pass
+
+
+# UpdateFileSystemRequest
+
+
+class UpdateFileSystemRequest(SocaPayload):
+    filesystem_name: str
+    filesystem_title: Optional[str]
+    projects: Optional[List[str]]
+
+
+class UpdateFileSystemResult(SocaPayload):
     pass
 
 
@@ -96,7 +121,9 @@ class RemoveFileSystemFromProjectResult(SocaPayload):
     pass
 
 
-# ListFileSystemInVPC
+# ListFileSystems
+
+
 class ListFileSystemInVPCRequest(SocaPayload):
     pass
 
@@ -107,7 +134,17 @@ class ListFileSystemInVPCResult(SocaPayload):
     fsx_lustre: Optional[List[FSxLUSTREFileSystem]]
 
 
+class ListOnboardedFileSystemsRequest(SocaListingPayload):
+    pass
+
+
+class ListOnboardedFileSystemsResult(SocaListingPayload):
+    listing: Optional[List[FileSystem]]
+
+
 # OnboardFileSystems
+
+
 class CommonOnboardFileSystemRequest(SocaPayload):
     filesystem_name: str
     filesystem_title: str
@@ -134,8 +171,26 @@ class OnboardFileSystemResult(SocaPayload):
     pass
 
 
-class OffboardFileSystemRequest(SocaPayload):
+class RemoveFileSystemRequest(SocaPayload):
     filesystem_name: str
+
+
+class RemoveFileSystemResult(SocaPayload):
+    pass
+
+
+class OnboardS3BucketRequest(SocaPayload):
+    object_storage_title: str
+    bucket_arn: str
+    read_only: bool
+    custom_bucket_prefix: Optional[CustomBucketPrefixTypes]
+    mount_directory: str
+    iam_role_arn: Optional[str]
+    projects: Optional[List[str]]
+
+
+class OnboardS3BucketResult(SocaPayload):
+    pass
 
 
 OPEN_API_SPEC_ENTRIES_FILESYSTEM = [
@@ -168,11 +223,32 @@ OPEN_API_SPEC_ENTRIES_FILESYSTEM = [
         is_public=False,
     ),
     IdeaOpenAPISpecEntry(
+        namespace="FileSystem.UpdateFileSystem",
+        request=UpdateFileSystemRequest,
+        result=UpdateFileSystemResult,
+        is_listing=False,
+        is_public=False,
+    ),
+    IdeaOpenAPISpecEntry(
+        namespace="FileSystem.RemoveFileSystem",
+        request=RemoveFileSystemRequest,
+        result=RemoveFileSystemResult,
+        is_listing=False,
+        is_public=False,
+    ),
+    IdeaOpenAPISpecEntry(
         namespace="FileSystem.ListFSinVPC",
         request=ListFileSystemInVPCRequest,
         result=ListFileSystemInVPCResult,
-        is_listing=False,
+        is_listing=True,
         is_public=False,
+    ),
+        IdeaOpenAPISpecEntry(
+        namespace="FileSystem.ListOnboardedFileSystems",
+        request=ListOnboardedFileSystemsRequest,
+        result=ListOnboardedFileSystemsResult,
+        is_listing=True,
+        is_public=False
     ),
     IdeaOpenAPISpecEntry(
         namespace="FileSystem.OnboardEFSFileSystem",
@@ -194,5 +270,12 @@ OPEN_API_SPEC_ENTRIES_FILESYSTEM = [
         result=OnboardFileSystemResult,
         is_listing=False,
         is_public=False
-    )
+    ),
+    IdeaOpenAPISpecEntry(
+        namespace="FileSystem.OnboardS3Bucket",
+        request=OnboardS3BucketRequest,
+        result=OnboardS3BucketResult,
+        is_listing=False,
+        is_public=False
+    ),
 ]
