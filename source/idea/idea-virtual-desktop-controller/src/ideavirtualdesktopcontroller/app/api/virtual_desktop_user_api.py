@@ -120,6 +120,53 @@ class VirtualDesktopUserAPI(VirtualDesktopAPI):
         if not Utils.is_empty(owner) and owner != context.get_username():
             return "Invalid owner provided. Non Admin users can submit requests for themselves only", False
         return "", True
+    
+    def _validate_owner_for_create(self, session: VirtualDesktopSession, context: ApiInvocationContext) -> (str, bool):
+        '''
+        User should be able to create session for themself if they have vdis.create_sessions for this project.
+        User should be able to create session for others if they have vdis.create_terminate_others_sessions permission for this project.
+        '''
+        if Utils.is_empty(session.project) or Utils.is_empty(session.project.project_id):
+            session.failure_reason = 'missing session.project.project_id'
+            return session, False
+        if Utils.is_empty(session.owner):
+            session.failure_reason = 'missing session.owner'
+            return session, False
+        
+        self._logger.info(f'Session creation requested by {context.get_username()} in project ID: {session.project.project_id} to be owned by {session.owner}')
+        
+        if session.owner == context.get_username():
+            if not context.is_authorized(elevated_access=False, scopes=[self.acl.get(context.namespace).get('scope')], 
+                                         role_assignment_resource_key=f'{session.project.project_id}:project', permission="vdis.create_sessions"):
+                session.failure_reason = "You're not authorized to create sessions for yourself in this project."
+                return session, False
+        elif not context.is_authorized(elevated_access=False, scopes=[self.acl.get(context.namespace).get('scope')], 
+                                       role_assignment_resource_key=f'{session.project.project_id}:project', permission="vdis.create_terminate_others_sessions"):
+            session.failure_reason = "You're not authorized to create sessions for others in this project."
+            return session, False
+
+        return "", True
+    
+    def _validate_owner_for_delete(self, session: VirtualDesktopSession, context: ApiInvocationContext) -> (str, bool):
+        '''
+        User should always be able to terminate their own sessions.
+        User should be able to terminate session for others if they have vdis.create_terminate_others_sessions permission for this project.
+        '''
+        if Utils.is_empty(session.project) or Utils.is_empty(session.project.project_id):
+            session.failure_reason = 'missing session.project.project_id'
+            return session, False
+        if Utils.is_empty(session.owner):
+            session.failure_reason = 'missing session.owner'
+            return session, False
+        
+        if session.owner != context.get_username() and not context.is_authorized(elevated_access=False, scopes=[self.acl.get(context.namespace).get('scope')], 
+                                                                                 role_assignment_resource_key=f'{session.project.project_id}:project', permission='vdis.create_terminate_others_sessions'):
+            session.failure_reason = "You're not authorized to terminate others' sessions in this project."
+            return session, False
+        
+        self._logger.info(f'Session termination requested by {context.get_username()} for session ID: {session.idea_session_id} owned by {session.owner}')
+
+        return "", True
 
     def _validate_reboot_session_request(self, session: VirtualDesktopSession, context: ApiInvocationContext) -> (VirtualDesktopSession, bool):
         self.validate_reboot_session_request(session)
@@ -143,7 +190,7 @@ class VirtualDesktopUserAPI(VirtualDesktopAPI):
         if not is_valid:
             valid_response = False
 
-        error_message, is_valid = self._validate_owner(session.owner, context)
+        error_message, is_valid = self._validate_owner_for_delete(session, context)
         if not is_valid:
             session.failure_reason = Utils.get_as_string(value=session.failure_reason, default='') + str(error_message)
             valid_response = False
@@ -190,14 +237,15 @@ class VirtualDesktopUserAPI(VirtualDesktopAPI):
             session.failure_reason = 'Missing Create Session Info'
             return session, False
 
-        message, is_valid = self._validate_owner(session.owner, context)
+        # If session.owner is empty, assume owner is self
+        if Utils.is_empty(session.owner): session.owner = context.get_username()
+        message, is_valid = self._validate_owner_for_create(session, context)
         if not is_valid:
             session.failure_reason = Utils.get_as_string(value=session.failure_reason, default='') + str(message)
             self._logger.error(session.failure_reason)
             return session, False
 
-        session.owner = context.get_username()
-        session_count_for_user = self.session_db.get_session_count_for_user(context.get_username())
+        session_count_for_user = self.session_db.get_session_count_for_user(session.owner)
         if session_count_for_user >= self.context.config().get_int('virtual-desktop-controller.dcv_session.allowed_sessions_per_user', required=True):
             session.failure_reason = f'User {session.owner} has exceeded the allowed number of sessions: {session_count_for_user}. Please contact the System Administrators if you need to create more sessions.'
             return session, False
@@ -252,7 +300,7 @@ class VirtualDesktopUserAPI(VirtualDesktopAPI):
         session = self.session_utils.create_session(session)
 
         if Utils.is_empty(session.failure_reason):
-            self._logger.debug(f'session request created for user: {context.get_username()} with session name: {session.name} and idea_session_id: {session.idea_session_id}:{session.name}')
+            self._logger.info(f'session request created for user: {session.owner} with session name: {session.name} and idea_session_id: {session.idea_session_id}:{session.name}' + '' if session.owner == context.get_username() else f' by: {context.get_username()}')
             context.success(CreateSessionResponse(
                 session=session
             ))
@@ -352,7 +400,6 @@ class VirtualDesktopUserAPI(VirtualDesktopAPI):
         for session in sessions:
             session, is_valid = self._validate_delete_session_request(session, context)
             if is_valid:
-                self.complete_delete_session_request(session, context)
                 valid_sessions.append(session)
             else:
                 failed_sessions.append(session)
@@ -457,8 +504,19 @@ class VirtualDesktopUserAPI(VirtualDesktopAPI):
 
     def list_sessions(self, context: ApiInvocationContext):
         request = context.get_request_payload_as(ListSessionsRequest)
+        result = None
+        username = context.get_username()
 
-        result = self.session_db.list_all_for_user(request, context.get_username())
+        # Get a list of projects where the current user has permission to manage other user sessions
+        user_projects = self.get_user_projects(username=username)
+        projects_to_manage_sessions = [project.project_id for project in user_projects if 
+                                       context.is_authorized(elevated_access=False, scopes=[self.acl.get(context.namespace).get('scope')], 
+                                                             role_assignment_resource_key=f'{project.project_id}:project', permission='vdis.create_terminate_others_sessions')]
+
+        if not projects_to_manage_sessions:
+            result = self.session_db.list_all_for_user(request, username)
+        else:
+            result = self.session_db.list_all_for_user_and_managed_sessions(request, username, projects_to_manage_sessions)
         context.success(result)
 
     def list_software_stacks(self, context: ApiInvocationContext):

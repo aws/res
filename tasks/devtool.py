@@ -327,25 +327,6 @@ def update_cdk_version(_, version):
     with open(os.path.join(idea.props.administrator_project_dir, 'install', 'install.sh'), 'w') as f:
         f.write(os.linesep.join(updated_lines))
 
-    # Update buildspec
-    # We don't do the YAML method as we want to preserve the comments/info in the buildspec output
-    # until it gets refactored to a proper template.
-    updated_lines = []
-    buildspec_filename = 'deployment/idea/codebuild/integration_tests/buildspec-idea-integration-tests.yml'
-    print(f'updating {buildspec_filename} with CDK version: {version}')
-    with open(buildspec_filename, 'r') as f:
-        #buildspec = Utils.from_yaml(f.read())
-        lines = f.read().splitlines()
-    for line in lines:
-        # a proper regex would be better
-        if line.startswith('    AWS_CDK_VERSION:'):
-            updated_lines.append(f'    AWS_CDK_VERSION: "{version}"  # CDK version - automatically updated')
-        else:
-            updated_lines.append(line)
-
-    with open(buildspec_filename, 'w') as f:
-        f.write(os.linesep.join(updated_lines))
-
     idea.console.success(f'successfully updated idea cdk version from {old_version} -> {version}')
     idea.console.warning('Note:')
     idea.console.warning('- run `invoke devtool.upgrade-cdk` to upgrade cdk nodejs binary and install cdk python libraries for new version.')

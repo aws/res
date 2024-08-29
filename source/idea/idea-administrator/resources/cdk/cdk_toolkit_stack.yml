@@ -172,6 +172,42 @@ Resources:
         Fn::Sub: alias/cdk-${Qualifier}-assets-key
       TargetKeyId:
         Ref: FileAssetsBucketEncryptionKey
+  LogBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName:
+        Fn::If:
+          - HasCustomFileAssetsBucketName
+          - Fn::Sub: log-${FileAssetsBucketName}
+          - Fn::Sub: log-cdk-${Qualifier}-assets-${AWS::AccountId}-${AWS::Region}
+      AccessControl: Private
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+    DeletionPolicy: Retain
+  LogBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket:
+        Ref: LogBucket
+      PolicyDocument:
+        Id: S3ServerAccessLogsPolicy
+        Version: "2012-10-17"
+        Statement:
+          - Sid: AllowS3LogRequests
+            Action: s3:PutObject
+            Effect: Allow
+            Resource:
+              - Fn::Sub: ${LogBucket.Arn}/*
+            Principal:
+              Service: logging.s3.amazonaws.com
+
   StagingBucket:
     Type: AWS::S3::Bucket
     Properties:
@@ -219,6 +255,10 @@ Resources:
           Value: "{{ cluster_name }}"
         - Key: "res:BackupPlan"
           Value: "cluster"
+      # Enable S3 bucket logging
+      LoggingConfiguration:
+        DestinationBucketName: !Ref LogBucket
+        LogFilePrefix: "cluster-s3-bucket-logs/"
     UpdateReplacePolicy: Retain
     DeletionPolicy: Retain
   StagingBucketPolicy:

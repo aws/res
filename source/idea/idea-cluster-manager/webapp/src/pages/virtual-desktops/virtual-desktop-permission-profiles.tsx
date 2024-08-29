@@ -39,7 +39,7 @@ export interface VirtualDesktopPermissionProfilesState {
 const VIRTUAL_DESKTOP_PERMISSION_PROFILE_TABLE_COLUMN_DEFINITIONS: TableProps.ColumnDefinition<VirtualDesktopPermissionProfile>[] = [
     {
         id: "profile_id",
-        header: "Profile ID",
+        header: "Desktop Shared Setting ID",
         cell: (e) => <Link href={`/#/virtual-desktop/permission-profiles/${e.profile_id}`}>{e.profile_id}</Link>,
     },
     {
@@ -143,7 +143,7 @@ class VirtualDesktopPermissionProfiles extends Component<VirtualDesktopPermissio
                             profile: permissionProfile,
                         })
                         .then((_) => {
-                            this.setFlashMessage(<p key={permissionProfile.profile_id}>Permission Profile: {permissionProfile.profile_id}, Create request submitted</p>, "success");
+                            this.setFlashMessage(<p key={permissionProfile.profile_id}>Desktop Shared Setting: {permissionProfile.profile_id}, Create request submitted</p>, "success");
                             this.getListing().fetchRecords();
                             return Promise.resolve(true);
                         })
@@ -194,7 +194,7 @@ class VirtualDesktopPermissionProfiles extends Component<VirtualDesktopPermissio
                             profile: permissionProfile,
                         })
                         .then((_) => {
-                            this.setFlashMessage(<p key={permissionProfile.profile_id}>Permission Profile: {permissionProfile.profile_id}, Edit request submitted</p>, "success");
+                            this.setFlashMessage(<p key={permissionProfile.profile_id}>Desktop Shared Setting: {permissionProfile.profile_id}, Edit request submitted</p>, "success");
                             this.getListing().fetchRecords();
                             return Promise.resolve(true);
                         })
@@ -233,14 +233,14 @@ class VirtualDesktopPermissionProfiles extends Component<VirtualDesktopPermissio
         return (
             <IdeaListView
                 ref={this.listing}
-                title="Permission Profiles"
+                title="Desktop Shared Settings"
                 preferencesKey={"permission-profile"}
                 showPreferences={true}
-                description="Manage your Virtual Desktop Permission Profiles"
+                description="Manage your Virtual Desktop Shared Settings"
                 selectionType="single"
                 primaryAction={{
                     id: "create-permission-profile",
-                    text: "Create Permission Profile",
+                    text: "Create Desktop Shared Setting",
                     onClick: () => {
                         this.showCreatePermissionProfileForm();
                     },
@@ -249,7 +249,7 @@ class VirtualDesktopPermissionProfiles extends Component<VirtualDesktopPermissio
                 secondaryActions={[
                     {
                         id: "edit-permission-profile",
-                        text: "Edit Permission Profile",
+                        text: "Edit Desktop Shared Setting",
                         disabled: !this.isSelected(),
                         onClick: () => {
                             this.setState(
@@ -348,7 +348,7 @@ class VirtualDesktopPermissionProfiles extends Component<VirtualDesktopPermissio
                         href: "#/virtual-desktop/sessions",
                     },
                     {
-                        text: "Permission Profiles",
+                        text: "Desktop Shared Settings",
                         href: "",
                     },
                 ]}

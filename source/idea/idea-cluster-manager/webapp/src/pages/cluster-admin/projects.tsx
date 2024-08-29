@@ -14,9 +14,9 @@
 import React, { Component, RefObject } from "react";
 
 import { TableProps } from "@cloudscape-design/components/table/interfaces";
-import { ListGroupsResult, Project, RoleAssignment } from "../../client/data-model";
+import { GetUserResult, Project, ProjectPermissions, RoleAssignment } from "../../client/data-model";
 import IdeaListView from "../../components/list-view";
-import { AccountsClient, ClusterSettingsClient, ProjectsClient } from "../../client";
+import { AuthClient, AccountsClient, ClusterSettingsClient, ProjectsClient } from "../../client";
 import { AppContext } from "../../common";
 import { Box, Button, Header, Modal, ProgressBar, SpaceBetween, StatusIndicator, TagEditor } from "@cloudscape-design/components";
 import Utils from "../../common/utils";
@@ -27,6 +27,7 @@ import IdeaSplitPanel from "../../components/split-panel";
 import { SharedStorageFileSystem } from "../../common/shared-storage-utils";
 import { FILESYSTEM_TABLE_COLUMN_DEFINITIONS } from "./filesystem";
 import FilesystemClient from "../../client/filesystem-client";
+import { AuthService } from "../../service";
 
 export interface ProjectsProps extends IdeaAppLayoutProps, IdeaSideNavigationProps {
   projectOwnerRoles?: string[]
@@ -34,12 +35,14 @@ export interface ProjectsProps extends IdeaAppLayoutProps, IdeaSideNavigationPro
 
 export interface ProjectsState {
     projectSelected: boolean;
+    defaultFilteringText?: string;
     showTagEditor: boolean;
     tags: any[];
     splitPanelOpen: boolean;
     projectAssignments: {
       [key: string]: RoleAssignment[];
-    },
+    };
+    projectPermissions: Map<string, ProjectPermissions>;
 }
 
 const PROJECT_TABLE_COLUMN_DEFINITIONS: TableProps.ColumnDefinition<Project>[] = [
@@ -132,12 +135,15 @@ class Projects extends Component<ProjectsProps, ProjectsState> {
         super(props);
         this.listing = React.createRef();
         this.filesystemListing = React.createRef();
+        const { state } = this.props.location
         this.state = {
             projectSelected: false,
+            defaultFilteringText: state ? state?.defaultFilteringText : "",
             showTagEditor: false,
             tags: [],
             splitPanelOpen: false,
             projectAssignments: {},
+            projectPermissions: new Map(),
         };
     }
 
@@ -157,6 +163,10 @@ class Projects extends Component<ProjectsProps, ProjectsState> {
             });
     }
 
+    getAuthService(): AuthService {
+        return AppContext.get().auth();
+    }
+
     accounts(): AccountsClient {
         return AppContext.get().client().accounts();
     }
@@ -172,7 +182,6 @@ class Projects extends Component<ProjectsProps, ProjectsState> {
     getFileSystemListing(): IdeaListView {
         return this.filesystemListing.current!;
     }
-
 
     isSelected(): boolean {
         return this.state.projectSelected;
@@ -206,61 +215,82 @@ class Projects extends Component<ProjectsProps, ProjectsState> {
         return AppContext.get().client().clusterSettings();
     }
 
-    async getOwnerProjectsWithGroups(context: AppContext, allProjects: Project[]): Promise<Project[]> {
-      const username: string = context.auth().getUsername();
-      const groups: string[] = await new Promise(resolve => {
-          context.client().accounts().listGroups({
-              username,
-          })
-          .then((result: ListGroupsResult) => {
-            resolve(result.listing?.map(x => `${x.name!}:group`) || []);
-          });
-      });
-      const userGroupRoleAssignments: Promise<void>[] = [];
-      const projects: Map<string, Project> = new Map();
-      const ownerProjectIds: string[] = [];
-      for (const actor_key of [...groups, `${username}:user`]) {
-        // resolves to true if one of the returned roles is project_owner
-        userGroupRoleAssignments.push(Promise.resolve(
-          context.client().authz().listRoleAssignments({
-            actor_key,
-          })
-          .then((result) => {
-            for (const roleAssignment of result.items) {
-              let update = {
-                ldap_groups: [] as string[],
-                users: [] as string[],
-              };
-              if (projects.has(roleAssignment.resource_id!)) {
-                update = {
-                  ldap_groups: projects.get(roleAssignment.resource_id!)?.ldap_groups ?? [],
-                  users: projects.get(roleAssignment.resource_id!)?.users ?? [],
+    async getProjectsWithPermissions(context: AppContext, allProjects: Project[]): Promise<Project[]> {
+        const rolePermissions = await context.client().authz().listRoles({
+          include_permissions: true,
+        });
+        const user = await this.getAuthService().getUser();
+        const projectRoleAssignments: Promise<void>[] = [];
+        const projects: Map<string, Project> = new Map();
+        const permissions: Map<string, ProjectPermissions> = new Map();
+  
+        // For every project in `allProjects`, we populate the users/groups columns, and the
+        // permissions that the current user has with which they can interact with the project
+        for (const project of allProjects) {
+          const resource_key = `${project.project_id!}:project`;
+          projectRoleAssignments.push(Promise.resolve(
+            context.client().authz().listRoleAssignments({
+              resource_key,
+            })
+            .then(async (result) => {
+              for (const roleAssignment of result.items) {
+                let update = {
+                  ldap_groups: [] as string[],
+                  users: [] as string[],
+                };
+                // If the project associated with the role assignment is already in the projects Map, it retrieves the existing ldap_groups and users arrays for that project.
+                if (projects.has(roleAssignment.resource_id!)) {
+                  update = {
+                    ldap_groups: projects.get(roleAssignment.resource_id!)?.ldap_groups ?? [],
+                    users: projects.get(roleAssignment.resource_id!)?.users ?? [],
+                  }
                 }
-              } else {
-                let project = allProjects.find(x => x.project_id! === roleAssignment.resource_id);
-                if (!project) continue;
-                projects.set(roleAssignment.resource_id, project);
+  
+                let partOfProject: boolean = false;
+  
+                if (roleAssignment.actor_type === "group") {
+                  update.ldap_groups.push(roleAssignment.actor_id);
+                  if (user.additional_groups?.includes(roleAssignment.actor_id))
+                    partOfProject = true;
+                } else if (roleAssignment.actor_type === "user") {
+                  update.users.push(roleAssignment.actor_id);
+                  if (roleAssignment.actor_id === user.username!)
+                    partOfProject = true;
+                }
+                
+                // if we already have a mapping, use that. Otherwise, use the base project
+                projects.set(roleAssignment.resource_id!, {...project, ...update});
+  
+                // If the user is part of the project or is in a group that is part of the project
+                // we update the permissions they have to interact with that project based on the 
+                // union of all groups/user permissions.
+  
+                if (partOfProject) {
+                  let permission = permissions.get(roleAssignment.resource_id!) ?? {
+                    update_personnel: false,
+                    update_status: false,
+                  }
+  
+                  const rolePermission = rolePermissions.items.find(perm => perm.role_id === roleAssignment.role_id);
+                  
+                  if (rolePermission) {
+                    permission = {
+                      update_personnel: permission.update_personnel || rolePermission.projects.update_personnel,
+                      update_status: permission.update_status || rolePermission.projects.update_status,
+                    }
+                    permissions.set(roleAssignment.resource_id!, permission);
+                  }
+                }
               }
-              if (roleAssignment.actor_type === "group") {
-                update.ldap_groups.push(roleAssignment.actor_id);
-              } else if (roleAssignment.actor_type === "user") {
-                update.users.push(roleAssignment.actor_id);
-              }
-              // if we already have a mapping, use that. Otherwise, use the base project
-              projects.set(roleAssignment.resource_id!, {...projects.get(roleAssignment.resource_id!), ...update});
-              if (roleAssignment.role_id === "project_owner") {
-                ownerProjectIds.push(roleAssignment.resource_id);
-              }
-              console.log(projects);
-            }
-          })
-        ));
-      }
-      await Promise.all(userGroupRoleAssignments);
-      return Array.from(projects.values()).filter(project => {
-        return ownerProjectIds.includes(project.project_id!);
-      });
-    };
+            })
+          ));
+        }
+        await Promise.all(projectRoleAssignments);
+        this.setState({
+          projectPermissions: permissions,
+        });
+        return Array.from(projects.values());
+      };
 
     async getProjectsWithRoles(projects: Project[]): Promise<Project[]> {
       const authzClient = AppContext.get().client().authz();
@@ -413,6 +443,35 @@ class Projects extends Component<ProjectsProps, ProjectsState> {
         });
     }
 
+    canEditProjectDetails(): boolean {
+      if (this.isAdmin())
+        return true;
+      const selectedProject = this.getSelected();
+      if (!selectedProject)
+        return true;
+      if (!this.state.projectPermissions.has(selectedProject!.project_id!)) {
+        return false;
+      }
+      const perms = this.state.projectPermissions.get(selectedProject!.project_id!)!;
+      return perms.update_personnel;
+    }
+
+    canUpdateProjectStatus(): boolean {
+      if (this.isAdmin())
+        return true;
+      const selectedProject = this.getSelected();
+      if (!selectedProject)
+        return true;
+      if (!this.state.projectPermissions.has(selectedProject!.project_id!)) {
+        return false;
+      }
+      return this.state.projectPermissions.get(selectedProject!.project_id!)!.update_status;
+    }
+
+    canEditProjectTags(): boolean {
+      return this.isAdmin();
+    }
+
     buildListing() {
         return (
             <IdeaListView
@@ -420,7 +479,7 @@ class Projects extends Component<ProjectsProps, ProjectsState> {
                 preferencesKey={"projects"}
                 showPreferences={false}
                 title="Projects"
-                description={`Environment Project Management.${this.isAdmin() ? "" : " These are the projects of which you are an owner."}`}
+                description={`Environment Project Management.${this.isAdmin() ? "" : " These are the projects of which you are a part of."}`}
                 selectionType="single"
                 primaryAction={{
                     id: "create-project",
@@ -441,9 +500,15 @@ class Projects extends Component<ProjectsProps, ProjectsState> {
                               resource_key: `${selectedProject!.project_id!}:project`,
                             })
                             .then((result) => {
-                              this.props.navigate("/cluster/projects/configure", { state: { isUpdate: true, project: selectedProject, projectRoles: result.items }})
+                              this.props.navigate("/cluster/projects/configure", { state: {
+                                isUpdate: true,
+                                project: selectedProject, projectRoles: result.items,
+                                projectPermission: this.isAdmin() ? undefined : this.state.projectPermissions.get(selectedProject!.project_id!)
+                              }})
                             });
                         },
+                        // based on if the user is admin or has update_personnel permission for selected project
+                        disabled: !this.canEditProjectDetails(),  
                     },
                     {
                         id: "toggle-enable-project",
@@ -473,7 +538,7 @@ class Projects extends Component<ProjectsProps, ProjectsState> {
                                     });
                                 });
                         },
-                        disabled: !this.isAdmin(),
+                        disabled: !this.canUpdateProjectStatus(),
                     },
                     {
                         id: "update-tags",
@@ -481,7 +546,7 @@ class Projects extends Component<ProjectsProps, ProjectsState> {
                         onClick: () => {
                             this.showTagEditor();
                         },
-                        disabled: !this.isAdmin(),
+                        disabled: !this.canEditProjectTags(),
                     },
                 ]}
                 showPaginator={true}
@@ -489,10 +554,18 @@ class Projects extends Component<ProjectsProps, ProjectsState> {
                 filters={[
                     {
                         key: "name",
+                        like: this.state.defaultFilteringText,
                     },
                 ]}
+                defaultFilteringText={this.state.defaultFilteringText}
                 onFilter={(filters) => {
                     const projectNameToken = Utils.asString(filters[0].value).trim().toLowerCase();
+                    this.setState(
+                        {
+                            projectSelected: false,
+                            splitPanelOpen: false,
+                        }
+                    );
                     if (Utils.isEmpty(projectNameToken)) {
                         return [];
                     } else {
@@ -508,8 +581,10 @@ class Projects extends Component<ProjectsProps, ProjectsState> {
                     this.setState(
                         {
                             projectSelected: false,
+                            defaultFilteringText: "",
                         },
                         () => {
+                            this.getListing().resetState();
                             this.getListing().fetchRecords();
                         }
                     );
@@ -540,8 +615,9 @@ class Projects extends Component<ProjectsProps, ProjectsState> {
                   }
                   let projects = (await Promise.resolve(this.projects().getUserProjects({
                       username: context.auth().getUsername(),
+                      exclude_disabled: false
                     }))).projects ?? [];
-                  projects = await this.getOwnerProjectsWithGroups(context, projects);
+                  projects = await this.getProjectsWithPermissions(context, projects);
                   return { listing: projects};  
                 }}
                 columnDefinitions={PROJECT_TABLE_COLUMN_DEFINITIONS}

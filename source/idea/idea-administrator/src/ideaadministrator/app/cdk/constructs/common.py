@@ -23,7 +23,10 @@ __all__ = (
     'CloudWatchAlarm',
     'Output',
     'DynamoDBTable',
+    'APIGatewayRestApi'
 )
+
+import re
 
 from aws_cdk.aws_ec2 import IVpc, SubnetSelection, ISecurityGroup
 
@@ -32,7 +35,7 @@ from ideaadministrator.app_context import AdministratorContext
 from ideaadministrator.app.cdk.constructs import SocaBaseConstruct, IdeaNagSuppression
 from ideaadministrator.app_utils import AdministratorUtils
 from ideasdk.utils import Utils
-from ideadatamodel import SocaAnyPayload, exceptions
+from ideadatamodel import SocaAnyPayload, exceptions, constants
 
 from typing import List, Dict, Optional, Any, Union
 
@@ -47,7 +50,8 @@ from aws_cdk import (
     aws_sqs as sqs,
     aws_dynamodb as dynamodb,
     aws_kinesis as kinesis,
-    aws_kms as kms
+    aws_kms as kms,
+    aws_apigateway as apigateway
 )
 
 
@@ -113,6 +117,32 @@ class LambdaFunction(SocaBaseConstruct, lambda_.Function):
         self.add_nag_suppression(suppressions=[
             IdeaNagSuppression(rule_id='AwsSolutions-L1', reason='Lambda runtime uses Python 3.9 by default.')
         ])
+
+
+class APIGatewayRestApi(SocaBaseConstruct, apigateway.RestApi):
+
+    def __init__(self, context: AdministratorContext,
+                 name: str,
+                 rest_api_name: str,
+                 scope: constructs.Construct,
+                 description: str = None,
+                 policy: iam.PolicyDocument = None,
+                 deploy: bool = True,
+                 deploy_options: apigateway.StageOptions = None,
+                 default_method_options: apigateway.MethodOptions = None,
+                 endpoint_types: List[apigateway.EndpointType] = None,
+                 endpoint_configuration: apigateway.EndpointConfiguration = None
+                 ) -> None:
+        super().__init__(context, name, scope,
+                         description=description,
+                         policy=policy,
+                         deploy=deploy,
+                         endpoint_types=endpoint_types,
+                         endpoint_configuration=endpoint_configuration,
+                         rest_api_name=rest_api_name,
+                         deploy_options=deploy_options,
+                         default_method_options=default_method_options
+                         )
 
 
 class Policy(SocaBaseConstruct, iam.Policy):

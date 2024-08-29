@@ -138,7 +138,7 @@ class VirtualDesktopPermissionProfileDetail extends Component<VirtualDesktopPerm
             <SpaceBetween size={"l"}>
                 <Container header={<Header variant={"h2"}>General Information</Header>}>
                     <ColumnLayout variant={"text-grid"} columns={3}>
-                        <KeyValue title="Profile ID" value={this.state.permissionProfile.profile_id} />
+                        <KeyValue title="Desktop Shared Setting ID" value={this.state.permissionProfile.profile_id} />
                         <KeyValue title="Title" value={this.state.permissionProfile.title} />
                         <KeyValue title="Description" value={this.state.permissionProfile.description} />
                     </ColumnLayout>
@@ -182,7 +182,7 @@ class VirtualDesktopPermissionProfileDetail extends Component<VirtualDesktopPerm
                             profile: permissionProfile,
                         })
                         .then((response) => {
-                            this.setFlashMessage(<p key={permissionProfile.profile_id}>Permission Profile: {permissionProfile.profile_id}, Edit request submitted</p>, "success");
+                            this.setFlashMessage(<p key={permissionProfile.profile_id}>Desktop Shared Setting: {permissionProfile.profile_id}, Edit request submitted</p>, "success");
                             this.setState({
                                 permissionProfile: response.profile!,
                             });
@@ -222,7 +222,7 @@ class VirtualDesktopPermissionProfileDetail extends Component<VirtualDesktopPerm
                         href: "#/virtual-desktop/sessions",
                     },
                     {
-                        text: "Permission Profiles",
+                        text: "Desktop Shared Settings",
                         href: "#/virtual-desktop/permission-profiles",
                     },
                     {
@@ -232,7 +232,7 @@ class VirtualDesktopPermissionProfileDetail extends Component<VirtualDesktopPerm
                 ]}
                 header={
                     <Header variant={"h1"} actions={this.buildHeaderActions()}>
-                        Permission Profile: {this.state.permissionProfile.title}
+                        Desktop Shared Setting: {this.state.permissionProfile.title}
                     </Header>
                 }
                 contentType={"default"}

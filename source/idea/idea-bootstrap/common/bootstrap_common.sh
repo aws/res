@@ -254,6 +254,82 @@ function add_fsx_netapp_ontap_to_fstab () {
   echo "${FS_DOMAIN}:${FS_VOLUME_PATH} ${MOUNT_DIR}/ ${MOUNT_OPTIONS}" >> /etc/fstab
 }
 
+add_s3_bucket() {
+    # Check if all required arguments are provided
+    if [ "$#" -lt 5 ]; then
+        echo "Usage: add_s3_bucket CUSTOM_CREDENTIAL_BROKER_SCRIPT_LOCATION API_URL FS_NAME MOUNT_DIR BUCKET_NAME [READ_ONLY] [PREFIX]"
+        return 1
+    fi
+
+    # Assign arguments to variables
+    local CUSTOM_CREDENTIAL_BROKER_SCRIPT_LOCATION="$1"
+    local API_URL="$2"
+    local FS_NAME="$3"
+    local MOUNT_DIR="$4"
+    local BUCKET_NAME="$5"
+    local READ_ONLY="${6:-True}"  # Default value for READ_ONLY is "True"
+    local PREFIX="${7}"
+
+    # Check if required variables are set
+    if [ -z "$CUSTOM_CREDENTIAL_BROKER_SCRIPT_LOCATION" ] || [ -z "$API_URL" ] || [ -z "$FS_NAME" ] || [ -z "$MOUNT_DIR" ] || [ -z "$BUCKET_NAME" ]; then
+        echo "Error: Required arguments are not provided."
+        return 1
+    fi
+
+    # Define additional variables
+    local PROFILE_NAME="${FS_NAME}-profile"
+    local MOUNT_S3=$(command -v mount-s3)
+    local RES_PYTHON=$(command -v res_python)
+
+    # Configure AWS CLI
+    aws configure set output json
+    aws configure set region ${AWS_DEFAULT_REGION}
+    aws configure set credential_process "${RES_PYTHON} ${CUSTOM_CREDENTIAL_BROKER_SCRIPT_LOCATION} --filesystem-name ${FS_NAME} --api-url ${API_URL}" --profile "${PROFILE_NAME}"
+    aws configure set output json --profile "${PROFILE_NAME}"
+    aws configure set region ${AWS_DEFAULT_REGION} --profile "${PROFILE_NAME}"
+
+    # Construct mount command
+    local mount_command="${MOUNT_S3} ${BUCKET_NAME} ${MOUNT_DIR} --allow-other"
+
+    if [[ "${READ_ONLY}" == "True" ]]; then
+      mount_command+=" --read-only"
+    elif [[ "${READ_ONLY}" == "False" ]]; then
+      mount_command+=" --allow-delete --allow-overwrite --dir-mode 0777 --file-mode 0777"
+    fi
+
+    [[ -n "$PREFIX" ]] && mount_command+=" --prefix $PREFIX"  # Add prefix if provided
+
+    # Execute Mount Command
+    log_info "Executing mount command: ${mount_command}"
+    AWS_PROFILE="${PROFILE_NAME}" ${mount_command}
+
+    local service_name="${FS_NAME}-mount-s3"
+    local service_file="/etc/systemd/system/${service_name}.service"
+    # Create a systemd service unit file
+    tee "${service_file}" > /dev/null << EOF
+[Unit]
+Description=Mountpoint for Amazon S3 mount
+Wants=network.target
+AssertPathIsDirectory=${MOUNT_DIR}
+
+[Service]
+Type=forking
+User=root
+ExecStart=/bin/bash -c 'AWS_PROFILE=${PROFILE_NAME} ${mount_command}'
+ExecStop=/usr/bin/fusermount -u ${MOUNT_DIR}
+Restart=always
+
+[Install]
+WantedBy=remote-fs.target
+EOF
+
+    # Reload systemd to read the new unit file
+    systemctl daemon-reload
+
+    # Enable the service to run at boot
+    systemctl enable "${service_name}.service"
+}
+
 function remove_fsx_netapp_ontap_from_fstab () {
   local MOUNT_DIR="${1}"
   sed -i.bak "\@ ${MOUNT_DIR}/@d" /etc/fstab

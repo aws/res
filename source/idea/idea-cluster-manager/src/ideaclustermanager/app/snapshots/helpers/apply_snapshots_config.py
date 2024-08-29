@@ -31,6 +31,7 @@ RES_VERSION_IN_TOPOLOGICAL_ORDER = [
     RESVersion.v_2024_04_01,
     RESVersion.v_2024_04_02,
     RESVersion.v_2024_06,
+    RESVersion.v_2024_08,
 ]
 
 TABLE_TO_TABLE_KEYS_BY_VERSION: Dict[TableName, Dict[RESVersion, TableKeys]] = {
@@ -51,7 +52,10 @@ TABLE_TO_TABLE_KEYS_BY_VERSION: Dict[TableName, Dict[RESVersion, TableKeys]] = {
     },
     TableName.ROLE_ASSIGNMENTS_TABLE_NAME: {
         RESVersion.v_2024_06: TableKeys(partition_key='actor_key', sort_key='resource_key')
-    }
+    },
+    TableName.ROLES_TABLE_NAME: {
+        RESVersion.v_2024_08: TableKeys(partition_key='role_id')
+    },
 }
 """
 - This is a strictly additive list.

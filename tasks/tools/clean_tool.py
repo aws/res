@@ -54,22 +54,6 @@ class CleanTool:
                         idea.console.print(f'deleting {function_build_dir} ...')
                         shutil.rmtree(function_build_dir)
 
-        # open source clean-up
-        opensource_build_dir = os.path.join(idea.props.project_build_dir, 'open-source')
-        if os.path.isdir(opensource_build_dir):
-            idea.console.print(f'deleting {opensource_build_dir} ...')
-            shutil.rmtree(opensource_build_dir)
-        opensource_dist_dir = os.path.join(idea.props.project_deployment_dir, 'open-source')
-        if os.path.isdir(opensource_dist_dir):
-            idea.console.print(f'deleting {opensource_dist_dir} ...')
-            shutil.rmtree(opensource_dist_dir)
-
-        # global s3 assets
-        global_s3_assets_dir = os.path.join(idea.props.project_deployment_dir, 'global-s3-assets')
-        if os.path.isdir(global_s3_assets_dir):
-            idea.console.print(f'deleting {global_s3_assets_dir} ...')
-            shutil.rmtree(global_s3_assets_dir)
-
         dist_dir = idea.props.project_dist_dir
         if os.path.isdir(dist_dir):
             files = os.listdir(dist_dir)

@@ -1,5 +1,5 @@
 # Begin: Mount Shared Storage
-{%- if context.base_os in ('amazonlinux2', 'centos7', 'rhel7', 'rhel8', 'rhel9', 'ubuntu2204') %}
+{%- if context.base_os in ('amazonlinux2', 'rhel8', 'rhel9', 'ubuntu2204') %}
   {%- if context.has_storage_provider('fsx_lustre') or context.has_storage_provider('fsx_cache') %}
     {% include '_templates/linux/fsx_lustre_client.jinja2' %}
   {%- endif %}
@@ -36,6 +36,16 @@
                                  "{{storage['mount_dir']}}" \
                                  "{{storage['mount_options']}}" \
                                  "{{storage['fsx_openzfs']['volume_path']}}"
+        {%- elif storage['provider'] == 's3_bucket' %}
+        mkdir -p "{{storage['mount_dir']}}"
+        SCRIPT_DIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
+        add_s3_bucket "${SCRIPT_DIR}/custom-credential-broker/custom_credential_broker.py" \
+                      "{{context.config.get_string('vdc.custom_credential_broker_api_gateway_url')}}" \
+                      "{{name}}" \
+                      "{{storage['mount_dir']}}" \
+                      "{{context.get_bucket_name(storage[storage['provider']]['bucket_arn'])}}" \
+                      "{{storage[storage['provider']]['read_only']}}" \
+                      "{{context.get_prefix_for_object_storage(storage[storage['provider']]['bucket_arn'], storage[storage['provider']]['read_only'], storage[storage['provider']]['custom_bucket_prefix'])}}"
         {%- endif %}
       {%- endif %}
     {%- endfor %}

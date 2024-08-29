@@ -80,9 +80,9 @@ class VirtualDesktopPermissionProfileForm extends Component<VirtualDesktopPermis
 
     buildTitle(): string {
         if (this.props.editMode) {
-            return `Update Permission Profile: ${this.props.profileToEdit?.title}`;
+            return `Update Desktop Shared Setting: ${this.props.profileToEdit?.title}`;
         }
-        return "Register new Permission Profile";
+        return "Register new Desktop Shared Setting";
     }
 
     getVirtualDesktopUtilsClient(): VirtualDesktopUtilsClient {
@@ -148,8 +148,8 @@ class VirtualDesktopPermissionProfileForm extends Component<VirtualDesktopPermis
             formParams = [
                 {
                     name: "profile_id",
-                    title: "Profile ID",
-                    description: "Enter a Unique Profile ID for the Permission Profile",
+                    title: "Desktop Shared Setting ID",
+                    description: "Enter a Unique ID for the Desktop Shared Setting",
                     data_type: "str",
                     param_type: "text",
                     default: this.buildDefaultProfileID(),
@@ -161,7 +161,7 @@ class VirtualDesktopPermissionProfileForm extends Component<VirtualDesktopPermis
                 {
                     name: "title",
                     title: "Title",
-                    description: "Enter a user friendly Title for the Permission Profile",
+                    description: "Enter a user friendly Title for the Shared Setting",
                     data_type: "str",
                     default: this.buildDefaultTitle(),
                     param_type: "text",
@@ -172,7 +172,7 @@ class VirtualDesktopPermissionProfileForm extends Component<VirtualDesktopPermis
                 {
                     name: "description",
                     title: "Description",
-                    description: "Enter a user friendly description for the Permission Profile",
+                    description: "Enter a user friendly description for the Desktop Shared Setting",
                     data_type: "str",
                     default: this.buildDefaultDescription(),
                     param_type: "text",

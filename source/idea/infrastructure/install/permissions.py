@@ -32,7 +32,7 @@ class Permissions(Construct):
             self,
             "PipelineRole",
             assumed_by=self.get_principal(),
-            role_name=f"Admin-{environment_name}-PipelineRole",
+            role_name=f"Admin-{environment_name}-{aws_cdk.Aws.REGION}-PipelineRole",
         )
 
         statements = (

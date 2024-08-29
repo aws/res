@@ -1,0 +1,9 @@
+Version: '2012-10-17'
+Statement:
+  - Action:
+      - s3:GetObject
+      - s3:ListBucket
+    Resource:
+      {{ context.utils.to_yaml(context.arns.get_s3_bucket_arns("*")) | indent(6) }}
+    Effect: Allow
+    Sid: S3ReadOnlyAccess

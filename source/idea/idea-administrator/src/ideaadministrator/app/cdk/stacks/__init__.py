@@ -20,4 +20,3 @@ from .cluster_manager_stack import ClusterManagerStack
 from .scheduler_stack import SchedulerStack
 from .bastion_host_stack import BastionHostStack
 from .virtual_desktop_controller_stack import VirtualDesktopControllerStack
-from .metrics_stack import MetricsStack

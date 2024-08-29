@@ -13,7 +13,8 @@ from ideasdk.protocols import ApiAuthorizationServiceProtocol
 from ideadatamodel.api.api_model import ApiAuthorization, ApiAuthorizationType
 from ideadatamodel.auth import User
 from ideadatamodel import exceptions, errorcodes
-from typing import Optional, Dict
+from ideasdk.utils import Utils
+from typing import Optional, Dict, List
 from abc import abstractmethod
 
 class ApiAuthorizationServiceBase(ApiAuthorizationServiceProtocol):
@@ -28,11 +29,11 @@ class ApiAuthorizationServiceBase(ApiAuthorizationServiceProtocol):
             if role == ApiAuthorizationType.ADMINISTRATOR:
                 authorization_type = ApiAuthorizationType.ADMINISTRATOR
             else:
-                authorization_type = ApiAuthorizationType.USER 
+                authorization_type = ApiAuthorizationType.USER
         if not authorization_type:
             authorization_type = ApiAuthorizationType.USER
         return authorization_type
-    
+
     def get_authorization(self, decoded_token: Optional[Dict]) -> ApiAuthorization:
         username = decoded_token.get('username')
         token_scope = decoded_token.get('scope')
@@ -48,14 +49,14 @@ class ApiAuthorizationServiceBase(ApiAuthorizationServiceProtocol):
             if not user.enabled:
                 raise exceptions.unauthorized_access(errorcodes.AUTH_USER_IS_DISABLED)
             authorization_type = self.get_authorization_type(user.role)
-        
+
         return ApiAuthorization(
             type=authorization_type,
             username=username,
             scopes=scopes,
             client_id=client_id
         )
-    
+
     def is_scope_authorized(self, decoded_token: str, scope: str) -> bool:
         if not decoded_token:
             return False
@@ -72,3 +73,48 @@ class ApiAuthorizationServiceBase(ApiAuthorizationServiceProtocol):
         token_username = decoded_token.get('username')
         user = self.get_user_from_token_username(token_username)
         return user.username
+
+    @abstractmethod
+    def get_roles_for_user(self, user: User, role_assignment_resource_key: Optional[str]) -> List[Dict]:
+        ...
+
+    def is_user_authorized(self, authorization: ApiAuthorization, namespace: str, role_assignment_resource_key: Optional[str], permission: Optional[str]) -> bool:
+        if authorization.type != ApiAuthorizationType.USER:
+            return False
+
+        # Permissions are resource-specific (currently project-specific but will expand to other resources in the future)
+        permission_needed_for_api = self._role_based_permission_lookup(permission)
+
+        # If role-based authorization is not supported for this API namespace, nothing else needs to be checked
+        if namespace not in permission_needed_for_api:
+            return True
+
+        # Some APIs can have varying authorization requirements - some use cases requiring role-based authz while some not
+        # If role_assignment_resource_key is provided, role-based authorization is being requested
+        if not role_assignment_resource_key:
+            return True
+
+        user = self.get_user_from_token_username(token_username=authorization.username)
+        roles = self.get_roles_for_user(user, role_assignment_resource_key)
+
+        # We get back roles as flattened dictionaries for easier permission querying
+        return any(Utils.get_value_as_bool(key=permission_needed_for_api[namespace], obj=role, default=False) for role in roles)
+
+    # Role-based authorization helpers
+
+    def _role_based_permission_lookup(self, permission: Optional[str]) -> Dict:
+        """
+        Permissions to certain RES actions will need to be granted to non-admin users via their role assignments
+        Roles contain permissions scoped to their respective resources. This action-to-permission scoping is represented here
+        The value is the location of the permission in the role upon flattening of the object
+
+        For some use cases, an API might be linked to more than one permission. In such cases, the "permission" param value should be used.
+        """
+        return {
+            "Authz.BatchPutRoleAssignment": "projects.update_personnel",
+            "Authz.BatchDeleteRoleAssignment": "projects.update_personnel",
+            "Projects.EnableProject": "projects.update_status",
+            "Projects.DisableProject": "projects.update_status",
+            "VirtualDesktop.CreateSession": permission,
+            "VirtualDesktop.DeleteSessions": permission,
+            }

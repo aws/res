@@ -11,7 +11,7 @@
  * and limitations under the License.
  */
 
-import { SocaListingPayload, SocaUserInputParamCondition, SocaUserInputParamMetadata, SocaMemory, SocaAmount, SocaDateRange, SocaUserInputChoice, VirtualDesktopGPU, VirtualDesktopSchedule, VirtualDesktopScheduleType, User } from "../client/data-model";
+import { SocaListingPayload, SocaUserInputParamCondition, SocaUserInputParamMetadata, SocaMemory, SocaAmount, SocaDateRange, SocaUserInputChoice, VirtualDesktopGPU, VirtualDesktopSchedule, VirtualDesktopScheduleType, User, ProjectPermissions, VDIPermissions, Project } from "../client/data-model";
 import { IdeaFormFieldRegistry } from "../components/form-field";
 import { v4 as uuid } from "uuid";
 import { DateRangePickerProps } from "@cloudscape-design/components";
@@ -19,6 +19,9 @@ import dot from "dot-object";
 import moment from "moment";
 import IdeaException from "./exceptions";
 import { Constants } from "./constants";
+import { ProjectsClient } from "../client";
+import AuthzClient from "../client/authz-client";
+import AppContext from "./app-context";
 
 const TRUE_VALUES = ["true", "yes", "y"];
 const FALSE_VALUES = ["false", "no", "n"];
@@ -470,9 +473,18 @@ class Utils {
         return options;
     }
 
-    static generateUserSelectionChoices(users: User[]): SocaUserInputChoice[] {
+    static generateUserSelectionChoices(users: User[], project?: Project, isAdmin: boolean = true): SocaUserInputChoice[] {
         let choices: SocaUserInputChoice[] = [];
         users?.forEach((user) => {
+            // if we are not admin, we don't include users that aren't in the project and our own username
+            if (!isAdmin) {
+                let isInProject = user.username === AppContext.get().auth().getUsername();
+                isInProject = isInProject || (project?.users?.includes(user.username!) ?? false);
+                isInProject = isInProject || (user.additional_groups?.some((group) => project?.ldap_groups?.includes(group)) ?? false);
+                if (!isInProject) {
+                    return;
+                }
+            }
             choices.push({
                 title: user.username,
                 description: user.email,
@@ -610,10 +622,6 @@ class Utils {
         switch (name) {
             case "amazonlinux2":
                 return "Amazon Linux 2";
-            case "centos7":
-                return "CentOS 7";
-            case "rhel7":
-                return "RedHat Enterprise Linux 7";
             case "rhel8":
                 return "RedHat Enterprise Linux 8";
             case "rhel9":
@@ -913,13 +921,6 @@ class Utils {
                 type: "stack",
             },
             {
-                deployment_priority: 3,
-                module_id: "metrics",
-                name: "metrics",
-                title: "Metrics & Monitoring",
-                type: "stack",
-            },
-            {
                 api_context_path: "/scheduler/api/v1",
                 deployment_priority: 6,
                 module_id: "scheduler",
@@ -952,6 +953,157 @@ class Utils {
     static isSsoEnabled(): boolean {
         return typeof window.idea.app.sso !== "undefined" && window.idea.app.sso;
     }
+
+    static getPermissionAsUIString(permission: keyof ProjectPermissions | keyof VDIPermissions): string {
+      switch (permission) {
+        case "update_personnel":
+          return "Update project membership";
+        case "update_status":
+          return "Update project status";
+        case "create_sessions":
+          return "Create session";
+        case "create_terminate_others_sessions":
+          return "Create/Terminate other's session";
+        default:
+          return "-"
+      }
+    }
+
+    static getPermissionDescription(permission: keyof ProjectPermissions | keyof VDIPermissions): string {
+      switch (permission) {
+        case "update_personnel":
+          return "Update users and groups associated with a project."
+        case "update_status":
+          return "Enable or disable a project."
+        case "create_sessions":
+          return "Create your own session. Users can always terminate their own sessions with or without this permission.";
+        case "create_terminate_others_sessions":
+          return "Create/Terminate another user's session within a project.";
+        default:
+          return "-";
+      }
+    }
+
+    static async getAffectedProjects(projectsClient: ProjectsClient, authzClient: AuthzClient): Promise<{
+      affectedProjects: Map<string, number>;
+      roleProjectSetMap: Map<string, Set<string>>;
+    }> {
+      const affectedProjects = new Map<string, number>();
+      const roleProjectSetMap = new Map<string, Set<string>>();
+  
+      const projects = (await projectsClient.listProjects({ })).listing ?? [];
+  
+      const requests = [];
+  
+      for (const project of projects) {
+        requests.push(
+          authzClient.listRoleAssignments({
+            resource_key: `${project.project_id!}:project`,
+          })
+          .then((response) => {
+            response.items.forEach(assignment => {
+              if (!roleProjectSetMap.has(assignment.role_id)) {
+                roleProjectSetMap.set(assignment.role_id, new Set<string>());
+              }
+        
+              const tempSet = roleProjectSetMap.get(assignment.role_id)!;
+              tempSet.add(assignment.resource_id);
+              affectedProjects.set(assignment.role_id, tempSet.size);
+              roleProjectSetMap.set(assignment.role_id, tempSet);
+            });
+          })
+        );
+      }
+  
+      await Promise.all(requests);
+      
+      return {
+        affectedProjects,
+        roleProjectSetMap,
+      };
+    }
+
+    static convertToRelativeTime(
+      date: Date | number,
+    ): string {
+      const timeMs = typeof date === "number" ? date : date.getTime();
+      const deltaSeconds = Math.round((timeMs - Date.now()) / 1000);
+    
+      // one minute, hour, day, week, month, etc in seconds
+      const cutoffs = [60, 3600, 86400, 86400 * 7, 86400 * 30, 86400 * 365, Infinity];
+      const units: Intl.RelativeTimeFormatUnit[] = ["second", "minute", "hour", "day", "week", "month", "year"];
+    
+      // Find the appropriate cutoff to divide the ms by for relative time representation
+      const unitIndex = cutoffs.findIndex(cutoff => cutoff > Math.abs(deltaSeconds));
+      const divisor = unitIndex ? cutoffs[unitIndex - 1] : 1;
+      const rtf = new Intl.RelativeTimeFormat('en', { numeric: "auto" });
+      return rtf.format(Math.floor(deltaSeconds / divisor), units[unitIndex]);
+    }
+
+    static convertToAbsoluteTime(
+      date: Date | number,
+    ): string {
+      return new Intl.DateTimeFormat('en', {
+        dateStyle: 'full',
+        timeStyle: 'long',
+      }).format(date);
+    }
+
+    static async fetchProjectsFilteredByVDIPermissions(
+      isAdmin: boolean,
+      vdiPerm: keyof VDIPermissions
+    ): Promise<Project[]> {
+      const user = await AppContext.get().auth().getUser();
+      const projects = await AppContext.get().client().projects().getUserProjects({
+          username: user.username,
+      });
+      if (isAdmin) {
+          return projects.projects ?? [];
+      }
+      const authzClient: AuthzClient = AppContext.get().client().authz();
+      const roles = await authzClient.listRoles({
+          include_permissions: true,
+      });
+
+      // Create a Set so that there are no duplicates
+      const validProjectIds: Set<string> = new Set<string>();
+
+      const vdiRoleAssignments: Promise<void>[] = [];
+
+      // filter out projects based on Role Permissions
+      for (const project of projects.projects!) {
+          const resource_key = `${project.project_id!}:project`;
+          vdiRoleAssignments.push(
+              Promise.resolve(authzClient.listRoleAssignments({
+                  resource_key,
+              })
+              .then((roleAssignments) => {
+                  for (const roleAssignment of roleAssignments.items) {
+                      if (roleAssignment.actor_type === "user") {
+                          if (!project.users) project.users = [];
+                          project.users.push(roleAssignment.actor_id);
+                      }
+                      if (roleAssignment.actor_type === "group") {
+                          if (!project.ldap_groups) project.ldap_groups = [];
+                          project.ldap_groups.push(roleAssignment.actor_id);
+                      }
+                      let currentUserIsInRole = user.additional_groups?.includes(roleAssignment.actor_id) || roleAssignment.actor_id === user.username!;
+
+                      if (currentUserIsInRole) {
+                          const rolePermission = roles.items.find(perm => perm.role_id === roleAssignment.role_id);
+                    
+                          if (rolePermission?.vdis && (rolePermission.vdis![vdiPerm])) {
+                              validProjectIds.add(project.project_id!);
+                          }
+                      }
+                  }
+              })
+          ));
+      }
+
+      await Promise.all(vdiRoleAssignments);
+      return projects.projects?.filter(proj => validProjectIds.has(proj.project_id!)) ?? [];
+  }
 }
 
 export default Utils;

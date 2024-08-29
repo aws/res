@@ -279,10 +279,10 @@ class VirtualDesktopControllerUtils:
 
         _attempt_subnets = []
         # Use a subnet_id if specified
-        if Utils.is_not_empty(session.server.server_id):
+        if Utils.is_not_empty(session.server.subnet_id):
             # this comes in as a string from the API
-            self._logger.debug(f"Using strict requested subnet_id: {session.server.server_id}")
-            _attempt_subnets.append(session.server.server_id)
+            self._logger.debug(f"Using strict requested subnet_id: {session.server.subnet_id}")
+            _attempt_subnets.append(session.server.subnet_id)
         elif configured_vdi_subnets:
             # A list from the config
             self._logger.debug(f"Found configured VDI subnets: {', '.join(configured_vdi_subnets)}")

@@ -12,7 +12,7 @@
 
 set -x
 
-snap services amazon-ssm-agent
-if [[ "$?" != "0" ]]; then
-  snap start amazon-ssm-agent
+snap services amazon-ssm-agent | grep inactive
+if [[ "$?" == "0" ]]; then
+  snap start --enable amazon-ssm-agent
 fi

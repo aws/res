@@ -13,7 +13,7 @@
 
 import React, { Component, RefObject } from "react";
 import IdeaForm from "../../../components/form";
-import { Project, SocaMemory, SocaUserInputChoice, SocaUserInputParamMetadata, User, VirtualDesktopArchitecture, VirtualDesktopBaseOS, VirtualDesktopGPU, VirtualDesktopSessionType, VirtualDesktopSoftwareStack } from "../../../client/data-model";
+import { Project, SocaMemory, SocaUserInputChoice, SocaUserInputParamMetadata, User, VDIPermissions, VirtualDesktopArchitecture, VirtualDesktopBaseOS, VirtualDesktopGPU, VirtualDesktopSessionType, VirtualDesktopSoftwareStack } from "../../../client/data-model";
 import Utils from "../../../common/utils";
 import { AccountsClient, AuthClient, ProjectsClient, VirtualDesktopClient } from "../../../client";
 import { AppContext } from "../../../common";
@@ -150,11 +150,19 @@ class VirtualDesktopCreateSessionForm extends Component<VirtualDesktopCreateSess
                         this.getForm()
                             ?.getFormField("user_name")
                             ?.setOptions({
-                                listing: Utils.generateUserSelectionChoices(this.state.eVDIUsers),
+                                listing: Utils.generateUserSelectionChoices(
+                                    this.state.eVDIUsers,
+                                    this.props.userProjects?.find(project => project.project_id! === this.getForm()?.getValue("project_id")),
+                                    this.isAdmin(),
+                                ),
                             });
                     }
                 );
             });
+    }
+
+    isAdmin(): boolean {
+        return AppContext.get().auth().isAdmin();
     }
 
     generateInstanceTypeReverseIndex(instanceTypeList: any[]): { [k: string]: any } {
@@ -456,19 +464,6 @@ class VirtualDesktopCreateSessionForm extends Component<VirtualDesktopCreateSess
             },
         });
 
-        if (this.props.isAdminView) {
-            formParams.push({
-                name: "user_name",
-                title: "User",
-                description: "Select the user to create the session for. Sessions can only be created for active user's.",
-                data_type: "str",
-                param_type: "select_or_text",
-                validate: {
-                    required: true,
-                },
-                choices: Utils.generateUserSelectionChoices(this.state.eVDIUsers),
-            });
-        }
         formParams.push({
             name: "project_id",
             title: "Project",
@@ -480,6 +475,31 @@ class VirtualDesktopCreateSessionForm extends Component<VirtualDesktopCreateSess
             },
             choices: this.buildProjectChoices(this.props.userProjects!),
         });
+
+        // Don't render User selection until project is selected,
+        // and then only if user is admin or has permission to create sessions for others
+        if (this.getForm()?.getValue("project_id")) {
+            if (this.props.isAdminView) {
+                formParams.push({
+                    name: "user_name",
+                    title: "User",
+                    description: "Select the user to create the session for. Sessions can only be created for active user's.",
+                    data_type: "str",
+                    param_type: "select_or_text",
+                    
+                    validate: {
+                        required: true,
+                    },
+                    choices: Utils.generateUserSelectionChoices(
+                        this.state.eVDIUsers,
+                        this.props.userProjects?.find(project => project.project_id! === this.getForm()?.getValue("project_id")),
+                        this.isAdmin(),
+                    ),
+                });
+            }
+        }
+
+        
         formParams.push({
             name: "base_os",
             title: "Operating System",
@@ -679,18 +699,6 @@ class VirtualDesktopCreateSessionForm extends Component<VirtualDesktopCreateSess
                                         listing: Utils.generateInstanceTypeListing(result.listing),
                                     });
                                     this.updateRootVolumeSizeIfRequired();
-                                });
-                        } else if (event.param.name === "user_name") {
-                            this.getProjectsClient()
-                                .getUserProjects({
-                                    username: this.getForm()?.getValues().user_name,
-                                })
-                                .then((result) => {
-                                    this.getForm()
-                                        ?.getFormField("project_id")
-                                        ?.setOptions({
-                                            listing: this.buildProjectChoices(result.projects!),
-                                        });
                                 });
                         }
                     }}

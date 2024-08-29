@@ -73,7 +73,7 @@ if [[ ! -f ${INSTALL_FINISHED_LOCK} ]]; then
   echo "Installing...."
   exec > /root/bootstrap/logs/install.log.${timestamp} 2>&1
 
-  if [[ ! $BASE_OS =~ ^(amzn2|centos7|rhel7|rhel8|rhel9|ubuntu2204)$ ]]; then
+  if [[ ! $BASE_OS =~ ^(amzn2|rhel8|rhel9|ubuntu2204)$ ]]; then
     echo "ERROR: Base OS not supported."
     exit 1
   fi
@@ -86,7 +86,7 @@ if [[ ! -f ${INSTALL_FINISHED_LOCK} ]]; then
   GPU_FAMILY=$GPU_FAMILY
   IDEA_CLUSTER_NAME=$RES_ENVIRONMENT_NAME
   BOOTSTRAP_DIR=/root/bootstrap
-  PATH=/bin:/usr/bin:/sbin:/usr/sbin:/usr/local/bin
+  PATH=/bin:/usr/bin:/sbin:/usr/sbin:/usr/local/bin:/opt/idea/python/latest/bin
   ## [END] RES Environment VDI Installation
   ")
 
@@ -102,6 +102,12 @@ if [[ ! -f ${INSTALL_FINISHED_LOCK} ]]; then
   echo -n "no" > ${BOOTSTRAP_DIR}/reboot_required.txt
 
   if [[ ! -f ${BOOTSTRAP_DIR}/res_installed_all_packages.log ]]; then
+    # Disable SSM agent if exists to avoid unexpected reboot during installation
+    # Don't disable ssm during pre baking AMI since it uses SSM to run remote commands
+    if [[ $PREBAKING_AMI == "false" ]]; then
+      /bin/bash  "${SCRIPT_DIR}/../common/disable_amazon_ssm_agent.sh" -o $BASE_OS -s "${SCRIPT_DIR}"
+    fi
+
     # Complete unfinished transactions
     /bin/bash  "${SCRIPT_DIR}/../common/complete_unfinished_transactions.sh" -o $RES_BASE_OS -s "${SCRIPT_DIR}"
 
@@ -113,15 +119,7 @@ if [[ ! -f ${INSTALL_FINISHED_LOCK} ]]; then
       # Begin: Install EPEL Repo
       /bin/bash "${SCRIPT_DIR}/../common/epel_repo.sh" -o $RES_BASE_OS -s "${SCRIPT_DIR}"
       # End: Install EPEL Repo
-
-      # Begin: Install S3 Mountpoint
-      /bin/bash "${SCRIPT_DIR}/../common/s3_mountpoint.sh" -o $RES_BASE_OS -r $AWS_REGION -n $RES_ENVIRONMENT_NAME -s "${SCRIPT_DIR}"
-      # End: Install S3 Mountpoint
     fi
-
-    # Begin: Install AWS Systems Manager Agent
-    /bin/bash "${SCRIPT_DIR}/../common/aws_ssm.sh" -o $RES_BASE_OS -r $AWS_REGION -n $RES_ENVIRONMENT_NAME -s "${SCRIPT_DIR}"
-    # End: Install AWS Systems Manager Agent
 
     # Begin: Install jq
     /bin/bash "${SCRIPT_DIR}/../common/jq.sh" -o $RES_BASE_OS -s "${SCRIPT_DIR}"
@@ -142,6 +140,18 @@ if [[ ! -f ${INSTALL_FINISHED_LOCK} ]]; then
     # Begin: Disable SE Linux
     /bin/bash "${SCRIPT_DIR}/../common/disable_se_linux.sh" -o $RES_BASE_OS -s "${SCRIPT_DIR}"
     # End: Disable SE Linux
+
+    # Begin: Install S3 Mountpoint
+    /bin/bash "${SCRIPT_DIR}/../common/s3_mountpoint.sh" -o $RES_BASE_OS -r $AWS_REGION -n $RES_ENVIRONMENT_NAME -s "${SCRIPT_DIR}"
+    # End: Install S3 Mountpoint
+
+    # Begin: Install Python
+    /bin/bash "${SCRIPT_DIR}/../common/python.sh" -o $RES_BASE_OS -r $AWS_REGION -n $RES_ENVIRONMENT_NAME  -s "${SCRIPT_DIR}" -a "res" -i "/opt/idea/python"
+    # End: Install Python
+
+    # Begin: Install Custom Credential Broker requirements
+    res_pip install --user -r ${SCRIPT_DIR}/custom-credential-broker/requirements.txt
+    # End: Install Custom Credential Broker
 
     if [[ $GPU_FAMILY =~ ^(NVIDIA|AMD)$ ]]; then
         # Begin: Disable Nouveau Drivers

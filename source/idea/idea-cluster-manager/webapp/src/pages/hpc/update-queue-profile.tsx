@@ -24,7 +24,7 @@ import { IdeaSideNavigationProps } from "../../components/side-navigation";
 import IdeaAppLayout, { IdeaAppLayoutProps } from "../../components/app-layout";
 import { withRouter } from "../../navigation/navigation-utils";
 
-export interface HpcUpdateQueueProfileProps extends IdeaAppLayoutProps, IdeaSideNavigationProps {}
+export interface HpcUpdateQueueProfileProps extends IdeaAppLayoutProps, IdeaSideNavigationProps { }
 
 export interface HpcUpdateQueueProfileState {
     queueProfile?: HpcQueueProfile;
@@ -425,15 +425,7 @@ class HpcUpdateQueueProfile extends Component<HpcUpdateQueueProfileProps, HpcUpd
                                                             {
                                                                 title: "Amazon Linux 2",
                                                                 value: "amazonlinux2",
-                                                            },
-                                                            {
-                                                                title: "Cent OS 7",
-                                                                value: "centos7",
-                                                            },
-                                                            {
-                                                                title: "RHEL 7",
-                                                                value: "rhel7",
-                                                            },
+                                                            }
                                                         ],
                                                     },
                                                     {

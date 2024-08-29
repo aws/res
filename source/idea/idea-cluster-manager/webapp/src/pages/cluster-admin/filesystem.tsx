@@ -91,7 +91,7 @@ class FileSystems extends Component<FileSystemProps, FileSystemState> {
             Object.keys(sharedFileSystem).forEach((key) => {
                 const storage = dot.pick(key, sharedFileSystem);
                 const provider = dot.pick("provider", storage);
-                if (Utils.isEmpty(provider)) {
+                if (Utils.isEmpty(provider) || provider === Constants.SHARED_STORAGE_PROVIDER_S3_BUCKET) {
                     return true;
                 }
                 const isInternal = key === "internal";
@@ -356,6 +356,8 @@ class FileSystems extends Component<FileSystemProps, FileSystemState> {
                 param_type: "text",
                 validate: {
                     required: true,
+                    regex: "^[a-zA-Z0-9\\s_-]{3,48}$",
+                    message: "Only use valid alphanumeric, hyphens (-), underscores (_), and spaces ( ) characters for the file system title. Must be between 3 and 48 characters long.",
                 }
             },
             {
@@ -858,6 +860,8 @@ class FileSystems extends Component<FileSystemProps, FileSystemState> {
                         param_type: "text",
                         validate: {
                             required: true,
+                            regex: "^[a-zA-Z0-9\\s_-]{3,48}$",
+                            message: "Only use valid alphanumeric, hyphens (-), underscores (_), and spaces ( ) characters for the file system title. Must be between 3 and 48 characters long.",
                         },
                     },
                     {

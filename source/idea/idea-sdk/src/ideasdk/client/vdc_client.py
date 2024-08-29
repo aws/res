@@ -104,7 +104,7 @@ class VirtualDesktopControllerClient(AbstractVirtualDesktopControllerClient):
 
     def list_sessions_by_project_id(self, project_id: str) -> list[VirtualDesktopSession]:
         result = self.client.invoke_alt(
-            namespace='VirtualDesktop.ListSessions',
+            namespace='VirtualDesktopAdmin.ListSessions',
             payload=ListSessionsRequest(),
             result_as=ListSessionsResponse,
             access_token=self.get_access_token(),

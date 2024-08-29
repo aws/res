@@ -14,7 +14,7 @@ from typing import Optional
 
 from ideadatamodel import constants
 from ideasdk.auth import TokenService, ApiAuthorizationServiceBase
-from ideasdk.client import NotificationsAsyncClient, ProjectsClient, AccountsClient
+from ideasdk.client import NotificationsAsyncClient, ProjectsClient, AccountsClient, RolesClient, RoleAssignmentsClient
 from ideasdk.context import SocaContext, SocaContextOptions
 from ideasdk.service import SocaService
 from ideasdk.utils import Utils, EnvironmentUtils
@@ -35,6 +35,8 @@ class VirtualDesktopControllerAppContext(SocaContext):
         self.event_queue_monitor_service: Optional[SocaService] = None
         self.controller_queue_monitor_service: Optional[SocaService] = None
         self.projects_client: Optional[ProjectsClient] = None
+        self.roles_client: Optional[RolesClient] = None
+        self.role_assignments_client: Optional[RoleAssignmentsClient] = None
         self.accounts_client: Optional[AccountsClient] = None
 
         self.notification_async_client: Optional[NotificationsAsyncClient] = None

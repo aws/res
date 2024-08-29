@@ -171,6 +171,8 @@ class ClusterManagerStack(IdeaBaseStack):
         variables = SocaAnyPayload()
         variables.vdi_host_policy_resource_tag = constants.VDI_HOST_POLICY_RESOURCE_TAG
         variables.vdi_security_group_resource_tag = constants.VDI_SECURITY_GROUP_RESOURCE_TAG
+
+        variables.s3_bucket_iam_role_resource_tag_value = constants.S3_BUCKET_IAM_ROLE_RESOURCE_TAG_VALUE
         self.cluster_manager_role.attach_inline_policy(
             Policy(
                 context=self.context,

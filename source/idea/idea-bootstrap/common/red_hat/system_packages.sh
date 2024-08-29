@@ -55,24 +55,6 @@ OPENLDAP_CLIENT_PKGS=($($AWS dynamodb get-item \
                         --output text \
                         | awk '/L/ {print $2}'))
 
-SYSTEM_PKGS_7=()
-SSSD_PKGS_7=()
-
-if [[ "$BASE_OS" == "rhel7" ]]; then
-  SYSTEM_PKGS_7=($($AWS dynamodb get-item \
-                          --region "$AWS_REGION" \
-                          --table-name "$RES_ENVIRONMENT_NAME.cluster-settings" \
-                          --key '{"key": {"S": "global-settings.package_config.linux_packages.system_rhel7"}}' \
-                          --output text \
-                          | awk '/L/ {print $2}'))
-  SSSD_PKGS_7=($($AWS dynamodb get-item \
-                          --region "$AWS_REGION" \
-                          --table-name "$RES_ENVIRONMENT_NAME.cluster-settings" \
-                          --key '{"key": {"S": "global-settings.package_config.linux_packages.sssd_rhel7"}}' \
-                          --output text \
-                          | awk '/L/ {print $2}'))
-fi
-
 # Extract package names using jq and accumulate them into an array
 mapfile -t SYSTEM_PKGS < <(echo "$SYSTEM_PKGS_JSON" | jq -r '.Item["value"]["L"][]["S"]')
 
@@ -83,12 +65,8 @@ for pkg in "${SYSTEM_PKGS[@]}"; do
 done
 
 case $BASE_OS in
-  amzn2|centos7)
+  amzn2)
     yum install -y ${EVALUATED_SYSTEM_PKGS[*]} ${APPLICATION_PKGS[*]} ${SSSD_PKGS[*]} ${OPENLDAP_CLIENT_PKGS[*]} --skip-broken
-    ;;
-  rhel7)
-    yum install -y ${EVALUATED_SYSTEM_PKGS[*]} ${SYSTEM_PKGS_7[*]} ${APPLICATION_PKGS[*]} ${SSSD_PKGS[*]} ${SSSD_PKGS_7[*]} ${OPENLDAP_CLIENT_PKGS[*]} --enablerepo rhel-7-server-rhui-optional-rpms --skip-broken
-    yum install -y ${SYSTEM_PKGS[*]} ${APPLICATION_PKGS[*]} ${SSSD_PKGS[*]} ${OPENLDAP_CLIENT_PKGS[*]} --skip-broken
     ;;
   rhel8)
     dnf install -y dnf-plugins-core

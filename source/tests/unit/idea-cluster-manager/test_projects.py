@@ -83,7 +83,7 @@ def create_role_assignment(
     resource_type: str,
     role_id: str,
 ):
-    response = context.authz.put_role_assignment(
+    response = context.role_assignments.put_role_assignment(
         PutRoleAssignmentRequest(
             request_id=generate_random_id("req"),
             actor_id=actor_id,
@@ -103,7 +103,7 @@ def delete_role_assignment(
     resource_id: str,
     resource_type: str,
 ):
-    response = context.authz.delete_role_assignment(
+    response = context.role_assignments.delete_role_assignment(
         DeleteRoleAssignmentRequest(
             request_id=generate_random_id("req"),
             actor_id=actor_id,
@@ -157,10 +157,14 @@ def membership(context: AppContext, monkey_session):
     )
     monkey_session.setattr(context.accounts.sssd, "get_gid_for_group", lambda x: 1000)
     monkey_session.setattr(
-        context.authz, "verify_actor_exists", lambda actor_id, actor_type: True
+        context.role_assignments,
+        "verify_actor_exists",
+        lambda actor_id, actor_type: True,
     )
     monkey_session.setattr(
-        context.authz, "verify_resource_exists", lambda resource_id, resource_type: True
+        context.role_assignments,
+        "verify_resource_exists",
+        lambda resource_id, resource_type: True,
     )
 
     def create_group(group_name: str) -> Group:

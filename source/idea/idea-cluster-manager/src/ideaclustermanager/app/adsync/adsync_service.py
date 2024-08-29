@@ -194,7 +194,7 @@ class ADSyncService:
             res_user_object = res_identified_users_by_unique_identifier[user_unique_identifier]
             res_user_additional_groups = set(res_user_object.additional_groups or [])
 
-            username = ldap_user_object['cn']
+            username = ldap_user_object['sam_account_name']
 
             for group_name in ldap_user_additional_groups - res_user_additional_groups:
                 self.handle_user_addition_to_group(username=username, group_name=group_name)

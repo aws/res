@@ -775,10 +775,6 @@ class EnabledModulesPrompt(DefaultPrompt[str]):
                 disabled=True
             ),
             SocaUserInputChoice(
-                title='Metrics and Monitoring',
-                value=constants.MODULE_METRICS
-            ),
-            SocaUserInputChoice(
                 title='Enterprise Virtual Desktop Infrastructure (eVDI)',
                 value=constants.MODULE_VIRTUAL_DESKTOP_CONTROLLER
             ),

@@ -168,7 +168,10 @@ sudo yum install -y amazon-linux-extras
 #AWS SSM Agent: 
 """
         bash_content += f"""
-yum install -y "{global_settings['package_config']['aws_ssm']['x86_64']}"
+systemctl status amazon-ssm-agent
+if [[ "$?" != "0" ]]; then
+    yum install -y "{global_settings['package_config']['aws_ssm']['x86_64']}"
+fi
 """
         bash_content += """
 #Jq
@@ -274,30 +277,32 @@ rpm --import {global_settings['package_config']['dcv']['gpg_key']}
 """
         bash_content += f"""
 #DCV server
-DCV_SERVER_URL="{global_settings['package_config']['dcv']['host']['x86_64']['linux']['al2_rhel_centos7']['url']}"
-DCV_SERVER_SHA256_HASH="{global_settings['package_config']['dcv']['host']['x86_64']['linux']['al2_rhel_centos7']['sha256sum']}"
+DCV_SERVER_URL="{global_settings['package_config']['dcv']['host']['x86_64']['linux']['al2']['url']}"
+DCV_SERVER_SHA256_URL="{global_settings['package_config']['dcv']['host']['x86_64']['linux']['al2']['sha256sum']}"
 """
         bash_content += """
 wget $DCV_SERVER_URL
 DCV_SERVER_TGZ=$(basename $DCV_SERVER_URL)
-if [[ $(sha256sum ${DCV_SERVER_TGZ} | awk '{print $1}') != ${DCV_SERVER_SHA256_HASH} ]];  then
+urlSha256Sum=$(wget -O - ${DCV_SERVER_SHA256_URL})
+if [[ $(sha256sum ${DCV_SERVER_TGZ} | awk '{print $1}') != ${urlSha256Sum} ]];  then
     echo -e "FATAL ERROR: Checksum for DCV Server failed. File may be compromised." > /etc/motd
     exit 1
 fi
-DIR_NAME=$(echo $DCV_SERVER_TGZ | sed 's/\.tgz//')
-tar zxvf $DCV_SERVER_TGZ
-pushd $DIR_NAME
+extractDir=$(echo ${DCV_SERVER_TGZ} |  sed 's/\.tgz$//')
+mkdir -p ${extractDir}
+tar zxvf ${DCV_SERVER_TGZ} -C ${extractDir} --strip-components 1
+pushd ${extractDir}
 rpm -ivh nice-dcv-web-viewer-*.${machine}.rpm
 popd
-rm -rf $DIR_NAME
-RM_TGZ=$(echo $TGZ | sed 's/\.tgz/*tgz*/')
+rm -rf ${extractDir}
+RM_TGZ=$(echo $DCV_SERVER_TGZ | sed 's/\.tgz/*tgz*/')
 RM_PAT=$(ls -d $RM_TGZ | egrep -v "tgz$")
 rm -rf $RM_PAT || true
 """
         bash_content += f"""
 #Gateway
-GATEWAY_URL="{global_settings['package_config']['dcv']['connection_gateway']['x86_64']['linux']['al2_rhel_centos7']['url']}"
-GATEWAY_SHA256_URL="{global_settings['package_config']['dcv']['connection_gateway']['x86_64']['linux']['al2_rhel_centos7']['sha256sum']}"
+GATEWAY_URL="{global_settings['package_config']['dcv']['connection_gateway']['x86_64']['linux']['al2']['url']}"
+GATEWAY_SHA256_URL="{global_settings['package_config']['dcv']['connection_gateway']['x86_64']['linux']['al2']['sha256sum']}"
 """
         bash_content += """
 wget $GATEWAY_URL
@@ -316,13 +321,14 @@ yum install -y nc
 """
         bash_content += f"""
 #Broker
-BROKER_URL="{global_settings['package_config']['dcv']['broker']['linux']['al2_rhel_centos7']['url']}"
-BROKER_SHA256_HASH="{global_settings['package_config']['dcv']['broker']['linux']['al2_rhel_centos7']['sha256sum']}"
+BROKER_URL="{global_settings['package_config']['dcv']['broker']['linux']['al2']['url']}"
+BROKER_SHA256_URL="{global_settings['package_config']['dcv']['broker']['linux']['al2']['sha256sum']}"
 """
         bash_content += """
 wget $BROKER_URL
 BROKER_FILE_NAME=$(basename $BROKER_URL)
-if [[ $(sha256sum $BROKER_FILE_NAME | awk '{print $1}') != $BROKER_SHA256_HASH ]];  then
+urlSha256Sum=$(wget -O - ${DCV_SESSION_MANAGER_BROKER_SHA256_URL})
+if [[ $(sha256sum ${BROKER_FILE_NAME} | awk '{print $1}') != ${urlSha256Sum} ]];  then
     echo -e "FATAL ERROR: Checksum for DCV Broker failed. File may be compromised." > /etc/motd
     exit 1
 fi

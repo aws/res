@@ -150,6 +150,7 @@ class SocaUserInputParamMetadata(SocaBaseModel):
     name: Optional[str]
     template: Optional[str]
     title: Optional[str]
+    optional: Optional[bool]
     prompt: Optional[bool]
     description: Optional[str]
     description2: Optional[str]

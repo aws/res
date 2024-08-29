@@ -20,6 +20,7 @@ do
         r) AWS_REGION=${OPTARG};;
         n) RES_ENVIRONMENT_NAME=${OPTARG};;
         s) SCRIPT_DIR=${OPTARG};;
+        *) echo "Invalid option: -${OPTARG}" >&2; exit 1;;
     esac
 done
 
@@ -30,25 +31,13 @@ fi
 
 source "$SCRIPT_DIR/../common/bootstrap_common.sh"
 
-function install_s3_mountpoint () {
-  mount-s3 --version
-  if [[ "$?" != "0" ]]; then
-    local AWS=$(command -v aws)
-    machine=$(uname -m)
-    if [[ $machine =~ ^(x86_64|aarch64)$ ]]; then
-      local s3_mountpoint_link=$($AWS dynamodb get-item \
-                                --region "$AWS_REGION" \
-                                --table-name "$RES_ENVIRONMENT_NAME.cluster-settings" \
-                                --key '{"key": {"S": "global-settings.package_config.s3_mountpoint.'${machine}'"}}' \
-                                --output text \
-                                | awk '/VALUE/ {print $2}')
-      yum install -y $s3_mountpoint_link
-    else
-      log_warning "Base architecture not supported."
-    fi
-  fi
-}
-if [[ $BASE_OS =~ ^(amzn2|centos7|rhel7|rhel8|rhel9)$ ]]; then 
-  install_s3_mountpoint
+
+if [[ $BASE_OS =~ ^(amzn2|rhel8|rhel9)$ ]]; then
+  /bin/bash "${SCRIPT_DIR}/../common/red_hat/s3_mountpoint.sh" -r $AWS_REGION -n $RES_ENVIRONMENT_NAME
+elif [[ $BASE_OS =~ ^(ubuntu2204)$ ]]; then
+  /bin/bash "${SCRIPT_DIR}/../common/debian/s3_mountpoint.sh" -r $AWS_REGION -n $RES_ENVIRONMENT_NAME
+else
+  log_warning "Base OS not supported."
+  exit 1
 fi
 # End: S3 Mountpoint

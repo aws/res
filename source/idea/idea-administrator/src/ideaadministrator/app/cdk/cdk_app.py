@@ -20,8 +20,7 @@ from ideaadministrator.app.cdk.stacks import (
     ClusterManagerStack,
     SchedulerStack,
     BastionHostStack,
-    VirtualDesktopControllerStack,
-    MetricsStack
+    VirtualDesktopControllerStack
 )
 
 import aws_cdk as cdk
@@ -171,18 +170,6 @@ class CdkApp:
             env=self.cdk_env
         )
 
-    def metrics_stack(self):
-        MetricsStack(
-            scope=self.cdk_app,
-            cluster_name=self.cluster_name,
-            aws_region=self.aws_region,
-            aws_profile=self.aws_profile,
-            module_id=self.module_id,
-            deployment_id=self.deployment_id,
-            termination_protection=self.termination_protection,
-            env=self.cdk_env
-        )
-
     def build_stack(self):
         if self.module_name == constants.MODULE_BOOTSTRAP:
             self.bootstrap_stack()
@@ -202,8 +189,6 @@ class CdkApp:
             self.bastion_host_stack()
         elif self.module_name == constants.MODULE_VIRTUAL_DESKTOP_CONTROLLER:
             self.virtual_desktop_controller_stack()
-        elif self.module_name == constants.MODULE_METRICS:
-            self.metrics_stack()
 
     def invoke(self):
         self.build_stack()

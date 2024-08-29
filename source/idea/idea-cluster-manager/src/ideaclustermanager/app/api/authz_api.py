@@ -15,12 +15,23 @@ from ideasdk.api import ApiInvocationContext, BaseAPI
 from ideadatamodel.authz import (
     BatchPutRoleAssignmentRequest,
     BatchDeleteRoleAssignmentRequest,
-    ListRoleAssignmentsRequest
+    ListRoleAssignmentsRequest,
+    ListRolesRequest,
+    GetRoleRequest,
+    CreateRoleRequest,
+    DeleteRoleRequest,
+    UpdateRoleRequest
+)
+from ideadatamodel.projects import (
+    GetUserProjectsRequest
 )
 from ideadatamodel import exceptions
 from ideasdk.utils import Utils, ApiUtils
 
-
+'''
+This class is used to manage both roles and role assignments. Since both services lead to defining user authorization, 
+they are logged within the same context for easier debugging if needed.
+'''
 class AuthzAPI(BaseAPI):
 
     def __init__(self, context: ideaclustermanager.AppContext):
@@ -30,6 +41,29 @@ class AuthzAPI(BaseAPI):
         self.SCOPE_READ = f'{self.context.module_id()}/read'
 
         self.acl = {
+            # ======== Role APIs ========
+            'Authz.ListRoles': {
+                'scope': self.SCOPE_READ,
+                'method': self.list_roles
+            },
+            'Authz.GetRole': {
+                'scope': self.SCOPE_READ,
+                'method': self.get_role
+            },
+            'Authz.CreateRole': {
+                'scope': self.SCOPE_WRITE,
+                'method': self.create_role
+            },
+            'Authz.DeleteRole': {
+                'scope': self.SCOPE_WRITE,
+                'method': self.delete_role
+            },
+            'Authz.UpdateRole': {
+                'scope': self.SCOPE_WRITE,
+                'method': self.update_role
+            },
+
+            # ======== Role Assignment APIs ========
             'Authz.BatchPutRoleAssignment': {
                 'scope': self.SCOPE_WRITE,
                 'method': self.put_role_assignments
@@ -46,17 +80,42 @@ class AuthzAPI(BaseAPI):
 
     def put_role_assignments(self, context: ApiInvocationContext):
         request = context.get_request_payload_as(BatchPutRoleAssignmentRequest)
-        result = self.context.authz.put_role_assignments(request)
+        result = self.context.role_assignments.put_role_assignments(request)
         context.success(result)
 
     def delete_role_assignments(self, context: ApiInvocationContext):
         request = context.get_request_payload_as(BatchDeleteRoleAssignmentRequest)
-        result = self.context.authz.delete_role_assignments(request)
+        result = self.context.role_assignments.delete_role_assignments(request)
         context.success(result)
 
     def list_role_assignments(self, context: ApiInvocationContext):
         request = context.get_request_payload_as(ListRoleAssignmentsRequest)
-        result = self.context.authz.list_role_assignments(request)
+        result = self.context.role_assignments.list_role_assignments(request)
+        context.success(result)
+
+    def list_roles(self, context: ApiInvocationContext):
+        request = context.get_request_payload_as(ListRolesRequest)
+        result = self.context.roles.list_roles(request)
+        context.success(result)
+    
+    def get_role(self, context: ApiInvocationContext):
+        request = context.get_request_payload_as(GetRoleRequest)
+        result = self.context.roles.get_role(request)
+        context.success(result)
+    
+    def create_role(self, context: ApiInvocationContext):
+        request = context.get_request_payload_as(CreateRoleRequest)
+        result = self.context.roles.create_role(request)
+        context.success(result)
+    
+    def delete_role(self, context: ApiInvocationContext):
+        request = context.get_request_payload_as(DeleteRoleRequest)
+        result = self.context.roles.delete_role(request)
+        context.success(result)
+    
+    def update_role(self, context: ApiInvocationContext):
+        request = context.get_request_payload_as(UpdateRoleRequest)
+        result = self.context.roles.update_role(request)
         context.success(result)
 
     def invoke(self, context: ApiInvocationContext):
@@ -68,22 +127,46 @@ class AuthzAPI(BaseAPI):
         
         acl_entry_scope = Utils.get_value_as_string('scope', acl_entry)
         is_authorized = context.is_authorized(elevated_access=True, scopes=[acl_entry_scope])
+
+        if is_authorized:
+            acl_entry['method'](context)
+            return
+
         username = context.get_username()
-        user = self.context.accounts.get_user(username)
-        
-        # Current user needs to be IT admin or a project owner for all projects in the Put/Delete request
-        if namespace in ['Authz.BatchPutRoleAssignment', 'Authz.BatchDeleteRoleAssignment']:
-            request = context.get_request_payload_as(BatchPutRoleAssignmentRequest) if namespace == 'Authz.BatchPutRoleAssignment' else context.get_request_payload_as(BatchDeleteRoleAssignmentRequest)
+
+        # Conditional permissions for non-admins
+
+        if namespace == 'Authz.BatchPutRoleAssignment':
+            request = context.get_request_payload_as(BatchPutRoleAssignmentRequest)
             project_ids = list(set([assignment.resource_id for assignment in request.items]))
-            if (is_authorized or self.context.authz.is_user_project_owner_for_all_projects(user=user, project_ids=project_ids)):
+            # Current user must have "update_personnel" permission for all projects in the Put request
+            if all([context.is_authorized(elevated_access=False, scopes=[acl_entry_scope], role_assignment_resource_key=f"{project_id}:project") for project_id in project_ids]):
+                acl_entry['method'](context)
+                return
+        elif namespace == 'Authz.BatchDeleteRoleAssignment':
+            request = context.get_request_payload_as(BatchDeleteRoleAssignmentRequest)
+            project_ids = list(set([assignment.resource_id for assignment in request.items]))
+            # Current user must have "update_personnel" permission for all projects in the Delete request
+            if all([context.is_authorized(elevated_access=False, scopes=[acl_entry_scope], role_assignment_resource_key=f"{project_id}:project") for project_id in project_ids]):
+                acl_entry['method'](context)
+                return
+        elif namespace == 'Authz.ListRoleAssignments':
+            # Current user must be assigned to a project in the application
+            projects_assigned = self.context.projects.get_user_projects(GetUserProjectsRequest(username=username, exclude_disabled=False))
+            if not Utils.is_empty(projects_assigned.projects):
+                acl_entry['method'](context)
+                return
+        elif namespace == 'Authz.ListRoles':
+            # Current user must be assigned to a project in the application
+            projects_assigned = self.context.projects.get_user_projects(GetUserProjectsRequest(username=username, exclude_disabled=False))
+            if not Utils.is_empty(projects_assigned.projects):
+                acl_entry['method'](context)
+                return
+        elif namespace == 'Authz.GetRole':
+            # Current user must be assigned to a project in the application
+            projects_assigned = self.context.projects.get_user_projects(GetUserProjectsRequest(username=username, exclude_disabled=False))
+            if not Utils.is_empty(projects_assigned.projects):
                 acl_entry['method'](context)
                 return
         
-        # Current user needs to be IT admin or a project owner for any project
-        if namespace == 'Authz.ListRoleAssignments' and (is_authorized or self.context.authz.is_user_any_project_owner(user=user)):
-            acl_entry['method'](context)
-            return
-        
         raise exceptions.unauthorized_access()
-
-    

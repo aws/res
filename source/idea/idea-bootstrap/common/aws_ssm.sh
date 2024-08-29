@@ -30,7 +30,7 @@ fi
 
 source "$SCRIPT_DIR/../common/bootstrap_common.sh"
 
-if [[ $BASE_OS =~ ^(amzn2|centos7|rhel7|rhel8|rhel9)$ ]]; then
+if [[ $BASE_OS =~ ^(amzn2|rhel8|rhel9)$ ]]; then
   /bin/bash "${SCRIPT_DIR}/../common/red_hat/aws_ssm.sh" -r $AWS_REGION -n $RES_ENVIRONMENT_NAME
 elif [[ $BASE_OS =~ ^(ubuntu2204)$ ]]; then
   /bin/bash "${SCRIPT_DIR}/../common/debian/aws_ssm.sh"

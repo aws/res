@@ -9,6 +9,7 @@
 #  OR CONDITIONS OF ANY KIND, express or implied. See the License for the specific language governing permissions
 #  and limitations under the License.
 import json
+import re
 
 from ideasdk.protocols import AwsClientProviderProtocol, AWSUtilProtocol, SocaContextProtocol, PagingCallback
 from ideasdk.launch_configurations import LaunchRoleHelper
@@ -18,7 +19,7 @@ from ideadatamodel import (
     SocaAmount,
     EC2InstanceType, AutoScalingGroup, CloudFormationStack, CloudFormationStackResources,
     EC2Instance, EC2SpotFleetRequestConfig, EC2SpotFleetInstance, EC2InstanceUnitPrice, AwsProjectBudget,
-    SocaJob, SecurityGroup, Policy
+    SocaJob, SecurityGroup, Policy, AWSTag
 )
 from ideasdk.aws import EC2InstanceTypesDB
 
@@ -74,6 +75,42 @@ class AWSUtil(AWSUtilProtocol):
         if self._aws is not None:
             return self._aws
         return self._context.aws()
+
+    @staticmethod
+    def is_valid_s3_bucket_arn(bucket_arn: str):
+        bucket_arn_regex = re.compile(constants.S3_BUCKET_ARN_REGEX)
+        if bucket_arn_regex.match(bucket_arn):
+            return True
+        else:
+            return False
+
+    @staticmethod
+    def is_valid_iam_role_arn(iam_role_arn: str):
+        iam_role_arn_regex = re.compile(constants.IAM_ROLE_ARN_REGEX)
+        if iam_role_arn_regex.match(iam_role_arn):
+            return True
+        else:
+            return False
+
+    @staticmethod
+    def is_valid_iam_role_name(iam_role_name: str):
+        iam_role_name_regex = re.compile(constants.IAM_ROLE_NAME_REGEX)
+        if iam_role_name_regex.match(iam_role_name):
+            return True
+        else:
+            return False
+
+    @staticmethod
+    def get_bucket_name_from_bucket_arn(bucket_arn: str):
+        bucket_arn_regex = re.compile(constants.S3_BUCKET_ARN_REGEX)
+        match = bucket_arn_regex.match(bucket_arn)
+        if match:
+            return match.group(1)
+        else:
+            raise exceptions.soca_exception(
+                error_code=errorcodes.INVALID_PARAMS,
+                message=constants.S3_BUCKET_ARN_ERROR_MESSAGE
+            )
 
     @staticmethod
     def get_instance_type_class(instance_type: str) -> Tuple[str, bool]:
@@ -1271,3 +1308,27 @@ class AWSUtil(AWSUtilProtocol):
             }
         ]
         return self.is_security_group_valid(security_group_id, filter_tags)
+
+    def does_iam_role_exist(self, role_arn: str, filter_tags: List[AWSTag] = None) -> bool:
+        try:
+            match = re.compile(constants.IAM_ROLE_NAME_CAPTURE_GROUP_REGEX).search(role_arn)
+            if match:
+                role_name = match.group(1)
+            else:
+                return False
+            response = self.aws().iam().get_role(RoleName=role_name)
+            role = response['Role']
+            tags = {tag['Key']: tag['Value'] for tag in role.get('Tags', [])}
+            if filter_tags:
+                for tag in filter_tags:
+                    key = tag.Key
+                    value = tag.Value
+                    if tags.get(key) != value:
+                        return False
+            return True
+        except botocore.exceptions.ClientError as e:
+            if e.response['Error']['Code'] == 'NoSuchEntityException':
+                return False
+            elif e.response['Error']['Code'] == 'AccessDenied':
+                return False
+            raise e

@@ -210,10 +210,10 @@ class ResClient:
             BatchDeleteRoleAssignmentResponse,
         )
 
-    def list_role_assignment(
+    def list_role_assignments(
         self, request: ListRoleAssignmentsRequest
     ) -> ListRoleAssignmentsResponse:
-        logger.info(f"listing  role assignments {request.items}...")
+        logger.info(f"listing role assignments {request.items}...")
 
         return self._invoke(
             "Authz.ListRoleAssignments",

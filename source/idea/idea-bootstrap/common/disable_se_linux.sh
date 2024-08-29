@@ -27,7 +27,7 @@ if [[ -z "$BASE_OS" || -z "$SCRIPT_DIR" ]]; then
 fi
 
 source "$SCRIPT_DIR/../common/bootstrap_common.sh"
-if [[ $BASE_OS =~ ^(amzn2|centos7|rhel7|rhel8|rhel9)$ ]]; then 
+if [[ $BASE_OS =~ ^(amzn2|rhel8|rhel9)$ ]]; then 
   sestatus | grep -q "disabled"
   if [[ "$?" != "0" ]]; then
     # disables selinux for current session

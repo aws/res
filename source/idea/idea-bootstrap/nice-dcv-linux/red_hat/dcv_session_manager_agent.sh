@@ -35,25 +35,19 @@ function install_nice_dcv_session_manager_agent () {
   local machine=$(uname -m) #x86_64 or aarch64
   local AGENT_URL=""
   local AGENT_VERSION=""
-  local AGENT_SHA256_HASH=""
+  local AGENT_SHA256_URL=""
   case $BASE_OS in
-    amzn2|centos7|rhel7)
+    amzn2)
       AGENT_URL=$($AWS dynamodb get-item \
                         --region "$AWS_REGION" \
                         --table-name "$RES_ENVIRONMENT_NAME.cluster-settings" \
-                        --key '{"key": {"S": "global-settings.package_config.dcv.agent.'$machine'.linux.al2_rhel_centos7.url"}}' \
+                        --key '{"key": {"S": "global-settings.package_config.dcv.agent.'$machine'.linux.al2.url"}}' \
                         --output text \
                         | awk '/VALUE/ {print $2}')
-      AGENT_VERSION=$($AWS dynamodb get-item \
+      AGENT_SHA256_URL=$($AWS dynamodb get-item \
                         --region "$AWS_REGION" \
                         --table-name "$RES_ENVIRONMENT_NAME.cluster-settings" \
-                        --key '{"key": {"S": "global-settings.package_config.dcv.agent.'$machine'.linux.al2_rhel_centos7.version"}}' \
-                        --output text \
-                        | awk '/VALUE/ {print $2}')
-      AGENT_SHA256_HASH=$($AWS dynamodb get-item \
-                        --region "$AWS_REGION" \
-                        --table-name "$RES_ENVIRONMENT_NAME.cluster-settings" \
-                        --key '{"key": {"S": "global-settings.package_config.dcv.agent.'$machine'.linux.al2_rhel_centos7.sha256sum"}}' \
+                        --key '{"key": {"S": "global-settings.package_config.dcv.agent.'$machine'.linux.al2.sha256sum"}}' \
                         --output text \
                         | awk '/VALUE/ {print $2}')
       ;;
@@ -64,13 +58,7 @@ function install_nice_dcv_session_manager_agent () {
                         --key '{"key": {"S": "global-settings.package_config.dcv.agent.'$machine'.linux.rhel_centos_rocky'${BASE_OS:4:1}'.url"}}' \
                         --output text \
                         | awk '/VALUE/ {print $2}')
-      AGENT_VERSION=$($AWS dynamodb get-item \
-                        --region "$AWS_REGION" \
-                        --table-name "$RES_ENVIRONMENT_NAME.cluster-settings" \
-                        --key '{"key": {"S": "global-settings.package_config.dcv.agent.'$machine'.linux.rhel_centos_rocky'${BASE_OS:4:1}'.version"}}' \
-                        --output text \
-                        | awk '/VALUE/ {print $2}')
-      AGENT_SHA256_HASH=$($AWS dynamodb get-item \
+      AGENT_SHA256_URL=$($AWS dynamodb get-item \
                         --region "$AWS_REGION" \
                         --table-name "$RES_ENVIRONMENT_NAME.cluster-settings" \
                         --key '{"key": {"S": "global-settings.package_config.dcv.agent.'$machine'.linux.rhel_centos_rocky'${BASE_OS:4:1}'.sha256sum"}}' \
@@ -86,12 +74,14 @@ function install_nice_dcv_session_manager_agent () {
   rpm --import ${DCV_GPG_KEY_DCV_AGENT}
 
   wget ${AGENT_URL}
-  if [[ $(sha256sum nice-dcv-session-manager-agent-${AGENT_VERSION}.rpm | awk '{print $1}') != ${AGENT_SHA256_HASH} ]];  then
+  fileName=$(basename ${AGENT_URL})
+  urlSha256Sum=$(wget -O - ${AGENT_SHA256_URL})
+  if [[ $(sha256sum ${fileName} | awk '{print $1}') != ${urlSha256Sum} ]];  then
     echo -e "FATAL ERROR: Checksum for DCV Session Manager Agent failed. File may be compromised." > /etc/motd
     exit 1
   fi
 
-  yum install -y nice-dcv-session-manager-agent-${AGENT_VERSION}.rpm
+  yum install -y ./${fileName}
   log_info "# installing dcv agent complete ..."
-  rm -rf nice-dcv-session-manager-agent-${AGENT_VERSION}.rpm
+  rm -rf ./${fileName}
 }

@@ -12,7 +12,6 @@
 import copy
 
 import ideaclustermanager.app.snapshots.helpers.db_utils as db_utils
-import pytest
 from _pytest.monkeypatch import MonkeyPatch
 from ideaclustermanager import AppContext
 from ideaclustermanager.app.snapshots.apply_snapshot_merge_table.role_assignments_table_merger import (
@@ -27,12 +26,7 @@ from ideaclustermanager.app.snapshots.helpers.merged_record_utils import (
 )
 from ideasdk.utils.utils import Utils
 
-from ideadatamodel import (
-    ListRoleAssignmentsRequest,
-    PutRoleAssignmentRequest,
-    errorcodes,
-    exceptions,
-)
+from ideadatamodel import ListRoleAssignmentsRequest, PutRoleAssignmentRequest
 from ideadatamodel.snapshots.snapshot_model import TableName
 
 
@@ -41,14 +35,18 @@ def generate_random_id(prefix: str) -> str:
 
 
 def test_role_assignments_table_merger_merge_new_role_assignment_succeed(
-    context: AppContext, monkeypatch
+    context: AppContext, monkeypatch: MonkeyPatch
 ):
 
     monkeypatch.setattr(
-        context.authz, "verify_actor_exists", lambda actor_id, actor_type: True
+        context.role_assignments,
+        "verify_actor_exists",
+        lambda actor_id, actor_type: True,
     )
     monkeypatch.setattr(
-        context.authz, "verify_resource_exists", lambda resource_id, resource_type: True
+        context.role_assignments,
+        "verify_resource_exists",
+        lambda resource_id, resource_type: True,
     )
 
     table_data_to_merge = [
@@ -60,7 +58,16 @@ def test_role_assignments_table_merger_merge_new_role_assignment_succeed(
             db_utils.ROLE_ASSIGNMENT_DB_ROLD_ID_KEY: "project_owner",
             db_utils.ROLE_ASSIGNMENT_DB_ACTOR_KEY: "admin1:user",
             db_utils.ROLE_ASSIGNMENT_DB_RESOURCE_KEY: "test_project1:project",
-        }
+        },
+        {
+            db_utils.ROLE_ASSIGNMENT_DB_ACTOR_ID_KEY: "Admin Group",
+            db_utils.ROLE_ASSIGNMENT_DB_RESOURCE_ID_KEY: "test_project1",
+            db_utils.ROLE_ASSIGNMENT_DB_ACTOR_TYPE_KEY: "group",
+            db_utils.ROLE_ASSIGNMENT_DB_RESOURCE_TYPE_KEY: "project",
+            db_utils.ROLE_ASSIGNMENT_DB_ROLD_ID_KEY: "project_owner",
+            db_utils.ROLE_ASSIGNMENT_DB_ACTOR_KEY: "Admin Group:group",
+            db_utils.ROLE_ASSIGNMENT_DB_RESOURCE_KEY: "test_project1:project",
+        },
     ]
 
     resolver = RoleAssignmentsTableMerger()
@@ -81,63 +88,75 @@ def test_role_assignments_table_merger_merge_new_role_assignment_succeed(
         ),
     )
     assert success
-    assert len(record_deltas) == 1
+    assert len(record_deltas) == 2
     assert record_deltas[0].original_record is None
-    assert (
-        record_deltas[0].snapshot_record.get(db_utils.ROLE_ASSIGNMENT_DB_ACTOR_ID_KEY)
-        == "admin1"
-    )
-    assert (
-        record_deltas[0].resolved_record.get(db_utils.ROLE_ASSIGNMENT_DB_ACTOR_ID_KEY)
-        == "admin1"
-    )
-    assert record_deltas[0].action_performed == MergedRecordActionType.CREATE
 
-    retrieved_assignment = context.authz.list_role_assignments(
-        ListRoleAssignmentsRequest(
-            actor_key=f"{record_deltas[0].resolved_record.get(db_utils.ROLE_ASSIGNMENT_DB_ACTOR_KEY)}",
-            resource_key=f"{record_deltas[0].resolved_record.get(db_utils.ROLE_ASSIGNMENT_DB_RESOURCE_KEY)}",
+    for i in range(len(record_deltas)):
+        assert (
+            record_deltas[i].snapshot_record.get(
+                db_utils.ROLE_ASSIGNMENT_DB_ACTOR_ID_KEY
+            )
+            == table_data_to_merge[i][db_utils.ROLE_ASSIGNMENT_DB_ACTOR_ID_KEY]
         )
-    ).items[0]
+        assert (
+            record_deltas[i].resolved_record.get(
+                db_utils.ROLE_ASSIGNMENT_DB_ACTOR_ID_KEY
+            )
+            == table_data_to_merge[i][db_utils.ROLE_ASSIGNMENT_DB_ACTOR_ID_KEY]
+        )
+        assert record_deltas[i].action_performed == MergedRecordActionType.CREATE
 
-    assert retrieved_assignment is not None
-    assert retrieved_assignment.role_id == record_deltas[0].resolved_record.get(
-        db_utils.ROLE_ASSIGNMENT_DB_ROLD_ID_KEY
-    )
-    assert retrieved_assignment.actor_id == record_deltas[0].resolved_record.get(
-        db_utils.ROLE_ASSIGNMENT_DB_ACTOR_ID_KEY
-    )
-    assert retrieved_assignment.actor_type == record_deltas[0].resolved_record.get(
-        db_utils.ROLE_ASSIGNMENT_DB_ACTOR_TYPE_KEY
-    )
-    assert retrieved_assignment.resource_type == record_deltas[0].resolved_record.get(
-        db_utils.ROLE_ASSIGNMENT_DB_RESOURCE_TYPE_KEY
-    )
-    assert retrieved_assignment.resource_id == record_deltas[0].resolved_record.get(
-        db_utils.ROLE_ASSIGNMENT_DB_RESOURCE_ID_KEY
-    )
+        retrieved_assignment = context.role_assignments.list_role_assignments(
+            ListRoleAssignmentsRequest(
+                actor_key=f"{record_deltas[i].resolved_record.get(db_utils.ROLE_ASSIGNMENT_DB_ACTOR_KEY)}",
+                resource_key=f"{record_deltas[i].resolved_record.get(db_utils.ROLE_ASSIGNMENT_DB_RESOURCE_KEY)}",
+            )
+        ).items[0]
 
-    imported_role_assignment_id = context.authz.get_role_assignment(
-        actor_key=table_data_to_merge[0][db_utils.ROLE_ASSIGNMENT_DB_ACTOR_KEY],
-        resource_key=table_data_to_merge[0][db_utils.ROLE_ASSIGNMENT_DB_RESOURCE_KEY],
-    ).role_id
-    assert (
-        imported_role_assignment_id
-        == table_data_to_merge[0][db_utils.ROLE_ASSIGNMENT_DB_ROLD_ID_KEY]
-    )
+        assert retrieved_assignment is not None
+        assert retrieved_assignment.role_id == record_deltas[i].resolved_record.get(
+            db_utils.ROLE_ASSIGNMENT_DB_ROLD_ID_KEY
+        )
+        assert retrieved_assignment.actor_id == record_deltas[i].resolved_record.get(
+            db_utils.ROLE_ASSIGNMENT_DB_ACTOR_ID_KEY
+        )
+        assert retrieved_assignment.actor_type == record_deltas[i].resolved_record.get(
+            db_utils.ROLE_ASSIGNMENT_DB_ACTOR_TYPE_KEY
+        )
+        assert retrieved_assignment.resource_type == record_deltas[
+            i
+        ].resolved_record.get(db_utils.ROLE_ASSIGNMENT_DB_RESOURCE_TYPE_KEY)
+        assert retrieved_assignment.resource_id == record_deltas[i].resolved_record.get(
+            db_utils.ROLE_ASSIGNMENT_DB_RESOURCE_ID_KEY
+        )
+
+        imported_role_assignment_id = context.role_assignments.get_role_assignment(
+            actor_key=table_data_to_merge[i][db_utils.ROLE_ASSIGNMENT_DB_ACTOR_KEY],
+            resource_key=table_data_to_merge[i][
+                db_utils.ROLE_ASSIGNMENT_DB_RESOURCE_KEY
+            ],
+        ).role_id
+        assert (
+            imported_role_assignment_id
+            == table_data_to_merge[i][db_utils.ROLE_ASSIGNMENT_DB_ROLD_ID_KEY]
+        )
 
 
 def test_role_assignments_table_merger_ignore_existing_role_assignment_succeed(
     context: AppContext, monkeypatch
 ):
     monkeypatch.setattr(
-        context.authz, "verify_actor_exists", lambda actor_id, actor_type: True
+        context.role_assignments,
+        "verify_actor_exists",
+        lambda actor_id, actor_type: True,
     )
     monkeypatch.setattr(
-        context.authz, "verify_resource_exists", lambda resource_id, resource_type: True
+        context.role_assignments,
+        "verify_resource_exists",
+        lambda resource_id, resource_type: True,
     )
 
-    context.authz.put_role_assignment(
+    context.role_assignments.put_role_assignment(
         PutRoleAssignmentRequest(
             request_id=generate_random_id("req"),
             actor_id="admin1",
@@ -185,10 +204,14 @@ def test_role_assignments_table_merger_rollback_original_data_succeed(
     context: AppContext, monkeypatch
 ):
     monkeypatch.setattr(
-        context.authz, "verify_actor_exists", lambda actor_id, actor_type: True
+        context.role_assignments,
+        "verify_actor_exists",
+        lambda actor_id, actor_type: True,
     )
     monkeypatch.setattr(
-        context.authz, "verify_resource_exists", lambda resource_id, resource_type: True
+        context.role_assignments,
+        "verify_resource_exists",
+        lambda resource_id, resource_type: True,
     )
 
     put_role_assignment_request = PutRoleAssignmentRequest(
@@ -200,7 +223,7 @@ def test_role_assignments_table_merger_rollback_original_data_succeed(
         role_id="project_owner",
     )
 
-    context.authz.put_role_assignment(put_role_assignment_request)
+    context.role_assignments.put_role_assignment(put_role_assignment_request)
 
     resolver = RoleAssignmentsTableMerger()
     delta_records = [
@@ -234,7 +257,7 @@ def test_role_assignments_table_merger_rollback_original_data_succeed(
         ),
     )
 
-    retrieved_assignment = context.authz.get_role_assignment(
+    retrieved_assignment = context.role_assignments.get_role_assignment(
         actor_key=f"{put_role_assignment_request.actor_id}:{put_role_assignment_request.actor_type}",
         resource_key=f"{put_role_assignment_request.resource_id}:{put_role_assignment_request.resource_type}",
     )
@@ -246,10 +269,14 @@ def test_role_assignments_table_resolve_non_existing_record_succeed(
     context: AppContext, monkeypatch
 ):
     monkeypatch.setattr(
-        context.authz, "verify_actor_exists", lambda actor_id, actor_type: True
+        context.role_assignments,
+        "verify_actor_exists",
+        lambda actor_id, actor_type: True,
     )
     monkeypatch.setattr(
-        context.authz, "verify_resource_exists", lambda resource_id, resource_type: True
+        context.role_assignments,
+        "verify_resource_exists",
+        lambda resource_id, resource_type: True,
     )
 
     table_data_to_merge = [
@@ -284,7 +311,9 @@ def test_role_assignments_table_resolve_non_existing_actor_suppress_error_no_rec
     context: AppContext, monkeypatch
 ):
     monkeypatch.setattr(
-        context.authz, "verify_resource_exists", lambda resource_id, resource_type: True
+        context.role_assignments,
+        "verify_resource_exists",
+        lambda resource_id, resource_type: True,
     )
 
     table_data_to_merge = [
@@ -321,7 +350,9 @@ def test_role_assignments_table_resolve_non_existing_resource_suppress_error_no_
     context: AppContext, monkeypatch
 ):
     monkeypatch.setattr(
-        context.authz, "verify_actor_exists", lambda actor_id, actor_type: True
+        context.role_assignments,
+        "verify_actor_exists",
+        lambda actor_id, actor_type: True,
     )
 
     table_data_to_merge = [
@@ -358,10 +389,14 @@ def test_role_assignments_table_resolve_existing_record_succeed(
     context: AppContext, monkeypatch
 ):
     monkeypatch.setattr(
-        context.authz, "verify_actor_exists", lambda actor_id, actor_type: True
+        context.role_assignments,
+        "verify_actor_exists",
+        lambda actor_id, actor_type: True,
     )
     monkeypatch.setattr(
-        context.authz, "verify_resource_exists", lambda resource_id, resource_type: True
+        context.role_assignments,
+        "verify_resource_exists",
+        lambda resource_id, resource_type: True,
     )
 
     table_data_to_merge = [
@@ -373,16 +408,37 @@ def test_role_assignments_table_resolve_existing_record_succeed(
             db_utils.ROLE_ASSIGNMENT_DB_ROLD_ID_KEY: "project_owner",
             db_utils.ROLE_ASSIGNMENT_DB_ACTOR_KEY: "admin1:user",
             db_utils.ROLE_ASSIGNMENT_DB_RESOURCE_KEY: "test_project1:project",
-        }
+        },
+        # Add a group record
+        {
+            db_utils.ROLE_ASSIGNMENT_DB_ACTOR_ID_KEY: "Admin Group",
+            db_utils.ROLE_ASSIGNMENT_DB_RESOURCE_ID_KEY: "test_project1",
+            db_utils.ROLE_ASSIGNMENT_DB_ACTOR_TYPE_KEY: "group",
+            db_utils.ROLE_ASSIGNMENT_DB_RESOURCE_TYPE_KEY: "project",
+            db_utils.ROLE_ASSIGNMENT_DB_ROLD_ID_KEY: "project_owner",
+            db_utils.ROLE_ASSIGNMENT_DB_ACTOR_KEY: "Admin Group:group",
+            db_utils.ROLE_ASSIGNMENT_DB_RESOURCE_KEY: "test_project1:project",
+        },
     ]
 
-    context.authz.put_role_assignment(
+    context.role_assignments.put_role_assignment(
         PutRoleAssignmentRequest(
             request_id=generate_random_id("req"),
             actor_id="admin1",
             resource_id="test_project1",
             resource_type="project",
             actor_type="user",
+            role_id="project_owner",
+        )
+    )
+
+    context.role_assignments.put_role_assignment(
+        PutRoleAssignmentRequest(
+            request_id=generate_random_id("req"),
+            actor_id="Admin Group",
+            resource_id="test_project1",
+            resource_type="project",
+            actor_type="group",
             role_id="project_owner",
         )
     )
@@ -408,10 +464,14 @@ def test_role_assignments_resolver_resolve_project_id_succeed(
 ):
 
     monkeypatch.setattr(
-        context.authz, "verify_actor_exists", lambda actor_id, actor_type: True
+        context.role_assignments,
+        "verify_actor_exists",
+        lambda actor_id, actor_type: True,
     )
     monkeypatch.setattr(
-        context.authz, "verify_resource_exists", lambda resource_id, resource_type: True
+        context.role_assignments,
+        "verify_resource_exists",
+        lambda resource_id, resource_type: True,
     )
 
     table_data_to_merge = [
@@ -460,7 +520,7 @@ def test_role_assignments_resolver_resolve_project_id_succeed(
         == f"resolved_project_id:{db_utils.ROLE_ASSIGNMENT_DB_RESOURCE_TYPE_PROJECT_VALUE}"
     )
 
-    retrieved_assignment = context.authz.list_role_assignments(
+    retrieved_assignment = context.role_assignments.list_role_assignments(
         ListRoleAssignmentsRequest(
             actor_key=f"{record_deltas[0].resolved_record.get(db_utils.ROLE_ASSIGNMENT_DB_ACTOR_KEY)}",
             resource_key=f"{record_deltas[0].resolved_record.get(db_utils.ROLE_ASSIGNMENT_DB_RESOURCE_KEY)}",
@@ -484,7 +544,7 @@ def test_role_assignments_resolver_resolve_project_id_succeed(
         db_utils.ROLE_ASSIGNMENT_DB_RESOURCE_ID_KEY
     )
 
-    record_with_old_project_id = context.authz.get_role_assignment(
+    record_with_old_project_id = context.role_assignments.get_role_assignment(
         actor_key=table_data_to_merge[0][db_utils.ROLE_ASSIGNMENT_DB_ACTOR_KEY],
         resource_key=table_data_to_merge[0][
             db_utils.ROLE_ASSIGNMENT_DB_RESOURCE_KEY
@@ -497,10 +557,14 @@ def test_role_assignments_table_resolve_non_existing_record_different_project_id
     context: AppContext, monkeypatch
 ):
     monkeypatch.setattr(
-        context.authz, "verify_actor_exists", lambda actor_id, actor_type: True
+        context.role_assignments,
+        "verify_actor_exists",
+        lambda actor_id, actor_type: True,
     )
     monkeypatch.setattr(
-        context.authz, "verify_resource_exists", lambda resource_id, resource_type: True
+        context.role_assignments,
+        "verify_resource_exists",
+        lambda resource_id, resource_type: True,
     )
 
     table_data_to_merge = [
@@ -545,10 +609,14 @@ def test_role_assignments_table_resolve_existing_record_different_project_id_ski
     context: AppContext, monkeypatch
 ):
     monkeypatch.setattr(
-        context.authz, "verify_actor_exists", lambda actor_id, actor_type: True
+        context.role_assignments,
+        "verify_actor_exists",
+        lambda actor_id, actor_type: True,
     )
     monkeypatch.setattr(
-        context.authz, "verify_resource_exists", lambda resource_id, resource_type: True
+        context.role_assignments,
+        "verify_resource_exists",
+        lambda resource_id, resource_type: True,
     )
 
     table_data_to_merge = [
@@ -563,7 +631,7 @@ def test_role_assignments_table_resolve_existing_record_different_project_id_ski
         }
     ]
 
-    context.authz.put_role_assignment(
+    context.role_assignments.put_role_assignment(
         PutRoleAssignmentRequest(
             request_id=generate_random_id("req"),
             actor_id="admin1",

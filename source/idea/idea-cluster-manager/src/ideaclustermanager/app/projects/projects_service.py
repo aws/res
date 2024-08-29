@@ -28,10 +28,8 @@ from ideadatamodel import (
     GetUserProjectsRequest,
     GetUserProjectsResult,
     ListSecurityGroupsResult,
-    ListPoliciesResult,
-    ListRoleAssignmentsRequest
+    ListPoliciesResult
 )
-from ideasdk.aws import AwsResources
 from ideasdk.utils import Utils, ApiUtils
 from ideasdk.launch_configurations import LaunchScriptsHelper, LaunchRoleHelper
 from ideasdk.context import SocaContext, ArnBuilder
@@ -167,7 +165,7 @@ class ProjectsService:
                 raise exceptions.general_exception(f'project is still used by software stacks. '
                                                    f'Project ID: {project_id}, Stack IDs: {stack_ids_by_project_id}')
 
-            role_assignments = self.role_assignments_dao.list_role_assignments(ListRoleAssignmentsRequest(resource_key=f"{project_id}:project")).items
+            role_assignments = self.role_assignments_dao.list_role_assignments(resource_key=f"{project_id}:project")
             for role_assignment in role_assignments:
                 if role_assignment.actor_type in constants.VALID_ROLE_ASSIGNMENT_ACTOR_TYPES:
                     self.role_assignments_dao.delete_role_assignment(actor_key=role_assignment.actor_key, resource_key=role_assignment.resource_key)
@@ -306,15 +304,6 @@ class ProjectsService:
             'enabled': True
         })
 
-        self.task_manager.send(
-            task_name='projects.project-enabled',
-            payload={
-                'project_id': project['project_id']
-            },
-            message_group_id=project['project_id'],
-            message_dedupe_id=Utils.short_uuid()
-        )
-
         return EnableProjectResult()
 
     def disable_project(self, request: DisableProjectRequest) -> DisableProjectResult:
@@ -339,15 +328,6 @@ class ProjectsService:
             'project_id': project['project_id'],
             'enabled': False
         })
-
-        self.task_manager.send(
-            task_name='projects.project-disabled',
-            payload={
-                'project_id': project['project_id']
-            },
-            message_group_id=project['project_id'],
-            message_dedupe_id=Utils.short_uuid()
-        )
 
         return DisableProjectResult()
 
@@ -420,7 +400,7 @@ class ProjectsService:
         # This gets all projects for a user via direct project-user role assignments or from any of their group-project assignments
         user = self.context.accounts.get_user(request.username)
         is_user_enabled = Utils.is_true(user.enabled)
-        user_projects = self.role_assignments_dao.get_projects_for_user(request.username, user.additional_groups)
+        user_projects = self.role_assignments_dao.get_projects_for_user(request.username, Utils.get_as_string_list(user.additional_groups, []))
 
         result = []
         if is_user_enabled:
@@ -429,7 +409,7 @@ class ProjectsService:
                 db_project = self.projects_dao.get_project_by_id(project_id)
                 if db_project is None:
                     continue
-                if not db_project['enabled']:
+                if not db_project['enabled'] and Utils.get_as_bool(request.exclude_disabled, True):
                     continue
                 result.append(self.projects_dao.convert_from_db(db_project))
             result.sort(key=lambda p: p.name)

@@ -1,6 +1,6 @@
 # Begin: Update Sudoer Secure Path
 # Enables sudo users to execute commands on this path.
-{%- if context.base_os in ('amazonlinux2', 'centos7', 'rhel7', 'rhel8', 'rhel9') %}
+{%- if context.base_os in ('amazonlinux2', 'rhel8', 'rhel9') %}
 echo 'Defaults secure_path="{{ secure_path }}"' > /etc/sudoers.d/secure_path
 {%- endif %}
 # End: Update Sudoer Secure Path

@@ -1,6 +1,6 @@
 # Begin: FSx Lustre Client Tuning - Post-Mount
 # https://docs.aws.amazon.com/fsx/latest/LustreGuide/performance.html#performance-tips
-{%- if context.base_os in ('amazonlinux2', 'centos7', 'rhel7', 'rhel8', 'rhel9') %}
+{%- if context.base_os in ('amazonlinux2', 'rhel8', 'rhel9') %}
   NPROCS=$(nproc)
   GB_MEM=$(free --si -g | egrep '^Mem:' | awk '{print $2}')
   log_info "Detected ${NPROCS} CPUs / ${GB_MEM} GiB memory for Lustre performance tuning"

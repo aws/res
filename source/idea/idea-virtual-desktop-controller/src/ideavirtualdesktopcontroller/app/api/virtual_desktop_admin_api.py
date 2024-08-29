@@ -604,14 +604,6 @@ class VirtualDesktopAdminAPI(VirtualDesktopAPI):
 
             return
 
-        sessions = self.session_db.list_all_for_software_stack(ListSessionsRequest(), software_stack)
-        if sessions.listing:
-            session_ids_by_software_stack_id = [session.dcv_session_id for session in sessions.listing]
-            context.fail(error_code=errorcodes.GENERAL_ERROR, message=f'Software stack is still in use by virtual desktop sessions. '
-                                                                      f'Stack ID: {software_stack.stack_id}， Session IDs: {session_ids_by_software_stack_id}')
-
-            return
-
         self._delete_software_stack(software_stack)
         context.success(DeleteSoftwareStackResponse())
 

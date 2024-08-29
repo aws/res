@@ -18,8 +18,10 @@ from ideaclustermanager.app.snapshots.helpers.merged_record_utils import (
 
 from ideadatamodel import (
     AddFileSystemToProjectRequest,
-    OffboardFileSystemRequest,
+    FileSystem,
     OnboardEFSFileSystemRequest,
+    RemoveFileSystemRequest,
+    UpdateFileSystemRequest,
     errorcodes,
     exceptions,
 )
@@ -44,16 +46,21 @@ DUMMY_DEDUP_ID = "dedup_id"
 DUMMY_EFS_1 = "dummy_efs_1"
 DUMMY_ONTAP_1 = "dummy_ontap_1"
 DUMMY_LUSTRE_1 = "dummy_lustre_1"
+DUMMY_S3_BUCKET_1 = "bucket-name-uuid"
 
 DUMMY_EFS_1_DEDUP = dummy_unique_resource_id_generator(DUMMY_EFS_1, DUMMY_DEDUP_ID)
 DUMMY_ONTAP_1_DEDUP = dummy_unique_resource_id_generator(DUMMY_ONTAP_1, DUMMY_DEDUP_ID)
 DUMMY_LUSTRE_1_DEDUP = dummy_unique_resource_id_generator(
     DUMMY_LUSTRE_1, DUMMY_DEDUP_ID
 )
+DUMMY_S3_BUCKET_1_DEDUP = dummy_unique_resource_id_generator(
+    DUMMY_S3_BUCKET_1, DUMMY_DEDUP_ID
+)
 
 DUMMY_EFS_FILESYSTEM_ID = "fs-efs-1-id"
 DUMMY_ONTAP_FILESYSTEM_ID = "fs-ontap-1-id"
 DUMMY_LUSTRE_FILESYSTEM_ID = "fs-lustre-1-id"
+DUMMY_S3_BUCKET_BUCKET_ARN = "arn:aws:s3:::example-bucket"
 
 DUMMY_PROJECT_NAME = "dummy_project"
 
@@ -123,6 +130,17 @@ dummy_snapshot_filesystem_details_in_dict = {
         "scope": ["project"],
         "title": "lustre-1",
     },
+    DUMMY_S3_BUCKET_1: {
+        "s3_bucket": {
+            "read_only": True,
+            "bucket_arn": DUMMY_S3_BUCKET_BUCKET_ARN,
+        },
+        "mount_dir": "/s3-bucket",
+        "provider": "s3_bucket",
+        "scope": ["project"],
+        "projects": [DUMMY_PROJECT_NAME],
+        "title": "s3-bucket-1",
+    },
 }
 
 
@@ -162,6 +180,11 @@ class FileSystemClusterSettingsTableMergerTest(unittest.TestCase):
         )
         self.monkeypatch.setattr(
             self.context.shared_filesystem, "onboard_lustre_filesystem", lambda x: None
+        )
+        self.monkeypatch.setattr(
+            self.context.shared_filesystem,
+            "onboard_s3_bucket",
+            lambda x: DUMMY_S3_BUCKET_1,
         )
         self.monkeypatch.setattr(
             self.context.shared_filesystem, "add_filesystem_to_project", lambda x: None
@@ -212,7 +235,7 @@ class FileSystemClusterSettingsTableMergerTest(unittest.TestCase):
         )
 
         assert success
-        assert len(record_deltas) == 3
+        assert len(record_deltas) == 4
 
         merged_filesystem_names = []
         for record in record_deltas:
@@ -227,6 +250,9 @@ class FileSystemClusterSettingsTableMergerTest(unittest.TestCase):
 
         assert DUMMY_LUSTRE_1 in merged_filesystem_names
         assert DUMMY_LUSTRE_1_DEDUP not in merged_filesystem_names
+
+        assert DUMMY_S3_BUCKET_1 in merged_filesystem_names
+        assert DUMMY_S3_BUCKET_1_DEDUP not in merged_filesystem_names
 
     def test_filesystem_cluster_settings_table_merger_non_project_scope_filesystem_skipped(
         self,
@@ -305,7 +331,7 @@ class FileSystemClusterSettingsTableMergerTest(unittest.TestCase):
         )
 
         assert success
-        assert len(record_deltas) == 3
+        assert len(record_deltas) == 4
 
         merged_filesystem_names = []
         for record in record_deltas:
@@ -320,6 +346,9 @@ class FileSystemClusterSettingsTableMergerTest(unittest.TestCase):
 
         assert DUMMY_LUSTRE_1 in merged_filesystem_names
         assert DUMMY_LUSTRE_1_DEDUP not in merged_filesystem_names
+
+        assert DUMMY_S3_BUCKET_1 in merged_filesystem_names
+        assert DUMMY_S3_BUCKET_1_DEDUP not in merged_filesystem_names
 
     def test_filesystem_cluster_settings_table_merger_adds_existing_project_to_file_system(
         self,
@@ -577,7 +606,7 @@ class FileSystemClusterSettingsTableMergerTest(unittest.TestCase):
         )
 
         assert success
-        assert len(record_deltas) == 2
+        assert len(record_deltas) == 3
 
     def test_filesystem_cluter_settings_table_merger_skips_not_accessible_filesystem(
         self,
@@ -619,21 +648,50 @@ class FileSystemClusterSettingsTableMergerTest(unittest.TestCase):
         )
 
         assert success
-        assert len(record_deltas) == 2
+        assert len(record_deltas) == 3
 
     def test_filesystem_cluster_settings_table_merger_rollback_succeed(self):
-        offboard_filesystem_called = False
+        update_filesystem_called = False
+        remove_filesystem_called = False
 
-        def dummy_offboard_filesystem(request: OffboardFileSystemRequest):
-            nonlocal offboard_filesystem_called
-            offboard_filesystem_called = True
+        def dummy_update_filesystem(request: UpdateFileSystemRequest):
+            nonlocal update_filesystem_called
+            update_filesystem_called = True
+
+            assert request.filesystem_name == DUMMY_EFS_1
+            assert request.projects == []
+
+        def dummy_remove_filesystem(request: RemoveFileSystemRequest):
+            nonlocal remove_filesystem_called
+            remove_filesystem_called = True
 
             assert request.filesystem_name == DUMMY_EFS_1
 
         self.monkeypatch.setattr(
             self.context.shared_filesystem,
-            "offboard_filesystem",
-            lambda filesystem_name: dummy_offboard_filesystem(filesystem_name),
+            "get_filesystem",
+            lambda *_: FileSystem(
+                name=DUMMY_EFS_1,
+                storage={
+                    "title": "My EFS",
+                    "provider": "efs",
+                    "projects": ["dummy-project-1"],
+                    "mount_dir": "/efs",
+                    "efs": {},
+                },
+            ),
+        )
+
+        self.monkeypatch.setattr(
+            self.context.shared_filesystem,
+            "update_filesystem",
+            lambda request: dummy_update_filesystem(request),
+        )
+
+        self.monkeypatch.setattr(
+            self.context.shared_filesystem,
+            "remove_filesystem",
+            lambda request: dummy_remove_filesystem(request),
         )
 
         delta_records = [
@@ -654,4 +712,5 @@ class FileSystemClusterSettingsTableMergerTest(unittest.TestCase):
             ),
         )
 
-        assert offboard_filesystem_called
+        assert update_filesystem_called
+        assert remove_filesystem_called

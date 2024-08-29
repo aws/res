@@ -112,7 +112,7 @@ ldap_auth_disable_tls_never_use_in_production = true
 " >> /etc/sssd/sssd.conf
 fi
 
-{%- if context.base_os in ('amazonlinux2', 'centos7', 'rhel7', 'rhel8', 'rhel9') %}
+{%- if context.base_os in ('amazonlinux2', 'rhel8', 'rhel9') %}
 authconfig --enablemkhomedir --enablesssdauth --enablesssd --updateall
 {%- elif context.base_os == 'ubuntu2204' %}
 pam-auth-update --enable sss

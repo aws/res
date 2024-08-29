@@ -27,20 +27,23 @@ from ideaclustermanager.app.snapshots.helpers.merged_record_utils import (
 from ideasdk.context import SocaContext
 from pyhocon import ConfigFactory
 
-from ideadatamodel import errorcodes, exceptions
+from ideadatamodel import errorcodes, exceptions, OnboardS3BucketRequest
 from ideadatamodel.constants import (
     MODULE_SHARED_STORAGE,
     STORAGE_PROVIDER_EFS,
     STORAGE_PROVIDER_FSX_NETAPP_ONTAP,
     STORAGE_PROVIDER_FSX_LUSTRE,
+    STORAGE_PROVIDER_S3_BUCKET
 )
 from ideadatamodel import (
     OnboardEFSFileSystemRequest,
     AddFileSystemToProjectRequest,
     OnboardONTAPFileSystemRequest,
     OnboardLUSTREFileSystemRequest,
-    OffboardFileSystemRequest,
-    ListProjectsRequest
+    UpdateFileSystemRequest,
+    RemoveFileSystemRequest,
+    ListProjectsRequest,
+    ListOnboardedFileSystemsRequest
 
 )
 from ideadatamodel.snapshots.snapshot_model import TableName
@@ -81,13 +84,17 @@ class FileSystemsClusterSettingTableMerger(MergeTable):
 
             # If filesystem does not belong to the same VPC or is already onboarded, skip applying filesystem
             try:
-                filesystem_id = details[filesystem_name][provider]["file_system_id"]
+                if provider == STORAGE_PROVIDER_S3_BUCKET:
+                    filesystem_id = details[filesystem_name][provider]["bucket_arn"]
+                else:
+                    filesystem_id = details[filesystem_name][provider]["file_system_id"]
                 if filesystem_id in onboarded_filesystem_ids:
                     raise exceptions.soca_exception(
                         error_code=errorcodes.FILESYSTEM_ALREADY_ONBOARDED,
                         message=f"{filesystem_id} has already been onboarded"
                     )
-                if filesystem_id not in accessible_filesystem_ids:
+                # Does not apply to S3 buckets
+                if filesystem_id not in accessible_filesystem_ids and provider != STORAGE_PROVIDER_S3_BUCKET:
                     raise exceptions.soca_exception(
                         error_code=errorcodes.FILESYSTEM_NOT_IN_VPC,
                         message=f"{filesystem_id} not part of the env's VPC thus not accessible"
@@ -103,7 +110,7 @@ class FileSystemsClusterSettingTableMerger(MergeTable):
                 logger.error(TABLE_NAME, filesystem_name, ApplyResourceStatus.FAILED_APPLY, str(e))
                 return record_deltas, False
 
-            # Check to see if the env already has a filesystem with the same name. If so aply the filesystem with the dedup_id attached.
+            # Check to see if the env already has a filesystem with the same name. If so apply the filesystem with the dedup_id attached.
             filesystem_with_name_already_present = False
             try:
                 context.shared_filesystem.get_filesystem(filesystem_name)
@@ -133,12 +140,17 @@ class FileSystemsClusterSettingTableMerger(MergeTable):
                     self._onboard_ontap(filesystem_name_to_use, details[filesystem_name], context)
                 elif provider == STORAGE_PROVIDER_FSX_LUSTRE:
                     self._onboard_lustre(filesystem_name_to_use, details[filesystem_name], context)
-
-                # Wait for some time for the filesystem changes to be picked up by the config listner and added to the local config tree
+                elif provider == STORAGE_PROVIDER_S3_BUCKET:
+                    # Onboard s3 bucket generates the filesystem name
+                    filesystem_name_to_use = self._onboard_s3_bucket(details[filesystem_name], context)
+                # Wait for some time for the filesystem changes to be picked up by the config listener and added to the local config tree
                 self._wait_for_onboarded_filesystem_to_sync_to_config_tree(filesystem_name, context)
-                accessible_filesystem_ids.remove(filesystem_id)
 
-                # All the onboarded filesystem to corrresponding projects. This is a soft dependency. If a project does not exist, it will be ignored. A rollback will not be triggered in this case.
+                # Does not apply to s3 bucket
+                if provider != STORAGE_PROVIDER_S3_BUCKET:
+                    accessible_filesystem_ids.remove(filesystem_id)
+
+                # All the onboarded filesystem to corresponding projects. This is a soft dependency. If a project does not exist, it will be ignored. A rollback will not be triggered in this case.
                 self._add_filesystem_to_projects(filesystem_name_to_use, details[filesystem_name], env_project_names, context, dedup_id, logger)
             except exceptions.SocaException as e:
                 # Gracefully handling cases when filesystem is already onboarded or not accessible
@@ -169,7 +181,7 @@ class FileSystemsClusterSettingTableMerger(MergeTable):
 
     @staticmethod
     def get_list_of_onboarded_filesystem_ids(context):
-        onboarded_filesystems = context.shared_filesystem._list_shared_filesystems()
+        onboarded_filesystems = context.shared_filesystem.list_onboarded_file_systems(ListOnboardedFileSystemsRequest()).listing
         return set([fs.get_filesystem_id() for fs in onboarded_filesystems])
 
     @staticmethod
@@ -239,6 +251,19 @@ class FileSystemsClusterSettingTableMerger(MergeTable):
         context.shared_filesystem.onboard_lustre_filesystem(onboard_lustre_request)
 
     @staticmethod
+    def _onboard_s3_bucket(details: Dict, context: SocaContext) -> str:
+
+        onboard_s3_bucket_request = OnboardS3BucketRequest(
+            object_storage_title=details["title"],
+            mount_directory=details["mount_dir"],
+            read_only=details[STORAGE_PROVIDER_S3_BUCKET]["read_only"],
+            custom_bucket_prefix=details[STORAGE_PROVIDER_S3_BUCKET].get("custom_bucket_prefix"),
+            bucket_arn=details[STORAGE_PROVIDER_S3_BUCKET]["bucket_arn"],
+            iam_role_arn=details[STORAGE_PROVIDER_S3_BUCKET].get("iam_role_arn")
+        )
+        return context.shared_filesystem.onboard_s3_bucket(onboard_s3_bucket_request)
+
+    @staticmethod
     def _wait_for_onboarded_filesystem_to_sync_to_config_tree(filesystem_name, context):
         """Wait for some time for the filesystem changes to be picked up by the config listner and added to the local config tree
 
@@ -258,7 +283,7 @@ class FileSystemsClusterSettingTableMerger(MergeTable):
                 pass
 
     @staticmethod
-    def _add_filesystem_to_projects(filesystem_name: str, details: Dict, env_project_names: List[str], context: SocaContext, dedup_id: str, logger: ApplySnapshotObservabilityHelper):
+    def _add_filesystem_to_projects(filesystem_name: str, details: Dict, env_project_names: set[str], context: SocaContext, dedup_id: str, logger: ApplySnapshotObservabilityHelper):
         fs_projects = details.get("projects")
         if not fs_projects:
             return
@@ -290,7 +315,8 @@ class FileSystemsClusterSettingTableMerger(MergeTable):
 
             if record_delta.action_performed == MergedRecordActionType.CREATE:
                 try:
-                    context.shared_filesystem.offboard_filesystem(OffboardFileSystemRequest(filesystem_name=filesystem_name))
+                    context.shared_filesystem.update_filesystem(UpdateFileSystemRequest(filesystem_name=filesystem_name, projects=[]))
+                    context.shared_filesystem.remove_filesystem(RemoveFileSystemRequest(filesystem_name=filesystem_name))
                 except Exception as e:
                     logger.error(TABLE_NAME, filesystem_name, ApplyResourceStatus.FAILED_ROLLBACK, str(e))
                     raise e

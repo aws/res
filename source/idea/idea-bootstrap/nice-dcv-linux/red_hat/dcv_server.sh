@@ -40,13 +40,9 @@ function install_prerequisites() {
         yum install -y ${DCV_AMAZONLINUX_PKGS[*]}
         unset IFS
         ;;
-      rhel7|rhel8|rhel9)
+      rhel8|rhel9)
         yum groups mark convert
         yum groupinstall "Server with GUI" -y --skip-broken --exclude=kernel*
-        ;;
-      centos7)
-        yum groups mark convert
-        yum groupinstall "GNOME Desktop" -y --skip-broken --exclude=kernel*
         ;;
       *)
         log_warning "Base OS not supported."
@@ -75,31 +71,19 @@ function install_nice_dcv_server () {
   local DCV_SERVER_URL=""
   local DCV_SERVER_TGZ=""
   local DCV_SERVER_VERSION=""
-  local DCV_SERVER_SHA256_HASH=""
+  local DCV_SERVER_SHA256_URL=""
   case $BASE_OS in
-    amzn2|centos7|rhel7)
+    amzn2)
       DCV_SERVER_URL=$($AWS dynamodb get-item \
                                     --region "$AWS_REGION" \
                                     --table-name "$RES_ENVIRONMENT_NAME.cluster-settings" \
-                                    --key '{"key": {"S": "global-settings.package_config.dcv.host.'$machine'.linux.al2_rhel_centos7.url"}}' \
+                                    --key '{"key": {"S": "global-settings.package_config.dcv.host.'$machine'.linux.al2.url"}}' \
                                     --output text \
                                     | awk '/VALUE/ {print $2}')
-      DCV_SERVER_TGZ=$($AWS dynamodb get-item \
+      DCV_SERVER_SHA256_URL=$($AWS dynamodb get-item \
                                     --region "$AWS_REGION" \
                                     --table-name "$RES_ENVIRONMENT_NAME.cluster-settings" \
-                                    --key '{"key": {"S": "global-settings.package_config.dcv.host.'$machine'.linux.al2_rhel_centos7.tgz"}}' \
-                                    --output text \
-                                    | awk '/VALUE/ {print $2}')
-      DCV_SERVER_VERSION=$($AWS dynamodb get-item \
-                                    --region "$AWS_REGION" \
-                                    --table-name "$RES_ENVIRONMENT_NAME.cluster-settings" \
-                                    --key '{"key": {"S": "global-settings.package_config.dcv.host.'$machine'.linux.al2_rhel_centos7.version"}}' \
-                                    --output text \
-                                    | awk '/VALUE/ {print $2}')
-      DCV_SERVER_SHA256_HASH=$($AWS dynamodb get-item \
-                                    --region "$AWS_REGION" \
-                                    --table-name "$RES_ENVIRONMENT_NAME.cluster-settings" \
-                                    --key '{"key": {"S": "global-settings.package_config.dcv.host.'$machine'.linux.al2_rhel_centos7.sha256sum"}}' \
+                                    --key '{"key": {"S": "global-settings.package_config.dcv.host.'$machine'.linux.al2.sha256sum"}}' \
                                     --output text \
                                     | awk '/VALUE/ {print $2}')
       ;;
@@ -110,19 +94,7 @@ function install_nice_dcv_server () {
                                     --key '{"key": {"S": "global-settings.package_config.dcv.host.'$machine'.linux.rhel_centos_rocky'${BASE_OS:4:1}'.url"}}' \
                                     --output text \
                                     | awk '/VALUE/ {print $2}')
-      DCV_SERVER_TGZ=$($AWS dynamodb get-item \
-                                    --region "$AWS_REGION" \
-                                    --table-name "$RES_ENVIRONMENT_NAME.cluster-settings" \
-                                    --key '{"key": {"S": "global-settings.package_config.dcv.host.'$machine'.linux.rhel_centos_rocky'${BASE_OS:4:1}'.tgz"}}' \
-                                    --output text \
-                                    | awk '/VALUE/ {print $2}')
-      DCV_SERVER_VERSION=$($AWS dynamodb get-item \
-                                    --region "$AWS_REGION" \
-                                    --table-name "$RES_ENVIRONMENT_NAME.cluster-settings" \
-                                    --key '{"key": {"S": "global-settings.package_config.dcv.host.'$machine'.linux.rhel_centos_rocky'${BASE_OS:4:1}'.version"}}' \
-                                    --output text \
-                                    | awk '/VALUE/ {print $2}')
-      DCV_SERVER_SHA256_HASH=$($AWS dynamodb get-item \
+      DCV_SERVER_SHA256_URL=$($AWS dynamodb get-item \
                                     --region "$AWS_REGION" \
                                     --table-name "$RES_ENVIRONMENT_NAME.cluster-settings" \
                                     --key '{"key": {"S": "global-settings.package_config.dcv.host.'$machine'.linux.rhel_centos_rocky'${BASE_OS:4:1}'.sha256sum"}}' \
@@ -138,11 +110,15 @@ function install_nice_dcv_server () {
   rpm --import ${DCV_GPG_KEY_DCV_SERVER}
 
   wget ${DCV_SERVER_URL}
-  if [[ $(sha256sum ${DCV_SERVER_TGZ} | awk '{print $1}') != ${DCV_SERVER_SHA256_HASH} ]];  then
+  fileName=$(basename ${DCV_SERVER_URL})
+  urlSha256Sum=$(wget -O - ${DCV_SERVER_SHA256_URL})
+  if [[ $(sha256sum ${fileName} | awk '{print $1}') != ${urlSha256Sum} ]];  then
     echo -e "FATAL ERROR: Checksum for DCV Server failed. File may be compromised." > /etc/motd
     exit 1
   fi
-  tar zxvf ${DCV_SERVER_TGZ}
+  extractDir=$(echo ${fileName} |  sed 's/\.tgz$//')
+  mkdir -p ${extractDir}
+  tar zxvf ${fileName} -C ${extractDir} --strip-components 1
 
   if [[ "$BASE_OS" == "rhel9" ]]; then
     if [[ -z "$(rpm -qa pcsc-lite-libs)" ]]; then
@@ -155,7 +131,7 @@ function install_nice_dcv_server () {
   fi
 
   local machine=$(uname -m) #x86_64 or aarch64
-  pushd nice-dcv-${DCV_SERVER_VERSION}
+  pushd ${extractDir}
 
   case $BASE_OS in
     amzn2)
@@ -163,7 +139,7 @@ function install_nice_dcv_server () {
       rpm -ivh nice-dcv-server-*.${machine}.rpm
       rpm -ivh nice-dcv-web-viewer-*.${machine}.rpm
       ;;
-    centos7|rhel7|rhel8|rhel9)
+    rhel8|rhel9)
       rpm -ivh nice-xdcv-*.${machine}.rpm --nodeps
       rpm -ivh nice-dcv-server-*.${machine}.rpm --nodeps
       rpm -ivh nice-dcv-web-viewer-*.${machine}.rpm --nodeps
@@ -185,8 +161,8 @@ function install_nice_dcv_server () {
   fi
 
   popd
-  rm -rf nice-dcv-${DCV_SERVER_VERSION}
-  rm -rf ${DCV_SERVER_TGZ}
+  rm -rf ${extractDir}
+  rm -rf ${fileName}
 
   if [[ "$BASE_OS" == "amzn2" ]]; then
     log_info "Base os is amzn2. No need for firewall disabling"

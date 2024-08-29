@@ -103,6 +103,7 @@ Statement:
       - '{{ context.arns.get_ddb_table_arn(context.module_id + ".distributed-lock") }}'
       - '{{ context.arns.get_ddb_table_arn("snapshots") }}'
       - '{{ context.arns.get_ddb_table_arn("apply-snapshot") }}'
+      - '{{ context.arns.get_ddb_table_arn("authz.roles") }}'
       - '{{ context.arns.get_ddb_table_arn("authz.role-assignments") }}'
       - '{{ context.arns.get_ddb_table_arn("authz.role-assignments/index/*") }}'
     Effect: Allow
@@ -231,6 +232,15 @@ Statement:
       - iam:GetRole
     Resource: '{{ context.arns.get_vdi_iam_role_arn("*") }}'
     Effect: Allow
+
+  # Used for accessing role used for mounting s3 buckets for filesystems, this is user provided therefore admins must tag the role first
+  - Action:
+      - iam:GetRole
+    Resource: '*'
+    Effect: Allow
+    Condition:
+      StringEquals:
+        aws:ResourceTag/res:Resource: '{{ context.vars.s3_bucket_iam_role_resource_tag_value }}'
 
   - Action:
       - iam:AttachRolePolicy

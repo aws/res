@@ -64,7 +64,6 @@ storage_home_provider: ${storage_home_provider}
 use_existing_home_fs: true
 existing_home_fs_id: ${home_fs_id}
 enabled_modules:
-- metrics
 - virtual-desktop-controller
 - bastion-host
 metrics_provider: cloudwatch

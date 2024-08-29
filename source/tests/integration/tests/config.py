@@ -42,33 +42,6 @@ TEST_SOFTWARE_STACKS = [
         gpu=VirtualDesktopGPU.NO_GPU,
     ),
     VirtualDesktopSoftwareStack(
-        name=f"res-integ-test-stack-{VirtualDesktopBaseOS.CENTOS7}-{VirtualDesktopArchitecture.X86_64}",
-        description="RES integ test software stack",
-        base_os=VirtualDesktopBaseOS.CENTOS7,
-        architecture=VirtualDesktopArchitecture.X86_64,
-        min_storage=MIN_LINUX_STORAGE,
-        min_ram=MIN_RAM,
-        gpu=VirtualDesktopGPU.NO_GPU,
-    ),
-    VirtualDesktopSoftwareStack(
-        name=f"res-integ-test-stack-{VirtualDesktopBaseOS.CENTOS7}-{VirtualDesktopArchitecture.ARM64}",
-        description="RES integ test software stack",
-        base_os=VirtualDesktopBaseOS.CENTOS7,
-        architecture=VirtualDesktopArchitecture.ARM64,
-        min_storage=MIN_LINUX_STORAGE,
-        min_ram=MIN_RAM,
-        gpu=VirtualDesktopGPU.NO_GPU,
-    ),
-    VirtualDesktopSoftwareStack(
-        name=f"res-integ-test-stack-{VirtualDesktopBaseOS.RHEL7}-{VirtualDesktopArchitecture.X86_64}",
-        description="RES integ test software stack",
-        base_os=VirtualDesktopBaseOS.RHEL7,
-        architecture=VirtualDesktopArchitecture.X86_64,
-        min_storage=MIN_LINUX_STORAGE,
-        min_ram=MIN_RAM,
-        gpu=VirtualDesktopGPU.NO_GPU,
-    ),
-    VirtualDesktopSoftwareStack(
         name=f"res-integ-test-stack-{VirtualDesktopBaseOS.RHEL8}-{VirtualDesktopArchitecture.X86_64}",
         description="RES integ test software stack",
         base_os=VirtualDesktopBaseOS.RHEL8,
@@ -127,7 +100,6 @@ TEST_SOFTWARE_STACKS = [
 TEST_SOFTWARE_STACKS_GOVCLOUD = [
     f"res-integ-test-stack-{VirtualDesktopBaseOS.AMAZON_LINUX2}-{VirtualDesktopArchitecture.X86_64}",
     f"res-integ-test-stack-{VirtualDesktopBaseOS.AMAZON_LINUX2}-{VirtualDesktopArchitecture.ARM64}",
-    f"res-integ-test-stack-{VirtualDesktopBaseOS.RHEL7}-{VirtualDesktopArchitecture.X86_64}",
     f"res-integ-test-stack-{VirtualDesktopBaseOS.RHEL8}-{VirtualDesktopArchitecture.X86_64}",
     f"res-integ-test-stack-{VirtualDesktopBaseOS.RHEL9}-{VirtualDesktopArchitecture.X86_64}",
 ]

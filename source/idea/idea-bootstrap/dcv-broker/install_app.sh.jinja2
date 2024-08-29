@@ -11,9 +11,8 @@ source "${SCRIPT_DIR}/../common/bootstrap_common.sh"
 
 # DCV Broker
 DCV_GPG_KEY="{{ context.config.get_string('global-settings.package_config.dcv.gpg_key', required=True) }}"
-DCV_SESSION_MANAGER_BROKER_NOARCH_VERSION="{{ context.config.get_string('global-settings.package_config.dcv.broker.linux.al2_rhel_centos7.version', required=True) }}"
-DCV_SESSION_MANAGER_BROKER_URL="{{ context.config.get_string('global-settings.package_config.dcv.broker.linux.al2_rhel_centos7.url', required=True) }}"
-DCV_SESSION_MANAGER_BROKER_SHA256_HASH="{{ context.config.get_string('global-settings.package_config.dcv.broker.linux.al2_rhel_centos7.sha256sum', required=True) }}"
+DCV_SESSION_MANAGER_BROKER_URL="{{ context.config.get_string('global-settings.package_config.dcv.broker.linux.al2.url', required=True) }}"
+DCV_SESSION_MANAGER_BROKER_SHA256_URL="{{ context.config.get_string('global-settings.package_config.dcv.broker.linux.al2.sha256sum', required=True) }}"
 
 timestamp=$(date +%s)
 clean_hostname=$(hostname -s)
@@ -55,11 +54,13 @@ function install_dcv_broker_package() {
     rpm --import ${DCV_GPG_KEY}
     pushd ${STAGING_AREA_RELATIVE_PATH}
     wget ${DCV_SESSION_MANAGER_BROKER_URL}
-    if [[ $(sha256sum nice-dcv-session-manager-broker-${DCV_SESSION_MANAGER_BROKER_NOARCH_VERSION}.rpm | awk '{print $1}') != ${DCV_SESSION_MANAGER_BROKER_SHA256_HASH} ]];  then
+    fileName=$(basename ${DCV_SESSION_MANAGER_BROKER_URL})
+    urlSha256Sum=$(wget -O - ${DCV_SESSION_MANAGER_BROKER_SHA256_URL})
+    if [[ $(sha256sum ${fileName} | awk '{print $1}') != ${urlSha256Sum} ]];  then
       echo -e "FATAL ERROR: Checksum for DCV Broker failed. File may be compromised." > /etc/motd
       exit 1
     fi
-    yum install -y nice-dcv-session-manager-broker-${DCV_SESSION_MANAGER_BROKER_NOARCH_VERSION}.rpm
+    yum install -y ${fileName}
     popd
   fi
   echo "dcv session manager broker package installation complete."

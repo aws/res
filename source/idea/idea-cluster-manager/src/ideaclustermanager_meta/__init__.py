@@ -10,4 +10,4 @@
 #  and limitations under the License.
 
 __name__ = 'idea-cluster-manager'
-__version__ = '2024.06'
+__version__ = '2024.08'

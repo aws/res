@@ -11,7 +11,7 @@
 
 import ideasdk.app
 from ideadatamodel import constants
-from ideasdk.client import NotificationsAsyncClient, ProjectsClient, SocaClientOptions, AccountsClient
+from ideasdk.client import NotificationsAsyncClient, ProjectsClient, SocaClientOptions, AccountsClient, RolesClient, RoleAssignmentsClient
 from ideasdk.utils import Utils, GroupNameHelper
 from ideasdk.auth import TokenService, TokenServiceOptions
 from ideasdk.server import SocaServerOptions
@@ -130,10 +130,30 @@ class VirtualDesktopControllerApp(ideasdk.app.SocaApp):
             ),
             token_service=self.context.token_service
         )
+        self.context.roles_client = RolesClient(
+            context=self.context,
+            options=SocaClientOptions(
+                endpoint=f'{internal_endpoint}/{cluster_manager_module_id}/api/v1',
+                enable_logging=False,
+                verify_ssl=False
+            ),
+            token_service=self.context.token_service
+        )
+        self.context.role_assignments_client = RoleAssignmentsClient(
+            context=self.context,
+            options=SocaClientOptions(
+                endpoint=f'{internal_endpoint}/{cluster_manager_module_id}/api/v1',
+                enable_logging=False,
+                verify_ssl=False
+            ),
+            token_service=self.context.token_service
+        )
         
         self.context.api_authorization_service = VdcApiAuthorizationService(
             accounts_client=self.context.accounts_client,
-            token_service= self.context.token_service
+            token_service= self.context.token_service,
+            roles_client=self.context.roles_client,
+            role_assignments_client=self.context.role_assignments_client
         )
 
         self.context.notification_async_client = NotificationsAsyncClient(context=self.context)

@@ -479,7 +479,7 @@ global-settings:
             url: https://d1uj6qtbmh3dt5.cloudfront.net/2022.1/Servers/nice-dcv-server-x64-Release-2022.1-13300.msi
             sha256sum: a0581180d56612eccfa4af6e4958d608cd0076a0d2e186b7e45cfe1c6ab49b61
           linux:
-            al2_rhel_centos7:
+            al2:
               version: 2022.1-13300-el7-x86_64
               tgz: nice-dcv-2022.1-13300-el7-x86_64.tgz
               url: https://d1uj6qtbmh3dt5.cloudfront.net/2022.1/Servers/nice-dcv-2022.1-13300-el7-x86_64.tgz
@@ -487,7 +487,7 @@ global-settings:
           ubuntu:
         aarch64:
           linux:
-            al2_rhel_centos7:
+            al2:
               version: 2022.1-13300-el7-aarch64
               tgz: nice-dcv-2022.1-13300-el7-aarch64.tgz
               url: https://d1uj6qtbmh3dt5.cloudfront.net/2022.1/Servers/nice-dcv-2022.1-13300-el7-aarch64.tgz
@@ -499,14 +499,14 @@ global-settings:
             url: https://d1uj6qtbmh3dt5.cloudfront.net/2022.1/Servers/nice-dcv-server-x64-Release-2022.1-13300.msi
             sha256sum: e043eda4ed5421692b60e31ac83e23ce2bc3d3098165b0d50344361c6bb0f808
           linux:
-            al2_rhel_centos7:
+            al2:
               version: 2022.1.592-1.el7.x86_64
               url: https://d1uj6qtbmh3dt5.cloudfront.net/2022.1/SessionManagerAgents/nice-dcv-session-manager-agent-2022.1.592-1.el7.x86_64.rpm
               sha256sum: 7825a389900fd89143f8c0deeff0bfb0336bbf59092249211503bbd7d2d12754
           ubuntu:
         aarch64:
           linux:
-            al2_rhel_centos7:
+            al2:
               version: 2022.1.592-1.el7.aarch64
               url: https://d1uj6qtbmh3dt5.cloudfront.net/2022.1/SessionManagerAgents/nice-dcv-session-manager-agent-2022.1.592-1.el7.aarch64.rpm
               sha256sum: 81bba492f340ce0f9930d7a7c698f07eca57e9274ea6167da5d6c6103527465b
@@ -514,21 +514,21 @@ global-settings:
       connection_gateway:
         x86_64:
           linux:
-            al2_rhel_centos7:
+            al2:
               version: 2022.1.377-1.el7.x86_64
               url: https://d1uj6qtbmh3dt5.cloudfront.net/2022.1/Gateway/nice-dcv-connection-gateway-2022.1.377-1.el7.x86_64.rpm
               sha256sum: 3cdd671482fd58670dc037118709fb7810e8dcfbe040799a8f991ffebd5dafa4
           ubuntu:
         aarch64:
           linux:
-            al2_rhel_centos7:
+            al2:
               version: 2022.1.377-1.el7.aarch64
               url: https://d1uj6qtbmh3dt5.cloudfront.net/2022.1/Gateway/nice-dcv-connection-gateway-2022.1.377-1.el7.aarch64.rpm
               sha256sum: dab04b1b20e91e664dd51d81190c6030e7104d8455de9f72bad946c591f57126
           ubuntu:
       broker:
         linux:
-          al2_rhel_centos7:
+          al2:
             version: 2022.1.355-1.el7.noarch
             url: https://d1uj6qtbmh3dt5.cloudfront.net/2022.1/SessionManagerBrokers/nice-dcv-session-manager-broker-2022.1.355-1.el7.noarch.rpm
             sha256sum: db3bad6cf7b295b3f2b63ab8ebb4dd3e41d3caaaceee1443213fc6472512d5a9
@@ -549,9 +549,6 @@ global-settings:
             label: Intel Chip
             url: https://d1uj6qtbmh3dt5.cloudfront.net/2022.1/Clients/nice-dcv-viewer-2022.1.4279.x86_64.dmg
         linux:
-          rhel_centos7:
-            label: RHEL 7 | Cent OS 7
-            url: https://d1uj6qtbmh3dt5.cloudfront.net/2022.1/Clients/nice-dcv-viewer-2022.1.4251-1.el7.x86_64.rpm
           rhel_centos_rocky8:
             label: RHEL 8 | Cent OS 8 | Rocky Linux 8
             url: https://d1uj6qtbmh3dt5.cloudfront.net/2022.1/Clients/nice-dcv-viewer-2022.1.4251-1.el8.x86_64.rpm

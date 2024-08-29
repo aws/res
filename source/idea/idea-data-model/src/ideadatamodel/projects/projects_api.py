@@ -50,6 +50,7 @@ class CreateProjectRequest(SocaPayload):
 
 class CreateProjectResult(SocaPayload):
     project: Optional[Project]
+    filesystem_names: Optional[list[str]]
 
 
 # Projects.CreateProject
@@ -65,10 +66,12 @@ class GetProjectResult(SocaPayload):
 # Projects.UpdateProject
 class UpdateProjectRequest(SocaPayload):
     project: Optional[Project]
+    filesystem_names: Optional[list[str]]
 
 
 class UpdateProjectResult(SocaPayload):
     project: Optional[Project]
+    filesystem_names: Optional[list[str]]
 
 
 # Projects.DeleteProject
@@ -113,6 +116,7 @@ class DisableProjectResult(SocaPayload):
 # Projects.GetUserProjects
 class GetUserProjectsRequest(SocaPayload):
     username: Optional[str]
+    exclude_disabled: Optional[bool]
 
 
 class GetUserProjectsResult(SocaPayload):

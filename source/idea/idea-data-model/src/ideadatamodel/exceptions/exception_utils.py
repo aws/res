@@ -75,7 +75,7 @@ def invalid_session(info: Optional[str] = None) -> SocaException:
 
 
 def invalid_params(info: Optional[str] = None) -> SocaException:
-    message = 'Invalid params'
+    message = 'Invalid parameters'
     if info is not None:
         message += f': {info}'
     return SocaException(

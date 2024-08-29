@@ -13,7 +13,6 @@
 
 import { SideNavigationProps } from "@cloudscape-design/components";
 import { AppContext } from "../common";
-import { Constants } from "../common/constants";
 
 export const IdeaSideNavHeader = (context: AppContext): SideNavigationProps.Header => {
     return {
@@ -89,7 +88,7 @@ export const IdeaSideNavItems = (context: AppContext): SideNavigationProps.Item[
                 },
                 {
                     type: "link",
-                    text: "Permission Profiles",
+                    text: "Desktop Shared Settings",
                     href: "#/virtual-desktop/permission-profiles",
                 },
                 {
@@ -131,6 +130,16 @@ export const IdeaSideNavItems = (context: AppContext): SideNavigationProps.Item[
                     type: "link",
                     text: "File Systems",
                     href: "#/cluster/filesystem",
+                },
+                {
+                    type: "link",
+                    text: "S3 Buckets",
+                    href: "#/cluster/s3-bucket",
+                },
+                {
+                    type: "link",
+                    text: "Permission Profiles",
+                    href: "#/cluster/permission-profiles",
                 },
                 {
                     type: "link",

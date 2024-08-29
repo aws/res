@@ -2,7 +2,7 @@
 #  SPDX-License-Identifier: Apache-2.0
 
 from ideadatamodel import (
-    SocaBaseModel
+    SocaBaseModel, constants
 )
 
 
@@ -26,11 +26,16 @@ class FileSystem(SocaBaseModel):
     def get_filesystem_id(self):
         provider = self.get_provider()
         filesystem = self.storage.get(provider)
+        # when provider is a s3_bucket, return bucket_arn as filesystem id
+        if provider == constants.STORAGE_PROVIDER_S3_BUCKET:
+            return filesystem.get("bucket_arn")
         return filesystem.get('file_system_id')
 
     def get_projects(self):
         return self.storage.get('projects')
 
+    def get_mount_dir(self):
+        return self.storage.get('mount_dir')
 
 class EFSFileSystem(SocaBaseModel):
     efs: Optional[Any]

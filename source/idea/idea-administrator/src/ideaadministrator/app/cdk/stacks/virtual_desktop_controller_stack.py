@@ -19,6 +19,7 @@ from ideaadministrator.app.cdk.constructs import (
     InstanceProfile,
     VirtualDesktopBastionAccessSecurityGroup,
     VirtualDesktopPublicLoadBalancerAccessSecurityGroup,
+    VirtualDesktopCustomCredentialBrokerSecurityGroup,
     SQSQueue,
     SNSTopic,
     Policy,
@@ -26,14 +27,17 @@ from ideaadministrator.app.cdk.constructs import (
     LambdaFunction,
     SecurityGroup,
     IdeaNagSuppression,
-    BackupPlan
+    BackupPlan,
+    APIGatewayRestApi, VpcInterfaceEndpoint, VpcEndpointSecurityGroup, CreateTagsCustomResource
 )
+from ideaadministrator import app_constants
 from ideaadministrator.app.cdk.stacks import IdeaBaseStack
 from ideadatamodel import (
     constants,
     SocaAnyPayload
 )
 from ideadatamodel.constants import IDEA_TAG_MODULE_ID
+from ideasdk.aws import AwsClientProvider, AWSClientProviderOptions
 from ideasdk.bootstrap import BootstrapUserDataBuilder
 from ideasdk.context import ArnBuilder
 from ideasdk.utils import Utils
@@ -53,7 +57,10 @@ from aws_cdk import (
     aws_s3 as s3,
     aws_backup as backup,
     aws_iam as iam,
-    aws_kms as kms
+    aws_kms as kms,
+    aws_apigateway as apigateway,
+    aws_logs as logs,
+    RemovalPolicy,
 )
 
 from aws_cdk.aws_events import Schedule
@@ -107,10 +114,24 @@ class VirtualDesktopControllerStack(IdeaBaseStack):
 
         self.CLUSTER_ENDPOINTS_LAMBDA_ARN = self.context.config().get_string('cluster.cluster_endpoints_lambda_arn', required=True)
 
+        self.aws = AwsClientProvider(options=AWSClientProviderOptions(profile=aws_profile, region=aws_region))
+
         self.cluster = ExistingSocaCluster(self.context, self.stack)
         self.arn_builder = ArnBuilder(self.context.config())
 
         self.oauth2_client_secret: Optional[OAuthClientIdAndSecret] = None
+
+        self.custom_credential_broker_lambda_function: Optional[LambdaFunction] = None
+
+        self.custom_credential_broker_api_gateway_rest_api: Optional[APIGatewayRestApi] = None
+        self.custom_credential_broker_api_gateway_rest_api_request_validator: Optional[apigateway.RequestValidator] = None
+        self.object_storage_temp_credentials: Optional[apigateway.Resource] = None
+        self.object_storage_temp_credentials_path_part: Optional[str] = None
+        self.custom_credential_broker_api_gateway_vpc_endpoint: Optional[VpcInterfaceEndpoint] = None
+        self.custom_credential_broker_api_gateway_vpc_endpoint_security_group: Optional[VpcEndpointSecurityGroup] = None
+        self.custom_credential_broker_lambda_role: Optional[Role] = None
+        self.s3_mount_base_bucket_read_only_role: Optional[Role] = None
+        self.s3_mount_base_bucket_read_write_role: Optional[Role] = None
 
         self.dcv_host_role: Optional[Role] = None
         self.controller_role: Optional[Role] = None
@@ -143,6 +164,8 @@ class VirtualDesktopControllerStack(IdeaBaseStack):
         self.resource_server = None
         self.build_oauth2_client()
         self.update_cluster_manager_client_scopes()
+
+        self.build_custom_credential_broker_infra()
 
         self.build_sqs_queues()
         self.build_scheduled_event_notification_infra()
@@ -192,9 +215,9 @@ class VirtualDesktopControllerStack(IdeaBaseStack):
         )
 
         self.sqs_kms_key = kms.Key(self.stack, "res-sqs-kms",
-            enable_key_rotation=True,
-            policy=sqs_kms_key_policy
-        )
+                                   enable_key_rotation=True,
+                                   policy=sqs_kms_key_policy
+                                   )
 
         self.sqs_kms_key.add_alias(f'{self.cluster_name}/sqs')
 
@@ -452,6 +475,254 @@ class VirtualDesktopControllerStack(IdeaBaseStack):
             resource_type='Custom::UpdateClusterManagerClient'
         )
 
+    def build_custom_credential_broker_infra(self):
+        lambda_name = f'{self.module_id}-custom-credential-broker-lambda'
+        api_gateway_name = f'{self.module_id}-custom-credential-broker-api-gateway'
+
+        self.custom_credential_broker_lambda_role = Role(
+            context=self.context,
+            name=app_constants.CUSTOM_CREDENTIAL_BROKER_ROLE_NAME,
+            scope=self.stack,
+            assumed_by=['lambda'],
+            description=f'{lambda_name}-role',
+        )
+
+        self.s3_mount_base_bucket_read_only_role = Role(
+            context=self.context,
+            name=app_constants.S3_MOUNT_BUCKET_READ_ONLY_ROLE_NAME,
+            scope=self.stack,
+            description='Base bucket role for read only access to S3 buckets onboarded to RES.',
+            assumed_by=['lambda'],
+            inline_policies=[
+                Policy(
+                    context=self.context,
+                    name='S3MountReadOnlyPolicy',
+                    scope=self.stack,
+                    policy_template_name='s3-mount-base-bucket-read-only.yml'
+                )
+            ],
+        )
+        self.s3_mount_base_bucket_read_write_role = Role(
+            context=self.context,
+            name=app_constants.S3_MOUNT_BUCKET_READ_WRITE_ROLE_NAME,
+            scope=self.stack,
+            description='Base bucket role for read and write access to S3 buckets onboarded to RES.',
+            assumed_by=['lambda'],
+            inline_policies=[
+                Policy(
+                    context=self.context,
+                    name='S3MountReadWritePolicy',
+                    scope=self.stack,
+                    policy_template_name='s3-mount-base-bucket-read-write.yml'
+                )
+            ],
+        )
+        self.s3_mount_base_bucket_read_only_role.assume_role_policy.add_statements(
+            iam.PolicyStatement(
+                effect=iam.Effect.ALLOW,
+                actions=['sts:AssumeRole'],
+                principals=[
+                    iam.ArnPrincipal(self.custom_credential_broker_lambda_role.role_arn)
+                ]
+            )
+        )
+        self.s3_mount_base_bucket_read_write_role.assume_role_policy.add_statements(
+            iam.PolicyStatement(
+                effect=iam.Effect.ALLOW,
+                actions=['sts:AssumeRole'],
+                principals=[
+                    iam.ArnPrincipal(self.custom_credential_broker_lambda_role.role_arn)
+                ]
+            )
+        )
+        variable = SocaAnyPayload()
+        variable.s3_bucket_iam_role_resource_tag_value = constants.S3_BUCKET_IAM_ROLE_RESOURCE_TAG_VALUE
+        custom_credential_broker_lambda_role_policy = ManagedPolicy(
+            context=self.context,
+            name=f'{lambda_name}-policy',
+            scope=self.stack,
+            managed_policy_name=f'{self.cluster_name}-{self.aws_region}-{lambda_name}-policy',
+            description='Required policy for RES Custom Credential Broker Lambda.',
+            policy_template_name='custom-credential-broker.yml',
+            vars=variable
+        )
+        self.custom_credential_broker_lambda_role.add_managed_policy(custom_credential_broker_lambda_role_policy)
+
+        # Determine if we have a specific list of subnets configured for VDI
+        configured_vdi_subnets = self.context.config().get_list(
+            'vdc.dcv_session.network.private_subnets',
+            default=[]
+        )
+        # Required=True as these should always be available, and we want to error otherwise
+        cluster_private_subnets = self.context.config().get_list(
+            'cluster.network.private_subnets',
+            required=True
+        )
+
+        if configured_vdi_subnets:
+            vdi_cidr_blocks = [
+                subnet['CidrBlock'] for subnet in self.aws.ec2().describe_subnets(SubnetIds=configured_vdi_subnets)['Subnets']
+            ]
+        else:
+            vdi_cidr_blocks = [
+                subnet['CidrBlock'] for subnet in self.aws.ec2().describe_subnets(SubnetIds=cluster_private_subnets)['Subnets']
+            ]
+
+        custom_credential_broker_security_group = VirtualDesktopCustomCredentialBrokerSecurityGroup(
+            context=self.context,
+            name=f'{lambda_name}-security-group',
+            scope=self.stack,
+            vpc=self.cluster.vpc,
+            component_name="Custom Credential Broker",
+            vdi_cidr_blocks=vdi_cidr_blocks,
+        )
+
+        self.custom_credential_broker_lambda_function = LambdaFunction(
+            context=self.context,
+            name=lambda_name,
+            description=f'{self.module_id} lambda to provide temporary credentials for mounting object storage to virtual desktop infrastructure (VDI) instances.',
+            scope=self.stack,
+            vpc=self.cluster.vpc,
+            vpc_subnets=ec2.SubnetSelection(subnets=self.cluster.private_subnets),
+            security_groups=[custom_credential_broker_security_group],
+            environment={
+                "CLUSTER_NAME": f'{self.cluster_name}',
+                "CLUSTER_SETTINGS_TABLE_NAME": f'{self.cluster_name}.cluster-settings',
+                "DCV_HOST_DB_HASH_KEY": app_constants.DCV_HOST_DB_HASH_KEY,
+                "DCV_HOST_DB_IDEA_SESSION_ID_KEY": app_constants.DCV_HOST_DB_IDEA_SESSION_ID_KEY,
+                "DCV_HOST_DB_IDEA_SESSION_OWNER_KEY": app_constants.DCV_HOST_DB_IDEA_SESSION_OWNER_KEY,
+                "MODULE_ID": f'{self.module_id}',
+                "OBJECT_STORAGE_CUSTOM_PROJECT_NAME_AND_USERNAME_PREFIX": constants.OBJECT_STORAGE_CUSTOM_PROJECT_NAME_AND_USERNAME_PREFIX,
+                "OBJECT_STORAGE_CUSTOM_PROJECT_NAME_PREFIX": constants.OBJECT_STORAGE_CUSTOM_PROJECT_NAME_PREFIX,
+                "OBJECT_STORAGE_NO_CUSTOM_PREFIX": constants.OBJECT_STORAGE_NO_CUSTOM_PREFIX,
+                "READ_AND_WRITE_ROLE_NAME_ARN": self.arn_builder.get_iam_arn("s3-mount-bucket-read-write"),
+                "READ_ONLY_ROLE_NAME_ARN": self.arn_builder.get_iam_arn("s3-mount-bucket-read-only"),
+                "SHARED_STORAGE_PREFIX": f'{constants.MODULE_SHARED_STORAGE}',
+                "STORAGE_PROVIDER_S3_BUCKET": constants.STORAGE_PROVIDER_S3_BUCKET,
+                "USER_SESSION_OWNER_KEY": app_constants.USER_SESSION_DB_HASH_KEY,
+                "USER_SESSION_SESSION_ID_KEY": app_constants.USER_SESSION_DB_RANGE_KEY
+            },
+            role=self.custom_credential_broker_lambda_role,
+            timeout_seconds=60,
+            idea_code_asset=IdeaCodeAsset(
+                lambda_package_name='res_custom_credential_broker',
+                lambda_platform=SupportedLambdaPlatforms.PYTHON
+            ),
+        )
+        self.custom_credential_broker_lambda_function.node.add_dependency(custom_credential_broker_lambda_role_policy)
+        self.add_common_tags(self.custom_credential_broker_lambda_function)
+
+        custom_credential_broker_api_gateway_rest_api_resource_policy = iam.PolicyDocument(
+            statements=[
+                iam.PolicyStatement(
+                    actions=["execute-api:Invoke"],
+                    principals=[iam.ServicePrincipal("ec2.amazonaws.com")],
+                    resources=[self.arn_builder.custom_credential_broker_api_gateway_execute_api_arn('*')],
+                    conditions={
+                        "IpAddress": {
+                            "aws:SourceIp": vdi_cidr_blocks
+                        }
+                    }
+                ),
+            ]
+        )
+
+        custom_credential_broker_api_gateway_rest_api_access_logs = logs.LogGroup(
+            scope=self.stack,
+            id=f'{self.module_id}-custom-credential-broker-api-gateway-access-logs',
+            retention=logs.RetentionDays.TEN_YEARS,
+            removal_policy=RemovalPolicy.DESTROY,
+        )
+
+        self.custom_credential_broker_api_gateway_vpc_endpoint_security_group = VpcEndpointSecurityGroup(
+            context=self.context,
+            scope=self.stack,
+            vpc=self.cluster.vpc,
+            name='Custom Credential Broker API Gateway VPC Endpoint Security Group',
+        )
+
+        create_tags = CreateTagsCustomResource(
+            context=self.context,
+            scope=self.stack,
+        )
+
+        self.custom_credential_broker_api_gateway_vpc_endpoint = VpcInterfaceEndpoint(
+            context=self.context,
+            scope=self.stack,
+            vpc=self.cluster.vpc,
+            service="execute-api",
+            vpc_endpoint_security_group=self.custom_credential_broker_api_gateway_vpc_endpoint_security_group,
+            create_tags=create_tags,
+            lookup_supported_azs=False
+        )
+
+        self.custom_credential_broker_api_gateway_rest_api = APIGatewayRestApi(
+            context=self.context,
+            scope=self.stack,
+            name=api_gateway_name,
+            description=f'{self.module_id} api gateway to provide temporary credentials for mounting object storage to virtual desktop infrastructure (VDI) instances.',
+            policy=custom_credential_broker_api_gateway_rest_api_resource_policy,
+            deploy_options=apigateway.StageOptions(stage_name=constants.API_GATEWAY_CUSTOM_CREDENTIAL_BROKER_STAGE,
+                                                   access_log_destination=apigateway.LogGroupLogDestination(custom_credential_broker_api_gateway_rest_api_access_logs),
+                                                   access_log_format=apigateway.AccessLogFormat.json_with_standard_fields(
+                                                       caller=True,
+                                                       http_method=True,
+                                                       ip=True,
+                                                       protocol=True,
+                                                       request_time=True,
+                                                       resource_path=True,
+                                                       response_length=True,
+                                                       user=True,
+                                                       status=True,
+                                                   )),
+            endpoint_configuration=apigateway.EndpointConfiguration(
+                types=[apigateway.EndpointType.PRIVATE],
+                vpc_endpoints=[self.custom_credential_broker_api_gateway_vpc_endpoint.get_endpoint()],
+            ),
+            default_method_options=apigateway.MethodOptions(authorization_type=apigateway.AuthorizationType.IAM),
+            rest_api_name=api_gateway_name,
+        )
+        self.object_storage_temp_credentials_path_part = constants.API_GATEWAY_CUSTOM_CREDENTIAL_BROKER_RESOURCE
+        self.object_storage_temp_credentials = self.custom_credential_broker_api_gateway_rest_api.root.add_resource(
+            path_part=self.object_storage_temp_credentials_path_part
+        )
+
+        self.object_storage_temp_credentials.add_method(
+            http_method="GET",
+            integration=apigateway.LambdaIntegration(
+                handler=self.custom_credential_broker_lambda_function
+            ),
+            authorization_type=apigateway.AuthorizationType.IAM
+        )
+
+        self.custom_credential_broker_api_gateway_rest_api.node.add_dependency(self.custom_credential_broker_lambda_function)
+
+        self.custom_credential_broker_api_gateway_rest_api_request_validator = apigateway.RequestValidator(
+            rest_api=self.custom_credential_broker_api_gateway_rest_api,
+            scope=self.stack,
+            id="custom-credential-broker-api-gateway-validator",
+            validate_request_body=True,
+            validate_request_parameters=True,
+        )
+
+        self.add_nag_suppression(
+            construct=self.custom_credential_broker_api_gateway_rest_api,
+            suppressions=[IdeaNagSuppression(rule_id='AwsSolutions-APIG6', reason='This is a private API Gateway endpoint')],
+            apply_to_children=True
+        )
+
+        self.add_nag_suppression(
+            construct=self.custom_credential_broker_api_gateway_rest_api,
+            suppressions=[IdeaNagSuppression(rule_id='AwsSolutions-COG4', reason='This endpoint uses AWS IAM as the authorizer')],
+            apply_to_children=True
+        )
+
+        self.add_nag_suppression(
+            construct=self.custom_credential_broker_api_gateway_rest_api,
+            suppressions=[IdeaNagSuppression(rule_id='AwsSolutions-IAM4', reason='Suppressing AwsSolutions-IAM4 for CloudWatch logs role')],
+            apply_to_children=True
+        )
+
     def build_dcv_host_infra(self):
         self.dcv_host_role = self._build_iam_role(
             role_description=f'IAM role assigned to virtual-desktop-{self.COMPONENT_DCV_HOST}',
@@ -609,10 +880,10 @@ class VirtualDesktopControllerStack(IdeaBaseStack):
         proxy_config = {}
         if Utils.is_not_empty(https_proxy):
             proxy_config = {
-                    'http_proxy': https_proxy,
-                    'https_proxy': https_proxy,
-                    'no_proxy': no_proxy
-                    }
+                'http_proxy': https_proxy,
+                'https_proxy': https_proxy,
+                'no_proxy': no_proxy
+            }
 
         if Utils.is_empty(dcv_broker_package_uri):
             dcv_broker_package_uri = 'not-provided'
@@ -661,7 +932,6 @@ class VirtualDesktopControllerStack(IdeaBaseStack):
         ]
 
     def _build_iam_role(self, role_description: str, component_name: str, component_jinja: str) -> Role:
-
         ec2_managed_policies = self.get_ec2_instance_managed_policies()
 
         role = Role(
@@ -713,10 +983,10 @@ class VirtualDesktopControllerStack(IdeaBaseStack):
         proxy_config = {}
         if Utils.is_not_empty(https_proxy):
             proxy_config = {
-                    'http_proxy': https_proxy,
-                    'https_proxy': https_proxy,
-                    'no_proxy': no_proxy
-                    }
+                'http_proxy': https_proxy,
+                'https_proxy': https_proxy,
+                'no_proxy': no_proxy
+            }
 
         self.controller_auto_scaling_group = self._build_auto_scaling_group(
             component_name=self.COMPONENT_CONTROLLER,
@@ -850,10 +1120,10 @@ class VirtualDesktopControllerStack(IdeaBaseStack):
 
         kms_key_id = self.context.config().get_string('cluster.ebs.kms_key_id', required=False, default=None)
         if kms_key_id is not None:
-             kms_key_arn = self.get_kms_key_arn(kms_key_id)
-             ebs_kms_key = kms.Key.from_key_arn(scope=self.stack, id=f'{component_name}-ebs-kms-key', key_arn=kms_key_arn)
+            kms_key_arn = self.get_kms_key_arn(kms_key_id)
+            ebs_kms_key = kms.Key.from_key_arn(scope=self.stack, id=f'{component_name}-ebs-kms-key', key_arn=kms_key_arn)
         else:
-             ebs_kms_key = kms.Alias.from_alias_name(scope=self.stack, id=f'{component_name}-ebs-kms-key-default', alias_name='alias/aws/ebs')
+            ebs_kms_key = kms.Alias.from_alias_name(scope=self.stack, id=f'{component_name}-ebs-kms-key-default', alias_name='alias/aws/ebs')
 
         launch_template = ec2.LaunchTemplate(
             self.stack, f'{component_name}-lt',
@@ -950,10 +1220,10 @@ class VirtualDesktopControllerStack(IdeaBaseStack):
         proxy_config = {}
         if Utils.is_not_empty(https_proxy):
             proxy_config = {
-                    'http_proxy': https_proxy,
-                    'https_proxy': https_proxy,
-                    'no_proxy': no_proxy
-                    }
+                'http_proxy': https_proxy,
+                'https_proxy': https_proxy,
+                'no_proxy': no_proxy
+            }
 
         connection_gateway_userdata = BootstrapUserDataBuilder(
             aws_region=self.aws_region,
@@ -1142,6 +1412,13 @@ class VirtualDesktopControllerStack(IdeaBaseStack):
             'scheduled_event_transformer_lambda_role_arn': self.scheduled_event_transformer_lambda_role.role_arn,
             'scheduled_event_transformer_lambda_role_name': self.scheduled_event_transformer_lambda_role.role_name,
             'scheduled_event_transformer_lambda_role_id': self.scheduled_event_transformer_lambda_role.role_id,
+            'custom_credential_broker_lambda_function_arn': self.custom_credential_broker_lambda_function.function_arn,
+            'custom_credential_broker_api_gateway_url': self.custom_credential_broker_api_gateway_rest_api.url + self.object_storage_temp_credentials_path_part,
+            'custom_credential_broker_api_gateway_id': self.custom_credential_broker_api_gateway_rest_api.rest_api_id,
+            'custom_credential_broker_lambda_role_arn': self.custom_credential_broker_lambda_role.role_arn,
+            's3_mount_base_bucket_read_only_role_arn': self.s3_mount_base_bucket_read_only_role.role_arn,
+            's3_mount_base_bucket_read_write_role_arn': self.s3_mount_base_bucket_read_write_role.role_arn,
+            'dcv_host_instance_profile_name': self.dcv_host_instance_profile.ref,
             'dcv_host_instance_profile_arn': self.build_instance_profile_arn(self.dcv_host_instance_profile.ref),
             'ssm_commands_sns_topic_arn': self.ssm_commands_sns_topic.topic_arn,
             'ssm_commands_sns_topic_name': self.ssm_commands_sns_topic.topic_name,

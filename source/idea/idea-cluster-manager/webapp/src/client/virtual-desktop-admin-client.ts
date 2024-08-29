@@ -36,6 +36,8 @@ import {
     CreateSoftwareStackResponse,
     UpdateSoftwareStackRequest,
     UpdateSoftwareStackResponse,
+    DeleteSoftwareStackRequest,
+    DeleteSoftwareStackResponse,
     GetModuleInfoRequest,
     GetModuleInfoResult,
     RebootSessionRequest,
@@ -114,6 +116,10 @@ class VirtualDesktopAdminClient extends IdeaBaseClient<VirtualDesktopAdminClient
 
     updateSoftwareStack(req: UpdateSoftwareStackRequest): Promise<UpdateSoftwareStackResponse> {
         return this.apiInvoker.invoke_alt<UpdateSoftwareStackRequest, UpdateSoftwareStackResponse>("VirtualDesktopAdmin.UpdateSoftwareStack", req);
+    }
+
+    deleteSoftwareStack(req: DeleteSoftwareStackRequest): Promise<DeleteSoftwareStackResponse> {
+        return this.apiInvoker.invoke_alt<DeleteSoftwareStackRequest, DeleteSoftwareStackResponse>("VirtualDesktopAdmin.DeleteSoftwareStack", req);
     }
 
     getSoftwareStackInfo(req: GetSoftwareStackInfoRequest): Promise<GetSoftwareStackInfoResponse> {

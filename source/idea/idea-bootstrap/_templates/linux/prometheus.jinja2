@@ -1,5 +1,5 @@
 # Begin: Install Prometheus
-{%- if context.base_os in ('amazonlinux2', 'centos7', 'rhel7', 'rhel8', 'rhel9') %}
+{%- if context.base_os in ('amazonlinux2', 'rhel8', 'rhel9') %}
 function install_prometheus () {
   local AWS=$(command -v aws)
   local MACHINE=$(uname -m)

@@ -172,6 +172,7 @@ class InstallStack(Stack):
             encryption=kinesis.StreamEncryption.MANAGED,
             stream_mode=kinesis.StreamMode.ON_DEMAND,
             stream_name=f"{self.parameters.get_str(CommonKey.CLUSTER_NAME)}.cluster-settings-kinesis-stream",
+            removal_policy=aws_cdk.RemovalPolicy.DESTROY,
         )
 
         Tags.of(kinesis_stream).add(

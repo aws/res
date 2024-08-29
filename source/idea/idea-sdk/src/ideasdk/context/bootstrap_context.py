@@ -8,6 +8,7 @@
 #  or in the 'license' file accompanying this file. This file is distributed on an 'AS IS' BASIS, WITHOUT WARRANTIES
 #  OR CONDITIONS OF ANY KIND, express or implied. See the License for the specific language governing permissions
 #  and limitations under the License.
+import re
 
 import ideasdk
 from ideasdk.utils import Utils
@@ -94,10 +95,8 @@ class BootstrapContext:
 
     @property
     def default_system_user(self) -> str:
-        if self.base_os in ('amazonlinux2', 'rhel7', 'rhel8', 'rhel9'):
+        if self.base_os in ('amazonlinux2', 'rhel8', 'rhel9'):
             return 'ec2-user'
-        if self.base_os == 'centos7':
-            return 'centos'
         raise exceptions.general_exception(f'unknown system user name for base_os: {self.base_os}')
 
     def has_storage_provider(self, provider: str) -> bool:
@@ -244,3 +243,32 @@ class BootstrapContext:
         if Utils.is_empty(prometheus_exporters):
             return False
         return name in prometheus_exporters
+
+    def get_bucket_name(self, bucket_arn: str) -> str:
+        bucket_arn_regex = re.compile(constants.S3_BUCKET_ARN_REGEX)
+        match = bucket_arn_regex.match(bucket_arn)
+        if match:
+            return match.group(1)
+        return ""
+
+    def get_prefix_for_object_storage(self, bucket_arn: str, read_only: bool, custom_prefix: str = None) -> str:
+        match = re.match(constants.S3_BUCKET_ARN_PREFIX_REGEX, bucket_arn)
+        if not match:
+            return ""
+
+        prefix = match.group(1).rstrip("/")
+
+        if read_only:
+            return f"{prefix}/"
+
+        if not custom_prefix:
+            raise exceptions.invalid_params('custom_bucket_prefix is required for read/write object storage')
+
+        if custom_prefix == constants.OBJECT_STORAGE_CUSTOM_PROJECT_NAME_AND_USERNAME_PREFIX:
+            return f"{prefix}/{self.vars.project}/{self.vars.session_owner}/"
+        elif custom_prefix == constants.OBJECT_STORAGE_CUSTOM_PROJECT_NAME_PREFIX:
+            return f"{prefix}/{self.vars.project}/"
+        elif custom_prefix == constants.OBJECT_STORAGE_NO_CUSTOM_PREFIX:
+            return f"{prefix}/"
+
+        raise exceptions.invalid_params('invalid custom_prefix')

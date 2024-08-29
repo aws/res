@@ -22,6 +22,7 @@ class DeletePermissions:
         statements.extend(self.get_dynamodb_access())
         statements.extend(self.get_ecr_access())
         statements.extend(self.get_ec2_access())
+        statements.extend(self.get_lambda_access())
         statements.extend(self.get_elb_access())
         statements.extend(self.get_iam_access())
         statements.extend(self.get_cloudwatch_alarms_access())
@@ -154,6 +155,34 @@ class DeletePermissions:
             ),
         ]
 
+    def get_lambda_access(self) -> List[iam.PolicyStatement]:
+        return [
+            iam.PolicyStatement(
+                effect=iam.Effect.ALLOW,
+                resources=[
+                    f"arn:{aws_cdk.Aws.PARTITION}:lambda:{aws_cdk.Aws.REGION}:{aws_cdk.Aws.ACCOUNT_ID}:function:*",
+                ],
+                actions=[
+                    "lambda:UpdateFunctionConfiguration",
+                ],
+                conditions={
+                    "StringEquals": {
+                        "aws:ResourceTag/res:EnvironmentName": self.environment_name
+                    },
+                },
+            ),
+            iam.PolicyStatement(
+                effect=iam.Effect.ALLOW,
+                resources=[
+                    "*",
+                ],
+                actions=[
+                    "lambda:ListFunctions",
+                    "lambda:ListTags",
+                ],
+            ),
+        ]
+
     def get_elb_access(self) -> List[iam.PolicyStatement]:
         return [
             iam.PolicyStatement(
@@ -211,7 +240,8 @@ class DeletePermissions:
             iam.PolicyStatement(
                 effect=iam.Effect.ALLOW,
                 resources=[
-                    f"arn:{aws_cdk.Aws.PARTITION}:s3:::{self.environment_name}-cluster-{aws_cdk.Aws.REGION}-{aws_cdk.Aws.ACCOUNT_ID}"
+                    f"arn:{aws_cdk.Aws.PARTITION}:s3:::{self.environment_name}-cluster-{aws_cdk.Aws.REGION}-{aws_cdk.Aws.ACCOUNT_ID}",
+                    f"arn:{aws_cdk.Aws.PARTITION}:s3:::log-{self.environment_name}-cluster-{aws_cdk.Aws.REGION}-{aws_cdk.Aws.ACCOUNT_ID}",
                 ],
                 actions=[
                     "s3:DeleteBucket",
@@ -223,7 +253,8 @@ class DeletePermissions:
             iam.PolicyStatement(
                 effect=iam.Effect.ALLOW,
                 resources=[
-                    f"arn:{aws_cdk.Aws.PARTITION}:s3:::{self.environment_name}-cluster-{aws_cdk.Aws.REGION}-{aws_cdk.Aws.ACCOUNT_ID}/*"
+                    f"arn:{aws_cdk.Aws.PARTITION}:s3:::{self.environment_name}-cluster-{aws_cdk.Aws.REGION}-{aws_cdk.Aws.ACCOUNT_ID}/*",
+                    f"arn:{aws_cdk.Aws.PARTITION}:s3:::log-{self.environment_name}-cluster-{aws_cdk.Aws.REGION}-{aws_cdk.Aws.ACCOUNT_ID}/*",
                 ],
                 actions=[
                     "s3:DeleteObjectVersion",

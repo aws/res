@@ -8,6 +8,7 @@
 #  or in the 'license' file accompanying this file. This file is distributed on an 'AS IS' BASIS, WITHOUT WARRANTIES
 #  OR CONDITIONS OF ANY KIND, express or implied. See the License for the specific language governing permissions
 #  and limitations under the License.
+import urllib.parse
 
 from ideasdk.protocols import SocaContextProtocol, ApiInvocationContextProtocol, SocaContextProtocolType
 from ideasdk.auth import TokenService, ApiAuthorizationServiceBase
@@ -153,7 +154,7 @@ class ApiInvocationContext(ApiInvocationContextProtocol):
         authorization = self.get_authorization()
         return True
 
-    def is_authorized_user(self, authorization: ApiAuthorization = None) -> bool:
+    def is_authorized_user(self, authorization: ApiAuthorization = None, role_assignment_resource_key: Optional[str] = None, permission: Optional[str] = None) -> bool:
         """
         check if a user is authorized
         admins are implicitly authorized
@@ -161,11 +162,14 @@ class ApiInvocationContext(ApiInvocationContextProtocol):
 
         if not authorization:
             authorization = self.get_authorization()
-        
+
         # administrator with sudo access
         if self.is_administrator(authorization=authorization):
             return True
-        return authorization.type == ApiAuthorizationType.USER
+
+        # We delegate authorization check to API authorization service.
+        # This will also check for role assignments, if needed based on the current API namespace
+        return self._api_authorization_service.is_user_authorized(authorization=authorization, namespace=self.namespace, role_assignment_resource_key=role_assignment_resource_key, permission=permission)
 
     def is_authorized_app(self, authorization: ApiAuthorization = None) -> bool:
         if not authorization:
@@ -185,15 +189,16 @@ class ApiInvocationContext(ApiInvocationContextProtocol):
 
         return False
 
-    def is_authorized(self, elevated_access: bool, scopes: Optional[List[str]] = None):
+    def is_authorized(self, elevated_access: bool, scopes: Optional[List[str]] = None, role_assignment_resource_key: Optional[str] = None, permission: Optional[str] = None):
         """
         method to check if the invocation is authorized
         this method combines check for both user + app authorizations to simplify and abstract
         authorization check implementation across all APIs
 
         although scopes can be passed to this method, user and app authorization are mutually exclusive:
-        * `elevated_access` is applicable for user authorization
+        * `elevated_access` is applicable for user authorization when user has to be admin
         * `scopes` is applicable for app authorization
+        * `role_assignment_resource_key` is applicable for user authorization when user need not be admin
 
         :param bool elevated_access: indicate if APIs need elevated access such as admin or manager.
         :param List[str] scopes: the applicable scopes to be checked
@@ -203,7 +208,7 @@ class ApiInvocationContext(ApiInvocationContextProtocol):
         if elevated_access:
             authorized_user = self.is_administrator(authorization=authorization)
         else:
-            authorized_user = self.is_authorized_user(authorization=authorization)
+            authorized_user = self.is_authorized_user(authorization=authorization, role_assignment_resource_key=role_assignment_resource_key, permission=permission)
 
         authorized_scopes = False
         if Utils.is_not_empty(scopes):
@@ -293,7 +298,14 @@ class ApiInvocationContext(ApiInvocationContextProtocol):
 
     @property
     def header(self) -> Dict:
-        return Utils.get_value_as_dict('header', self.request)
+        header = Utils.get_value_as_dict('header', self.request)
+        escaped_header = {}
+        for key, value in header.items():
+            # Replace special characters in string using the %xx escape. Encoding is using utf-8 and ignores safe URL characters /:?=& that are reserved as part of RFC 3986
+            escaped_key = urllib.parse.quote_plus(key, safe='/:?=&') if isinstance(key, str) else key
+            escaped_value = urllib.parse.quote_plus(value, safe='/:?=&') if isinstance(value, str) else value
+            escaped_header[escaped_key] = escaped_value
+        return escaped_header
 
     @property
     def namespace(self) -> str:
@@ -302,7 +314,7 @@ class ApiInvocationContext(ApiInvocationContextProtocol):
     @property
     def request_id(self) -> str:
         return Utils.get_value_as_string('request_id', self.header)
-
+    
     @property
     def request_payload(self) -> Dict:
         return Utils.get_value_as_dict('payload', self.request, default={})
@@ -411,11 +423,13 @@ class ApiInvocationContext(ApiInvocationContextProtocol):
     def get_log_tag(self) -> str:
 
         client_id = None
+        invocation_source = None
 
         try:
             authorization = self.get_authorization()
             client_id = authorization.client_id
             authorization_type = authorization.type
+            invocation_source = authorization.invocation_source
             if authorization_type == ApiAuthorizationType.APP:
                 actor = 'app'
             else:
@@ -438,13 +452,13 @@ class ApiInvocationContext(ApiInvocationContextProtocol):
             tags.append(f'auth:{authorization_type}')
 
         if 'client_id' in enabled_tags and Utils.is_not_empty(client_id):
-            if client_id is not None:
-                tags.append(f'client_id:{client_id}')
+            tags.append(f'client_id:{client_id}')
 
-        if 'request_id' in enabled_tags:
-            request_id = self.request_id
-            if Utils.is_not_empty(request_id):
-                tags.append(f'request_id:{request_id}')
+        if 'request_id' in enabled_tags and Utils.is_not_empty(self.request_id):
+            tags.append(f'request_id:{self.request_id}')
+
+        if 'protocol' in enabled_tags and Utils.is_not_empty(invocation_source):
+            tags.append(f'protocol:{invocation_source}')
 
         return f'{"|".join(tags)}'
 

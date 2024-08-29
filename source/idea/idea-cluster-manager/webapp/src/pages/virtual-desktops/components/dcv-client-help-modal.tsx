@@ -28,8 +28,6 @@ function downloadDcvClient(os: string) {
         window.open(client_settings.macos.m1.url);
     } else if (os === "macos-intel") {
         window.open(client_settings.macos.intel.url);
-    } else if (os === "linux-rhel_centos7") {
-        window.open(client_settings.linux.rhel_centos7.url);
     } else if (os === "linux-rhel_centos_rocky8") {
         window.open(client_settings.linux.rhel_centos_rocky8.url);
     } else if (os === "linux-suse15") {
@@ -51,8 +49,6 @@ function getDCVClientLabelForOSFlavor(os: string): string {
         return client_settings.macos.m1.label;
     } else if (os === "macos-intel") {
         return client_settings.macos.intel.label;
-    } else if (os === "linux-rhel_centos7") {
-        return client_settings.linux.rhel_centos7.label;
     } else if (os === "linux-rhel_centos_rocky8") {
         return client_settings.linux.rhel_centos_rocky8.label;
     } else if (os === "linux-suse15") {
@@ -161,9 +157,6 @@ export function DcvClientHelpModal(props: DcvClientHelpModalProps) {
                                     <strong>Step 1)</strong> Download DCV Linux Client.
                                 </p>
                                 <p>
-                                    <Button variant={"link"} onClick={() => downloadDcvClient("linux-rhel_centos7")}>
-                                        <FontAwesomeIcon icon={faDownload} /> {getDCVClientLabelForOSFlavor("linux-rhel_centos7")}
-                                    </Button>
                                     <Button variant={"link"} onClick={() => downloadDcvClient("linux-rhel_centos_rocky8")}>
                                         <FontAwesomeIcon icon={faDownload} /> {getDCVClientLabelForOSFlavor("linux-rhel_centos_rocky8")}
                                     </Button>

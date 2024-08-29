@@ -1,6 +1,32 @@
 # Change Log
 This file is used to list changes made in each release of Research and Engineering Studio (RES).
 
+2024.08
+------
+
+**ENHANCEMENTS**
+
+- Added support for mounting S3 buckets and accessing that storage from Linux desktop sessions.
+- Added support to create and customize permission profiles
+- Added the ability to customize the types of instances available to a RES environment from the UI.
+- Added the ability to delete software stacks from UI.
+- Added support for the Europe (Stockholm) region.
+
+**CHANGES**
+
+- CentOS 7 and RHEL 7 are no longer supported operating systems for RES desktop sessions.
+- Removed the RES metrics stack from the RES installer as it was not in use.
+
+**BUG FIXES**
+
+- Resolved an issue where the Windows software stack AMIs were out of date in Europe (London) region.
+- Resolved an issue where Linux virtual desktops may become stuck in the "RESUMING" state on reboot.
+- Resolved an issue where RES fails to sync AD users whose SAMAccountName attributes includes capital letters or special characters.
+- Resolved an issue that prevented groups with empty spaces or more than 20 characters in their names from successfully being assigned to projects.
+- Resolved an issue with VDI sharing where the list of users included only members inside project groups and not individual users that were part of a project.
+- Resolved an issue where a VDI sharing sessions could not be deleted after it was shared.
+- Resolved an issue where a VDI would not launch in a specified subnet even though a valid subnet ID was provided.
+
 2024.06
 ------
 

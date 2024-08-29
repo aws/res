@@ -26,9 +26,9 @@ import IdeaListView from "../../components/list-view";
 import VirtualDesktopSessionStatusIndicator from "./components/virtual-desktop-session-status-indicator";
 import { withRouter } from "../../navigation/navigation-utils";
 
-export interface MySharedVirtualDesktopProps extends IdeaAppLayoutProps, IdeaSideNavigationProps {}
+export interface MySharedVirtualDesktopProps extends IdeaAppLayoutProps, IdeaSideNavigationProps { }
 
-export interface MySharedVirtualDesktopsState {}
+export interface MySharedVirtualDesktopsState { }
 
 class MySharedVirtualDesktopSessions extends Component<MySharedVirtualDesktopProps, MySharedVirtualDesktopsState> {
     VIRTUAL_DESKTOP_SHARED_SESSIONS_TABLE_COLUMN_DEFINITIONS: TableProps.ColumnDefinition<VirtualDesktopSessionPermission>[] = [
@@ -158,16 +158,16 @@ class MySharedVirtualDesktopSessions extends Component<MySharedVirtualDesktopPro
 
     onJoinSession = (idea_session_id: string, idea_session_owner: string, idea_session_name: string, username: string): Promise<boolean> => {
         let connection_info: VirtualDesktopSessionConnectionInfo = {
-                idea_session_id: idea_session_id,
-                idea_session_owner: idea_session_owner,
-            };
+            idea_session_id: idea_session_id,
+            idea_session_owner: idea_session_owner,
+        };
 
-            if (username) {
-                connection_info.username = username;
-            }
+        if (username) {
+            connection_info.username = username;
+        }
 
         return AppContext.get().client().virtualDesktop()
-            .getSessionConnectionInfo({connection_info: connection_info})
+            .getSessionConnectionInfo({ connection_info: connection_info })
             .then((result) => {
                 return `${result.connection_info?.endpoint}${result.connection_info?.web_url_path}?authToken=${result.connection_info?.access_token}#${result.connection_info?.dcv_session_id}`;
             })
@@ -185,7 +185,7 @@ class MySharedVirtualDesktopSessions extends Component<MySharedVirtualDesktopPro
                 }
                 return false;
             });
-    };   
+    };
 
     setFlashMessage = (content: React.ReactNode, type: "success" | "info" | "error") => {
         this.props.onFlashbarChange({
@@ -291,14 +291,6 @@ class MySharedVirtualDesktopSessions extends Component<MySharedVirtualDesktopPro
                             {
                                 title: "Windows",
                                 value: "windows",
-                            },
-                            {
-                                title: "CentOS 7",
-                                value: "centos7",
-                            },
-                            {
-                                title: "RHEL 7",
-                                value: "rhel7",
                             },
                             {
                                 title: "RHEL 8",

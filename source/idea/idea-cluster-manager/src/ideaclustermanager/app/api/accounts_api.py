@@ -271,14 +271,22 @@ class AccountsAPI(BaseAPI):
         acl_entry_scope = Utils.get_value_as_string('scope', acl_entry)
         is_authorized = context.is_authorized(elevated_access=True, scopes=[acl_entry_scope])
 
-        if namespace in ['Accounts.ListUsers', 'Accounts.ListGroups']:
+        # Allow if admin
+        if is_authorized:
+            acl_entry['method'](context)
+            return
+
+        if namespace == 'Accounts.ListUsers':
             username = context.get_username()
             user = self.context.accounts.get_user(username)
-            if is_authorized or self.context.authz.is_user_any_project_owner(user=user):
+            if self.context.role_assignments.check_permissions_in_any_role(user=user, permissions=["projects.update_personnel","vdis.create_terminate_others_sessions"]):
                 acl_entry['method'](context)
-            else:
-                raise exceptions.unauthorized_access()
-        elif is_authorized:
-            acl_entry['method'](context)
-        else:
-            raise exceptions.unauthorized_access()
+                return
+        elif namespace == 'Accounts.ListGroups':
+            username = context.get_username()
+            user = self.context.accounts.get_user(username)
+            if self.context.role_assignments.check_permissions_in_any_role(user=user, permissions=["projects.update_personnel"]):
+                acl_entry['method'](context)
+                return
+        
+        raise exceptions.unauthorized_access()

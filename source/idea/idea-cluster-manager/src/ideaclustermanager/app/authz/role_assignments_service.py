@@ -24,6 +24,7 @@ from ideadatamodel import (
     DeleteRoleAssignmentErrorResponse,
     ListRoleAssignmentsRequest,
     ListRoleAssignmentsResponse,
+    ListRolesRequest,
     RoleAssignment,
     GetProjectRequest,
     User
@@ -31,9 +32,10 @@ from ideadatamodel import (
 from ideasdk.utils import Utils, ApiUtils
 from ideasdk.context import SocaContext
 
+from ideaclustermanager.app.authz.db.roles_dao import RolesDAO
 from ideaclustermanager.app.authz.db.role_assignments_dao import RoleAssignmentsDAO
 
-from typing import Union, Optional, List
+from typing import Set, Union, Optional, List
 
 
 class RoleAssignmentsService:
@@ -45,7 +47,11 @@ class RoleAssignmentsService:
         self.role_assignments_dao = RoleAssignmentsDAO(
             context=context
         )
+        self.roles_dao = RolesDAO(
+            context=context
+        )
         self.role_assignments_dao.initialize()
+        self.roles_dao.initialize()
 
     def put_role_assignments(self, request: BatchPutRoleAssignmentRequest) -> BatchPutRoleAssignmentResponse:
         success = []
@@ -84,7 +90,9 @@ class RoleAssignmentsService:
                 raise exceptions.invalid_params(constants.INVALID_ROLE_ASSIGNMENT_ACTOR_TYPE)
             if request.resource_type not in constants.VALID_ROLE_ASSIGNMENT_RESOURCE_TYPES:
                 raise exceptions.invalid_params(constants.INVALID_ROLE_ASSIGNMENT_RESOURCE_TYPE)
-            if request.role_id not in constants.VALID_ROLE_ASSIGNMENT_ROLE_IDS:
+            
+            role_ids = [role.role_id for role in self.roles_dao.list_roles(False, "", []).listing]
+            if request.role_id not in role_ids:
                 raise exceptions.invalid_params('role_id value is not recognized')
             
             ApiUtils.validate_input(request.actor_id, constants.ROLE_ASSIGNMENT_ACTOR_ID_REGEX, constants.ROLE_ASSIGNMENT_ACTOR_ID_ERROR_MESSAGE)
@@ -199,24 +207,6 @@ class RoleAssignmentsService:
                 message=e.message
             )
 
-    # Checks if there is a specific record of the given actor-resource with the given role
-    def is_actor_in_project(self, actor_id: str, actor_type: str, resource_id: str, role_id: str) -> bool:
-        actor_key=f"{actor_id}:{actor_type}"
-        resource_key=f"{resource_id}:project"
-        role_assignment = self.get_role_assignment(actor_key, resource_key)
-
-        # Check role equality if role ID was provided
-        return role_assignment and role_assignment.role_id == role_id
-    
-    # Checks if there is a specific record of the given actor-resource with the project owner role
-    def is_actor_any_project_owner(self, actor_id: str, actor_type: str) -> bool:
-        actor_key=f"{actor_id}:{actor_type}"
-        self.logger.debug(f'is_actor_any_project_owner() - actor_key: {actor_key}')
-        role_assignments = self.list_role_assignments(ListRoleAssignmentsRequest(actor_key=actor_key)).items
-
-        # Check role equality if role ID was provided
-        return any(role_assignment.role_id == constants.PROJECT_OWNER_ROLE_ID for role_assignment in role_assignments)
-
     def get_role_assignment(self, actor_key: str, resource_key: str) -> Optional[RoleAssignment]:
         # Perform validations on the incoming actor/resource types
         if Utils.is_empty(actor_key) or Utils.is_empty(resource_key):
@@ -247,36 +237,60 @@ class RoleAssignmentsService:
         if not Utils.is_empty(request.resource_key):
             ApiUtils.validate_input(request.resource_key, constants.ROLE_ASSIGNMENT_RESOURCE_KEY_REGEX, constants.ROLE_ASSIGNMENT_RESOURCE_KEY_ERROR_MESSAGE)
             self.logger.debug(f'list_role_assignments() called for resource {request.resource_key}')
-
             resource_type = request.resource_key.split(':')[1] if len(request.resource_key.split(':')) == 2 else ""
             if resource_type not in constants.VALID_ROLE_ASSIGNMENT_RESOURCE_TYPES:
                 raise exceptions.invalid_params(constants.INVALID_ROLE_ASSIGNMENT_RESOURCE_TYPE)
+            
+        role_assignments = []
         
-        return self.role_assignments_dao.list_role_assignments(request)
+        role_assignments = self.role_assignments_dao.list_role_assignments(actor_key = request.actor_key if request.actor_key is not None else "", 
+                                                                           resource_key = request.resource_key if request.resource_key is not None else "")
+
+        return ListRoleAssignmentsResponse(
+            items=role_assignments
+        )
 
     ### Helper methods
 
-    # Checks if the given user is assigned as a project owner for the given project directly or via any of their groups
-    def is_user_project_owner(self, user: User, project_id: str) -> bool:
-        if user.enabled and (
-            self.is_actor_in_project(actor_id=user.username, actor_type='user', resource_id=project_id, role_id=constants.PROJECT_OWNER_ROLE_ID) or 
-            any(self.is_actor_in_project(actor_id=group, actor_type='group', resource_id=project_id, role_id=constants.PROJECT_OWNER_ROLE_ID) for group in user.additional_groups)
-            ):
-            return True
-        
-        return False
+    # Checks if the given user has any of the given permissions for any project directly or via any of their groups
+    def check_permissions_in_any_role(self, user: User, permissions: List[str]) -> bool:
+        self.logger.debug(f'Checking if user {user.username} has any of these permissions {permissions} in any of their roles')
 
-    # Checks if the given user is assigned as a project owner for ANY project directly or via any of their groups
-    def is_user_any_project_owner(self, user: User) -> bool:
-        self.logger.debug(f'is_user_any_project_owner() - username: {user.username}')
-        if user.enabled and (
-            self.is_actor_any_project_owner(actor_id=user.username, actor_type='user') or 
-            any(self.is_actor_any_project_owner(actor_id=group, actor_type='group') for group in user.additional_groups)
-            ):
-            return True
+        if not user.enabled: return False
         
+        # We maintain a set for when we have to go over roles assigned through the user's groups
+        roles_seen = set()
+
+        def check_permission_in_roles(roles_to_check: Set[str], permissions: List[str]) -> bool:
+            for role_id in roles_to_check:
+                if role_id not in roles_seen:
+                    roles_seen.add(role_id)
+                    db_role = self.roles_dao.get_role(role_id=role_id)
+                    if db_role is not None:
+                        role = Utils.flatten_dict(db_role)
+                        
+                        # We try to short-circuit the process if we find that the user has one of these permissions
+                        for permission in permissions:
+                            if Utils.get_value_as_bool(key=permission, obj=role, default=False): return True
+            return False
+
+        # First get all role assignments associated directly to this user
+        roles_to_check = set()
+
+        user_role_assignments = self.list_role_assignments(ListRoleAssignmentsRequest(actor_key=f"{user.username}:user"))
+        for user_role_assignment in user_role_assignments.items:
+            roles_to_check.add(user_role_assignment.role_id)
+        
+        if check_permission_in_roles(roles_to_check=roles_to_check, permissions=permissions): return True
+        
+        # reset the role IDs set to get role assignments via groups
+        roles_to_check = set()
+
+        for group in user.additional_groups:
+            group_role_assignments = self.list_role_assignments(ListRoleAssignmentsRequest(actor_key=f"{group}:group"))
+            for group_role_assignment in group_role_assignments.items:
+                roles_to_check.add(group_role_assignment.role_id)
+
+        if check_permission_in_roles(roles_to_check=roles_to_check, permissions=permissions): return True
+
         return False
-    
-    # Checks if the given user is assigned as a project owner for ALL given project directly or via any of their groups
-    def is_user_project_owner_for_all_projects(self, user: User, project_ids: List[str]) -> bool:
-        return all(self.is_user_project_owner(user=user, project_id=project_id) for project_id in project_ids)

@@ -42,7 +42,7 @@ function install_efs_mount_helper_impl() {
 
   if [[ $BASE_OS =~ ^(amzn2)$ ]]; then
     yum install -y amazon-efs-utils
-  elif [[ $BASE_OS =~ ^(centos7|rhel7|rhel8|rhel9)$ ]]; then
+  elif [[ $BASE_OS =~ ^(rhel8|rhel9)$ ]]; then
     git clone https://github.com/aws/efs-utils
     cd efs-utils
     make rpm

@@ -19,7 +19,6 @@ export const Constants = {
     MODULE_DIRECTORY_SERVICE: "directoryservice",
     MODULE_IDENTITY_PROVIDER: "identity-provider",
     MODULE_SHARED_STORAGE: "shared-storage",
-    MODULE_METRICS: "metrics",
     MODULE_BASTION_HOST: "bastion-host",
     MODULE_CLUSTER: "cluster",
     MODULE_CLUSTER_MANAGER: "cluster-manager",
@@ -43,6 +42,14 @@ export const Constants = {
     SHARED_STORAGE_PROVIDER_FSX_NETAPP_ONTAP_SECURITY_TYPE_UNIX: "UNIX",
     SHARED_STORAGE_PROVIDER_FSX_NETAPP_ONTAP_SECURITY_TYPE_MIXED: "MIXED",
     SHARED_STORAGE_PROVIDER_FSX_NETAPP_ONTAP_SECURITY_TYPE_NTFS: "NTFS",
+    SHARED_STORAGE_PROVIDER_S3_BUCKET: "s3_bucket",
+
+    SHARED_STORAGE_MODE_READ_ONLY: "R",
+    SHARED_STORAGE_MODE_READ_WRITE: "R/W",
+
+    SHARED_STORAGE_NO_CUSTOM_PREFIX: "NO_CUSTOM_PREFIX",
+    SHARED_STORAGE_CUSTOM_PROJECT_NAME_PREFIX: "PROJECT_NAME_PREFIX",
+    SHARED_STORAGE_CUSTOM_PROJECT_NAME_AND_USERNAME_PREFIX: "PROJECT_NAME_AND_USERNAME_PREFIX",
 
     FSX_NETAPP_ONTAP_DEPLOYMENT_TYPE_MULTI_AZ: "MULTI_AZ_1",
     FSX_NETAPP_ONTAP_DEPLOYMENT_TYPE_SINGLE_AZ: "SINGLE_AZ_1",
@@ -78,6 +85,11 @@ export const Constants = {
         IDEA_SW_INIT: "IDEA.InitializeServiceWorker",
         IDEA_GET_SW_INIT: "IDEA.GetServiceWorkerInitialized",
     },
+
+    ROLE_NAME_REGEX: "^[a-zA-Z0-9-_ ]{3,36}$",
+    ROLE_NAME_ERROR_MESSAGE: "Only use alphabets, numbers, spaces, dashes (-), or underscores (_) for role name. Must be between 3 and 36 characters long.",
+    ROLE_DESC_REGEX: "^[a-zA-Z0-9-_ ]{0,50}$",
+    ROLE_DESC_ERROR_MESSAGE: "Only use alphabets, numbers, spaces, dashes (-), or underscores (_) for role description. Can be up to 50 characters long.",
 };
 
 export const ErrorCodes = {

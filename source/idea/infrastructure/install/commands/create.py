@@ -297,7 +297,6 @@ $(echo "{
     self.params.dcv_session_private_subnets_string
 }" | tr -d '" ' | tr ',' '\n' | sed 's/^/- /')
 enabled_modules:
-- metrics
 - virtual-desktop-controller
 $(echo {self.params.get_str(CommonKey.IS_LOAD_BALANCER_INTERNET_FACING)}- bastion-host | grep true | sed 's:true::')
 metrics_provider: cloudwatch

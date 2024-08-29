@@ -33,7 +33,7 @@ If applicable, add screenshots and/or a video to help explain your problem.
 **Environment (please complete the following information):**
  - RES Version: [e.g. 2023.11]
  - Software Stack AMI ID: [e.g. ami-0fceec18b58bfda68]
- - Software Stack OS: [e.g. Windows, Amazon Linux 2, CentOS 7, RedHat Enterprise Linux 7]
+ - Software Stack OS: [e.g. Windows, Amazon Linux 2]
 
 **Additional context**
 Add any other context about the problem here.

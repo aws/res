@@ -21,12 +21,23 @@ __all__ = (
     'DeleteRoleAssignmentSuccessResponse',
     'DeleteRoleAssignmentErrorResponse',
     'ListRoleAssignmentsRequest',
+    'ListRolesResponse',
+    'ListRolesRequest',
+    'GetRoleResponse',
+    'GetRoleRequest',
+    'CreateRoleRequest',
+    'CreateRoleResponse',
+    'DeleteRoleRequest',
+    'DeleteRoleResponse',
+    'UpdateRoleRequest',
+    'UpdateRoleResponse',
     'ListRoleAssignmentsResponse',
     'OPEN_API_SPEC_ENTRIES_AUTHZ'
 )
 
 from ideadatamodel import SocaPayload, SocaListingPayload, SocaPaginator, IdeaOpenAPISpecEntry
-from ideadatamodel.authz.role_assignment_model import RoleAssignment
+from ideadatamodel.authz.role_assignments_model import RoleAssignment
+from ideadatamodel.authz.roles_model import Role
 from typing import Optional, List
 
 # Authz.BatchPutRoleAssignment
@@ -91,6 +102,46 @@ class ListRoleAssignmentsRequest(SocaListingPayload):
 class ListRoleAssignmentsResponse(SocaListingPayload):
     items: List[RoleAssignment]
 
+# Authz.ListRoles
+
+class ListRolesRequest(SocaListingPayload):
+    paginator: Optional[SocaPaginator] = None
+    include_permissions: Optional[bool] = False
+
+class ListRolesResponse(SocaListingPayload):
+    items: List[Role]
+
+# Authz.GetRole
+
+class GetRoleRequest(SocaPayload):
+    role_id: Optional[str]
+
+class GetRoleResponse(SocaPayload):
+    role: Role
+
+# Authz.CreateRole
+
+class CreateRoleRequest(SocaPayload):
+    role: Role
+
+class CreateRoleResponse(SocaPayload):
+    role: Role
+
+# Authz.DeleteRole
+
+class DeleteRoleRequest(SocaPayload):
+    role_id: Optional[str]
+
+class DeleteRoleResponse(SocaPayload):
+    pass
+
+# Authz.UpdateRole
+
+class UpdateRoleRequest(SocaPayload):
+    role: Role
+
+class UpdateRoleResponse(SocaPayload):
+    role: Role
 
 OPEN_API_SPEC_ENTRIES_AUTHZ = [
     IdeaOpenAPISpecEntry(
@@ -113,5 +164,40 @@ OPEN_API_SPEC_ENTRIES_AUTHZ = [
         result=BatchDeleteRoleAssignmentResponse,
         is_listing=False,
         is_public=False
-    )
+    ),
+    IdeaOpenAPISpecEntry(
+        namespace='Authz.ListRoles',
+        request=ListRolesRequest,
+        result=ListRolesResponse,
+        is_listing=True,
+        is_public=False
+    ),
+    IdeaOpenAPISpecEntry(
+        namespace='Authz.GetRole',
+        request=GetRoleRequest,
+        result=GetRoleResponse,
+        is_listing=False,
+        is_public=False
+    ),
+    IdeaOpenAPISpecEntry(
+        namespace='Authz.CreateRole',
+        request=CreateRoleRequest,
+        result=CreateRoleResponse,
+        is_listing=False,
+        is_public=False
+    ),
+    IdeaOpenAPISpecEntry(
+        namespace='Authz.DeleteRole',
+        request=DeleteRoleRequest,
+        result=DeleteRoleResponse,
+        is_listing=False,
+        is_public=False
+    ),
+    IdeaOpenAPISpecEntry(
+        namespace='Authz.UpdateRole',
+        request=UpdateRoleRequest,
+        result=UpdateRoleResponse,
+        is_listing=False,
+        is_public=False
+    ),
 ]

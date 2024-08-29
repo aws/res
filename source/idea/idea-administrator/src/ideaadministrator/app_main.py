@@ -1469,16 +1469,6 @@ def run_integration_tests(cluster_name: str, aws_region: str, aws_profile: str, 
             --admin-password YOUR_ADMIN_PASSWORD
 
     \b
-    * Run all scheduler job submission test cases for all multiple base os
-    ./res-admin.sh run-integration-tests scheduler \\
-            --cluster-name idea-test1 \\
-            --aws-region eu-west-1 \\
-            --admin-username YOUR_ADMIN_USER \\
-            --admin-password YOUR_ADMIN_PASSWORD \\
-            --param base_os=amazonlinux2,centos7,rhel7 \\
-            --test-case-id SCHEDULER_JOB_TEST_CASES
-
-    \b
     * Run scheduler job submission test cases: hello_world and custom_instance_type for base_os: amazonlinux2 with a custom ami
     ./res-admin.sh run-integration-tests scheduler \\
             --cluster-name idea-test1 \\

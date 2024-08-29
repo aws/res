@@ -221,6 +221,13 @@ class ArnBuilder:
             self.get_arn(service='s3', aws_region='', aws_account_id='', resource=f'{self.config.get_string("cluster.cluster_s3_bucket")}')
         ]
 
+    def get_s3_bucket_arns(self, bucket_name: str) -> List[str]:
+        return [
+            self.get_arn(service='s3', aws_region='', aws_account_id='', resource=f'{bucket_name}/*'),
+            self.get_arn(service='s3', aws_region='', aws_account_id='', resource=bucket_name)
+        ]
+
+
     def get_ssm_arn(self, resource_id: str) -> str:
         return self.build_arn(
             partition=self.config.get_string("cluster.aws.partition"),
@@ -375,3 +382,10 @@ class ArnBuilder:
 
     def get_ddb_application_autoscaling_service_role_arn(self) -> str:
         return self.get_arn(service='iam', aws_region='', resource='role/aws-service-role/dynamodb.application-autoscaling.amazonaws.com/AWSServiceRoleForApplicationAutoScaling_DynamoDBTable')
+
+    def api_gateway_execute_api_arn(self, api_id: str, stage: str, http_verb: str, resource: str):
+        return self.get_arn(service="execute-api", aws_region=self.config.get_string("cluster.aws.region"), resource=f'{api_id}/{stage}/{http_verb}/{resource}')
+
+    def custom_credential_broker_api_gateway_execute_api_arn(self, api_id: str):
+        return self.api_gateway_execute_api_arn(api_id, constants.API_GATEWAY_CUSTOM_CREDENTIAL_BROKER_STAGE, "GET", constants.API_GATEWAY_CUSTOM_CREDENTIAL_BROKER_RESOURCE)
+

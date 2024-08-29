@@ -22,7 +22,7 @@ source "$SCRIPT_DIR/../common/bootstrap_common.sh"
 
 log_info "Configure Amazon SSM agent"
 
-if [[ $BASE_OS =~ ^(amzn2|centos7|rhel7|rhel8|rhel9)$ ]]; then
+if [[ $BASE_OS =~ ^(amzn2|rhel8|rhel9)$ ]]; then
   /bin/bash "${SCRIPT_DIR}/../common/red_hat/configure_amazon_ssm_agent.sh"
 elif [[ $BASE_OS =~ ^(ubuntu2204)$ ]]; then
   /bin/bash "${SCRIPT_DIR}/../common/debian/configure_amazon_ssm_agent.sh"

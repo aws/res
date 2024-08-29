@@ -416,6 +416,52 @@ class DeleteCluster:
                     NetworkInterfaceId=network_interface_id
                 )
 
+    def detach_vpc_from_lambda_functions(self):
+        # List all functions with a VPC configuration
+        response = self.context.aws().lambda_().list_functions()
+        vpc_functions = []
+        # Filter functions based on tags
+        for func in response['Functions']:
+            if 'VpcConfig' in func:
+                function_arn = func['FunctionArn']
+                try:
+                    tags = self.context.aws().lambda_().list_tags(Resource=function_arn)['Tags']
+                    if tags.get(constants.IDEA_TAG_ENVIRONMENT_NAME) == self.cluster_name:
+                        vpc_functions.append(func)
+                except Exception as e:
+                    print(f"Error retrieving tags for function {function_arn}: {e}")
+
+        # Handle pagination if there are more functions
+        while 'NextMarker' in response:
+            response = self.context.aws().lambda_().list_functions(Marker=response['NextMarker'])
+            for func in response['Functions']:
+                if 'VpcConfig' in func:
+                    function_arn = func['FunctionArn']
+                    try:
+                        tags = self.context.aws().lambda_().list_tags(Resource=function_arn)['Tags']
+                        if tags.get(constants.IDEA_TAG_ENVIRONMENT_NAME) == self.cluster_name:
+                            vpc_functions.append(func)
+                    except Exception as e:
+                        print(f"Error retrieving tags for function {function_arn}: {e}")
+
+        # Remove the VPC configuration from each function
+        for function in vpc_functions:
+            function_name = function['FunctionName']
+            print(f"Removing VPC configuration from function: {function_name}")
+            
+            try:
+                self.context.aws().lambda_().update_function_configuration(
+                    FunctionName=function_name,
+                    VpcConfig={
+                        'SubnetIds': [],
+                        'SecurityGroupIds': []
+                    }
+                )
+                print(f"VPC configuration removed from function: {function_name}")
+            except Exception as e:
+                print(f"Error removing VPC configuration from function {function_name}: {e}")
+            
+
     def check_stack_deletion_status(self, stack_names: List[str]) -> bool:
         delete_failed = 0
         stacks_pending = list(stack_names)
@@ -796,6 +842,8 @@ class DeleteCluster:
                 confirm = self.context.prompt('Are you sure you want to disable termination protection for above instances ?')
                 if not confirm:
                     return
+
+        self.detach_vpc_from_lambda_functions()
 
         self.delete_ec2_instances()
         self.delete_cloud_formation_stacks()

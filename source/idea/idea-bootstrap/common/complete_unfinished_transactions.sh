@@ -28,7 +28,7 @@ fi
 
 source "$SCRIPT_DIR/../common/bootstrap_common.sh"
 
-if [[ $BASE_OS =~ ^(amzn2|centos7|rhel7|rhel8|rhel9)$ ]]; then
+if [[ $BASE_OS =~ ^(amzn2|rhel8|rhel9)$ ]]; then
   /bin/bash "${SCRIPT_DIR}/../common/red_hat/complete_unfinished_transactions.sh"
 else
   log_info "Base OS doesn't require to complete unfinished transactions."

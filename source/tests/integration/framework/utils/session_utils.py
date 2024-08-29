@@ -78,10 +78,10 @@ def wait_for_deleting_session(
         existing_sessions = list_sessions_response.listing
 
         if existing_sessions and any(
-            existing_session.dcv_session_id == session.dcv_session_id
+            existing_session.idea_session_id == session.idea_session_id
             for existing_session in existing_sessions
         ):
-            logger.debug(f"session {session.dcv_session_id} is still available")
+            logger.debug(f"session {session.idea_session_id} is still available")
             time.sleep(30)
         else:
             return
