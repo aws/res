@@ -44,8 +44,8 @@ class DCVHostRebootCompleteEventHandler(BaseVirtualDesktopControllerEventHandler
         if session.server.instance_id != sender_instance_id:
             raise self.message_source_validation_failed(f'Corrupted sender_id: {sender_id}. Ignoring message')
 
-        # if session is RESUMING/READY/STOPPED/ERROR continue, else ignore
-        if session.state not in {VirtualDesktopSessionState.RESUMING, VirtualDesktopSessionState.READY, VirtualDesktopSessionState.ERROR, VirtualDesktopSessionState.STOPPED}:
+        # if session is RESUMING/READY/STOPPED/STOPPED_IDLE/ERROR continue, else ignore
+        if session.state not in {VirtualDesktopSessionState.RESUMING, VirtualDesktopSessionState.READY, VirtualDesktopSessionState.ERROR, VirtualDesktopSessionState.STOPPED, VirtualDesktopSessionState.STOPPED_IDLE}:
             self.log_error(message_id=message_id, message=f'RES session {session.idea_session_id}:{session.name} is in state: {session.state}. Not handling.')
             return
 

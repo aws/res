@@ -291,6 +291,13 @@ MODULE_TYPE_APP = 'app'
 MODULE_TYPE_CONFIG = 'config'
 MODULE_TYPE_STACK = 'stack'
 
+# restricted modules and keys for non-admins
+RESTRICTED_MODULES_FOR_NON_ADMINS = [MODULE_SHARED_STORAGE]
+RESTRICTED_MODULE_NON_ADMIN_PARENT_KEYS = dict()
+RESTRICTED_MODULE_NON_ADMIN_PARENT_KEYS[MODULE_SHARED_STORAGE] = {
+    "enable_file_browser"
+}
+
 # group types
 GROUP_TYPE_USER = 'user'
 GROUP_TYPE_PROJECT = 'project'
@@ -431,6 +438,9 @@ FILE_SYSTEM_TITLE_ERROR_MESSAGE = "Only use valid alphanumeric, hyphens (-), und
 FILE_SYSTEM_TITLE_KEY = "title"
 FILE_SYSTEM_PROVIDER_KEY = "provider"
 FILE_SYSTEM_PROJECTS_KEY = "projects"
+FILE_SYSTEM_SCOPE_KEY = "scope"
+FILE_SYSTEM_GLOBAL_SCOPE = "cluster"
+FILE_SYSTEM_PROJECT_SCOPE = "project"
 FILE_SYSTEM_ALLOWED_KEYS_TO_UPDATE = [FILE_SYSTEM_TITLE_KEY, FILE_SYSTEM_PROJECTS_KEY]
 FILE_SYSTEM_VALID_FILTER_KEYS = [FILE_SYSTEM_TITLE_KEY, FILE_SYSTEM_PROVIDER_KEY, FILE_SYSTEM_PROJECTS_KEY]
 
@@ -446,6 +456,9 @@ FILE_SYSTEM_FILTER_PROVIDERS_ERROR_MESSAGE = "Only use supported storage provide
 MOUNT_DIRECTORY_REGEX = "^/[a-z0-9-]{3,18}$"
 MOUNT_DIRECTORY_ERROR_MESSAGE = "Only use lowercase alphabets, numbers, " +\
     "and hyphens (-) for mount directory. Must be between 3 and 18 characters long."
+
+MOUNT_DIRECTORY_HOME_REGEX = "^(?!\/home$).*"
+MOUNT_DIRECTORY_HOME_ERROR_MESSAGE = "/home cannot be used as the mount directory for S3 Bucket."
 
 S3_BUCKET_ARN_REGEX = "^(?:arn:(?:aws(?:-cn|-us-gov)?)):s3:::([a-z0-9][a-z0-9-.]{1,61}[a-z0-9])(?:/[a-z0-9-.]+)*/?$"
 S3_BUCKET_ARN_ERROR_MESSAGE = "The provided ARN does not adhere to the required format for an Amazon S3 bucket ARN. A properly formatted bucket ARN should follow the pattern 'arn:aws:s3:::bucket-name', where 'bucket-name' is the name of the S3 bucket."
@@ -521,6 +534,9 @@ S3_BUCKET_IAM_ROLE_ERROR_MESSAGE = "The provided role either does not exist or l
 API_GATEWAY_CUSTOM_CREDENTIAL_BROKER_STAGE = "prod"
 API_GATEWAY_CUSTOM_CREDENTIAL_BROKER_RESOURCE = "ObjectStorageTempCredentials"
 
+API_GATEWAY_VDI_HELPER_STAGE = "prod"
+API_GATEWAY_VDI_HELPER_RESOURCE = "VDIOperations"
+
 OBJECT_STORAGE_CUSTOM_PROJECT_NAME_PREFIX = "PROJECT_NAME_PREFIX"
 OBJECT_STORAGE_CUSTOM_PROJECT_NAME_AND_USERNAME_PREFIX = "PROJECT_NAME_AND_USERNAME_PREFIX"
 OBJECT_STORAGE_NO_CUSTOM_PREFIX = "NO_CUSTOM_PREFIX"
@@ -540,3 +556,5 @@ ROLE_DESC_ERROR_MESSAGE = "Only use alphabets, numbers, spaces, dashes (-), or u
 # Since role assignment objects are small in size (~300 bytes) and we want to conserve DDB RCUs, we query/get role assignments based on number of groups
 # https://stackoverflow.com/questions/73452943/what-count-as-one-read-in-dynamodb
 CONSERVE_DDB_RCU_LIST_GROUP_ROLES = 3
+
+ARTIFACTS_BUCKET_PREFIX_NAME = "research-engineering-studio"

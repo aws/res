@@ -9,13 +9,13 @@
 #  OR CONDITIONS OF ANY KIND, express or implied. See the License for the specific language governing permissions
 #  and limitations under the License.
 
-import tasks.idea as idea
-
-from invoke import task, Context
-
-from typing import Optional
 import os
 import sys
+from typing import Optional
+
+from invoke import Context, task
+
+import tasks.idea as idea
 
 
 def _update_requirement(c: Context, name: str, upgrade: bool = False, package_name: str = None):
@@ -35,7 +35,7 @@ def _update_requirement(c: Context, name: str, upgrade: bool = False, package_na
         idea.console.error(f'Requirements .in file not found: {in_file_abs_path}')
         sys.exit(1)
 
-    cmd = 'pip-compile --no-header --no-annotate '
+    cmd = 'pip-compile --no-header --no-annotate --no-emit-index-url '
     if upgrade:
         cmd += '--upgrade '
     if package_name:
@@ -85,7 +85,8 @@ def update(c, name=None, upgrade=False, package_name=None):
                  'tests',
                  'idea-administrator',
                  'idea-cluster-manager',
-                 'idea-virtual-desktop-controller'):
+                 'idea-virtual-desktop-controller',
+                 'library'):
         _update_requirement(c, name, upgrade, package_name)
 
 

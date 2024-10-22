@@ -477,6 +477,10 @@ class MyVirtualDesktopSessions extends Component<MyVirtualDesktopSessionsProps, 
                                                                     {
                                                                         idea_session_id: this.state.selectedSession?.idea_session_id,
                                                                         dcv_session_id: this.state.selectedSession?.dcv_session_id,
+                                                                        owner: AppContext.get().auth().getUsername(),
+                                                                        project: {
+                                                                          project_id: this.state.selectedSession?.project?.project_id,
+                                                                        },
                                                                         force: true,
                                                                     },
                                                                 ],

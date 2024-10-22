@@ -3,28 +3,28 @@ builtin:
   description: All features
 display:
   name: Display
-  description: Receive visual data from the NICE DCV server
+  description: Receive visual data from the Amazon DCV server
 pointer:
   name: Pointer
-  description: View NICE DCV server mouse position events and pointer shapes
+  description: View Amazon DCV server mouse position events and pointer shapes
 mouse:
   name: Mouse
-  description: Input from the client mouse to the NICE DCV server
+  description: Input from the client mouse to the Amazon DCV server
 keyboard:
   name: Keyboard
-  description: Input from the client keyboard to the NICE DCV server
+  description: Input from the client keyboard to the Amazon DCV server
 audio_in:
   name: Audio In
-  description: Send audio from the client to the NICE DCV server
+  description: Send audio from the client to the Amazon DCV server
 audio_out:
   name: Audio Out
-  description: Receive audio from the NICE DCV server to the client
+  description: Receive audio from the Amazon DCV server to the client
 clipboard_copy:
   name: Clipboard Copy
-  description: Copy data from the NICE DCV server to the client clipboard
+  description: Copy data from the Amazon DCV server to the client clipboard
 clipboard_paste:
   name: Clipboard Paste
-  description: Copy data to the NICE DCV server from the client clipboard
+  description: Copy data to the Amazon DCV server from the client clipboard
 file_upload:
   name: File Upload
   description: Upload files to the session storage
@@ -36,7 +36,7 @@ usb:
   description: Use USB devices from the client
 printer:
   name: Printer
-  description: Create PDFs or XPS files from the NICE DCV server to the client
+  description: Create PDFs or XPS files from the Amazon DCV server to the client
 smartcard:
   name: Smartcard
   description: Read the smart card from the client

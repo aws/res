@@ -38,7 +38,7 @@ class IDEASessionPermissionsEnforceEventHandler(BaseVirtualDesktopControllerEven
             self.log_info(message_id=message_id, message=f'Session {idea_session_id} in {session.state}. Ignoring enforce permission event. NO=OP')
             return
 
-        if session.state in {VirtualDesktopSessionState.PROVISIONING, VirtualDesktopSessionState.STOPPING, VirtualDesktopSessionState.STOPPED, VirtualDesktopSessionState.ERROR, VirtualDesktopSessionState.DELETING, VirtualDesktopSessionState.PROVISIONING}:
+        if session.state in {VirtualDesktopSessionState.PROVISIONING, VirtualDesktopSessionState.STOPPING, VirtualDesktopSessionState.STOPPED, VirtualDesktopSessionState.STOPPED_IDLE, VirtualDesktopSessionState.ERROR, VirtualDesktopSessionState.DELETING, VirtualDesktopSessionState.PROVISIONING}:
             raise self.do_not_delete_message_exception(f'Session {idea_session_id} in {session.state}. Will handle later')
 
         # session is READY

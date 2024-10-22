@@ -292,6 +292,30 @@ def test_admin_update_permission_profile(context: TestContext):
     finally:
         vdc_test_helper.after_test(test_case_name, test_results_map, test_case_id)
 
+def test_admin_update_admin_permission_profile(context: TestContext):
+    test_case_name = 'Test Admin Update Admin Permission Profile'
+    test_case_id = test_constants.VIRTUAL_DESKTOP_TEST_ADMIN_UPDATE_ADMIN_PERMISSION_PROFILE
+    admin_access_token = context.get_admin_access_token()
+    test_results_map = SessionsTestResultMap(test_case_name)
+    vdc_api_helper = VirtualDesktopApiHelper(context, admin_access_token, context.admin_username)
+    vdc_test_helper = VirtualDesktopTestHelper(context)
+
+    try:
+        vdc_test_helper.before_test(test_case_name)
+
+        response = vdc_api_helper.update_admin_permission_profile('VirtualDesktopAdmin.UpdateAdminPermissionProfile')
+
+        if response is not None:
+            vdc_test_helper.on_test_pass(test_case_name, test_results_map)
+
+        else:
+            vdc_test_helper.on_test_fail(test_case_name, response, test_results_map)
+
+    except exceptions.SocaException as error:
+        vdc_test_helper.on_test_exception(test_case_name, error, test_results_map)
+
+    finally:
+        vdc_test_helper.after_test(test_case_name, test_results_map, test_case_id)
 
 def test_admin_list_session_permissions(context: TestContext):
     test_case_name = 'Test Admin List Session Permissions'
@@ -1257,6 +1281,10 @@ TEST_CASES = [
     {
         'test_case_id': test_constants.VIRTUAL_DESKTOP_TEST_ADMIN_UPDATE_PERMISSION_PROFILE,
         'test_case': test_admin_update_permission_profile
+    },
+    {
+        'test_case_id': test_constants.VIRTUAL_DESKTOP_TEST_ADMIN_UPDATE_ADMIN_PERMISSION_PROFILE,
+        'test_case': test_admin_update_admin_permission_profile
     },
     {
         'test_case_id': test_constants.VIRTUAL_DESKTOP_TEST_ADMIN_UPDATE_SESSION_PERMISSIONS,

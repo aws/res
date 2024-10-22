@@ -63,16 +63,26 @@ Statement:
         dynamodb:LeadingKeys:
           - global-settings.package_config.*
           - global-settings.gpu_settings.*
+          - vdc.host_modules.*
+          - vdc.dcv_session.*
+          - vdc.vdi_helper_api_gateway_url
 
   - Action:
       - execute-api:Invoke
     Resource:
-      - '{{ context.arns.custom_credential_broker_api_gateway_execute_api_arn("*") }}'
+      - '{{ context.arns.custom_credential_broker_api_gateway_execute_api_arn() }}'
+      - '{{ context.arns.vdi_helper_api_gateway_execute_api_arn() }}'
     Effect: Allow
 
   - Action:
       - logs:PutRetentionPolicy
     Resource: '*'
+    Effect: Allow
+
+  - Action:
+      - s3:GetObject
+    Resource:
+      {{ context.utils.to_yaml(context.arns.s3_public_host_modules) | indent(6) }}
     Effect: Allow
 
 {% include '_templates/aws-managed-ad.yml' %}

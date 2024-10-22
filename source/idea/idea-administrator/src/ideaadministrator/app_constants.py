@@ -35,4 +35,4 @@ USER_SESSION_DB_RANGE_KEY = 'idea_session_id'
 DCV_HOST_DB_HASH_KEY = 'instance_id'
 DCV_HOST_DB_IDEA_SESSION_ID_KEY = 'idea_session_id'
 DCV_HOST_DB_IDEA_SESSION_OWNER_KEY = 'idea_session_owner'
-
+DCV_SETTINGS_DEFAULT_OWNER_PROFILE_ID = 'admin_profile'

@@ -7,7 +7,7 @@ import click
 import pytest
 from aws_cdk.assertions import Match, Template
 
-from idea.infrastructure.install.stack import InstallStack
+from idea.infrastructure.install.stacks.install_stack import InstallStack
 from tests.unit.infrastructure.install import util
 
 

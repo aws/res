@@ -5,7 +5,7 @@
   {%- endif %}
   function mount_shared_storage () {
     {%- for name, storage in context.config.get_config('shared-storage').items() %}
-      {%- if context.eval_shared_storage_scope(shared_storage=storage) %}
+      {%- if storage is mapping and context.eval_shared_storage_scope(shared_storage=storage) %}
         {%- if storage['provider'] == 'efs' %}
         echo "# Using Provider {{storage['provider']}} for {{storage['mount_dir']}} using options {{storage['mount_options']}}"
         mkdir -p "{{storage['mount_dir']}}"
@@ -39,7 +39,7 @@
         {%- elif storage['provider'] == 's3_bucket' %}
         mkdir -p "{{storage['mount_dir']}}"
         SCRIPT_DIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
-        add_s3_bucket "${SCRIPT_DIR}/custom-credential-broker/custom_credential_broker.py" \
+        add_s3_bucket "${SCRIPT_DIR}/../vdi-helper/custom_credential_broker.py" \
                       "{{context.config.get_string('vdc.custom_credential_broker_api_gateway_url')}}" \
                       "{{name}}" \
                       "{{storage['mount_dir']}}" \

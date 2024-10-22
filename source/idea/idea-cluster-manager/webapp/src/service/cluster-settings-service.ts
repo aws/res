@@ -16,6 +16,7 @@ import { Constants, ErrorCodes } from "../common/constants";
 import { UNAUTHORIZED_ACCESS } from "../common/error-codes";
 import IdeaException from "../common/exceptions";
 import Utils from "../common/utils";
+import dot from "dot-object";
 
 export interface ClusterSettingsServiceProps {
     clusterSettings: ClusterSettingsClient;
@@ -31,6 +32,7 @@ class ClusterSettingsService {
     clusterLocale: string;
     clusterTimezone: string;
     clusterHomeDir: string;
+    isFileBrowserEnabled: boolean;
 
     constructor(props: ClusterSettingsServiceProps) {
         this.props = props;
@@ -41,6 +43,7 @@ class ClusterSettingsService {
         this.clusterLocale = "en-US";
         this.clusterTimezone = "UTC";
         this.clusterHomeDir = "";
+        this.isFileBrowserEnabled = false;
     }
 
     initialize(): Promise<boolean> {
@@ -63,7 +66,8 @@ class ClusterSettingsService {
                 return this.getModuleSettings(Constants.MODULE_SHARED_STORAGE);
             })
             .then((sharedStorageSettings) => {
-                this.clusterHomeDir = `${sharedStorageSettings.internal.mount_dir}/${this.clusterName}`;
+                this.isFileBrowserEnabled = dot.pick(Constants.SHARED_STORAGE_FILE_BROWSER_KEY, sharedStorageSettings);
+                this.clusterHomeDir = `${sharedStorageSettings?.internal?.mount_dir}/${this.clusterName}`;
                 return true;
             })
             .catch((error) => {
@@ -267,6 +271,10 @@ class ClusterSettingsService {
 
     getClusterHomeDir(): string {
         return this.clusterHomeDir;
+    }
+
+    getIsFileBrowserEnabled(): boolean {
+        return this.isFileBrowserEnabled;
     }
 }
 

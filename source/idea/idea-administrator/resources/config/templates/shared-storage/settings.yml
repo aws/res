@@ -59,6 +59,8 @@ home:
       }
   }) | indent(2) }}
 
+# By default at deployment, the File Browser is disabled on an environment level.
+enable_file_browser: False
 
 # Example configurations for existing File Systems
 # Below configurations are for quick reference.

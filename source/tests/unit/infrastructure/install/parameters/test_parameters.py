@@ -9,13 +9,13 @@ from idea.infrastructure.install.parameters.base import Attributes, Base
 from idea.infrastructure.install.parameters.common import CommonKey
 from idea.infrastructure.install.parameters.directoryservice import DirectoryServiceKey
 from idea.infrastructure.install.parameters.parameters import RESParameters
-from idea.infrastructure.install.stack import InstallStack
+from idea.infrastructure.install.stacks.install_stack import InstallStack
 
 
 def test_parameters_are_generated(cluster_name: str) -> None:
     parameters = RESParameters(cluster_name=cluster_name)
     env = aws_cdk.Environment(account="111111111111", region="us-east-1")
-    app = aws_cdk.App()
+    app = aws_cdk.App(context={"vpc_id": "vpc-0fakeexample0000001"})
     InstallStack(
         app,
         "IDEAInstallStack",
@@ -76,11 +76,3 @@ def test_parameters_only_generates_cfn_parameters_for_base_parameter_attributes(
     defined_keys = set(attributes.id.value for _, attributes in RESParameters._fields())
 
     assert cfn_keys == defined_keys
-
-
-def test_secrets_use_no_echo(
-    stack: InstallStack,
-    template: Template,
-) -> None:
-    for parameter in (DirectoryServiceKey.ROOT_USERNAME,):
-        template.has_parameter(parameter, props={"NoEcho": True})

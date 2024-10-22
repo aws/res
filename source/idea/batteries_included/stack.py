@@ -1,6 +1,8 @@
 #  Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 #  SPDX-License-Identifier: Apache-2.0
-from aws_cdk import CfnStack, Stack, aws_ssm
+from aws_cdk import CfnStack, Stack
+from aws_cdk import aws_secretsmanager as secretsmanager
+from aws_cdk import aws_ssm
 from constructs import Construct
 
 from idea.batteries_included.parameters.parameters import BIParameters
@@ -23,8 +25,8 @@ class BiStack(Stack):
                 "PortalDomainName": str(parameters.portal_domain_name),
                 "Keypair": str(parameters.ssh_key_pair_name),
                 "EnvironmentName": str(parameters.cluster_name),
-                "AdminPassword": str(parameters.root_password),
-                "ServiceAccountPassword": str(parameters.root_password),
+                "AdminPassword": str(parameters.service_account_password),
+                "ServiceAccountPassword": str(parameters.service_account_password),
                 "ClientIpCidr": str(parameters.client_ip),
                 "ClientPrefixList": str(parameters.client_prefix_list),
                 "RetainStorageResources": str(parameters.retain_storage_resources),
@@ -155,27 +157,38 @@ class BiStack(Stack):
             self.bi_stack
         )
 
-        self.root_username = aws_ssm.StringParameter(
-            self,
-            id=str(parameters.root_username),
-            parameter_name=str(parameters.root_username),
-            string_value=self.bi_stack.get_att(
+        def get_credentials_secret_arn() -> str:
+            service_account_username = self.bi_stack.get_att(
                 "Outputs.ServiceAccountUsername"
-            ).to_string(),
-        )
-
-        self.root_username.node.add_dependency(self.bi_stack)
-
-        self.root_password_secret_arn = aws_ssm.StringParameter(
-            self,
-            id=str(parameters.root_password_secret_arn),
-            parameter_name=str(parameters.root_password_secret_arn),
-            string_value=self.bi_stack.get_att(
+            ).to_string()
+            service_account_password_arn = self.bi_stack.get_att(
                 "Outputs.ServiceAccountPasswordSecretArn"
-            ).to_string(),
+            ).to_string()
+
+            service_account_password = secretsmanager.Secret.from_secret_attributes(
+                self,
+                id="ServiceAccountPasswordSecretArn",
+                secret_complete_arn=service_account_password_arn,
+            ).secret_value
+
+            credentials_secret = secretsmanager.CfnSecret(
+                scope=self,
+                id="ServiceAccountCredentialsSecret",
+                name=f"{str(parameters.cluster_name)}-service-account-credentials",
+                secret_string=f'{{"{service_account_username}":"{service_account_password.unsafe_unwrap()}"}}',
+                description="Service Account Credentials Secret",
+            )
+            credentials_secret_arn = credentials_secret.ref
+            return credentials_secret_arn
+
+        self.service_account_credentials_secret_arn = aws_ssm.StringParameter(
+            self,
+            id=str(parameters.service_account_credentials_secret_arn),
+            parameter_name=str(parameters.service_account_credentials_secret_arn),
+            string_value=get_credentials_secret_arn(),
         )
 
-        self.root_password_secret_arn.node.add_dependency(self.bi_stack)
+        self.service_account_credentials_secret_arn.node.add_dependency(self.bi_stack)
 
         self.root_user_dn = aws_ssm.StringParameter(
             self,
@@ -205,15 +218,6 @@ class BiStack(Stack):
         )
 
         self.groups_ou.node.add_dependency(self.bi_stack)
-
-        self.sudoers_ou = aws_ssm.StringParameter(
-            self,
-            id=str(parameters.sudoers_ou),
-            parameter_name=str(parameters.sudoers_ou),
-            string_value=self.bi_stack.get_att("Outputs.SudoersOU").to_string(),
-        )
-
-        self.sudoers_ou.node.add_dependency(self.bi_stack)
 
         self.sudoers_group_name = aws_ssm.StringParameter(
             self,

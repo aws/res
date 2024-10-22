@@ -114,8 +114,6 @@ class BootstrapContext:
         scope = Utils.get_value_as_list('scope', shared_storage, [])
         if Utils.is_empty(scope):
             return True
-        if 'cluster' in scope:
-            return True
 
         context_vars = vars(self.vars)
 
@@ -140,6 +138,19 @@ class BootstrapContext:
             if Utils.is_empty(queue_profiles):
                 return True
             return self.vars.queue_profile in queue_profiles
+
+        def eval_internal_filesystem() -> bool:
+            mount_dir = Utils.get_value_as_string('mount_dir', shared_storage, '')
+            if mount_dir == '/internal':
+                return True
+            return False
+
+        # Global filesystem attached to modules vs projects
+        if 'cluster' in scope and 'project' not in context_vars:
+            return True
+        elif 'cluster' in scope and 'project' in context_vars:
+            # Internal filesystem will always be attached
+            return eval_project() or eval_internal_filesystem()
 
         if 'module' in scope and 'project' in scope:
             return eval_module() and eval_project()
@@ -253,22 +264,21 @@ class BootstrapContext:
 
     def get_prefix_for_object_storage(self, bucket_arn: str, read_only: bool, custom_prefix: str = None) -> str:
         match = re.match(constants.S3_BUCKET_ARN_PREFIX_REGEX, bucket_arn)
-        if not match:
-            return ""
-
-        prefix = match.group(1).rstrip("/")
-
-        if read_only:
-            return f"{prefix}/"
-
-        if not custom_prefix:
-            raise exceptions.invalid_params('custom_bucket_prefix is required for read/write object storage')
-
-        if custom_prefix == constants.OBJECT_STORAGE_CUSTOM_PROJECT_NAME_AND_USERNAME_PREFIX:
-            return f"{prefix}/{self.vars.project}/{self.vars.session_owner}/"
-        elif custom_prefix == constants.OBJECT_STORAGE_CUSTOM_PROJECT_NAME_PREFIX:
-            return f"{prefix}/{self.vars.project}/"
-        elif custom_prefix == constants.OBJECT_STORAGE_NO_CUSTOM_PREFIX:
-            return f"{prefix}/"
-
-        raise exceptions.invalid_params('invalid custom_prefix')
+        prefix = ""
+        if match:
+            prefix = match.group(1).rstrip('/')
+        if not read_only:
+            if custom_prefix:
+                if custom_prefix == constants.OBJECT_STORAGE_CUSTOM_PROJECT_NAME_AND_USERNAME_PREFIX:
+                    prefix = f'/{prefix}/{self.vars.project}/{self.vars.session_owner}/'
+                elif custom_prefix == constants.OBJECT_STORAGE_CUSTOM_PROJECT_NAME_PREFIX:
+                    prefix = f'/{prefix}/{self.vars.project}/'
+                elif custom_prefix == constants.OBJECT_STORAGE_NO_CUSTOM_PREFIX:
+                    pass
+                else:
+                    raise exceptions.invalid_params('invalid custom_prefix')
+            else:
+                raise exceptions.invalid_params('custom_bucket_prefix is required for read/write object storage')
+        if prefix:
+            prefix = f"{prefix.lstrip('/').rstrip('/')}/"
+        return prefix

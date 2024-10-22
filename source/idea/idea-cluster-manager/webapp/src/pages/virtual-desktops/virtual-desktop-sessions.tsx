@@ -838,6 +838,10 @@ class VirtualDesktopSessions extends Component<VirtualDesktopSessionsProps, Virt
                                 value: "STOPPED",
                             },
                             {
+                                title: "Stopped Idle",
+                                value: "STOPPED_IDLE",
+                            },
+                            {
                                 title: "Stopping",
                                 value: "STOPPING",
                             },

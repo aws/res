@@ -1,6 +1,6 @@
 #  Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 #  SPDX-License-Identifier: Apache-2.0
-from typing import Any, Callable, Optional, TypedDict, Union
+from typing import Optional, TypedDict, Union
 
 import aws_cdk
 from aws_cdk import aws_codebuild as codebuild
@@ -13,11 +13,13 @@ from aws_cdk import aws_stepfunctions_tasks as sfn_tasks
 from constructs import Construct, DependencyGroup
 
 from idea.batteries_included.parameters.parameters import BIParameters
-from idea.infrastructure.install import handlers
 from idea.infrastructure.install.commands import create
+from idea.infrastructure.install.constants import RES_COMMON_LAMBDA_RUNTIME
+from idea.infrastructure.install.handlers import installer_handlers
 from idea.infrastructure.install.parameters.common import CommonKey
 from idea.infrastructure.install.parameters.parameters import RESParameters
 from idea.infrastructure.install.permissions import Permissions
+from idea.infrastructure.install.utils import InfraUtils
 
 
 class TaskEnvironment(TypedDict):
@@ -35,10 +37,12 @@ class Tasks(Construct):
         installer_registry_name: str,
         params: Union[RESParameters, BIParameters],
         dependency_group: DependencyGroup,
+        lambda_layer_arn: str,
     ):
 
         super().__init__(scope, id)
 
+        self.lambda_layer_arn = lambda_layer_arn
         self.registry_name = registry_name
         self.installer_registry_name = installer_registry_name
 
@@ -100,7 +104,10 @@ class Tasks(Construct):
     def get_create_task(self) -> sfn_tasks.EcsRunTask:
         return self.get_task(
             name="Create",
-            command=create.Create(params=self.params).get_commands(),
+            command=create.Create(
+                params=self.params,
+                lambda_layer_arn=self.lambda_layer_arn,
+            ).get_commands(),
             task_role=self.permissions.pipeline_role,
         )
 
@@ -109,6 +116,7 @@ class Tasks(Construct):
             name="Update",
             command=[
                 "res-admin --version",
+                f"res-admin config set Key=shared_library_arn,Type=str,Value={self.lambda_layer_arn} --force --cluster-name {self.params.get_str(CommonKey.CLUSTER_NAME)} --aws-region {aws_cdk.Aws.REGION}",
                 f"res-admin deploy all --upgrade --cluster-name {self.params.get_str(CommonKey.CLUSTER_NAME)} --aws-region {aws_cdk.Aws.REGION}",
             ],
             task_role=self.permissions.pipeline_role,
@@ -209,7 +217,7 @@ class Tasks(Construct):
             "InstallerCodeBuildStart",
             project=project,
             integration_pattern=sfn.IntegrationPattern.RUN_JOB,
-            result_path=f"$.{handlers.EnvKeys.RESULT}",
+            result_path=f"$.{installer_handlers.EnvKeys.RESULT}",
         )
         self.dependency_group.add(task)
         return task
@@ -238,18 +246,16 @@ class Tasks(Construct):
             ],
         )
 
-    def get_installer_ecr_images_delete_task(
-        self,
-        lambda_runtime: lambda_.Runtime,
-        get_handler_and_code_for_function: Callable[[Any], Any],
-    ) -> sfn_tasks.LambdaInvoke:
+    def get_installer_ecr_images_delete_task(self) -> sfn_tasks.LambdaInvoke:
         installer_ecr_images_delete = lambda_.Function(
             self,
             "InstallerDeleteEcrImagesLambda",
-            runtime=lambda_runtime,
+            runtime=RES_COMMON_LAMBDA_RUNTIME,
             timeout=aws_cdk.Duration.minutes(2),
             description="Lambda to delete installer ecr repository images",
-            **get_handler_and_code_for_function(handlers.delete_installer_ecr_images),
+            **InfraUtils.get_handler_and_code_for_function(
+                installer_handlers.delete_installer_ecr_images
+            ),
         )
         installer_ecr_images_delete.add_to_role_policy(
             iam.PolicyStatement(
@@ -268,21 +274,19 @@ class Tasks(Construct):
             "InstallerDeleteEcrImages",
             lambda_function=installer_ecr_images_delete,
             payload_response_only=True,
-            result_path=f"$.{handlers.EnvKeys.RESULT}",
+            result_path=f"$.{installer_handlers.EnvKeys.RESULT}",
         )
 
-    def get_cognito_user_pool_unprotect_task(
-        self,
-        lambda_runtime: lambda_.Runtime,
-        get_handler_and_code_for_function: Callable[[Any], Any],
-    ) -> sfn_tasks.LambdaInvoke:
+    def get_cognito_user_pool_unprotect_task(self) -> sfn_tasks.LambdaInvoke:
         unprotect_cognito_user_pool_lambda_task = lambda_.Function(
             self,
             "UnprotectCognitoUserPoolLambda",
-            runtime=lambda_runtime,
+            runtime=RES_COMMON_LAMBDA_RUNTIME,
             timeout=aws_cdk.Duration.minutes(2),
             description="Lambda to unprotect Cognito user pool",
-            **get_handler_and_code_for_function(handlers.unprotect_cognito_user_pool),
+            **InfraUtils.get_handler_and_code_for_function(
+                installer_handlers.unprotect_cognito_user_pool
+            ),
         )
         unprotect_cognito_user_pool_lambda_task.add_to_role_policy(
             iam.PolicyStatement(
@@ -318,7 +322,7 @@ class Tasks(Construct):
             "UnprotectCognitoUserPool",
             lambda_function=unprotect_cognito_user_pool_lambda_task,
             payload_response_only=True,
-            result_path=f"$.{handlers.EnvKeys.RESULT}",
+            result_path=f"$.{installer_handlers.EnvKeys.RESULT}",
         )
 
     def get_task(
@@ -345,7 +349,7 @@ class Tasks(Construct):
                 platform_version=ecs.FargatePlatformVersion.LATEST
             ),
             integration_pattern=sfn.IntegrationPattern.RUN_JOB,
-            result_path=f"$.{handlers.EnvKeys.RESULT}",
+            result_path=f"$.{installer_handlers.EnvKeys.RESULT}",
         )
 
         self.dependency_group.add(task)

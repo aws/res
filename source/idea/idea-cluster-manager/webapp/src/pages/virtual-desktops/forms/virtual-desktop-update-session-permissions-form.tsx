@@ -23,6 +23,7 @@ import { faTrash, faUndo } from "@fortawesome/free-solid-svg-icons";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import { IconDefinition } from "@fortawesome/fontawesome-svg-core";
 import VirtualDesktopUtilsClient from "../../../client/virtual-desktop-utils-client";
+import { Constants } from "../../../common/constants";
 
 export interface PermissionRowProps {
     usersList: User[];
@@ -346,7 +347,7 @@ class UpdateSessionPermissionModal extends Component<UpdateSessionPermissionModa
             .then((response) => {
                 this.setState(
                     {
-                        permissionProfiles: response.listing!.filter(profile => profile.profile_id != 'admin_profile'),
+                        permissionProfiles: response.listing!.filter(profile => profile.profile_id !== Constants.DCV_SETTINGS_DEFAULT_OWNER_PROFILE_ID),
                         permissionProfilesLoaded: true,
                     },
                     () => {

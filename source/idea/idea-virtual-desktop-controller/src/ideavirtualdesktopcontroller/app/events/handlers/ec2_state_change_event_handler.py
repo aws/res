@@ -49,6 +49,10 @@ class EC2StateChangeEventHandler(BaseVirtualDesktopControllerEventHandler):
             if state == 'stopping':
                 session.state = VirtualDesktopSessionState.STOPPING
                 server.state = 'STOPPING'
+            elif session.is_idle:
+                session.state = VirtualDesktopSessionState.STOPPED_IDLE
+                server.state = 'STOPPED_IDLE'
+                _ = self.server_db.update(server)
             else:
                 session.state = VirtualDesktopSessionState.STOPPED
                 server.state = 'STOPPED'
@@ -74,6 +78,9 @@ class EC2StateChangeEventHandler(BaseVirtualDesktopControllerEventHandler):
                 idea_session_id=idea_session_id,
                 idea_session_owner=idea_session_owner
             )
+        
+        session.is_idle = False
+        _ = self.session_db.update(session)
 
         server = self.server_db.get(instance_id=instance_id)
         server.state = 'CREATED'

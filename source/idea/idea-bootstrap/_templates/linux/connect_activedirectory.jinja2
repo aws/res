@@ -14,12 +14,11 @@ AD_LDAP_BASE="{{context.config.get_string('directoryservice.ldap_base', required
 ROOT_USER_DN_SECRET_ARN="{{ context.config.get_string('directoryservice.root_user_dn_secret_arn', required=True) }}"
 ROOT_USER_DN=$(get_secret "${ROOT_USER_DN_SECRET_ARN}")
 
-ROOT_USERNAME_SECRET_ARN="{{ context.config.get_string('directoryservice.root_username_secret_arn', required=True) }}"
-AD_USER_USERNAME=$(get_secret "${ROOT_USERNAME_SECRET_ARN}")
-
 set +x
-ROOT_PASSWORD_SECRET_ARN="{{ context.config.get_string('directoryservice.root_password_secret_arn', required=True) }}"
-AD_USER_PASSWORD=$(get_secret "${ROOT_PASSWORD_SECRET_ARN}")
+SERVICE_ACCOUNT_CREDENTIALS_SECRET_ARN="{{ context.config.get_string('directoryservice.service_account_credentials_secret_arn', required=True) }}"
+AD_USER_CREDENTIALS=$(get_secret "${SERVICE_ACCOUNT_CREDENTIALS_SECRET_ARN}")
+AD_USER_USERNAME=$(echo $AD_USER_CREDENTIALS | jq -r 'keys[0]')
+AD_USER_PASSWORD=$(echo $AD_USER_CREDENTIALS | jq -r '.[]')
 set -x
 
 if [[ ${IDEA_MODULE_NAME} == "cluster-manager" ]]; then

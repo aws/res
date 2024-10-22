@@ -9,13 +9,15 @@
 #  OR CONDITIONS OF ANY KIND, express or implied. See the License for the specific language governing permissions
 #  and limitations under the License.
 
-import tasks.idea as idea
-from tasks.tools.package_tool import PackageTool
-from tasks.tools.infra_ami_package_tool import InfraAmiPackageTool
-
-from invoke import task, Context
 import os
 import shutil
+
+from invoke import Context, task
+
+import tasks.idea as idea
+from tasks.tools.infra_ami_package_tool import InfraAmiPackageTool
+from tasks.tools.package_tool import PackageTool
+
 
 @task
 def administrator(c):
@@ -89,6 +91,17 @@ def package_infra_ami_dependencies(c):
     package_tool.package()
     idea.console.success(f'distribution created: {package_tool.output_archive_name}')
 
+@task()
+def library(c):
+    # type: (Context) -> None
+    """
+    package library
+    """
+    package_tool = PackageTool(c, 'library')
+    package_tool.package()
+    idea.console.success(f'distribution created: {package_tool.output_archive_name}')    
+
+
 @task
 def make_all_archive(c):
     # type: (Context) -> None
@@ -137,6 +150,8 @@ def package_all(c):
     cluster_manager(c)
 
     virtual_desktop_controller(c)
+    
+    library(c)
 
     # all archive
     make_all_archive(c)

@@ -9,6 +9,40 @@
 #  OR CONDITIONS OF ANY KIND, express or implied. See the License for the specific language governing permissions
 #  and limitations under the License.
 
+function Check-Python-Installed {
+  $PythonInstalled = $false
+  $PythonCommand = Get-Command python -ErrorAction SilentlyContinue
+
+  if ($PythonCommand) {
+      $PythonVersion = python --version
+      if ($PythonVersion -match "3\.11") {
+          $PythonInstalled = $true
+      }
+  } 
+  return $PythonInstalled
+}
+
+function Install-Python {
+  $PythonInstalled = Check-Python-Installed
+
+  if(!$PythonInstalled){
+    Start-Job -Name PythonWebReq -ScriptBlock { Invoke-WebRequest -uri https://www.python.org/ftp/python/3.11.0/python-3.11.0-amd64.exe -OutFile C:\Windows\Temp\Python3.11.0.exe }
+    Wait-Job -Name PythonWebReq
+
+    Invoke-Command -ScriptBlock {Start-Process "C:\Windows\Temp\Python3.11.0.exe" -ArgumentList "/quiet InstallAllUsers=1 PrependPath=1" -Wait}
+
+    $oldPath = [Environment]::GetEnvironmentVariable("Path")
+    $newPythonPath = "C:\Program Files\Python311\Scripts\;C:\Program Files\Python311"
+    $newPath = "$newPythonPath;$oldPath"
+
+    [Environment]::SetEnvironmentVariable("Path", $newPath)
+  }
+}
+
+function Install-Python-Requirements {
+  pip install -r C:\Users\Administrator\RES\Bootstrap\vdi-helper\requirements.txt
+}
+
 function Install-NiceDCV {
   Param(
     [string]$OSVersion,
@@ -76,6 +110,9 @@ function Install-NiceSessionManagerAgent {
 
 function Install-WindowsEC2Instance {
   Param(
+    [string]$AWSRegion,
+    [string]$ENVName,
+
     [switch]$ConfigureForRESVDI,
     [switch]$Update
   )
@@ -92,10 +129,13 @@ function Install-WindowsEC2Instance {
   Install-NiceDCV -OSVersion $OSVersion -InstanceType $InstanceType -Update:$Update
   Install-NiceSessionManagerAgent -Update:$Update
 
+  Install-Python
+  Install-Python-Requirements
+
   Stop-Transcript
 
   if($ConfigureForRESVDI){
     Import-Module .\Configure.ps1
-    Configure-WindowsEC2Instance
+    Configure-WindowsEC2Instance -AWSRegion $AWSRegion -ENVName $ENVName 
   }
 }

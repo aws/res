@@ -184,7 +184,6 @@ class DeleteSessionResponse(VirtualDesktopSessionBatchResponsePayload):
 class StopSessionRequest(SocaPayload):
     sessions: Optional[List[VirtualDesktopSession]]
 
-
 # VirtualDesktopAdmin.StopSessions - Response
 # VirtualDesktop.StopSessions - Response
 class StopSessionResponse(VirtualDesktopSessionBatchResponsePayload):

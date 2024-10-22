@@ -40,13 +40,11 @@ import EditS3Bucket from "./pages/cluster-admin/edit-s3-bucket";
 import { Box, HelpPanel, SideNavigationProps, StatusIndicator } from "@cloudscape-design/components";
 import { NonCancelableCustomEvent } from "@cloudscape-design/components/internal/events";
 import { FlashbarProps } from "@cloudscape-design/components/flashbar/interfaces";
-import EmailTemplates from "./pages/cluster-admin/email-templates";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import rehypeRaw from "rehype-raw";
 import { applyDensity, applyMode, Density, Mode } from "@cloudscape-design/global-styles";
-import VirtualDesktopPermissionProfiles from "./pages/virtual-desktops/virtual-desktop-permission-profiles";
-import VirtualDesktopPermissionProfileDetail from "./pages/virtual-desktops/virtual-desktop-permission-profile-detail";
+import VirtualDesktopPermissionProfileDetail from "./pages/permissions/desktop-sharing-profile-detail";
 import MySharedVirtualDesktopSessions from "./pages/virtual-desktops/my-shared-virtual-desktop-sessions";
 import VirtualDesktopSoftwareStackDetail from "./pages/virtual-desktops/virtual-desktop-software-stack-detail";
 import { IdeaSideNavHeader, IdeaSideNavItems } from "./navigation/side-nav-items";
@@ -55,10 +53,11 @@ import { Routes, Route, Navigate } from "react-router-dom";
 import IdeaLogTail from "./pages/home/log-tail";
 import Utils from "./common/utils";
 import SnapshotManagement from "./pages/snapshots/snapshot-management"
-import PermissionProfilesDashboard from "./pages/permission-profiles/permission-profiles-dashboard";
-import PermissionProfilesView from "./pages/permission-profiles/view-permission-profile";
-import ConfigurePermissionProfile from "./pages/permission-profiles/configure-permission-profile";
 import AuthzClient from "./client/authz-client";
+import Permissions from "./pages/permissions/permissions";
+import PermissionProfilesView from "./pages/permissions/view-permission-profile";
+import ConfigurePermissionProfile from "./pages/permissions/configure-permission-profile";
+import ConfigureDesktopSharingProfile from "./pages/permissions/configure-desktop-sharing-profile";
 
 export interface IdeaWebPortalAppProps extends IdeaAppNavigationProps {}
 
@@ -70,7 +69,8 @@ export interface IdeaWebPortalAppState {
     toolsOpen: boolean;
     tools: React.ReactNode;
     flashbarItems: FlashbarProps.MessageDefinition[];
-    hasProjects?: boolean;
+    isFileBrowserEnabled: boolean;
+    projectPermissions?: { isInProject: boolean; canCreateOthersSession: boolean; }
     projectOwnerRoles?: string[];
 }
 
@@ -102,7 +102,8 @@ class IdeaWebPortalApp extends Component<IdeaWebPortalAppProps, IdeaWebPortalApp
             toolsOpen: false,
             tools: null,
             flashbarItems: [],
-            hasProjects: false,
+            isFileBrowserEnabled: false,
+            projectPermissions: { isInProject: false, canCreateOthersSession: false },
             projectOwnerRoles: [],
         };
     }
@@ -118,11 +119,11 @@ class IdeaWebPortalApp extends Component<IdeaWebPortalAppProps, IdeaWebPortalApp
                     if (!context.auth().isAdmin()) {
                       const isInProject = async (): Promise<{
                           isInProject: boolean;
-                          canCreateSession: boolean;
+                          canCreateOthersSession: boolean;
                       }> => {
                           const output = {
                               isInProject: false,
-                              canCreateSession: false,
+                              canCreateOthersSession: false,
                           }
                           const user = await context.auth().getUser();
                           const authzClient: AuthzClient = context.client().authz();
@@ -136,7 +137,7 @@ class IdeaWebPortalApp extends Component<IdeaWebPortalAppProps, IdeaWebPortalApp
                           });
                           const projectRoleAssignments: Promise<void>[] = [];
                           
-                          // for every project, we check if the user has permission to create sessions
+                          // for every project, we check if the user has permission to create sessions for others
                           // in that project
                           for (const project of projects.projects!) {
                               const resource_key = `${project.project_id!}:project`;
@@ -149,8 +150,8 @@ class IdeaWebPortalApp extends Component<IdeaWebPortalAppProps, IdeaWebPortalApp
                                           if (currentUserIsInRole) {
                                               const rolePermission = rolePermissions.items.find(perm => perm.role_id === roleAssignment.role_id);
                                               if (rolePermission && rolePermission.vdis?.create_terminate_others_sessions) {
-                                                  output.canCreateSession = true;
-                                                  return; // we only need to know if one of the roles allows creating sessions
+                                                  output.canCreateOthersSession = true;
+                                                  return; // we only need to know if one of the roles allows creating sessions for others
                                               }
                                           }
                                       }
@@ -163,15 +164,15 @@ class IdeaWebPortalApp extends Component<IdeaWebPortalAppProps, IdeaWebPortalApp
                           return output;
                       };
                       isInProject()
-                      .then((hasProjects) => {
+                      .then((projectPermissions) => {
                           // user is not assigned to any projects, don't render projects page
-                          if (!hasProjects.isInProject)
+                          if (!projectPermissions.isInProject)
                               return;
                           const result: SideNavigationProps.Item[] = [...this.state.sideNavItems];
                           result.push({
                               type: "divider",
                           });
-                          if (hasProjects.canCreateSession) {
+                          if (projectPermissions.canCreateOthersSession) {
                               result.push({
                                   type: "section",
                                   text: "Session Management",
@@ -197,12 +198,13 @@ class IdeaWebPortalApp extends Component<IdeaWebPortalAppProps, IdeaWebPortalApp
                                   }
                               ]
                           });
-                          this.setState( { sideNavItems: result, hasProjects: hasProjects.isInProject });
+                          this.setState( { sideNavItems: result, projectPermissions: projectPermissions });
                       });
                     }
                     this.setState({
                         isInitialized: true,
                         isLoggedIn: loginStatus,
+                        isFileBrowserEnabled: context.getClusterSettingsService().getIsFileBrowserEnabled(),
                         sideNavHeader: IdeaSideNavHeader(context),
                         sideNavItems: IdeaSideNavItems(context),
                     });
@@ -526,7 +528,7 @@ class IdeaWebPortalApp extends Component<IdeaWebPortalAppProps, IdeaWebPortalApp
                     <Route
                         path="/home/file-browser"
                         element={
-                            <IdeaAuthenticatedRoute isLoggedIn={this.state.isLoggedIn}>
+                            <IdeaAuthenticatedRoute isLoggedIn={this.state.isLoggedIn} isFileBrowserEnabled={this.state.isFileBrowserEnabled}>
                                 <SocaFileBrowser
                                     ideaPageId="file-browser"
                                     toolsOpen={this.state.toolsOpen}
@@ -545,7 +547,7 @@ class IdeaWebPortalApp extends Component<IdeaWebPortalAppProps, IdeaWebPortalApp
                     <Route
                         path="/home/file-browser/tail"
                         element={
-                            <IdeaAuthenticatedRoute isLoggedIn={this.state.isLoggedIn}>
+                            <IdeaAuthenticatedRoute isLoggedIn={this.state.isLoggedIn} isFileBrowserEnabled={this.state.isFileBrowserEnabled}>
                                 <IdeaLogTail
                                     ideaPageId="log-tail"
                                     toolsOpen={this.state.toolsOpen}
@@ -623,7 +625,7 @@ class IdeaWebPortalApp extends Component<IdeaWebPortalAppProps, IdeaWebPortalApp
                     <Route
                         path="/virtual-desktop/sessions"
                         element={
-                            <IdeaAuthenticatedRoute isLoggedIn={this.state.isLoggedIn} isProjectOwner={this.state.hasProjects}>
+                            <IdeaAuthenticatedRoute isLoggedIn={this.state.isLoggedIn} hasProjectBasedPermission={this.state.projectPermissions?.canCreateOthersSession}>
                                 <VirtualDesktopSessions
                                     ideaPageId="virtual-desktop-sessions"
                                     toolsOpen={this.state.toolsOpen}
@@ -716,7 +718,7 @@ class IdeaWebPortalApp extends Component<IdeaWebPortalAppProps, IdeaWebPortalApp
                         }
                     />
                     <Route
-                        path="/virtual-desktop/permission-profiles/:profile_id"
+                        path="/cluster/permissions/sharing-profiles/:profile_id"
                         element={
                             <IdeaAuthenticatedRoute isLoggedIn={this.state.isLoggedIn}>
                                 <VirtualDesktopPermissionProfileDetail
@@ -734,30 +736,11 @@ class IdeaWebPortalApp extends Component<IdeaWebPortalAppProps, IdeaWebPortalApp
                             </IdeaAuthenticatedRoute>
                         }
                     />
-                    <Route
-                        path="/virtual-desktop/permission-profiles"
-                        element={
-                            <IdeaAuthenticatedRoute isLoggedIn={this.state.isLoggedIn}>
-                                <VirtualDesktopPermissionProfiles
-                                    ideaPageId="virtual-desktop-permission-profiles"
-                                    toolsOpen={this.state.toolsOpen}
-                                    tools={this.state.tools}
-                                    onToolsChange={this.onToolsChange}
-                                    onPageChange={this.onPageChange}
-                                    sideNavItems={this.state.sideNavItems}
-                                    sideNavHeader={this.state.sideNavHeader}
-                                    onSideNavChange={this.onSideNavChange}
-                                    onFlashbarChange={this.onFlashbarChange}
-                                    flashbarItems={this.state.flashbarItems}
-                                />
-                            </IdeaAuthenticatedRoute>
-                        }
-                    />
                     {/* environment */}
                     <Route
                         path="/cluster/projects"
                         element={
-                            <IdeaAuthenticatedRoute isLoggedIn={this.state.isLoggedIn} isProjectOwner={this.state.hasProjects || false}>
+                            <IdeaAuthenticatedRoute isLoggedIn={this.state.isLoggedIn} hasProjectBasedPermission={this.state.projectPermissions?.isInProject || false}>
                                 <Projects
                                     ideaPageId="projects"
                                     toolsOpen={this.state.toolsOpen}
@@ -777,7 +760,7 @@ class IdeaWebPortalApp extends Component<IdeaWebPortalAppProps, IdeaWebPortalApp
                      <Route
                         path="/cluster/projects/configure"
                         element={
-                            <IdeaAuthenticatedRoute isLoggedIn={this.state.isLoggedIn} isProjectOwner={this.state.hasProjects}>
+                            <IdeaAuthenticatedRoute isLoggedIn={this.state.isLoggedIn} hasProjectBasedPermission={this.state.projectPermissions?.isInProject}>
                                 <ConfigureProject
                                     ideaPageId="configure-project"
                                     toolsOpen={this.state.toolsOpen}
@@ -908,11 +891,11 @@ class IdeaWebPortalApp extends Component<IdeaWebPortalAppProps, IdeaWebPortalApp
                         }
                     />
                     <Route
-                        path="/cluster/permission-profiles"
+                        path="/cluster/permissions"
                         element={
                             <IdeaAuthenticatedRoute isLoggedIn={this.state.isLoggedIn}>
-                                <PermissionProfilesDashboard
-                                    ideaPageId="permission-profiles"
+                                <Permissions
+                                    ideaPageId="permissions"
                                     toolsOpen={this.state.toolsOpen}
                                     tools={this.state.tools}
                                     onToolsChange={this.onToolsChange}
@@ -927,11 +910,11 @@ class IdeaWebPortalApp extends Component<IdeaWebPortalAppProps, IdeaWebPortalApp
                         }
                     />
                     <Route
-                        path="/cluster/permission-profiles/:profile_id"
+                        path="/cluster/permissions/project-roles/:profile_id"
                         element={
                             <IdeaAuthenticatedRoute isLoggedIn={this.state.isLoggedIn}>
                                 <PermissionProfilesView
-                                    ideaPageId="permission-profiles-view-detail"
+                                    ideaPageId="project-roles-view-detail"
                                     toolsOpen={this.state.toolsOpen}
                                     tools={this.state.tools}
                                     onToolsChange={this.onToolsChange}
@@ -946,11 +929,30 @@ class IdeaWebPortalApp extends Component<IdeaWebPortalAppProps, IdeaWebPortalApp
                         }
                     />
                     <Route
-                        path="/cluster/permission-profiles/configure"
+                        path="/cluster/permissions/project-roles/configure"
                         element={
                             <IdeaAuthenticatedRoute isLoggedIn={this.state.isLoggedIn}>
                                 <ConfigurePermissionProfile
-                                    ideaPageId="permission-profiles-configure"
+                                    ideaPageId="project-roles-configure"
+                                    toolsOpen={this.state.toolsOpen}
+                                    tools={this.state.tools}
+                                    onToolsChange={this.onToolsChange}
+                                    onPageChange={this.onPageChange}
+                                    sideNavItems={this.state.sideNavItems}
+                                    sideNavHeader={this.state.sideNavHeader}
+                                    onSideNavChange={this.onSideNavChange}
+                                    onFlashbarChange={this.onFlashbarChange}
+                                    flashbarItems={this.state.flashbarItems}
+                                />
+                            </IdeaAuthenticatedRoute>
+                        }
+                    />
+                    <Route
+                        path="/cluster/permissions/sharing-profiles/configure"
+                        element={
+                            <IdeaAuthenticatedRoute isLoggedIn={this.state.isLoggedIn}>
+                                <ConfigureDesktopSharingProfile
+                                    ideaPageId="sharing-profiles-configure"
                                     toolsOpen={this.state.toolsOpen}
                                     tools={this.state.tools}
                                     onToolsChange={this.onToolsChange}

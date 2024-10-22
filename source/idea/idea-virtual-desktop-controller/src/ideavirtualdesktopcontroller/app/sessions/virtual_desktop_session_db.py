@@ -136,7 +136,8 @@ class VirtualDesktopSessionDB(VirtualDesktopNotifiableDB):
                 name=Utils.get_value_as_string(sessions_constants.USER_SESSION_DB_PROJECT_NAME_KEY, Utils.get_value_as_dict(sessions_constants.USER_SESSION_DB_PROJECT_KEY, db_entry, {}), None),
                 title=Utils.get_value_as_string(sessions_constants.USER_SESSION_DB_PROJECT_TITLE_KEY, Utils.get_value_as_dict(sessions_constants.USER_SESSION_DB_PROJECT_KEY, db_entry, {}), None)
             ),
-            tags=Utils.get_value_as_list(sessions_constants.USER_SESSION_DB_SESSION_TAGS_KEY, db_entry)
+            tags=db_entry.get(sessions_constants.USER_SESSION_DB_SESSION_TAGS_KEY, []),
+            is_idle=db_entry.get(sessions_constants.USER_SESSION_DB_IS_IDLE_KEY, False)
         )
 
     def convert_session_object_to_db_dict(self, session: VirtualDesktopSession) -> Dict:
@@ -174,7 +175,8 @@ class VirtualDesktopSessionDB(VirtualDesktopNotifiableDB):
             sessions_constants.USER_SESSION_DB_SCHEDULE_KEYS[DayOfWeek.FRIDAY]: self._schedule_db.convert_schedule_object_to_db_dict(session.schedule.friday),
             sessions_constants.USER_SESSION_DB_SCHEDULE_KEYS[DayOfWeek.SATURDAY]: self._schedule_db.convert_schedule_object_to_db_dict(session.schedule.saturday),
             sessions_constants.USER_SESSION_DB_SCHEDULE_KEYS[DayOfWeek.SUNDAY]: self._schedule_db.convert_schedule_object_to_db_dict(session.schedule.sunday),
-            sessions_constants.USER_SESSION_DB_SESSION_TAGS_KEY: session.tags
+            sessions_constants.USER_SESSION_DB_SESSION_TAGS_KEY: session.tags,
+            sessions_constants.USER_SESSION_DB_IS_IDLE_KEY: False if session.is_idle is None else session.is_idle,
         }
 
         return db_dict

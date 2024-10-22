@@ -9,13 +9,14 @@
 #  OR CONDITIONS OF ANY KIND, express or implied. See the License for the specific language governing permissions
 #  and limitations under the License.
 
-import tasks.idea as idea
-from tasks.tools.build_tool import BuildTool
+import os
+import shutil
+from typing import Callable, Optional
 
 from invoke import Context
-import shutil
-import os
-from typing import Callable, Optional
+
+import tasks.idea as idea
+from tasks.tools.build_tool import BuildTool
 
 
 class PackageTool:
@@ -27,10 +28,12 @@ class PackageTool:
         self.project_build_tool = BuildTool(c, app_name)
         self.data_model_build_tool: Optional[BuildTool] = None
         self.sdk_build_tool: Optional[BuildTool] = None
+        self.library_build_tool: Optional[BuildTool] = None
 
-        if app_name not in {'idea-bootstrap', 'idea-dcv-connection-gateway'}:
+        if app_name not in {'idea-bootstrap', 'idea-dcv-connection-gateway', 'library'}:
             self.data_model_build_tool = BuildTool(c, 'idea-data-model')
             self.sdk_build_tool = BuildTool(c, 'idea-sdk')
+            self.library_build_tool = BuildTool(c, 'library')
             self.project_build_tool = BuildTool(c, app_name)
 
     @property
@@ -105,6 +108,17 @@ class PackageTool:
             idea.console.print(f'copying data-model artifacts ...')
             for file in os.listdir(self.data_model_build_tool.output_dir):
                 file_path = os.path.join(self.data_model_build_tool.output_dir, file)
+                if os.path.isdir(file_path):
+                    shutil.copytree(file_path, os.path.join(output_dir, file))
+                else:
+                    shutil.copy2(file_path, output_dir)
+        
+        # copy library
+        if self.library_build_tool is not None:
+            self.library_build_tool.build()
+            idea.console.print(f'copying library artifacts ...')
+            for file in os.listdir(self.library_build_tool.output_dir):
+                file_path = os.path.join(self.library_build_tool.output_dir, file)
                 if os.path.isdir(file_path):
                     shutil.copytree(file_path, os.path.join(output_dir, file))
                 else:

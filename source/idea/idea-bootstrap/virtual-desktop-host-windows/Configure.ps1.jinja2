@@ -16,7 +16,13 @@
 {% include '_templates/windows/mount_shared_storage.jinja2' %}
 
 function Configure-WindowsEC2Instance {
-  Param()
+  Param(
+    [Parameter(Mandatory = $true)]
+    [string]$AWSRegion,
+
+    [Parameter(Mandatory = $true)]
+    [string]$ENVName
+  )
 
   $timestamp = Get-Date -Format 'yyyyMMddTHHmmssffffZ'
   $RESConfigureVDI = "$env:SystemDrive\Users\Administrator\RES\Bootstrap\Log\RESConfigureVDI.log.$timestamp"
@@ -139,6 +145,11 @@ function Configure-WindowsEC2Instance {
   Import-Module .\ConfigureDCVHost.ps1
   Bootstrap-DCV-WindowsHost
 
+  Write-Host "Schedule Task for VDI Idle Check"
+  New-Item -Path "C:\RES" -ItemType "directory"
+  $CurrentDirectory = Get-Location
+  schtasks /create /sc minute /mo 1 /tn RunVDIIdleCheckScriptEveryMinute /tr "powershell -File $CurrentDirectory\VDIIdleCheck.ps1 -AWSRegion $AWSRegion -EnvName $EnvName" /ru system /f
+  
   if($env:ON_VDI_CONFIGURED_COMMANDS) {
       Import-Module .\DownloadAndExecuteScript.ps1
       & .\$env:ON_VDI_CONFIGURED_COMMANDS

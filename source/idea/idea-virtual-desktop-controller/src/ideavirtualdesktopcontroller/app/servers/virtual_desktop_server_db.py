@@ -74,7 +74,8 @@ class VirtualDesktopServerDB(VirtualDesktopNotifiableDB):
             servers_constants.DCV_HOST_DB_IDEA_SESSION_ID_KEY: server.idea_sesssion_id,
             servers_constants.DCV_HOST_DB_IDEA_SESSION_OWNER_KEY: server.idea_session_owner,
             servers_constants.DCV_HOST_DB_STATE_KEY: server.state,
-            servers_constants.DCV_HOST_DB_LOCKED_KEY: False if Utils.is_empty(server.locked) else server.locked
+            servers_constants.DCV_HOST_DB_LOCKED_KEY: False if Utils.is_empty(server.locked) else server.locked,
+            servers_constants.DCV_HOST_DB_IS_IDLE_KEY: False if not server.is_idle else server.is_idle
         }
 
     @staticmethod
@@ -87,7 +88,8 @@ class VirtualDesktopServerDB(VirtualDesktopNotifiableDB):
             instance_type=Utils.get_value_as_string(servers_constants.DCV_HOST_DB_INSTANCE_TYPE_KEY, db_entry),
             idea_sesssion_id=Utils.get_value_as_string(servers_constants.DCV_HOST_DB_IDEA_SESSION_ID_KEY, db_entry),
             idea_session_owner=Utils.get_value_as_string(servers_constants.DCV_HOST_DB_IDEA_SESSION_OWNER_KEY, db_entry),
-            locked=Utils.get_value_as_bool(servers_constants.DCV_HOST_DB_LOCKED_KEY, db_entry, False)
+            locked=Utils.get_value_as_bool(servers_constants.DCV_HOST_DB_LOCKED_KEY, db_entry, False),
+            is_idle=db_entry.get(servers_constants.DCV_HOST_DB_IS_IDLE_KEY, False)
         )
 
     def create(self, server: VirtualDesktopServer, idea_session_id: str, idea_session_owner: str) -> VirtualDesktopServer:

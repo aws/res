@@ -18,9 +18,7 @@ from typing import Optional
 import pytest
 from ideaclustermanager import AppContext
 from ideaclustermanager.app.accounts.account_tasks import (
-    CreateUserHomeDirectoryTask,
     SyncGroupInDirectoryServiceTask,
-    SyncUserInDirectoryServiceTask,
 )
 from ideaclustermanager.app.accounts.auth_utils import AuthUtils
 from ideaclustermanager.app.accounts.user_home_directory import UserHomeDirectory
@@ -382,42 +380,6 @@ def test_accounts_crud_list_users(context: AppContext):
             found = user
             break
     assert found is not None
-
-
-def test_accounts_create_user_home_directory(context: AppContext, monkeypatch):
-    """
-    user home directory
-    """
-    crud_user = AccountsTestContext.crud_user
-    username = crud_user.username
-    monkeypatch.setattr(context.accounts, "get_user", lambda x: crud_user)
-    task = CreateUserHomeDirectoryTask(context=context)
-    monkeypatch.setattr(UserHomeDirectory, "initialize", lambda x: True)
-    try:
-        task.invoke(
-            payload={
-                "username": username,
-            }
-        )
-    except Exception as e:
-        print("failed in create home directory task: {e}")
-
-
-def test_sync_user_in_directory_service_task(context, monkeypatch):
-    """
-    sync users in directory service, read_only
-    """
-    monkeypatch.setattr(context.ldap_client, "is_readonly", lambda: True)
-    crud_user = AccountsTestContext.crud_user
-    username = crud_user.username
-    payload = {"username": username, "enabled": "true"}
-    monkeypatch.setattr(context.accounts.user_dao, "get_user", lambda x: payload)
-    monkeypatch.setattr(Utils, "get_value_as_bool", lambda x, y, z: False)
-    task = SyncUserInDirectoryServiceTask(context=context)
-    try:
-        task.invoke(payload=payload)
-    except Exception as e:
-        print("failed in sync user directory service task: {e}")
 
 
 def test_sync_group_in_directory_service_task(context, monkeypatch):

@@ -30,6 +30,7 @@ import { IdeaAuthenticationContext } from "../common/authentication-context";
 import IdeaBaseClient, { IdeaBaseClientProps } from "./base-client";
 import FileSystemClient from "./filesystem-client";
 import AuthzClient from "./authz-client";
+import ProxyClient from "./proxy-client";
 
 export interface IdeaClientsProps {
     appId: string;
@@ -54,6 +55,7 @@ class IdeaClients {
     private readonly projectsClient: ProjectsClient;
     private readonly filesystemClient: FileSystemClient;
     private readonly emailTemplatesClient: EmailTemplatesClient;
+    private readonly proxyClient: ProxyClient;
 
     private readonly clients: IdeaBaseClient<IdeaBaseClientProps>[];
 
@@ -86,6 +88,15 @@ class IdeaClients {
             serviceWorkerRegistration: props.serviceWorkerRegistration,
         });
         this.clients.push(this.authAdminClient);
+
+        this.proxyClient = new ProxyClient({
+            name: "proxy-client",
+            baseUrl: `${props.baseUrl}/awsproxy`,
+            authContext: props.authContext,
+            apiContextPath: "",
+            serviceWorkerRegistration: props.serviceWorkerRegistration,
+        });
+        this.clients.push(this.proxyClient);
 
         this.snapshotsClient = new SnapshotsClient({
             name: "snapshots-client",
@@ -258,6 +269,10 @@ class IdeaClients {
 
     emailTemplates(): EmailTemplatesClient {
         return this.emailTemplatesClient;
+    }
+
+    proxy(): ProxyClient {
+        return this.proxyClient;
     }
 }
 

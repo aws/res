@@ -117,4 +117,5 @@ class ApiAuthorizationServiceBase(ApiAuthorizationServiceProtocol):
             "Projects.DisableProject": "projects.update_status",
             "VirtualDesktop.CreateSession": permission,
             "VirtualDesktop.DeleteSessions": permission,
+            "VirtualDesktop.ListSessions": permission,
             }

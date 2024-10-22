@@ -22,8 +22,11 @@ class Create:
     automagically
     """
 
-    def __init__(self, params: Union[RESParameters, BIParameters]):
+    def __init__(
+        self, params: Union[RESParameters, BIParameters], lambda_layer_arn: str
+    ):
         self.params = params
+        self.lambda_layer_arn = lambda_layer_arn
 
     def get_commands(self) -> list[str]:
         return [
@@ -50,6 +53,7 @@ class Create:
             *self._update_infrastructure_host_ami_config(),
             *self._update_directory_service_config(),
             *self._update_custom_domain_config(),
+            f"{EXE} config set Key=shared_library_arn,Type=str,Value={self.lambda_layer_arn} --force {self._get_suffix()}",
             f"rm -rf /root/.idea/clusters/{self.params.get_str(CommonKey.CLUSTER_NAME)}/{aws_cdk.Aws.REGION}/config",
             f"{EXE} config export {self._get_suffix()}",
         ]
@@ -154,7 +158,7 @@ class Create:
                 f"{EXE} config set Key={key},Type={type(value).__name__},Value='{value}' --force {self._get_suffix()}"
             )
         config_update_commands.append(
-            f"{EXE} config set Key=directoryservice.root_credentials_provided,Type=bool,Value=True --force {self._get_suffix()}"
+            f"{EXE} config set Key=directoryservice.service_account_credentials_provided,Type=bool,Value=True --force {self._get_suffix()}"
         )
         return config_update_commands
 
@@ -189,9 +193,8 @@ class Create:
             "directoryservice.ldap_base": self.params.get_str(
                 DirectoryServiceKey.LDAP_BASE
             ),
-            "directoryservice.root_username_secret_arn": self.params.root_username_secret_arn,
-            "directoryservice.root_password_secret_arn": self.params.get_str(
-                DirectoryServiceKey.ROOT_PASSWORD_SECRET_ARN
+            "directoryservice.service_account_credentials_secret_arn": self.params.get_str(
+                DirectoryServiceKey.SERVICE_ACCOUNT_CREDENTIALS_SECRET_ARN
             ),
             "directoryservice.ad_short_name": self.params.get_str(
                 DirectoryServiceKey.AD_SHORT_NAME
@@ -208,9 +211,6 @@ class Create:
             "directoryservice.computers.ou": self.params.get_str(
                 DirectoryServiceKey.COMPUTERS_OU
             ),
-            "directoryservice.sudoers.ou": self.params.get_str(
-                DirectoryServiceKey.SUDOERS_OU
-            ),
             "directoryservice.sudoers.group_name": self.params.get_str(
                 DirectoryServiceKey.SUDOERS_GROUP_NAME
             ),
@@ -224,6 +224,8 @@ class Create:
                 DirectoryServiceKey.DISABLE_AD_JOIN
             ),
             "directoryservice.root_user_dn_secret_arn": self.params.root_user_dn_secret_arn,
+            "directoryservice.groups_filter": "(sAMAccountName=*)",
+            "directoryservice.users_filter": "(sAMAccountName=*)",
         }
 
     def _get_custom_domain_settings(self) -> dict[str, Any]:

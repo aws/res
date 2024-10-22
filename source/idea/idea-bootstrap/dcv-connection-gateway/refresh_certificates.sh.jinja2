@@ -13,7 +13,7 @@
 
 #!/bin/bash
 
-set -x
+set +x
 
 source /etc/environment
 source /root/bootstrap/infra.cfg
@@ -25,6 +25,13 @@ fi
 SCRIPT_DIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
 source "${SCRIPT_DIR}/../common/bootstrap_common.sh"
 
-{% include 'dcv-connection-gateway/_templates/configure_certificates.jinja2' %}
+CERT_CONTENT=$(get_secret ${CERTIFICATE_SECRET_ARN})
+PRIVATE_KEY_CONTENT=$(get_secret ${PRIVATE_KEY_SECRET_ARN})
 
-systemctl restart dcv-connection-gateway
+if [[ $(< /etc/dcv-connection-gateway/certs/default_cert.pem) == "$CERT_CONTENT" ]] && [[ $(< /etc/dcv-connection-gateway/certs/default_key_pkcs1.pem) == "$PRIVATE_KEY_CONTENT" ]]; then
+    echo "`date`: Certificate and Private Key contents not changed. Skipping certificate reconfigurartion and DCV Gateway restart."
+else
+    echo "`date`: Certificate or Private Key contents or both have changed. Reconfiguring certificate and restarting DCV Gateway."
+    {% include 'dcv-connection-gateway/_templates/configure_certificates.jinja2' %}
+    systemctl restart dcv-connection-gateway
+fi

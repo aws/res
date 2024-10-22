@@ -15,6 +15,7 @@ from ideadatamodel import constants, exceptions
 from ideaclustermanager.app.accounts.ldapclient import AbstractLDAPClient, LdapClientOptions, OpenLDAPClient, ActiveDirectoryClient
 
 from typing import TypeVar
+import json
 
 AbstractLDAPClientType = TypeVar('AbstractLDAPClientType', bound=AbstractLDAPClient)
 
@@ -25,16 +26,15 @@ def build_ldap_client(context: SocaContext, logger=None) -> AbstractLDAPClientTy
 
         ldap_connection_uri = context.config().get_string('directoryservice.ldap_connection_uri', required=True)
         domain_name = context.config().get_string('directoryservice.name', required=True)
-        ds_root_username = context.config().get_secret('directoryservice.root_username_secret_arn', required=True)
-        ds_root_password = context.config().get_secret('directoryservice.root_password_secret_arn', required=True)
+        ds_service_account_username, ds_service_account_password = get_credentials_value_from_secret_arn(context)
 
         return OpenLDAPClient(
             context=context,
             options=LdapClientOptions(
                 uri=ldap_connection_uri,
                 domain_name=domain_name,
-                root_username=ds_root_username,
-                root_password=ds_root_password
+                root_username=ds_service_account_username,
+                root_password=ds_service_account_password
             ),
             logger=logger
         )
@@ -49,8 +49,7 @@ def build_ldap_client(context: SocaContext, logger=None) -> AbstractLDAPClientTy
             directory_id = None
         ad_netbios = context.config().get_string('directoryservice.ad_short_name', required=True)
         ldap_connection_uri = context.config().get_string('directoryservice.ldap_connection_uri', required=True)
-        ds_root_username = context.config().get_secret('directoryservice.root_username_secret_arn', required=True)
-        ds_root_password = context.config().get_secret('directoryservice.root_password_secret_arn', required=True)
+        ds_service_account_username, ds_service_account_password = get_credentials_value_from_secret_arn(context)
         password_max_age = context.config().get_int('directoryservice.password_max_age', required=True)
 
         return ActiveDirectoryClient(
@@ -58,8 +57,8 @@ def build_ldap_client(context: SocaContext, logger=None) -> AbstractLDAPClientTy
             options=LdapClientOptions(
                 uri=ldap_connection_uri,
                 domain_name=domain_name,
-                root_username=ds_root_username,
-                root_password=ds_root_password,
+                root_username=ds_service_account_username,
+                root_password=ds_service_account_password,
                 ad_netbios=ad_netbios,
                 directory_id=directory_id,
                 password_max_age=password_max_age
@@ -70,3 +69,10 @@ def build_ldap_client(context: SocaContext, logger=None) -> AbstractLDAPClientTy
     else:
 
         raise exceptions.general_exception(f'directory service provider: {ds_provider} not supported')
+
+def get_credentials_value_from_secret_arn(context: SocaContext) -> str:
+    ds_service_account_credentials = context.config().get_secret('directoryservice.service_account_credentials_secret_arn', required=True)
+    parsed_credentials_dic = json.loads(ds_service_account_credentials)
+    username = list(parsed_credentials_dic.keys())[0]
+    password = parsed_credentials_dic[username]
+    return username, password

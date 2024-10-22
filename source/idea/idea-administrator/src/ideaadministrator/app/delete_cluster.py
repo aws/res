@@ -429,7 +429,7 @@ class DeleteCluster:
                     if tags.get(constants.IDEA_TAG_ENVIRONMENT_NAME) == self.cluster_name:
                         vpc_functions.append(func)
                 except Exception as e:
-                    print(f"Error retrieving tags for function {function_arn}: {e}")
+                    self.context.error(f"Error retrieving tags for function {function_arn}: {e}")
 
         # Handle pagination if there are more functions
         while 'NextMarker' in response:
@@ -442,12 +442,12 @@ class DeleteCluster:
                         if tags.get(constants.IDEA_TAG_ENVIRONMENT_NAME) == self.cluster_name:
                             vpc_functions.append(func)
                     except Exception as e:
-                        print(f"Error retrieving tags for function {function_arn}: {e}")
+                        self.context.error(f"Error retrieving tags for function {function_arn}: {e}")
 
         # Remove the VPC configuration from each function
         for function in vpc_functions:
             function_name = function['FunctionName']
-            print(f"Removing VPC configuration from function: {function_name}")
+            self.context.info(f"Removing VPC configuration from function: {function_name}")
             
             try:
                 self.context.aws().lambda_().update_function_configuration(
@@ -457,10 +457,15 @@ class DeleteCluster:
                         'SecurityGroupIds': []
                     }
                 )
-                print(f"VPC configuration removed from function: {function_name}")
+                self.context.info(f"VPC configuration removed from function: {function_name}")
             except Exception as e:
-                print(f"Error removing VPC configuration from function {function_name}: {e}")
-            
+                self.context.error(f"Error removing VPC configuration from function {function_name}: {e}")
+        
+        if vpc_functions:
+            # If there were any Lambda functions connected to a RES VPC,
+            # then the ENIs will take approximately ~15 minutes to delete.
+            self.context.info("Waiting at least 15 minutes for Lambda functions previously attached to VPC to clean up any of their leftover ENIs...")
+            time.sleep(900)
 
     def check_stack_deletion_status(self, stack_names: List[str]) -> bool:
         delete_failed = 0

@@ -9,6 +9,7 @@
 #  OR CONDITIONS OF ANY KIND, express or implied. See the License for the specific language governing permissions
 #  and limitations under the License.
 
+import json
 from ideadatamodel import (
     exceptions, errorcodes, constants,
     SocaBaseModel,
@@ -36,8 +37,7 @@ class LdapClientOptions(SocaBaseModel):
     domain_name: Optional[str]
     root_username: Optional[str]
     root_password: Optional[str]
-    root_username_secret_arn: Optional[str]
-    root_password_secret_arn: Optional[str]
+    service_account_credentials_secret_arn: Optional[str]
     root_username_file: Optional[str]
     root_password_file: Optional[str]
     connection_pool_enabled: Optional[bool]
@@ -118,23 +118,23 @@ class AbstractLDAPClient:
         )
 
     def filter_out_referrals_from_response(self, results):
-        # Response might contain search_ref results based on AD configuration. 
+        # Response might contain search_ref results based on AD configuration.
         # This result item does not correspond to a user in the AD instead corresponds to alternate location in which the client may search for additional matching entries.
         # Below logic filters out references from the results
         # https://ldapwiki.com/wiki/Wiki.jsp?page=Search%20Responses
-        
+
         filter_criteria = lambda x: x[0] != None
         search_results = []
         referrals = []
-        
-        for result in results: 
+
+        for result in results:
             if filter_criteria(result):
                 search_results.append(result)
             else:
                 referrals.append(result)
-        
+
         if(referrals): self.logger.debug(f"Referrals skipped in result response: {referrals}")
-        
+
         return search_results
 
     # ldap wrapper methods
@@ -362,12 +362,14 @@ class AbstractLDAPClient:
             with open(file, 'r') as f:
                 return f.read().strip()
 
-        secret_arn = self.options.root_username_secret_arn
+        secret_arn = self.options.service_account_credentials_secret_arn
         if Utils.is_not_empty(secret_arn):
             result = self.context.aws().secretsmanager().get_secret_value(
                 SecretId=secret_arn
             )
-            return Utils.get_value_as_string('SecretString', result)
+            secret_string = Utils.get_value_as_string('SecretString', result)
+            secret_dict = json.loads(secret_string)
+            return list(secret_dict.keys())[0]
 
         raise exceptions.soca_exception(
             error_code=errorcodes.GENERAL_ERROR,
@@ -383,12 +385,14 @@ class AbstractLDAPClient:
             with open(file, 'r') as f:
                 return f.read().strip()
 
-        secret_arn = self.options.root_password_secret_arn
+        secret_arn = self.options.service_account_credentials_secret_arn
         if Utils.is_not_empty(secret_arn):
             result = self.context.aws().secretsmanager().get_secret_value(
                 SecretId=secret_arn
             )
-            return Utils.get_value_as_string('SecretString', result)
+            secret_string = Utils.get_value_as_string('SecretString', result)
+            secret_dict = json.loads(secret_string)
+            return secret_dict[list(secret_dict.keys())[0]]
 
         raise exceptions.soca_exception(
             error_code=errorcodes.GENERAL_ERROR,
@@ -404,11 +408,13 @@ class AbstractLDAPClient:
             with open(file, 'w') as f:
                 f.write(password)
 
-        secret_arn = self.options.root_password_secret_arn
+        secret_arn = self.options.service_account_credentials_secret_arn
+        user_name = self.fetch_root_username()
+        credentials = json.dumps({user_name:password})
         if Utils.is_not_empty(secret_arn):
             self.context.aws().secretsmanager().put_secret_value(
                 SecretId=secret_arn,
-                SecretString=password
+                SecretString=credentials
             )
 
         self._root_password = password
@@ -478,16 +484,6 @@ class AbstractLDAPClient:
 
         return len(results) > 0
 
-    def is_sudo_user(self, username: str) -> bool:
-        results = self.search_s(
-            base=self.ldap_sudoers_base,
-            filterstr=self.build_sudoer_filterstr(username),
-            attrlist=['sAMAccountName']
-        )
-
-        return len(results) > 0
-
-
     @property
     @abstractmethod
     def ldap_computers_base(self) -> str:
@@ -541,14 +537,6 @@ class AbstractLDAPClient:
     @abstractmethod
     def ldap_sudoers_base(self) -> str:
         ...
-
-    @property
-    @abstractmethod
-    def ldap_sudoer_filterstr(self) -> str:
-        ...
-
-    def build_sudoer_filterstr(self, username: str) -> str:
-        return f'(&{self.ldap_sudoer_filterstr}(sAMAccountName={username}))'
 
     @property
     @abstractmethod
@@ -635,38 +623,15 @@ class AbstractLDAPClient:
 
         return result
 
-    def search_groups(self, group_name_filter: SocaFilter = None,
-                      username_filter: SocaFilter = None,
+    def search_groups(self, groups_filter: Optional[str] = None,
                       page_size: int = None,
                       start: int = 0) -> Tuple[List[Dict], SocaPaginator]:
         result = []
 
-        group_name_token = None
-        if group_name_filter is not None:
-            if Utils.is_not_empty(group_name_filter.eq):
-                group_name_token = group_name_filter.eq
-            elif Utils.is_not_empty(group_name_filter.starts_with):
-                group_name_token = f'{group_name_filter.starts_with}*'
-            elif Utils.is_not_empty(group_name_filter.ends_with):
-                group_name_token = f'*{group_name_filter.ends_with}'
-            elif Utils.is_not_empty(group_name_filter.like):
-                group_name_token = f'*{group_name_filter.like}*'
-
-        username_token = None
-        if username_filter is not None:
-            if Utils.is_not_empty(username_filter.eq):
-                username_token = username_filter.eq
-            elif Utils.is_not_empty(username_filter.starts_with):
-                username_token = f'{username_filter.starts_with}*'
-            elif Utils.is_not_empty(username_filter.ends_with):
-                username_token = f'*{username_filter.ends_with}'
-            elif Utils.is_not_empty(username_filter.like):
-                username_token = f'*{username_filter.like}*'
-
-        if Utils.are_empty(group_name_token, username_token):
-            filterstr = self.ldap_group_filterstr
+        if groups_filter:
+            filterstr = f"(&{self.ldap_group_filterstr}{groups_filter})"
         else:
-            filterstr = self.build_group_filterstr(group_name=group_name_token, username=username_token)
+            filterstr = self.ldap_group_filterstr
 
         if self.is_activedirectory():
 
@@ -723,30 +688,6 @@ class AbstractLDAPClient:
         group_dn = self.build_group_dn(group_name)
         self.delete_s(group_dn)
 
-    @abstractmethod
-    def add_sudo_user(self, username: str):
-        ...
-
-    @abstractmethod
-    def remove_sudo_user(self, username: str):
-        ...
-
-    def list_sudo_users(self) -> List[str]:
-        result = []
-
-        ldap_result = self.search_s(
-            base=self.ldap_sudoers_base,
-            filterstr=self.ldap_sudoer_filterstr,
-            attrlist=['sAMAccountName']
-        )
-
-        for entry in ldap_result:
-            sudo_user = entry[1]
-            username = LdapUtils.get_string_value('sAMAccountName', sudo_user)
-            result.append(username)
-
-        return result
-
     def get_user(self, username: str, trace=True) -> Optional[Dict]:
 
         results = self.search_s(
@@ -759,10 +700,6 @@ class AbstractLDAPClient:
             return None
 
         return self.convert_ldap_user(results[0][1])
-
-    @abstractmethod
-    def create_service_account(self, username: str, password: str):
-        ...
 
     @abstractmethod
     def sync_user(self, *,
@@ -794,32 +731,23 @@ class AbstractLDAPClient:
 
     def search_users(
         self,
-        username_filter: SocaFilter,
-        ldap_base: str = None,
-        filter_str: str = None,
-        page_size: int = None,
+        ldap_base: Optional[str] = None,
+        users_filter: Optional[str] = None,
+        page_size: Optional[int] = None,
         start: int = 0,
     ) -> Tuple[List[Dict], SocaPaginator]:
         result = []
 
-        if not filter_str:
-            filter_str = self.ldap_user_filterstr
-
-        if username_filter is not None:
-            if Utils.is_not_empty(username_filter.eq):
-                filter_str = self.build_user_filterstr(username=username_filter.eq)
-            elif Utils.is_not_empty(username_filter.starts_with):
-                filter_str = self.build_user_filterstr(username=f'{username_filter.starts_with}*')
-            elif Utils.is_not_empty(username_filter.ends_with):
-                filter_str = self.build_user_filterstr(username=f'*{username_filter.ends_with}')
-            elif Utils.is_not_empty(username_filter.like):
-                filter_str = self.build_user_filterstr(username=f'*{username_filter.like}*')
+        if users_filter:
+            filterstr = f"(&{self.ldap_user_filterstr}{users_filter})"
+        else:
+            filterstr = self.ldap_user_filterstr
 
         if not ldap_base:
             ldap_base = self.ldap_user_base
 
         if self.is_activedirectory():
-            search_result = self.simple_paginated_search(base=ldap_base, filterstr=filter_str)
+            search_result = self.simple_paginated_search(base=ldap_base, filterstr=filterstr)
 
             ldap_result = search_result.get('result', [])
             total = len(ldap_result)
@@ -829,7 +757,7 @@ class AbstractLDAPClient:
             search_result = self.sssvlv_paginated_search(
                 base=ldap_base,
                 sort_by='uidNumber:integerOrderingMatch',
-                filterstr=filter_str,
+                filterstr=filterstr,
                 page_size=page_size,
                 start=start
             )

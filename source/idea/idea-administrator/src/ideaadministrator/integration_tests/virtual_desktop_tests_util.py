@@ -95,6 +95,7 @@ from defusedxml.ElementTree import parse
 from ideadatamodel import (
     exceptions
 )
+from ideaadministrator import app_constants
 
 import os
 from typing import Dict, List, Optional
@@ -301,7 +302,7 @@ class SessionsTestHelper:
                 idea_session_base_os=self.session.base_os,
                 idea_session_created_on=self.session.created_on,
                 idea_session_hibernation_enabled=self.session.hibernation_enabled,
-                permission_profile=permission_profile.get_permission('admin_profile'))]
+                permission_profile=permission_profile.get_permission(app_constants.DCV_SETTINGS_DEFAULT_OWNER_PROFILE_ID))]
             return session_permission_payload
 
         except exceptions.SocaException as e:
@@ -604,6 +605,23 @@ class VirtualDesktopApiHelper:
         except (exceptions.SocaException, Exception) as e:
             self.context.error(f'Failed to Update Permissions Profile. Error : {e}')
 
+    def update_admin_permission_profile(self, namespace: str) -> UpdatePermissionProfileResponse:
+        try:
+            owner_profile: VirtualDesktopPermissionProfile = self.get_permission_profile(profile_id=app_constants.DCV_SETTINGS_DEFAULT_OWNER_PROFILE_ID)
+            response = self.context.get_virtual_desktop_controller_client(timeout=7200).invoke_alt(
+                namespace=namespace,
+                payload=UpdatePermissionProfileRequest(profile=VirtualDesktopPermissionProfile(
+                    profile_id=app_constants.DCV_SETTINGS_DEFAULT_OWNER_PROFILE_ID,
+                    title=owner_profile.title,
+                    description=owner_profile.description,
+                    permissions=owner_profile.permissions,
+                )),
+                result_as=UpdatePermissionProfileResponse,
+                access_token=self.access_token)
+            return response
+        except (exceptions.SocaException, Exception) as e:
+            self.context.error(f'Failed to Update Admin Permissions Profile. Error : {e}')
+
     def list_software_stacks(self, namespace: str) -> ListSoftwareStackResponse:
         try:
             response = self.context.get_virtual_desktop_controller_client(timeout=7200).invoke_alt(
@@ -686,11 +704,11 @@ class VirtualDesktopApiHelper:
         except (exceptions.SocaException, Exception) as e:
             self.context.error(f'Failed to List Permission Profiles. Error : {e}')
 
-    def get_permission_profile(self) -> GetPermissionProfileResponse:
+    def get_permission_profile(self, profile_id: str = 'observer_profile') -> GetPermissionProfileResponse:
         try:
             response = self.context.get_virtual_desktop_controller_client(timeout=7200).invoke_alt(
                 namespace='VirtualDesktopUtils.GetPermissionProfile',
-                payload=GetPermissionProfileRequest(profile_id='observer_profile'),
+                payload=GetPermissionProfileRequest(profile_id=profile_id),
                 result_as=GetPermissionProfileResponse,
                 access_token=self.access_token)
             return response

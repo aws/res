@@ -23,7 +23,7 @@ Statement:
       - ec2:DeregisterImage
       - ec2:RunInstances
       - budgets:ViewBudget
-      - budgets:DescribeBudget
+      - budgets:DescribeBudget*
       - fsx:CreateDataRepositoryTask
       - fsx:DescribeFileSystems
       - tag:GetResources

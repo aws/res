@@ -295,9 +295,7 @@ pushd ${extractDir}
 rpm -ivh nice-dcv-web-viewer-*.${machine}.rpm
 popd
 rm -rf ${extractDir}
-RM_TGZ=$(echo $DCV_SERVER_TGZ | sed 's/\.tgz/*tgz*/')
-RM_PAT=$(ls -d $RM_TGZ | egrep -v "tgz$")
-rm -rf $RM_PAT || true
+rm -f $DCV_SERVER_TGZ || true
 """
         bash_content += f"""
 #Gateway
@@ -327,7 +325,7 @@ BROKER_SHA256_URL="{global_settings['package_config']['dcv']['broker']['linux'][
         bash_content += """
 wget $BROKER_URL
 BROKER_FILE_NAME=$(basename $BROKER_URL)
-urlSha256Sum=$(wget -O - ${DCV_SESSION_MANAGER_BROKER_SHA256_URL})
+urlSha256Sum=$(wget -O - ${BROKER_SHA256_URL})
 if [[ $(sha256sum ${BROKER_FILE_NAME} | awk '{print $1}') != ${urlSha256Sum} ]];  then
     echo -e "FATAL ERROR: Checksum for DCV Broker failed. File may be compromised." > /etc/motd
     exit 1

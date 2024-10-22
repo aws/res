@@ -36,6 +36,10 @@ from ideadatamodel import (
     constants,
     SocaAnyPayload
 )
+from ideadatamodel.constants import (
+    IDEA_TAG_MODULE_ID,
+    ARTIFACTS_BUCKET_PREFIX_NAME
+)
 from ideadatamodel.constants import IDEA_TAG_MODULE_ID
 from ideasdk.aws import AwsClientProvider, AWSClientProviderOptions
 from ideasdk.bootstrap import BootstrapUserDataBuilder
@@ -60,11 +64,12 @@ from aws_cdk import (
     aws_kms as kms,
     aws_apigateway as apigateway,
     aws_logs as logs,
+    aws_lambda,
     RemovalPolicy,
 )
 
 from aws_cdk.aws_events import Schedule
-from typing import Optional
+from typing import Optional, List
 
 
 class VirtualDesktopControllerStack(IdeaBaseStack):
@@ -119,19 +124,25 @@ class VirtualDesktopControllerStack(IdeaBaseStack):
         self.cluster = ExistingSocaCluster(self.context, self.stack)
         self.arn_builder = ArnBuilder(self.context.config())
 
+        self.create_tags_custom_resource = CreateTagsCustomResource(
+            context=self.context,
+            scope=self.stack,
+        )
+
+        self.lambda_layer_arn = self.context.config().get_string('shared_library_arn')
+        self.shared_library_lambda_layer = aws_lambda.LayerVersion.from_layer_version_arn(self.stack, 'SharedLibraryLayer', self.lambda_layer_arn)
+
         self.oauth2_client_secret: Optional[OAuthClientIdAndSecret] = None
 
         self.custom_credential_broker_lambda_function: Optional[LambdaFunction] = None
-
         self.custom_credential_broker_api_gateway_rest_api: Optional[APIGatewayRestApi] = None
-        self.custom_credential_broker_api_gateway_rest_api_request_validator: Optional[apigateway.RequestValidator] = None
-        self.object_storage_temp_credentials: Optional[apigateway.Resource] = None
-        self.object_storage_temp_credentials_path_part: Optional[str] = None
-        self.custom_credential_broker_api_gateway_vpc_endpoint: Optional[VpcInterfaceEndpoint] = None
-        self.custom_credential_broker_api_gateway_vpc_endpoint_security_group: Optional[VpcEndpointSecurityGroup] = None
         self.custom_credential_broker_lambda_role: Optional[Role] = None
         self.s3_mount_base_bucket_read_only_role: Optional[Role] = None
         self.s3_mount_base_bucket_read_write_role: Optional[Role] = None
+
+        self.api_gateway_vpc_endpoint: Optional[VpcInterfaceEndpoint] = None
+        self.vdi_helper_api_gateway_rest_api: Optional[APIGatewayRestApi] = None
+        self.vdi_helper_lambda_function: Optional[LambdaFunction] = None
 
         self.dcv_host_role: Optional[Role] = None
         self.controller_role: Optional[Role] = None
@@ -165,7 +176,9 @@ class VirtualDesktopControllerStack(IdeaBaseStack):
         self.build_oauth2_client()
         self.update_cluster_manager_client_scopes()
 
+        self.build_api_gateway_vpc_endpoint()
         self.build_custom_credential_broker_infra()
+        self.build_vdi_helper_infra()
 
         self.build_sqs_queues()
         self.build_scheduled_event_notification_infra()
@@ -475,6 +488,25 @@ class VirtualDesktopControllerStack(IdeaBaseStack):
             resource_type='Custom::UpdateClusterManagerClient'
         )
 
+    def build_api_gateway_vpc_endpoint(self):
+        api_gateway_vpc_endpoint_security_group = VpcEndpointSecurityGroup(
+            context=self.context,
+            scope=self.stack,
+            vpc=self.cluster.vpc,
+            name='API Gateway VPC Endpoint Security Group',
+        )
+
+        self.api_gateway_vpc_endpoint = VpcInterfaceEndpoint(
+            context=self.context,
+            scope=self.stack,
+            vpc=self.cluster.vpc,
+            service="execute-api",
+            vpc_endpoint_security_group=api_gateway_vpc_endpoint_security_group,
+            create_tags=self.create_tags_custom_resource,
+            lookup_supported_azs=False,
+            private_dns_enabled=False
+        )
+
     def build_custom_credential_broker_infra(self):
         lambda_name = f'{self.module_id}-custom-credential-broker-lambda'
         api_gateway_name = f'{self.module_id}-custom-credential-broker-api-gateway'
@@ -612,116 +644,184 @@ class VirtualDesktopControllerStack(IdeaBaseStack):
         self.custom_credential_broker_lambda_function.node.add_dependency(custom_credential_broker_lambda_role_policy)
         self.add_common_tags(self.custom_credential_broker_lambda_function)
 
-        custom_credential_broker_api_gateway_rest_api_resource_policy = iam.PolicyDocument(
+        self.custom_credential_broker_api_gateway_rest_api = self._build_private_api_for_lambda(
+            lambda_function=self.custom_credential_broker_lambda_function,
+            api_name=api_gateway_name,
+            resource_name=constants.API_GATEWAY_CUSTOM_CREDENTIAL_BROKER_RESOURCE,
+            stage_name=constants.API_GATEWAY_CUSTOM_CREDENTIAL_BROKER_STAGE,
+            api_description=f'{self.module_id} API Gateway for custom credential broker',
+            http_method='GET',
+            cidr_blocks=vdi_cidr_blocks
+        )
+
+        self.custom_credential_broker_api_gateway_rest_api.node.add_dependency(self.custom_credential_broker_lambda_function)
+
+    def build_vdi_helper_infra(self):
+        lambda_name = f'{self.module_id}-vdi-helper-lambda'
+        api_gateway_name = f'{self.module_id}-vdi-helper-api-gateway'
+
+        configured_vdi_subnets = self.context.config().get_list(
+            'vdc.dcv_session.network.private_subnets',
+            required=True
+        )
+        vdi_cidr_blocks = [
+            subnet['CidrBlock'] for subnet in self.aws.ec2().describe_subnets(SubnetIds=configured_vdi_subnets)['Subnets']
+        ]
+
+        vdi_helper_lambda_role = Role(
+            context=self.context,
+            name=f'{lambda_name}-role',
+            scope=self.stack,
+            assumed_by=['lambda'],
+            description=f'{lambda_name}-role',
+        )
+        self.vdi_helper_lambda_role_role_id = vdi_helper_lambda_role.role_id
+        vdi_helper_lambda_role_policy = ManagedPolicy(
+            context=self.context,
+            name=f'{lambda_name}-policy',
+            scope=self.stack,
+            managed_policy_name=f'{self.cluster_name}-{self.aws_region}-{lambda_name}-policy',
+            description='Required policy for RES VDI Helper Lambda.',
+            policy_template_name='vdi-helper.yml'
+        )
+        vdi_helper_lambda_role.add_managed_policy(vdi_helper_lambda_role_policy)
+
+        self.vdi_helper_lambda_function = LambdaFunction(
+            context=self.context,
+            name=lambda_name,
+            description=f'{self.module_id} general purpose lambda for VDI operations.',
+            scope=self.stack,
+            vpc=self.cluster.vpc,
+            vpc_subnets=ec2.SubnetSelection(subnets=self.cluster.private_subnets),
+            timeout_seconds=60,
+            idea_code_asset=IdeaCodeAsset(
+                lambda_package_name='res_vdi_helper',
+                lambda_platform=SupportedLambdaPlatforms.PYTHON
+            ),
+            environment={
+                # Required by shared library
+                "environment_name": f'{self.cluster_name}',
+            },
+            role=vdi_helper_lambda_role,
+        )
+        self.vdi_helper_lambda_function.add_layers(self.shared_library_lambda_layer)
+        self.vdi_helper_lambda_function.node.add_dependency(vdi_helper_lambda_role_policy)
+        self.add_common_tags(self.vdi_helper_lambda_function)
+
+        self.vdi_helper_api_gateway_rest_api = self._build_private_api_for_lambda(
+            lambda_function=self.vdi_helper_lambda_function,
+            api_name=api_gateway_name,
+            resource_name=constants.API_GATEWAY_VDI_HELPER_RESOURCE,
+            stage_name=constants.API_GATEWAY_VDI_HELPER_STAGE,
+            api_description=f'{self.module_id} API Gateway for VDI Helper',
+            http_method='POST',
+            cidr_blocks=vdi_cidr_blocks
+        )
+
+        self.vdi_helper_api_gateway_rest_api.node.add_dependency(self.vdi_helper_lambda_function)
+
+    def _build_private_api_gateway_url(self, rest_api_id, stage_name):
+        return f'https://{rest_api_id}-{self.api_gateway_vpc_endpoint.get_endpoint().vpc_endpoint_id}.execute-api.{self.aws_region}.amazonaws.com/{stage_name}/'
+
+    def _build_private_api_for_lambda(self, lambda_function: LambdaFunction, api_name: str, resource_name: str,
+                                      stage_name: str, api_description: str, http_method: str,
+                                      cidr_blocks: List[str]) -> APIGatewayRestApi:
+
+        api_gateway_rest_api_resource_policy = iam.PolicyDocument(
             statements=[
                 iam.PolicyStatement(
                     actions=["execute-api:Invoke"],
                     principals=[iam.ServicePrincipal("ec2.amazonaws.com")],
-                    resources=[self.arn_builder.custom_credential_broker_api_gateway_execute_api_arn('*')],
+                    resources=[self.arn_builder.api_gateway_execute_api_arn(
+                        "*",
+                        stage_name,
+                        http_method,
+                        resource_name
+                    )],
                     conditions={
                         "IpAddress": {
-                            "aws:SourceIp": vdi_cidr_blocks
+                            "aws:SourceIp": cidr_blocks
                         }
                     }
                 ),
             ]
         )
 
-        custom_credential_broker_api_gateway_rest_api_access_logs = logs.LogGroup(
+        api_gateway_log_group = logs.LogGroup(
             scope=self.stack,
-            id=f'{self.module_id}-custom-credential-broker-api-gateway-access-logs',
+            id=f'{self.module_id}-{api_name}-access-logs',
             retention=logs.RetentionDays.TEN_YEARS,
             removal_policy=RemovalPolicy.DESTROY,
         )
 
-        self.custom_credential_broker_api_gateway_vpc_endpoint_security_group = VpcEndpointSecurityGroup(
+        api_gateway_rest_api = APIGatewayRestApi(
             context=self.context,
             scope=self.stack,
-            vpc=self.cluster.vpc,
-            name='Custom Credential Broker API Gateway VPC Endpoint Security Group',
-        )
-
-        create_tags = CreateTagsCustomResource(
-            context=self.context,
-            scope=self.stack,
-        )
-
-        self.custom_credential_broker_api_gateway_vpc_endpoint = VpcInterfaceEndpoint(
-            context=self.context,
-            scope=self.stack,
-            vpc=self.cluster.vpc,
-            service="execute-api",
-            vpc_endpoint_security_group=self.custom_credential_broker_api_gateway_vpc_endpoint_security_group,
-            create_tags=create_tags,
-            lookup_supported_azs=False
-        )
-
-        self.custom_credential_broker_api_gateway_rest_api = APIGatewayRestApi(
-            context=self.context,
-            scope=self.stack,
-            name=api_gateway_name,
-            description=f'{self.module_id} api gateway to provide temporary credentials for mounting object storage to virtual desktop infrastructure (VDI) instances.',
-            policy=custom_credential_broker_api_gateway_rest_api_resource_policy,
-            deploy_options=apigateway.StageOptions(stage_name=constants.API_GATEWAY_CUSTOM_CREDENTIAL_BROKER_STAGE,
-                                                   access_log_destination=apigateway.LogGroupLogDestination(custom_credential_broker_api_gateway_rest_api_access_logs),
-                                                   access_log_format=apigateway.AccessLogFormat.json_with_standard_fields(
-                                                       caller=True,
-                                                       http_method=True,
-                                                       ip=True,
-                                                       protocol=True,
-                                                       request_time=True,
-                                                       resource_path=True,
-                                                       response_length=True,
-                                                       user=True,
-                                                       status=True,
-                                                   )),
+            name=api_name,
+            description=api_description,
+            policy=api_gateway_rest_api_resource_policy,
+            deploy_options=apigateway.StageOptions(
+                stage_name=stage_name,
+                access_log_destination=apigateway.LogGroupLogDestination(api_gateway_log_group),
+                access_log_format=apigateway.AccessLogFormat.json_with_standard_fields(
+                    caller=True,
+                    http_method=True,
+                    ip=True,
+                    protocol=True,
+                    request_time=True,
+                    resource_path=True,
+                    response_length=True,
+                    user=True,
+                    status=True,
+                )
+            ),
             endpoint_configuration=apigateway.EndpointConfiguration(
                 types=[apigateway.EndpointType.PRIVATE],
-                vpc_endpoints=[self.custom_credential_broker_api_gateway_vpc_endpoint.get_endpoint()],
+                vpc_endpoints=[self.api_gateway_vpc_endpoint.get_endpoint()],
             ),
             default_method_options=apigateway.MethodOptions(authorization_type=apigateway.AuthorizationType.IAM),
-            rest_api_name=api_gateway_name,
-        )
-        self.object_storage_temp_credentials_path_part = constants.API_GATEWAY_CUSTOM_CREDENTIAL_BROKER_RESOURCE
-        self.object_storage_temp_credentials = self.custom_credential_broker_api_gateway_rest_api.root.add_resource(
-            path_part=self.object_storage_temp_credentials_path_part
+            rest_api_name=api_name,
         )
 
-        self.object_storage_temp_credentials.add_method(
-            http_method="GET",
+        resource = api_gateway_rest_api.root.add_resource(
+            path_part=resource_name
+        )
+
+        resource.add_method(
+            http_method=http_method,
             integration=apigateway.LambdaIntegration(
-                handler=self.custom_credential_broker_lambda_function
+                handler=lambda_function
             ),
             authorization_type=apigateway.AuthorizationType.IAM
         )
 
-        self.custom_credential_broker_api_gateway_rest_api.node.add_dependency(self.custom_credential_broker_lambda_function)
-
-        self.custom_credential_broker_api_gateway_rest_api_request_validator = apigateway.RequestValidator(
-            rest_api=self.custom_credential_broker_api_gateway_rest_api,
+        apigateway.RequestValidator(
             scope=self.stack,
-            id="custom-credential-broker-api-gateway-validator",
+            id=f'{self.module_id}-{api_name}-request-validator',
+            rest_api=api_gateway_rest_api,
             validate_request_body=True,
             validate_request_parameters=True,
         )
 
         self.add_nag_suppression(
-            construct=self.custom_credential_broker_api_gateway_rest_api,
+            construct=api_gateway_rest_api,
             suppressions=[IdeaNagSuppression(rule_id='AwsSolutions-APIG6', reason='This is a private API Gateway endpoint')],
             apply_to_children=True
         )
 
         self.add_nag_suppression(
-            construct=self.custom_credential_broker_api_gateway_rest_api,
+            construct=api_gateway_rest_api,
             suppressions=[IdeaNagSuppression(rule_id='AwsSolutions-COG4', reason='This endpoint uses AWS IAM as the authorizer')],
             apply_to_children=True
         )
 
         self.add_nag_suppression(
-            construct=self.custom_credential_broker_api_gateway_rest_api,
+            construct=api_gateway_rest_api,
             suppressions=[IdeaNagSuppression(rule_id='AwsSolutions-IAM4', reason='Suppressing AwsSolutions-IAM4 for CloudWatch logs role')],
             apply_to_children=True
         )
+
+        return api_gateway_rest_api
 
     def build_dcv_host_infra(self):
         self.dcv_host_role = self._build_iam_role(
@@ -1102,6 +1202,12 @@ class VirtualDesktopControllerStack(IdeaBaseStack):
             external_target_group.target_group_arn
         ]
 
+    def host_modules(self) -> List[str]:
+        return self.context.config().get_list("global-settings.package_config.host_modules.pam", []) + self.context.config().get_list("global-settings.package_config.host_modules.nss", [])
+
+    def build_host_module_s3_url(self, host_module_name, os_arch):
+        return f's3://{ARTIFACTS_BUCKET_PREFIX_NAME}-{self.aws_region}/host_modules/{host_module_name}/latest/{os_arch}/{host_module_name}.so'
+
     def _build_auto_scaling_group(self, component_name: str, security_group: SecurityGroup, iam_role: Role, substituted_userdata: str, node_type: str) -> asg.AutoScalingGroup:
         is_public = self.context.config().get_bool(f'virtual-desktop-controller.{self.CONFIG_MAPPING[component_name]}.autoscaling.public', False) and len(self.cluster.public_subnets) > 0
         if is_public:
@@ -1413,7 +1519,8 @@ class VirtualDesktopControllerStack(IdeaBaseStack):
             'scheduled_event_transformer_lambda_role_name': self.scheduled_event_transformer_lambda_role.role_name,
             'scheduled_event_transformer_lambda_role_id': self.scheduled_event_transformer_lambda_role.role_id,
             'custom_credential_broker_lambda_function_arn': self.custom_credential_broker_lambda_function.function_arn,
-            'custom_credential_broker_api_gateway_url': self.custom_credential_broker_api_gateway_rest_api.url + self.object_storage_temp_credentials_path_part,
+            'custom_credential_broker_api_gateway_url': self._build_private_api_gateway_url(self.custom_credential_broker_api_gateway_rest_api.rest_api_id, constants.API_GATEWAY_CUSTOM_CREDENTIAL_BROKER_STAGE) + constants.API_GATEWAY_CUSTOM_CREDENTIAL_BROKER_RESOURCE,
+            'vdi_helper_api_gateway_url': self._build_private_api_gateway_url(self.vdi_helper_api_gateway_rest_api.rest_api_id, constants.API_GATEWAY_VDI_HELPER_STAGE) + constants.API_GATEWAY_VDI_HELPER_RESOURCE,
             'custom_credential_broker_api_gateway_id': self.custom_credential_broker_api_gateway_rest_api.rest_api_id,
             'custom_credential_broker_lambda_role_arn': self.custom_credential_broker_lambda_role.role_arn,
             's3_mount_base_bucket_read_only_role_arn': self.s3_mount_base_bucket_read_only_role.role_arn,
@@ -1440,8 +1547,14 @@ class VirtualDesktopControllerStack(IdeaBaseStack):
             'dcv_broker.asg_arn': self.dcv_broker_autoscaling_group.auto_scaling_group_arn,
             'dcv_connection_gateway.asg_name': self.dcv_connection_gateway_autoscaling_group.auto_scaling_group_name,
             'dcv_connection_gateway.asg_arn': self.dcv_connection_gateway_autoscaling_group.auto_scaling_group_arn,
-            'gateway_security_group_id': self.dcv_connection_gateway_security_group.security_group_id
+            'gateway_security_group_id': self.dcv_connection_gateway_security_group.security_group_id,
+            'vdi-helper-id':self.vdi_helper_lambda_role_role_id
         }
+
+        host_modules = self.host_modules()
+        for host_module_name in host_modules:
+            for os_arch in ['x86_64', 'arm64']:
+                cluster_settings[f'host_modules.{host_module_name}.{os_arch}.s3_url'] = self.build_host_module_s3_url(host_module_name, os_arch)
 
         if not self.context.config().get_bool('virtual-desktop-controller.dcv_connection_gateway.certificate.provided', default=False):
             cluster_settings['dcv_connection_gateway.certificate.certificate_secret_arn'] = self.dcv_connection_gateway_self_signed_cert.get_att_string('certificate_secret_arn')

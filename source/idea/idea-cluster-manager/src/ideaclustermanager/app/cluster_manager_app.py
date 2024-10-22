@@ -30,8 +30,6 @@ from ideaclustermanager.app.authz.roles_service import RolesService
 from ideaclustermanager.app.authz.role_assignments_service import RoleAssignmentsService
 from ideaclustermanager.app.accounts.ad_automation_agent import ADAutomationAgent
 from ideaclustermanager.app.accounts.account_tasks import (
-    SyncUserInDirectoryServiceTask,
-    CreateUserHomeDirectoryTask,
     SyncGroupInDirectoryServiceTask
 )
 from ideaclustermanager.app.adsync.adsync_tasks import (
@@ -136,9 +134,7 @@ class ClusterManagerApp(ideasdk.app.SocaApp):
         self.context.task_manager = TaskManager(
             context=self.context,
             tasks=[
-                SyncUserInDirectoryServiceTask(self.context),
                 SyncGroupInDirectoryServiceTask(self.context),
-                CreateUserHomeDirectoryTask(self.context),
                 SyncAllGroupsTask(self.context),
                 SyncAllUsersTask(self.context),
                 SyncFromAD(self.context)

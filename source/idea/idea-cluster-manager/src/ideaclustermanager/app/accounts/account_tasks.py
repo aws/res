@@ -10,22 +10,15 @@
 #  and limitations under the License.
 
 __all__ = (
-    'SyncUserInDirectoryServiceTask',
-    'CreateUserHomeDirectoryTask',
     'SyncGroupInDirectoryServiceTask',
 )
 
 from ideasdk.utils import Utils
-from ideadatamodel import exceptions, errorcodes
 
 import ideaclustermanager
 from ideaclustermanager.app.tasks.base_task import BaseTask
-from ideaclustermanager.app.accounts.user_home_directory import UserHomeDirectory
 
 from typing import Dict
-import os
-import pathlib
-import shutil
 
 
 class SyncGroupInDirectoryServiceTask(BaseTask):
@@ -63,66 +56,3 @@ class SyncGroupInDirectoryServiceTask(BaseTask):
             if self.context.ldap_client.is_existing_group(group_name):
                 self.context.ldap_client.delete_group(group_name)
 
-class SyncUserInDirectoryServiceTask(BaseTask):
-
-    def __init__(self, context: ideaclustermanager.AppContext):
-        self.context = context
-        self.logger = context.logger(self.get_name())
-
-    def get_name(self) -> str:
-        return 'accounts.sync-user'
-
-    def invoke(self, payload: Dict):
-        username = payload['username']
-        user = self.context.accounts.user_dao.get_user(username)
-        enabled = user['enabled']
-        sudo = Utils.get_value_as_bool('sudo', user, False)
-
-        if self.context.ldap_client.is_readonly():
-            self.logger.info(f'sync user: Read-only Directory service - sync {username} NOOP ... returning')
-            return
-
-        if enabled:
-            self.logger.info(f'sync user: {username} TO directory service ...')
-            self.context.ldap_client.sync_group(
-                gid=user['gid']
-            )
-            self.context.ldap_client.sync_user(
-                uid=user['uid'],
-                gid=user['gid'],
-                username=user['username'],
-                email=user['email'],
-                login_shell=user['login_shell'],
-                home_dir=user['home_dir']
-            )
-
-            if sudo:
-                if not self.context.ldap_client.is_sudo_user(username):
-                    self.context.ldap_client.add_sudo_user(username)
-            else:
-                if self.context.ldap_client.is_sudo_user(username):
-                    self.context.ldap_client.remove_sudo_user(username)
-
-        else:
-            self.logger.info(f'deleting user: {username} from directory service ...')
-            if self.context.ldap_client.is_existing_user(username):
-                self.context.ldap_client.delete_user(username)
-            if self.context.ldap_client.is_sudo_user(username):
-                self.context.ldap_client.remove_sudo_user(username)
-
-class CreateUserHomeDirectoryTask(BaseTask):
-
-    def __init__(self, context: ideaclustermanager.AppContext):
-        self.context = context
-        self.logger = context.logger(self.get_name())
-
-    def get_name(self) -> str:
-        return 'accounts.create-home-directory'
-
-    def invoke(self, payload: Dict):
-        username = payload['username']
-        user = self.context.accounts.get_user(username)
-        UserHomeDirectory(
-            context=self.context,
-            user=user
-        ).initialize()

@@ -17,11 +17,9 @@ class DirectoryServiceKey(Key):
     USERS_OU = "UsersOU"
     GROUPS_OU = "GroupsOU"
     COMPUTERS_OU = "ComputersOU"
-    SUDOERS_OU = "SudoersOU"
     SUDOERS_GROUP_NAME = "SudoersGroupName"
-    ROOT_USERNAME = "ServiceAccountUsername"
-    ROOT_PASSWORD = "ServiceAccountPassword"
-    ROOT_PASSWORD_SECRET_ARN = "ServiceAccountPasswordSecretArn"
+    SERVICE_ACCOUNT_PASSWORD = "ServiceAccountPassword"
+    SERVICE_ACCOUNT_CREDENTIALS_SECRET_ARN = "ServiceAccountCredentialsSecretArn"
     DOMAIN_TLS_CERTIFICATE_SECRET_ARN = "DomainTLSCertificateSecretArn"
     ENABLE_LDAP_ID_MAPPING = "EnableLdapIDMapping"
     DISABLE_AD_JOIN = "DisableADJoin"
@@ -85,13 +83,6 @@ class DirectoryServiceParameters(Base):
             description="Please provide parameter store path to contain Organization Unit for compute and storage servers in your active directory",
         )
     )
-    sudoers_ou: str = Base.parameter(
-        Attributes(
-            id=DirectoryServiceKey.SUDOERS_OU,
-            type="AWS::SSM::Parameter::Value<String>",
-            description="Please provide parameter store path to contain Organization Unit for users who will be able to sudo in your active directory",
-        )
-    )
     sudoers_group_name: str = Base.parameter(
         Attributes(
             id=DirectoryServiceKey.SUDOERS_GROUP_NAME,
@@ -99,27 +90,19 @@ class DirectoryServiceParameters(Base):
             description="Please provide parameter store path to contain group name of users who will be able to sudo in your active directory",
         )
     )
-    root_username: str = Base.parameter(
+    service_account_password: str = Base.parameter(
         Attributes(
-            id=DirectoryServiceKey.ROOT_USERNAME,
-            type="AWS::SSM::Parameter::Value<String>",
-            description="Please provide parameter store path to contain Directory Service Root (Service Account) username",
-            no_echo=True,
-        )
-    )
-    root_password: str = Base.parameter(
-        Attributes(
-            id=DirectoryServiceKey.ROOT_PASSWORD,
+            id=DirectoryServiceKey.SERVICE_ACCOUNT_PASSWORD,
             type="String",
             description="Please provide Directory Service Root (Service Account) password",
             no_echo=True,
         )
     )
-    root_password_secret_arn: str = Base.parameter(
+    service_account_credentials_secret_arn: str = Base.parameter(
         Attributes(
-            id=DirectoryServiceKey.ROOT_PASSWORD_SECRET_ARN,
+            id=DirectoryServiceKey.SERVICE_ACCOUNT_CREDENTIALS_SECRET_ARN,
             type="AWS::SSM::Parameter::Value<String>",
-            description="Please provide Directory Service Root (Service Account) Password Secret ARN",
+            description="Directory Service Account Credentials Secret ARN",
         )
     )
     domain_tls_certificate_secret_arn: str = Base.parameter(
@@ -156,7 +139,6 @@ class DirectoryServiceParameters(Base):
     )
 
     # These will be populated after the secrets are created from the above parameters
-    root_username_secret_arn: Optional[str] = None
     root_user_dn_secret_arn: Optional[str] = None
 
 
@@ -168,12 +150,10 @@ class DirectoryServiceParameterGroups:
             DirectoryServiceKey.AD_SHORT_NAME,
             DirectoryServiceKey.LDAP_BASE,
             DirectoryServiceKey.LDAP_CONNECTION_URI,
-            DirectoryServiceKey.ROOT_USERNAME,
-            DirectoryServiceKey.ROOT_PASSWORD,
-            DirectoryServiceKey.ROOT_PASSWORD_SECRET_ARN,
+            DirectoryServiceKey.SERVICE_ACCOUNT_PASSWORD,
+            DirectoryServiceKey.SERVICE_ACCOUNT_CREDENTIALS_SECRET_ARN,
             DirectoryServiceKey.USERS_OU,
             DirectoryServiceKey.GROUPS_OU,
-            DirectoryServiceKey.SUDOERS_OU,
             DirectoryServiceKey.SUDOERS_GROUP_NAME,
             DirectoryServiceKey.COMPUTERS_OU,
             DirectoryServiceKey.DOMAIN_TLS_CERTIFICATE_SECRET_ARN,

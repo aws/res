@@ -9,10 +9,10 @@
 #  OR CONDITIONS OF ANY KIND, express or implied. See the License for the specific language governing permissions
 #  and limitations under the License.
 
+from invoke import Context, task
+
 import tasks.idea as idea
 from tasks.tools.clean_tool import CleanTool
-
-from invoke import task, Context
 
 
 @task
@@ -58,6 +58,14 @@ def virtual_desktop_controller(c):
     """
     CleanTool(c, 'idea-virtual-desktop-controller').clean()
     CleanTool(c, 'idea-dcv-connection-gateway').clean()
+    
+@task
+def library(c):
+    # type: (Context) -> None
+    """
+    clean library
+    """
+    CleanTool(c, 'library').clean()
 
 
 @task(name='all', default=True)
@@ -78,6 +86,8 @@ def clean_all(c):
     cluster_manager(c)
 
     virtual_desktop_controller(c)
+    
+    library(c)
 
     CleanTool(c, 'all').clean_non_project_items()
 

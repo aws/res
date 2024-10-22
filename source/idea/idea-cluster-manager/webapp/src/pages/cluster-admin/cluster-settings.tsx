@@ -490,18 +490,6 @@ class ClusterSettings extends Component<ClusterSettingsProps, ClusterSettingsSta
             return provider === "activedirectory" || provider === "aws_managed_activedirectory";
         };
 
-        const getClusterManagerOpenAPISpecUrl = () => {
-            return `${AppContext.get().getHttpEndpoint()}${Utils.getApiContextPath(Constants.MODULE_CLUSTER_MANAGER)}/openapi.yml`;
-        };
-
-        const getClusterManagerSwaggerEditorUrl = () => {
-            return `https://editor.swagger.io/?url=${getClusterManagerOpenAPISpecUrl()}`;
-        };
-
-        const isBackupEnabled = () => {
-            return Utils.asBoolean(dot.pick("backups.enabled", this.state.cluster));
-        };
-
         return (
             <IdeaAppLayout
                 ideaPageId={this.props.ideaPageId}
@@ -606,22 +594,12 @@ class ClusterSettings extends Component<ClusterSettingsProps, ClusterSettingsSta
                                                     <KeyValue title="Copyright Text" value={dot.pick("web_portal.copyright_text", this.state.clusterManager)}/>
                                                 </ColumnLayout>
                                             </Container>
-                                            <Container
-                                                header={
-                                                    <Header
-                                                        variant={"h2"}
-                                                        info={
-                                                            <Link external={true} href={"https://spec.openapis.org/oas/v3.1.0"}>
-                                                                Info
-                                                            </Link>
-                                                        }
-                                                    >
-                                                        OpenAPI Specification
-                                                    </Header>
-                                                }
-                                            >
-                                                <ColumnLayout variant={"text-grid"} columns={1}>
-                                                    <KeyValue title="Environment Manager API Spec" value={getClusterManagerOpenAPISpecUrl()} type={"external-link"} clipboard />
+                                            <Container header={<Header variant={"h2"}>AWS Account Settings</Header>}>
+                                                <ColumnLayout variant={"text-grid"} columns={3}>
+                                                    <KeyValue title="AWS Account ID" value={dot.pick("aws.account_id", this.state.cluster)} clipboard={true} />
+                                                    <KeyValue title="AWS Region" value={dot.pick("aws.region", this.state.cluster)} clipboard={true} />
+                                                    <KeyValue title="AWS Partition" value={dot.pick("aws.partition", this.state.cluster)} />
+                                                    <KeyValue title="AWS DNS Suffix" value={dot.pick("aws.dns_suffix", this.state.cluster)} />
                                                 </ColumnLayout>
                                             </Container>
                                         </SpaceBetween>
@@ -727,8 +705,7 @@ class ClusterSettings extends Component<ClusterSettingsProps, ClusterSettingsSta
                                                 <ColumnLayout variant={"text-grid"} columns={2}>
                                                     <KeyValue title="Provider" value={Utils.getDirectoryServiceTitle(dot.pick("provider", this.state.directoryservice))} />
                                                     <KeyValue title="Automation Directory" value={dot.pick("automation_dir", this.state.directoryservice)} clipboard={true} />
-                                                    <KeyValue title="Root Username Secret ARN" value={dot.pick("root_username_secret_arn", this.state.directoryservice)} clipboard={true} />
-                                                    <KeyValue title="Root Password Secret ARN" value={dot.pick("root_password_secret_arn", this.state.directoryservice)} clipboard={true} />
+                                                    <KeyValue title="Service Account Credentials Secret ARN" value={dot.pick("service_account_credentials_secret_arn", this.state.directoryservice)} clipboard={true} />
                                                 </ColumnLayout>
                                             </Container>
                                             {isDirectoryServiceOpenLDAP() && (
@@ -813,35 +790,6 @@ class ClusterSettings extends Component<ClusterSettingsProps, ClusterSettingsSta
                                     ),
                                 },
                                 {
-                                    label: "Backup",
-                                    id: "backups",
-                                    content: (
-                                        <SpaceBetween size={"l"}>
-                                            <Container header={<Header variant={"h2"}>AWS Backup</Header>}>
-                                                <ColumnLayout variant={"text-grid"} columns={2}>
-                                                    <KeyValue title="Status" value={<EnabledDisabledStatusIndicator enabled={isBackupEnabled()} />} type={"react-node"} />
-                                                </ColumnLayout>
-                                            </Container>
-                                            {isBackupEnabled() && (
-                                                <Container header={<Header variant={"h2"}>Backup Vault</Header>}>
-                                                    <ColumnLayout variant={"text-grid"} columns={2}>
-                                                        <KeyValue title="ARN" value={dot.pick("backups.backup_vault.arn", this.state.cluster)} clipboard={true} />
-                                                        <KeyValue title="KMS Key Id (CMK)" value={dot.pick("backups.backup_vault.kms_key_id", this.state.cluster)} clipboard={true} />
-                                                    </ColumnLayout>
-                                                </Container>
-                                            )}
-                                            {isBackupEnabled() && (
-                                                <Container header={<Header variant={"h2"}>Backup Plan</Header>}>
-                                                    <ColumnLayout variant={"text-grid"} columns={2}>
-                                                        <KeyValue title="ARN" value={dot.pick("backups.backup_plan.arn", this.state.cluster)} clipboard={true} />
-                                                        <KeyValue title="Selection" value={dot.pick("backups.backup_plan.selection.tags", this.state.cluster)} />
-                                                    </ColumnLayout>
-                                                </Container>
-                                            )}
-                                        </SpaceBetween>
-                                    ),
-                                },
-                                {
                                     label: "Route 53",
                                     id: "route-53",
                                     content: (
@@ -854,20 +802,6 @@ class ClusterSettings extends Component<ClusterSettingsProps, ClusterSettingsSta
                                                 </ColumnLayout>
                                             </Container>
                                         </SpaceBetween>
-                                    ),
-                                },
-                                {
-                                    label: "AWS Account",
-                                    id: "aws-account",
-                                    content: (
-                                        <Container header={<Header variant={"h2"}>AWS Account Settings</Header>}>
-                                            <ColumnLayout variant={"text-grid"} columns={3}>
-                                                <KeyValue title="AWS Account ID" value={dot.pick("aws.account_id", this.state.cluster)} clipboard={true} />
-                                                <KeyValue title="AWS Region" value={dot.pick("aws.region", this.state.cluster)} clipboard={true} />
-                                                <KeyValue title="AWS Partition" value={dot.pick("aws.partition", this.state.cluster)} />
-                                                <KeyValue title="AWS DNS Suffix" value={dot.pick("aws.dns_suffix", this.state.cluster)} />
-                                            </ColumnLayout>
-                                        </Container>
                                     ),
                                 },
                             ]}

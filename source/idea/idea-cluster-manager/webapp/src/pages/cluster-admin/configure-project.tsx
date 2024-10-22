@@ -12,6 +12,7 @@ import {Constants} from "../../common/constants";
 import dot from "dot-object";
 import AuthzClient from "../../client/authz-client";
 import { OptionDefinition } from "@cloudscape-design/components/internal/components/option/interfaces";
+import ProxyClient from "../../client/proxy-client";
 
 export interface ConfigureProjectState {
     isUpdate: boolean
@@ -23,6 +24,7 @@ export interface ConfigureProjectState {
     availableGroups: OptionDefinition[];
     permissionProfiles: Map<string, Role>;
     permissionForProject?: ProjectPermissions;
+    budgetNotFound: boolean;
 }
 
 export interface ConfigureProjectProps extends IdeaAppLayoutProps, IdeaSideNavigationProps {
@@ -45,6 +47,7 @@ class ConfigureProject extends Component<ConfigureProjectProps, ConfigureProject
             availableGroups: [],
             permissionProfiles: new Map(),
             permissionForProject: state ? state.projectPermission : undefined,
+            budgetNotFound: state?.project?.budget == Constants.BUDGET_NOT_FOUND,
         };
         this.getUsers();
         this.getGroups();
@@ -97,6 +100,10 @@ class ConfigureProject extends Component<ConfigureProjectProps, ConfigureProject
         return AppContext.get().client().accounts();
     }
 
+    proxy(): ProxyClient{
+        return AppContext.get().client().proxy()
+    }
+
     clusterSettings(): ClusterSettingsClient {
         return AppContext.get().client().clusterSettings();
     }
@@ -130,7 +137,7 @@ class ConfigureProject extends Component<ConfigureProjectProps, ConfigureProject
                 resource_type: "project",
                 resource_id: projectId,
                 role_id: actor.value.value!,
-                request_id: Utils.getUUID(),    
+                request_id: Utils.getUUID(),
               });
             }
             break;
@@ -158,7 +165,7 @@ class ConfigureProject extends Component<ConfigureProjectProps, ConfigureProject
             resource_type: "project",
             resource_id: projectId,
             role_id: user.value.value!,
-            request_id: Utils.getUUID(),    
+            request_id: Utils.getUUID(),
           });
         }
       }
@@ -173,7 +180,7 @@ class ConfigureProject extends Component<ConfigureProjectProps, ConfigureProject
             resource_type: "project",
             resource_id: projectId,
             role_id: group.value.value!,
-            request_id: Utils.getUUID(),    
+            request_id: Utils.getUUID(),
           });
         }
       }
@@ -205,7 +212,7 @@ class ConfigureProject extends Component<ConfigureProjectProps, ConfigureProject
           resource_type: "project",
           resource_id: projectId,
           role_id: groupRoleMapping.value.value!,
-          request_id: Utils.getUUID(),    
+          request_id: Utils.getUUID(),
         });
       }
       for (const userRoleMapping of userRoleAssignments ?? []) {
@@ -215,7 +222,7 @@ class ConfigureProject extends Component<ConfigureProjectProps, ConfigureProject
           resource_type: "project",
           resource_id: projectId,
           role_id: userRoleMapping.value.value!,
-          request_id: Utils.getUUID(),    
+          request_id: Utils.getUUID(),
         });
       }
 
@@ -223,6 +230,20 @@ class ConfigureProject extends Component<ConfigureProjectProps, ConfigureProject
       return authzClient.batchPutRoleAssignment({
         items
       });
+    }
+
+    async getBudgets(): Promise<Array<SocaUserInputChoice>> {
+        const clusterSettings = await AppContext.get()
+            .getClusterSettingsService()
+            .getModuleSettings(Constants.MODULE_CLUSTER)
+        const account_id = clusterSettings.aws.account_id
+        const proxyClient = this.proxy()
+        const result = await proxyClient.listBudgets({AccountId:account_id})
+        if(result.Budgets) {
+            return result.Budgets.map((budget) => {return {title: budget.BudgetName!, value: budget.BudgetName!}})
+        } else {
+            return []
+        }
     }
 
     getUsers() {
@@ -319,7 +340,7 @@ class ConfigureProject extends Component<ConfigureProjectProps, ConfigureProject
             items={this.state.attachedUsers}
             addButtonText={"Add user"}
             disableAddButton={
-              (this.state.attachedUsers.length === this.state.availableUsers.length) || 
+              (this.state.attachedUsers.length === this.state.availableUsers.length) ||
               (this.state.permissionForProject ? !this.state.permissionForProject.update_personnel : !this.isAdmin())
             }
             removeButtonText="Remove"
@@ -348,13 +369,14 @@ class ConfigureProject extends Component<ConfigureProjectProps, ConfigureProject
                       tmp[itemIndex].error = undefined;
                       this.setState({ attachedUsers: tmp });
                     }}
+                    filteringType="auto"
                   ></Select>
                 ),
                 errorText: (item: {key: string, value: OptionDefinition, error?: string}) => { return item.error },
               },
               {
-                label: "Permission profile",
-                info: <Popover content="Choose a permission profile for the user.">Info</Popover>,
+                label: "Project role",
+                info: <Popover content="Choose a project role for the user.">Info</Popover>,
                 control: (item: { key: string, value: OptionDefinition }, itemIndex: number) => (
                   <Select
                     key={item.key}
@@ -368,6 +390,7 @@ class ConfigureProject extends Component<ConfigureProjectProps, ConfigureProject
                       tmp[itemIndex].value = e.detail.selectedOption;
                       this.setState({ attachedUsers: tmp });
                     }}
+                    filteringType="auto"
                   ></Select>
                 ),
                 constraintText: (item: { key: string, value: OptionDefinition, error?: string }) => {
@@ -375,10 +398,9 @@ class ConfigureProject extends Component<ConfigureProjectProps, ConfigureProject
                     if (this.state.permissionProfiles.get(item.value.value!)?.projects.update_personnel) {
                       return <Box color="text-status-error" variant="p">
                         <Icon name="status-warning" /> Users/groups assigned
-                        to this permission profile can grant themselves or
+                        to this project role can grant themselves or
                         others higher privileges for this project by
-                        re-assigning personnel to a different permission
-                        profile
+                        re-assigning personnel to a different project role
                       </Box>
                     }
                   }
@@ -413,7 +435,7 @@ class ConfigureProject extends Component<ConfigureProjectProps, ConfigureProject
                 addButtonText={"Add group"}
                 removeButtonText="Remove"
                 disableAddButton={
-                  (this.state.attachedGroups.length === this.state.availableGroups.length) || 
+                  (this.state.attachedGroups.length === this.state.availableGroups.length) ||
                   (this.state.permissionForProject ? !this.state.permissionForProject.update_personnel : !this.isAdmin())
                 }
                 empty="No groups attached. Click 'Add group' below to get started."
@@ -438,13 +460,14 @@ class ConfigureProject extends Component<ConfigureProjectProps, ConfigureProject
                           tmp[itemIndex].error = undefined;
                           this.setState({ attachedGroups: tmp });
                         }}
+                        filteringType="auto"
                       ></Select>
                     ),
                     errorText: (item: {key: string, value: OptionDefinition, error?: string}) => { return item.error }
                   },
                   {
-                    label: "Permission profile",
-                    info: <Popover content="Choose a permission profile for the group.">Info</Popover>,
+                    label: "Project role",
+                    info: <Popover content="Choose a project role for the group.">Info</Popover>,
                     control: (item: { key: string, value: OptionDefinition }, itemIndex: number) => (
                       <Select
                         key={item.key}
@@ -457,6 +480,7 @@ class ConfigureProject extends Component<ConfigureProjectProps, ConfigureProject
                           tmp[itemIndex].value = e.detail.selectedOption;
                           this.setState({ attachedGroups: tmp });
                         }}
+                        filteringType="auto"
                       ></Select>
                     ),
                     constraintText: (item: { key: string, value: OptionDefinition, error?: string }) => {
@@ -464,10 +488,9 @@ class ConfigureProject extends Component<ConfigureProjectProps, ConfigureProject
                         if (this.state.permissionProfiles.get(item.value.value!)?.projects.update_personnel) {
                           return <Box color="text-status-error" variant="p">
                             <Icon name="status-warning" /> Users/groups assigned
-                            to this permission profile can grant themselves or
+                            to this project role can grant themselves or
                             others higher privileges for this project by
-                            re-assigning personnel to a different permission
-                            profile
+                            re-assigning personnel to a different project role
                           </Box>
                         }
                       }
@@ -492,11 +515,29 @@ class ConfigureProject extends Component<ConfigureProjectProps, ConfigureProject
             multiple: true,
             data_type: "str",
             dynamic_choices: true,
-            default: ["home"],
             container_group_name: "resource_configurations",
             readonly: !this.isAdmin(),
         });
         return params;
+    }
+
+    buildAddHomeDirectoryFileSystemParam(isUpdate: boolean): SocaUserInputParamMetadata[]{
+        const params: SocaUserInputParamMetadata[] = [];
+        if (isUpdate) {
+            return params;
+        }
+        params.push({
+            name: "add_home_directory_filesystem",
+            title: "Home directory filesystem",
+            description: "Select the filesystem that will be used to create the user home directories on Linux desktops.",
+            data_type: "str",
+            param_type: "select",
+            dynamic_choices: true,
+            default: ["home"],
+            container_group_name: "resource_configurations",
+            readonly: !this.isAdmin(),
+        })
+        return params
     }
 
     buildResourceConfigurationAdvancedOptions(): SocaUserInputParamMetadata[] {
@@ -654,195 +695,243 @@ class ConfigureProject extends Component<ConfigureProjectProps, ConfigureProject
         return formParams
     }
 
+
+
     buildCreateProjectForm() {
         let {isUpdate, project} = this.state
-        let values = undefined
+        let values: { [x: string]: any; } | undefined = undefined
         if (isUpdate) {
             let scripts = project?.scripts ? this.reverseScripts(project.scripts) : {};
             values = {
                 ...project,
                 ...scripts,
-                "budget.budget_name": project?.budget?.budget_name,
+                "budget": project?.budget == Constants.BUDGET_NOT_FOUND ? { budget_name: Constants.BUDGET_NOT_FOUND } : project?.budget,
+                "budget.budget_name":  project?.budget?.budget_name,
                 "advanced_options": !!(project?.scripts || project?.policy_arns || project?.security_groups)
             }
         }
+        const toggleBudgetNotFoundMessage = (event: any) => {
+            const currentBudgetName = this.getConfigureProjectForm().getValue("budget.budget_name");
+            this.setState({ budgetNotFound: currentBudgetName == Constants.BUDGET_NOT_FOUND })
+        }
         return (
-            <IdeaForm
-                name="create-update-project"
-                ref={this.configureProjectForm}
-                modal={false}
-                showHeader={false}
-                showActions={false}
-                useContainers={true}
-                values={values}
-                onFetchOptions={(request) => {
-                    if (request.param === "add_filesystems") {
-                            let promises: Promise<any>[] = [];
-                            promises.push(this.clusterSettings().getModuleSettings({ module_id: Constants.MODULE_SHARED_STORAGE }));
-                            return Promise.all(promises).then((result) => {
-                                const choices: SocaUserInputChoice[] = [];
-                                const sharedFileSystem = result[0].settings;
-                                Object.keys(sharedFileSystem).forEach((name) => {
-                                    const storage = dot.pick(name, sharedFileSystem);
-                                    const title = dot.pick("title", storage);
-                                    const provider = dot.pick("provider", storage);
-                                    if (Utils.isEmpty(provider)) {
-                                        return true;
-                                    }
-                                    const isInternal = name === "internal";
-                                    if (!isInternal) {
-                                        let choice: SocaUserInputChoice = {
-                                            title: `${title} [${provider}]`,
-                                            description: `${name}`,
-                                            value: `${name}`,
-                                        };
-                                        if (name === "home") {
-                                            choice.disabled = true;
+            <div onClick={this.state.budgetNotFound ? toggleBudgetNotFoundMessage : undefined}>
+                <IdeaForm
+                    name="create-update-project"
+                    ref={this.configureProjectForm}
+                    modal={false}
+                    showHeader={false}
+                    showActions={false}
+                    useContainers={true}
+                    values={values}
+                    onFetchOptions={(request) => {
+                        if (request.param === "add_filesystems") {
+                                let promises: Promise<any>[] = [];
+                                promises.push(this.clusterSettings().getModuleSettings({ module_id: Constants.MODULE_SHARED_STORAGE }));
+                                return Promise.all(promises).then((result) => {
+                                    const choices: SocaUserInputChoice[] = [];
+                                    const sharedFileSystem = result[0].settings;
+                                    Object.keys(sharedFileSystem).forEach((name) => {
+                                        const storage = dot.pick(name, sharedFileSystem);
+                                        const title = dot.pick("title", storage);
+                                        const provider = dot.pick("provider", storage);
+                                        const mount_dir = dot.pick("mount_dir", storage);
+                                        if (Utils.isEmpty(provider)) {
+                                            return true;
                                         }
-                                        choices.push(choice);
-                                    }
+                                        const isInternal = name === "internal";
+                                        if (!isInternal && mount_dir && mount_dir !== Constants.SHARED_STORAGE_HOME_MOUNT_DIRECTORY) {
+                                            let choice: SocaUserInputChoice = {
+                                                title: `${title} [${provider}]`,
+                                                description: `${name}`,
+                                                value: `${name}`,
+                                            };
+                                            choices.push(choice);
+                                        }
+                                    });
+                                    return { listing: choices };
                                 });
-                                return { listing: choices };
-                            });
-                        }
-                     else if (request.param === "security_groups") {
-                        if (!this.isAdmin()) {
-                          return Promise.resolve({ listing: [] });
-                        }
-                        return this.projects().listSecurityGroups().then((result) => {
-                            const security_groups = result.security_groups
-                            if (!security_groups || security_groups?.length === 0) {
-                                return {
-                                    listing: [],
-                                }
-                            } else {
-                                const choices: SocaUserInputChoice[] = []
-                                security_groups.forEach((security_group) => {
-                                    choices.push({
-                                        title: security_group.group_name,
-                                        value: security_group.group_id
-                                    })
-                                })
-                                return {
-                                    listing: choices
-                                }
                             }
-                        })
-                    }
-                     else if (request.param === "policy_arns") {
-                        if (!this.isAdmin()) {
-                          return Promise.resolve({ listing: [] });
+                        else if (request.param === "add_home_directory_filesystem") {
+                            let promises: Promise<any>[] = [];
+                                promises.push(this.clusterSettings().getModuleSettings({ module_id: Constants.MODULE_SHARED_STORAGE }));
+                                return Promise.all(promises).then((result) => {
+                                    const choices: SocaUserInputChoice[] = [];
+                                    choices.push({
+                                        title: "Elastic Block Store volume [ebs]",
+                                        description: "home",
+                                        value: `${Constants.SHARED_STORAGE_EBS_VOLUME}`
+                                    })
+                                    const sharedFileSystem = result[0].settings;
+                                    Object.keys(sharedFileSystem).forEach((name) => {
+                                        const storage = dot.pick(name, sharedFileSystem);
+                                        const title = dot.pick("title", storage);
+                                        const provider = dot.pick("provider", storage);
+                                        const mount_dir = dot.pick("mount_dir", storage);
+                                        if (Utils.isEmpty(provider)) {
+                                            return true;
+                                        }
+
+                                        // S3 Bucket is not supported for home directory
+                                        if (mount_dir === Constants.SHARED_STORAGE_HOME_MOUNT_DIRECTORY && provider !== Constants.SHARED_STORAGE_PROVIDER_S3_BUCKET) {
+                                            let choice: SocaUserInputChoice = {
+                                                title:  `${title} [${provider}]`,
+                                                description: name === "home" ? `global ${name}` : name,
+                                                value: name,
+                                            };
+                                            choices.push(choice);
+                                        }
+                                    });
+                                    return { listing: choices };
+                                });
                         }
-                         return this.projects().listPolicies().then((result) => {
-                             const policies = result.policies
-                             if(!policies || policies?.length === 0) {
-                                 return {
-                                     listing: []
+                        else if (request.param === "security_groups") {
+                            if (!this.isAdmin()) {
+                              return Promise.resolve({ listing: [] });
+                            }
+                            return this.projects().listSecurityGroups().then((result) => {
+                                const security_groups = result.security_groups
+                                if (!security_groups || security_groups?.length === 0) {
+                                    return {
+                                        listing: [],
+                                    }
+                                } else {
+                                    const choices: SocaUserInputChoice[] = []
+                                    security_groups.forEach((security_group) => {
+                                        choices.push({
+                                            title: security_group.group_name,
+                                            value: security_group.group_id
+                                        })
+                                    })
+                                    return {
+                                        listing: choices
+                                    }
+                                }
+                            })
+                        }
+                         else if (request.param === "policy_arns") {
+                            if (!this.isAdmin()) {
+                              return Promise.resolve({ listing: [] });
+                            }
+                             return this.projects().listPolicies().then((result) => {
+                                 const policies = result.policies
+                                 if(!policies || policies?.length === 0) {
+                                     return {
+                                         listing: []
+                                     }
                                  }
-                             }
-                             else{
-                                 const choices: SocaUserInputChoice[] = []
-                                 policies.forEach((policy) => {
-                                     choices.push({
-                                         title: policy.policy_name,
-                                         value: policy.policy_arn
+                                 else{
+                                     const choices: SocaUserInputChoice[] = []
+                                     policies.forEach((policy) => {
+                                         choices.push({
+                                             title: policy.policy_name,
+                                             value: policy.policy_arn
+                                         })
                                      })
-                                 })
-                                 return {
-                                     listing: choices
+                                     return {
+                                         listing: choices
+                                     }
                                  }
-                             }
-                         })
-                    }
-                     else {
-                            return Promise.resolve({
-                                listing: [],
-                            });
+                             })
                         }
-                }}
-                containerGroups={[
-                    {
-                        title: "Project Definition",
-                        name: "project_definition",
-                    },
-                    {
-                        title: "Resource Configurations",
-                        name: "resource_configurations",
-                    },
-                ]}
-                params={[
-                    {
-                        name: "title",
-                        title: "Title",
-                        description: "Enter a user friendly project title",
-                        data_type: "str",
-                        param_type: "text",
-                        validate: {
-                            required: true,
+                        else if (request.param === "budget.budget_name") {
+                            return this.getBudgets().then((result) => {
+                                return {listing: result}
+                            })
+                        }
+                         else {
+                                return Promise.resolve({
+                                    listing: [],
+                                });
+                            }
+                    }}
+                    containerGroups={[
+                        {
+                            title: "Project Definition",
+                            name: "project_definition",
                         },
-                        container_group_name: "project_definition",
-                        readonly: !this.isAdmin(),
-                    },
-                    {
-                        name: "name",
-                        title: "Project ID",
-                        description: "Enter a project-id",
-                        help_text: "Project ID can only use lowercase alphabets, numbers, hyphens (-), underscores (_), or periods (.). Must be between 3 and 40 characters long.",
-                        data_type: "str",
-                        param_type: "text",
-                        readonly: isUpdate,
-                        validate: {
-                            required: true,
-                            regex: "^[a-z0-9-_.]{3,40}$",
-                            message: "Only use lowercase alphabets, numbers, hyphens (-), underscores (_), or periods (.). Must be between 3 and 40 characters long.",
+                        {
+                            title: "Resource Configurations",
+                            name: "resource_configurations",
                         },
-                        container_group_name: "project_definition"
-                    },
-                    {
-                        name: "description",
-                        title: "Description",
-                        description: "Enter the project description",
-                        data_type: "str",
-                        param_type: "text",
-                        multiline: true,
-                        container_group_name: "project_definition",
-                        readonly: !this.isAdmin(),
-                    },
-                    ...this.buildAddFileSystemParam(isUpdate),
-                    {
-                        name: "enable_budgets",
-                        title: "Do you want to enable budgets for this project?",
-                        data_type: "bool",
-                        param_type: "confirm",
-                        default: false,
-                        validate: {
-                            required: true,
+                    ]}
+                    params={[
+                        {
+                            name: "title",
+                            title: "Title",
+                            description: "Enter a user friendly project title",
+                            data_type: "str",
+                            param_type: "text",
+                            validate: {
+                                required: true,
+                            },
+                            container_group_name: "project_definition",
+                            readonly: !this.isAdmin(),
                         },
-                        container_group_name: "project_definition",
-                        readonly: !this.isAdmin(),
-                    },
-                    {
-                        name: "budget.budget_name",
-                        title: "Enter the AWS Budgets name for the project",
-                        description: "Select budget name that you have created in AWS budget",
-                        data_type: "str",
-                        param_type: "text",
-                        validate: {
-                            required: true,
+                        {
+                            name: "name",
+                            title: "Project ID",
+                            description: "Enter a project-id",
+                            help_text: "Project ID can only use lowercase alphabets, numbers, hyphens (-), underscores (_), or periods (.). Must be between 3 and 40 characters long.",
+                            data_type: "str",
+                            param_type: "text",
+                            readonly: isUpdate,
+                            validate: {
+                                required: true,
+                                regex: "^[a-z0-9-_.]{3,40}$",
+                                message: "Only use lowercase alphabets, numbers, hyphens (-), underscores (_), or periods (.). Must be between 3 and 40 characters long.",
+                            },
+                            container_group_name: "project_definition"
                         },
-                        when: {
-                            param: "enable_budgets",
-                            eq: true,
+                        {
+                            name: "description",
+                            title: "Description",
+                            description: "Enter the project description",
+                            data_type: "str",
+                            param_type: "text",
+                            multiline: true,
+                            container_group_name: "project_definition",
+                            readonly: !this.isAdmin(),
                         },
-                        container_group_name: "project_definition",
-                        readonly: !this.isAdmin(),
-                    },
-                    ...this.buildResourceConfigurationAdvancedOptions()
-                ]}
-                toolsOpen={this.props.toolsOpen} 
-                tools={this.props.tools}
-                onToolsChange={this.props.onToolsChange}
-            />
+                        ...this.buildAddFileSystemParam(isUpdate),
+                        ...this.buildAddHomeDirectoryFileSystemParam(isUpdate),
+                        {
+                            name: "enable_budgets",
+                            title: "Do you want to enable budgets for this project?",
+                            data_type: "bool",
+                            param_type: "confirm",
+                            default: false,
+                            validate: {
+                                required: true,
+                            },
+                            container_group_name: "project_definition",
+                            readonly: !this.isAdmin(),
+                        },
+                        {
+                            name: "budget.budget_name",
+                            title: "Enter the AWS Budgets name for the project",
+                            description: this.state.budgetNotFound ? <span style={{color: "red"}}> Budget associated with this project can not be found in the AWS account, please choose another one. </span> : "\n" +
+                                "Select budget name that you have created in AWS budget",
+                            data_type: "str",
+                            param_type: "select_or_text",
+                            validate: {
+                                required: true,
+                            },
+                            when: {
+                                param: "enable_budgets",
+                                eq: true,
+                            },
+                            container_group_name: "project_definition",
+                            readonly: !this.isAdmin(),
+                            dynamic_choices: true,
+                        },
+                        ...this.buildResourceConfigurationAdvancedOptions()
+                    ]}
+                    toolsOpen={this.props.toolsOpen}
+                    tools={this.props.tools}
+                    onToolsChange={this.props.onToolsChange}
+                />
+            </div>
         )
     }
 
@@ -893,7 +982,7 @@ class ConfigureProject extends Component<ConfigureProjectProps, ConfigureProject
                 values[`linux_${eventType}_scripts`] =  scripts.linux[eventType]?.map(script => ({
                     key: script.script_location,
                     value: script.arguments?.join(',') || ''
-                })) || [];;
+                })) || [];
             }
         }
 
@@ -932,28 +1021,39 @@ class ConfigureProject extends Component<ConfigureProjectProps, ConfigureProject
         const values = this.configureProjectForm.current!.getValues();
         let createOrUpdate;
         let filesystemNames;
+        let homeDirectoryFilesystemName;
+        let combinedFilesystemNames;
         let scripts;
         if (this.state.isUpdate) {
             createOrUpdate = async (request: any) => {
-              // Only admin can update project
-              // users with other permissions can only update role assignments
-              const updates = [];
-              if (this.isAdmin()) {
-                updates.push(this.projects().updateProject(request));
-              }
-              updates.push(Promise.resolve(this.updateRoleAssignments()));
-              return Promise.all(updates);
-            }
+                // Only admin can update project
+                const updates = [];
+
+                if (this.isAdmin()) {
+                  updates.push(this.projects().updateProject(request));
+                }
+
+                // Users with other permissions can only update role assignments
+                updates.push(this.updateRoleAssignments());
+
+                await Promise.all(updates);
+            };
             values.project_id = this.state.project?.project_id;
         } else {
+            combinedFilesystemNames = [];
             filesystemNames = dot.del("add_filesystems", values);
-            filesystemNames = filesystemNames.filter((filesystemName: string) => filesystemName !== "home");
-            createOrUpdate = async (request: any) => {
-                  this.projects().createProject(request)
-                  .then((result) => {
-                    return this.createRoleAssignments(result.project?.project_id!);
-                  });
+            homeDirectoryFilesystemName = dot.del("add_home_directory_filesystem", values);
+            if (filesystemNames) {
+                combinedFilesystemNames = filesystemNames
             }
+
+            if (homeDirectoryFilesystemName && homeDirectoryFilesystemName !== Constants.SHARED_STORAGE_EBS_VOLUME) {
+                combinedFilesystemNames.push(homeDirectoryFilesystemName);
+            }
+            createOrUpdate = async (request: any) => {
+                const result = await this.projects().createProject(request);
+                return await this.createRoleAssignments(result.project?.project_id!);
+            };
         }
         const advanced_options_enabled = dot.del("advanced_options", values);
         if(advanced_options_enabled) {
@@ -962,7 +1062,7 @@ class ConfigureProject extends Component<ConfigureProjectProps, ConfigureProject
         }
         createOrUpdate({
             project: values,
-            filesystem_names: filesystemNames,
+            filesystem_names: combinedFilesystemNames,
         })
             .then(() => {
                 this.props.navigate("/cluster/projects")

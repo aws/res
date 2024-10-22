@@ -145,6 +145,13 @@ class BaseVirtualDesktopControllerEventHandler(VirtualDesktopQueueMessageHandler
             return False
         return self.context.config().get_string('virtual-desktop-controller.dcv_broker_role_id', required=True) == sender_id
 
+    def is_sender_vdi_helper_lambda(self, sender_id: str) -> bool:
+        sender_id = self._retrieve_iam_role_id_from_sender(sender_id)
+        if not sender_id:
+            return False
+        return self.context.config().get_string('virtual-desktop-controller.vdi-helper-id', required=True) == sender_id
+
+
     def is_sender_controller_role(self, sender_id: str) -> bool:
         sender_id = self._retrieve_iam_role_id_from_sender(sender_id)
         if Utils.is_empty(sender_id):

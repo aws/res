@@ -1,0 +1,4 @@
+boto3==1.34.155
+requests==2.31.0
+psutil==5.9.8
+awscli==1.33.44

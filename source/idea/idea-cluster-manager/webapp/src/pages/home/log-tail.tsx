@@ -17,6 +17,7 @@ import React, { Component, RefObject } from "react";
 import { withRouter } from "../../navigation/navigation-utils";
 import { AppContext } from "../../common";
 import Utils from "../../common/utils";
+import { ErrorCodes, ErrorMessages } from "../../common/constants";
 import { Box, Button, Container, Grid, StatusIndicator, StatusIndicatorProps } from "@cloudscape-design/components";
 import { XTerm } from "xterm-for-react";
 import { FitAddon } from "xterm-addon-fit";
@@ -111,11 +112,14 @@ class IdeaLogTail extends Component<IdeaLogTailProps, IdeaLogTailState> {
                             );
                         })
                         .catch((error) => {
+                            if (error.errorCode === ErrorCodes.DISABLED_FEATURE) {
+                                this.xterm.current!.terminal.clear();
+                            }
                             this.setState(
                                 {
                                     statusVisible: true,
                                     statusType: "error",
-                                    statusDescription: error.message,
+                                    statusDescription: error.errorCode === ErrorCodes.DISABLED_FEATURE ? ErrorMessages.DISABLED_FILE_BROWSER_BY_ADMIN : error.message,
                                     emptyReceives: this.state.emptyReceives + 1,
                                 },
                                 () => {
@@ -192,9 +196,12 @@ class IdeaLogTail extends Component<IdeaLogTailProps, IdeaLogTailState> {
                 );
             })
             .catch((error) => {
+                if (error.errorCode === ErrorCodes.DISABLED_FEATURE) {
+                    terminal.clear();
+                }
                 this.setState({
                     statusType: "error",
-                    statusDescription: error.message,
+                    statusDescription: error.errorCode === ErrorCodes.DISABLED_FEATURE ? ErrorMessages.DISABLED_FILE_BROWSER_BY_ADMIN : error.message,
                 });
             });
     }

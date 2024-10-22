@@ -11,6 +11,9 @@
 from typing import List
 
 import ideaclustermanager
+
+from ideadatamodel.errorcodes import BUDGET_NOT_FOUND
+from ideadatamodel.exceptions import SocaException
 from ideadatamodel.shared_filesystem import FileSystem
 
 from ideasdk.api import ApiInvocationContext, BaseAPI
@@ -90,9 +93,13 @@ class ProjectsAPI(BaseAPI):
         ApiUtils.validate_input(request.project.name,
                                 constants.PROJECT_ID_REGEX,
                                 constants.PROJECT_ID_ERROR_MESSAGE)
+        # Validate filesystems prior to project creation
+        if request.filesystem_names is not None:
+            self.context.shared_filesystem.validate_filesystems(request.filesystem_names)
         result = self.context.projects.create_project(request)
         if request.filesystem_names is not None:
-            result.filesystem_names = self.context.shared_filesystem.update_filesystems_to_project_mappings(request.filesystem_names, request.project.name)
+            # Skipping collision check as it happened prior
+            result.filesystem_names = self.context.shared_filesystem.update_filesystems_to_project_mappings(request.filesystem_names, request.project.name, False)
         context.success(result)
 
     def delete_project(self, context: ApiInvocationContext):
@@ -121,10 +128,16 @@ class ProjectsAPI(BaseAPI):
         result = self.context.projects.list_projects(request)
         for project in result.listing:
             if project.is_budgets_enabled():
-                # this call could possibly make some performance degradations, if the configured budget is not available.
-                # need to optimize this further.
-                budget = self.context.aws_util().budgets_get_budget(budget_name=project.budget.budget_name)
-                project.budget = budget
+                try:
+                    budget = self.context.aws_util().budgets_get_budget(
+                        budget_name=project.budget.budget_name
+                    )
+                    project.budget = budget
+                except SocaException as e:
+                    if e.error_code == BUDGET_NOT_FOUND:
+                        project.budget = BUDGET_NOT_FOUND
+                    else:
+                        raise e
         context.success(result)
 
     def get_user_projects(self, context: ApiInvocationContext):
@@ -197,9 +210,9 @@ class ProjectsAPI(BaseAPI):
         if is_authenticated_user and namespace in ('Projects.GetUserProjects', 'Projects.GetProject'):
             acl_entry['method'](context)
             return
-        
+
         # Conditional permissions for non-admins
-        
+
         if namespace == 'Projects.EnableProject':
             request = context.get_request_payload_as(EnableProjectRequest)
             # Current user must have "update_status" permission for all projects in the request

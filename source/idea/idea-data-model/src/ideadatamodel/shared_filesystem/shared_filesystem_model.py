@@ -37,6 +37,9 @@ class FileSystem(SocaBaseModel):
     def get_mount_dir(self):
         return self.storage.get('mount_dir')
 
+    def get_scope(self):
+        return self.storage.get('scope')
+
 class EFSFileSystem(SocaBaseModel):
     efs: Optional[Any]
 

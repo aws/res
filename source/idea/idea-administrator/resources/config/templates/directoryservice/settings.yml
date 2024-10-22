@@ -31,10 +31,9 @@ ldap_base: dc=idea,dc=local
 
 # Directory Service Root (Service Account) Credentials.
 # ---------------------------------------------
-# By default, the directory service stack will provision 2 Secrets in Secrets Manager.
-# 1. Root UserName - defaults to Admin
-# 2. Root Password - random generated secret string
-# set root_credentials_provided: true, if you want to specify your own credentials.
+# By default, the directory service stack will provision 1 Secret in Secrets Manager.
+# 1. Service Account Credentials - Username as key and Password as value
+# set service_account_credentials_provided: true, if you want to specify your own credentials.
 # the secrets you manually create must be tagged with:
 #  res:EnvironmentName = {{cluster_name}}
 #  res:ModuleName = directoryservice
@@ -45,9 +44,8 @@ ldap_base: dc=idea,dc=local
 #  The primary reason is, after 42 days, the AD Automation Agent will change the secret as admin credentials will expire.
 # After this event, if you every upgrade the directory service stack, CDK will update the password secret to the original one
 # as the changes applied by AD Automation Agent were not via CDK, and CDK state information does not know about this change.
-root_credentials_provided: {{ use_existing_directory_service | lower }}
-root_username_secret_arn: {{ directory_service_root_username_secret_arn or '~' }}
-root_password_secret_arn: {{ directory_service_root_password_secret_arn or '~' }}
+service_account_credentials_provided: {{ use_existing_directory_service | lower }}
+service_account_credentials_secret_arn: {{ directory_service_service_account_credentials_secret_arn or '~' }}
 
 
 {% if directory_service_provider == 'openldap' %}

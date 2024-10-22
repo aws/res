@@ -1,6 +1,6 @@
 ## Virtual Desktops
 
-Manage your Windows & Linux virtual desktops, powered by [AWS NICE DCV](https://aws.amazon.com/hpc/dcv/).
+Manage your Windows & Linux virtual desktops, powered by [Amazon DCV](https://aws.amazon.com/hpc/dcv/).
 
 <details>
     <summary markdown="span"><b>Create a new desktop</b></summary>

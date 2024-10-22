@@ -1718,13 +1718,11 @@ def ds_create_service_secrets(cluster_name: str, aws_region: str, aws_profile: s
             kms_key_id=kms_key_id
         )
 
-    username_secret_arn = secret_arns['username_secret_arn']
-    password_secret_arn = secret_arns['password_secret_arn']
+    credentials_secret_arn = secret_arns['credentials_secret_arn']
 
     context.success(f'directory service {purpose} secrets created successfully: ')
     print(f'Account Purpose: {purpose}')
-    print(f'Username Secret ARN: {username_secret_arn}')
-    print(f'Password Secret ARN: {password_secret_arn}')
+    print(f'Credentials Secret ARN: {credentials_secret_arn}')
 
 
 @shared_storage.command('add-file-system', context_settings=CLICK_SETTINGS)

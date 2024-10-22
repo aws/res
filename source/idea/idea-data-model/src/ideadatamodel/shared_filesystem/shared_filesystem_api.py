@@ -25,6 +25,8 @@ __all__ = (
     "OnboardS3BucketResult",
     "ListOnboardedFileSystemsRequest",
     "ListOnboardedFileSystemsResult",
+    "ListGlobalFileSystemsRequest",
+    "ListGlobalFileSystemsResult",
     "OPEN_API_SPEC_ENTRIES_FILESYSTEM",
 )
 
@@ -141,6 +143,13 @@ class ListOnboardedFileSystemsRequest(SocaListingPayload):
 class ListOnboardedFileSystemsResult(SocaListingPayload):
     listing: Optional[List[FileSystem]]
 
+
+class ListGlobalFileSystemsRequest(SocaListingPayload):
+    pass
+
+
+class ListGlobalFileSystemsResult(SocaListingPayload):
+    listing: Optional[List[FileSystem]]
 
 # OnboardFileSystems
 

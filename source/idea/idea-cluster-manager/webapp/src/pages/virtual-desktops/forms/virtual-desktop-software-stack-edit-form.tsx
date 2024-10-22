@@ -84,10 +84,10 @@ class VirtualDesktopSoftwareStackEditForm extends Component<VirtualDesktopSoftwa
 
     componentDidMount() {
         this.getProjectsClient()
-            .getUserProjects({})
+            .listProjects({})
             .then((result) => {
                 let projectChoices: SocaUserInputChoice[] = [];
-                result.projects?.forEach((project) => {
+                result.listing?.forEach((project) => {
                     projectChoices.push({
                         title: project.title,
                         value: project.project_id,

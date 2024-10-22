@@ -1,6 +1,27 @@
 # Change Log
 This file is used to list changes made in each release of Research and Engineering Studio (RES).
 
+2024.10
+------
+
+**ENHANCEMENTS**
+
+- Added the ability to automatically stop or terminate idle sessions to save costs.
+- Added the ability to assign projects their own home file system.
+- Added the ability for the admins to toggle file browser access on or off for the entire environment.
+- Added the ability for the admins to customize DCV permissions for session owners to allow or disallow functions such as copying and pasting from a virtual session.
+
+**CHANGES**
+
+- Added RES base stack to deploy resources required for RES deployment.
+- The S3 bucket BlockPublicAccess parameter now defaults to your account level S3 bucket setting.
+
+**BUG FIXES**
+
+- Resolved an issue where Infrastructure AMI building would error out due to a relative directory structure issue.
+- Resolved an issue where users were unable to connect to VDI instances running AL2 from the EC2 console.
+
+
 2024.08
 ------
 

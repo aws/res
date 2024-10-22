@@ -89,30 +89,8 @@ class ActiveDirectoryClient(AbstractLDAPClient):
         return self.context.config().get_string('directoryservice.sudoers.group_name', required=True)
 
     @property
-    def ldap_sudoers_group_dn(self) -> str:
-        sudoers_group_name = self.ldap_sudoers_group_name
-        tokens = [
-            f'cn={sudoers_group_name}'
-        ]
-        ou_sudoers = self.context.config().get_string('directoryservice.sudoers.ou')
-        if Utils.is_not_empty(ou_sudoers):
-            if '=' in ou_sudoers:
-                tokens.append(ou_sudoers)
-            else:
-                tokens.append(f'ou={ou_sudoers}')
-                tokens.append(self.ldap_base)
-        return ','.join(tokens)
-
-    @property
     def ldap_sudoers_base(self) -> str:
         return self.ldap_user_base
-
-    @property
-    def ldap_sudoer_filterstr(self) -> str:
-        return f'(&(objectClass=user)(memberOf={self.ldap_sudoers_group_dn}))'
-
-    def build_sudoer_filterstr(self, username: str) -> str:
-        return f'(&{self.ldap_sudoer_filterstr[2:-1]}(sAMAccountName={username}))'
 
     def build_samaccountname_filterstr(self, username: str) -> str:
         return f'(&{self.ldap_user_filterstr}(sAMAccountName={username}))'
@@ -181,39 +159,6 @@ class ActiveDirectoryClient(AbstractLDAPClient):
                 error_code=errorcodes.VALIDATION_FAILED,
                 message=f'Unable to update password. Active Directory provider is unsupported: {ad_provider}'
             )
-
-    def create_service_account(self, username: str, password: str) -> Dict:
-        user_principal_name = f'{username}@{self.domain_name}'
-
-        user_dn = self.build_user_dn(username)
-        existing = self.is_existing_user(username)
-
-        readonly = self.is_readonly()
-
-        if existing:
-            if readonly:
-                return self.get_user(username)
-            else:
-                raise exceptions.invalid_params(f'username already exists: {username}')
-
-        user_attrs = [
-            ('objectClass', [
-                Utils.to_bytes('top'),
-                Utils.to_bytes('person'),
-                Utils.to_bytes('user'),
-                Utils.to_bytes('organizationalPerson')
-            ]),
-            ('displayName', [Utils.to_bytes(username)]),
-            ('sAMAccountName', [Utils.to_bytes(username)]),
-            ('userPrincipalName', [Utils.to_bytes(user_principal_name)]),
-            ('cn', [Utils.to_bytes(username)]),
-            ('uid', [Utils.to_bytes(username)])
-        ]
-        self.add_s(user_dn, user_attrs)
-        self.wait_for_user_creation(username, interval=5, min_success=5)
-        self.change_password(username=username, password=password)
-        self.add_sudo_user(username=username)
-        return self.get_user(username)
 
     def sync_user(self, *,
                   uid: int,
@@ -331,26 +276,6 @@ class ActiveDirectoryClient(AbstractLDAPClient):
             self.wait_for_group_creation(group_name)
 
         return self.get_group(group_name)
-
-    def add_sudo_user(self, username: str):
-        user_dn = self.build_user_dn(username)
-        sudoer_group_dn = self.ldap_sudoers_group_dn
-
-        group_attrs = [
-            (ldap.MOD_ADD, 'member', [Utils.to_bytes(user_dn)])
-        ]
-
-        self.modify_s(sudoer_group_dn, group_attrs)
-
-    def remove_sudo_user(self, username: str):
-        user_dn = self.build_user_dn(username)
-        sudoer_group_dn = self.ldap_sudoers_group_dn
-
-        group_attrs = [
-            (ldap.MOD_DELETE, 'member', [Utils.to_bytes(user_dn)])
-        ]
-
-        self.modify_s(sudoer_group_dn, group_attrs)
 
     def wait_for_group_creation(self, group_name: str, interval: float = 2, max_attempts: int = 15, min_success: int = 3):
         """

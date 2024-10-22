@@ -638,6 +638,7 @@ class VpcInterfaceEndpoint(SocaBaseConstruct):
                  create_tags: CreateTagsCustomResource,
                  lookup_supported_azs=True,
                  subnets: ec2.SubnetSelection = None,
+                 private_dns_enabled = True,
                  ):
         super().__init__(context, f'{service}-vpc-endpoint')
         self.scope = scope
@@ -651,7 +652,7 @@ class VpcInterfaceEndpoint(SocaBaseConstruct):
                                                    ),
                                                    open=True,
                                                    # setting private_dns_enabled = True can be problem in GovCloud where Route53 and in turn Private Hosted Zones is not supported.
-                                                   private_dns_enabled=True,
+                                                   private_dns_enabled=private_dns_enabled,
                                                    lookup_supported_azs=lookup_supported_azs,
                                                    security_groups=[vpc_endpoint_security_group],
                                                    subnets=subnets

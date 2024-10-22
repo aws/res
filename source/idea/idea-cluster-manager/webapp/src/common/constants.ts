@@ -33,6 +33,9 @@ export const Constants = {
 
     ADMIN_ZONE_LINK_TEXT: "ADMIN ZONE",
 
+    SHARED_STORAGE_FILE_BROWSER_FEATURE_TITLE: "File browser",
+    SHARED_STORAGE_FILE_BROWSER_KEY: "enable_file_browser",
+
     SHARED_STORAGE_PROVIDER_EFS: "efs",
     SHARED_STORAGE_PROVIDER_FSX_CACHE: "fsx_cache",
     SHARED_STORAGE_PROVIDER_FSX_LUSTRE: "fsx_lustre",
@@ -43,6 +46,8 @@ export const Constants = {
     SHARED_STORAGE_PROVIDER_FSX_NETAPP_ONTAP_SECURITY_TYPE_MIXED: "MIXED",
     SHARED_STORAGE_PROVIDER_FSX_NETAPP_ONTAP_SECURITY_TYPE_NTFS: "NTFS",
     SHARED_STORAGE_PROVIDER_S3_BUCKET: "s3_bucket",
+    SHARED_STORAGE_HOME_MOUNT_DIRECTORY: "/home",
+    SHARED_STORAGE_EBS_VOLUME: "ebs_volume",
 
     SHARED_STORAGE_MODE_READ_ONLY: "R",
     SHARED_STORAGE_MODE_READ_WRITE: "R/W",
@@ -90,8 +95,36 @@ export const Constants = {
     ROLE_NAME_ERROR_MESSAGE: "Only use alphabets, numbers, spaces, dashes (-), or underscores (_) for role name. Must be between 3 and 36 characters long.",
     ROLE_DESC_REGEX: "^[a-zA-Z0-9-_ ]{0,50}$",
     ROLE_DESC_ERROR_MESSAGE: "Only use alphabets, numbers, spaces, dashes (-), or underscores (_) for role description. Can be up to 50 characters long.",
-};
+    DCV_SETTINGS_DEFAULT_OWNER_PROFILE_ID: "admin_profile",
+    DCV_SETTINGS_DESKTOP_SETTINGS: {
+        column_one: ["display", "pointer", "mouse", "audio_out", "unsupervised_access"],
+        column_two: ["keyboard", "keyboard_sas", "screenshot"],
+        column_three: ["clipboard_paste", "clipboard_copy", "file_upload", "file_download"],
+        getAllColumns: function () {
+            return [...this.column_one, ...this.column_two, ...this.column_three]
+        }
+    },
+    DCV_SETTINGS_DESKTOP_ADVANCED_SETTINGS: {
+        column_one: ["audio_in", "printer"],
+        column_two: ["usb", "smartcard", "stylus"],
+        column_three: ["webcam", "touch", "gamepad"],
+        getAllColumns: function () {
+            return [...this.column_one, ...this.column_two, ...this.column_three]
+        }
+    },
+    BUDGET_NOT_FOUND: "BUDGET_NOT_FOUND",
+    DIVIDER_COLOR: "#d1d5db",
+  };
 
 export const ErrorCodes = {
     MODULE_NOT_FOUND: "MODULE_NOT_FOUND",
+    UNAUTHORIZED_ACCESS: "UNAUTHORIZED_ACCESS",
+    DISABLED_FEATURE: "DISABLED_FEATURE",
+    NOT_A_TEXT_FILE: "NOT_A_TEXT_FILE",
+};
+
+export const ErrorMessages = {
+    PERMISSION_DENIED: "Permission Denied",
+    DISABLED_FILE_BROWSER_BY_ADMIN: "The File browser has been disabled. Contact your administrator to request data access via the web portal.",
+    DISABLED_FILE_BROWSER_NEW_USER: "Your personal home directory has not yet been created. File browsing is limited to the global home file system. Launch at least one Linux virtual desktop session with a project using the global home file system to have a personal home directory created for you.",
 };

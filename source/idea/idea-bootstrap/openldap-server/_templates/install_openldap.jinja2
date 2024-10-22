@@ -7,8 +7,9 @@ IDEA_DS_LDAP_NAME="{{ context.config.get_string('directoryservice.name', require
 
 source ${BOOTSTRAP_DIR}/infra.cfg
 
-DS_ROOT_USERNAME=$(get_secret "${LDAP_ROOT_USERNAME_SECRET_ARN}")
-DS_ROOT_PASSWORD=$(get_secret "${LDAP_ROOT_PASSWORD_SECRET_ARN}")
+DS_ROOT_CREDENTIALS=$(get_secret "${LDAP_SERVICE_ACCOUNT_CREDENTIALS_SECRET_ARN}")
+DS_ROOT_USERNAME=$(echo $DS_ROOT_CREDENTIALS | jq -r 'keys[0]')
+DS_ROOT_PASSWORD=$(echo $DS_ROOT_CREDENTIALS | jq -r '.[]')
 DS_TLS_CERTIFICATE=$(get_secret "${LDAP_TLS_CERTIFICATE_SECRET_ARN}")
 DS_TLS_PRIVATE_KEY=$(get_secret "${LDAP_TLS_PRIVATE_KEY_SECRET_ARN}")
 

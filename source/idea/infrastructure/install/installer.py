@@ -1,9 +1,8 @@
 #  Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 #  SPDX-License-Identifier: Apache-2.0
-import inspect
-import pathlib
+
 from datetime import datetime
-from typing import Any, Callable, Dict, TypedDict, Union
+from typing import Dict, TypedDict, Union
 
 import aws_cdk
 from aws_cdk import aws_ecr as ecr
@@ -14,10 +13,23 @@ from aws_cdk import aws_stepfunctions_tasks as sfn_tasks
 from constructs import Construct, DependencyGroup
 
 from idea.batteries_included.parameters.parameters import BIParameters
-from idea.infrastructure.install import handlers, tasks
-from idea.infrastructure.install.constants import INSTALLER_ECR_REPO_NAME_SUFFIX
+from idea.infrastructure.install import tasks
+from idea.infrastructure.install.constants import (
+    API_PROXY_LAMBDA_LAYER_NAME,
+    INSTALLER_ECR_REPO_NAME_SUFFIX,
+    RES_COMMON_LAMBDA_RUNTIME,
+    SHARED_RES_LIBRARY_LAMBDA_LAYER_NAME,
+)
+from idea.infrastructure.install.handlers import installer_handlers
 from idea.infrastructure.install.parameters.common import CommonKey
 from idea.infrastructure.install.parameters.parameters import RESParameters
+from idea.infrastructure.install.proxy import (
+    LambdaAndSecurityGroupCleanup,
+    Proxy,
+    proxy_lambda_name,
+    proxy_lambda_security_group_name,
+)
+from idea.infrastructure.install.utils import InfraUtils
 
 LAMBDA_RUNTIME = lambda_.Runtime.PYTHON_3_11
 
@@ -35,6 +47,7 @@ class Installer(Construct):
         registry_name: str,
         params: Union[RESParameters, BIParameters],
         dependency_group: DependencyGroup,
+        lambda_layers: Dict[str, lambda_.LayerVersion],
     ):
         super().__init__(scope, id)
         self.params = params
@@ -58,14 +71,13 @@ class Installer(Construct):
         event_handler = lambda_.Function(
             self,
             "CustomResourceEventHandler",
-            runtime=LAMBDA_RUNTIME,
+            runtime=RES_COMMON_LAMBDA_RUNTIME,
             timeout=aws_cdk.Duration.seconds(10),
             description="Lambda to handle the CFN custom resource events",
-            **self.get_handler_and_code_for_function(
-                handlers.handle_custom_resource_lifecycle_event
+            **InfraUtils.get_handler_and_code_for_function(
+                installer_handlers.handle_custom_resource_lifecycle_event
             ),
         )
-
         wait_condition_handle = aws_cdk.CfnWaitConditionHandle(
             self, f"InstallerWaitConditionHandle{self.get_wait_condition_suffix()}"
         )
@@ -82,6 +94,15 @@ class Installer(Construct):
             ",", self.params.get(CommonKey.VDI_SUBNETS).value_as_list
         )
 
+        cluster_name = self.params.get_str(CommonKey.CLUSTER_NAME)
+        self.proxyConstructCleanup = LambdaAndSecurityGroupCleanup(
+            self,
+            "remove-leftover-proxy-resource",
+            self.params.get_str(CommonKey.VPC_ID),
+            [f"{cluster_name}_{proxy_lambda_name}"],
+            [f"{cluster_name}_{proxy_lambda_security_group_name}"],
+        )
+
         installer = aws_cdk.CustomResource(
             self,
             "Installer",
@@ -89,27 +110,47 @@ class Installer(Construct):
             removal_policy=aws_cdk.RemovalPolicy.DESTROY,
             resource_type="Custom::RES",
             properties={
-                handlers.EnvKeys.CALLBACK_URL: wait_condition_handle.ref,
-                handlers.EnvKeys.INSTALLER_ECR_REPO_NAME: aws_cdk.Fn.join(
+                installer_handlers.EnvKeys.CALLBACK_URL: wait_condition_handle.ref,
+                installer_handlers.EnvKeys.INSTALLER_ECR_REPO_NAME: aws_cdk.Fn.join(
                     "",
                     [
                         self.params.get_str(CommonKey.CLUSTER_NAME),
                         INSTALLER_ECR_REPO_NAME_SUFFIX,
                     ],
                 ),
-                handlers.EnvKeys.ENVIRONMENT_NAME: self.params.get_str(
+                installer_handlers.EnvKeys.ENVIRONMENT_NAME: self.params.get_str(
                     CommonKey.CLUSTER_NAME
                 ),
             },
         )
 
-        aws_cdk.CfnWaitCondition(
+        # This ensures clean up is done after the installer finishes at stack deletion
+        # which gives Lambda more time to clean up the left over ENIs
+        installer.node.add_dependency(self.proxyConstructCleanup)
+
+        wait_condition = aws_cdk.CfnWaitCondition(
             self,
             f"InstallerWaitCondition{self.get_wait_condition_suffix()}",
             count=1,
             timeout=str(aws_cdk.Duration.hours(2).to_seconds()),
             handle=wait_condition_handle.ref,
-        ).node.add_dependency(installer)
+        )
+        wait_condition.node.add_dependency(installer)
+
+        self.proxyLambda = Proxy(
+            self,
+            "AWSProxy",
+            {
+                "target_group_priority": 101,
+                "ddb_users_table_name": f"{cluster_name}.accounts.users",
+                "ddb_groups_table_name": f"{cluster_name}.accounts.groups",
+                "ddb_cluster_settings_table_name": f"{cluster_name}.cluster-settings",
+                "cluster_name": cluster_name,
+            },
+            lambda_layer=lambda_layers[API_PROXY_LAMBDA_LAYER_NAME],
+        )
+        # Add wait condition as dependency ensures it deploys after ECS deployment is completed
+        self.proxyLambda.node.add_dependency(wait_condition)
 
         self.tasks = tasks.Tasks(
             self,
@@ -118,13 +159,17 @@ class Installer(Construct):
             installer_registry_name=installer_registry_name,
             params=params,
             dependency_group=dependency_group,
+            lambda_layer_arn=lambda_layers[
+                SHARED_RES_LIBRARY_LAMBDA_LAYER_NAME
+            ].layer_version_arn,
         )
 
         state_machine = self.get_state_machine()
         state_machine.node.add_dependency(self.installer_ecr_repo)
         state_machine.grant_start_execution(event_handler)
         event_handler.add_environment(
-            key=handlers.EnvKeys.SFN_ARN, value=state_machine.state_machine_arn
+            key=installer_handlers.EnvKeys.SFN_ARN,
+            value=state_machine.state_machine_arn,
         )
 
         dependency_group.add(state_machine)
@@ -160,11 +205,11 @@ class Installer(Construct):
         resource_signaler = lambda_.Function(
             self,
             "WaitConditionResponseSender",
-            runtime=LAMBDA_RUNTIME,
+            runtime=RES_COMMON_LAMBDA_RUNTIME,
             timeout=aws_cdk.Duration.seconds(10),
             description="Lambda to send response using the wait condition callback",
-            **self.get_handler_and_code_for_function(
-                handlers.send_wait_condition_response
+            **InfraUtils.get_handler_and_code_for_function(
+                installer_handlers.send_wait_condition_response
             ),
         )
 
@@ -181,13 +226,9 @@ class Installer(Construct):
         create_task = self.tasks.get_create_task()
         update_task = self.tasks.get_update_task()
         delete_task = self.tasks.get_delete_task()
-        cognito_unprotect_task = self.tasks.get_cognito_user_pool_unprotect_task(
-            LAMBDA_RUNTIME, self.get_handler_and_code_for_function
-        )
+        cognito_unprotect_task = self.tasks.get_cognito_user_pool_unprotect_task()
         installer_ecr_images_delete_task = (
-            self.tasks.get_installer_ecr_images_delete_task(
-                LAMBDA_RUNTIME, self.get_handler_and_code_for_function
-            )
+            self.tasks.get_installer_ecr_images_delete_task()
         )
 
         for task in (
@@ -200,17 +241,23 @@ class Installer(Construct):
         ):
             task.add_catch(
                 handler=send_cfn_response_task,
-                result_path=f"$.{handlers.EnvKeys.ERROR}",
+                result_path=f"$.{installer_handlers.EnvKeys.ERROR}",
             )
 
         request_type_choice.when(
-            sfn.Condition.string_equals("$.RequestType", handlers.RequestType.CREATE),
+            sfn.Condition.string_equals(
+                "$.RequestType", installer_handlers.RequestType.CREATE
+            ),
             codebuild_task,
         ).when(
-            sfn.Condition.string_equals("$.RequestType", handlers.RequestType.UPDATE),
+            sfn.Condition.string_equals(
+                "$.RequestType", installer_handlers.RequestType.UPDATE
+            ),
             codebuild_task,
         ).when(
-            sfn.Condition.string_equals("$.RequestType", handlers.RequestType.DELETE),
+            sfn.Condition.string_equals(
+                "$.RequestType", installer_handlers.RequestType.DELETE
+            ),
             cognito_unprotect_task,
         ).otherwise(
             sfn.Fail(self, "UnknownRequestType")
@@ -220,10 +267,14 @@ class Installer(Construct):
             self, "SwitchByEventTypePostCodeBuild"
         )
         request_type_choice_post_codebuild.when(
-            sfn.Condition.string_equals("$.RequestType", handlers.RequestType.CREATE),
+            sfn.Condition.string_equals(
+                "$.RequestType", installer_handlers.RequestType.CREATE
+            ),
             create_task,
         ).when(
-            sfn.Condition.string_equals("$.RequestType", handlers.RequestType.UPDATE),
+            sfn.Condition.string_equals(
+                "$.RequestType", installer_handlers.RequestType.UPDATE
+            ),
             update_task,
         ).otherwise(
             sfn.Fail(self, "UnknownRequestTypePostCodebuild")
@@ -239,18 +290,4 @@ class Installer(Construct):
             self,
             "InstallerStateMachine",
             definition=sfn.Chain.start(request_type_choice),
-        )
-
-    def get_handler_and_code_for_function(
-        self, function: Callable[[Dict[str, Any], Any], Any]
-    ) -> LambdaCodeParams:
-        module = inspect.getmodule(function)
-        if module is None or module.__file__ is None:
-            raise ValueError("module not found")
-        module_name = module.__name__.rsplit(".", 1)[1]
-        folder = str(pathlib.Path(module.__file__).parent)
-
-        return LambdaCodeParams(
-            handler=f"{module_name}.{function.__name__}",
-            code=lambda_.Code.from_asset(folder),
         )

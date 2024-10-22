@@ -97,12 +97,10 @@ class DirectoryServiceStack(IdeaBaseStack):
         provider = self.context.config().get_string('directoryservice.provider', required=True)
         if provider == constants.DIRECTORYSERVICE_OPENLDAP:
 
-            root_credentials_provided = self.context.config().get_bool('directoryservice.root_credentials_provided', default=False)
-            if root_credentials_provided:
-                root_username_secret_arn = self.context.config().get_string('directoryservice.root_username_secret_arn')
-                assert Utils.is_not_empty(root_username_secret_arn)
-                root_password_secret_arn = self.context.config().get_string('directoryservice.root_password_secret_arn')
-                assert Utils.is_not_empty(root_password_secret_arn)
+            service_account_credentials_provided = self.context.config().get_bool('directoryservice.service_account_credentials_provided', default=False)
+            if service_account_credentials_provided:
+                service_account_credentials_secret_arn = self.context.config().get_string('directoryservice.service_account_credentials_secret_arn')
+                assert Utils.is_not_empty(service_account_credentials_secret_arn)
 
             self.bootstrap_package_uri = self.stack.node.try_get_context('bootstrap_package_uri')
             self.openldap_credentials = DirectoryServiceCredentials(
@@ -120,12 +118,10 @@ class DirectoryServiceStack(IdeaBaseStack):
 
         elif provider == constants.DIRECTORYSERVICE_AWS_MANAGED_ACTIVE_DIRECTORY:
 
-            root_credentials_provided = self.context.config().get_bool('directoryservice.root_credentials_provided', default=False)
-            if root_credentials_provided:
-                root_username_secret_arn = self.context.config().get_string('directoryservice.root_username_secret_arn')
-                assert Utils.is_not_empty(root_username_secret_arn)
-                root_password_secret_arn = self.context.config().get_string('directoryservice.root_password_secret_arn')
-                assert Utils.is_not_empty(root_password_secret_arn)
+            service_account_credentials_provided = self.context.config().get_bool('directoryservice.service_account_credentials_provided', default=False)
+            if service_account_credentials_provided:
+                service_account_credentials_secret_arn = self.context.config().get_string('directoryservice.service_account_credentials_secret_arn')
+                assert Utils.is_not_empty(service_account_credentials_secret_arn)
 
             use_existing = self.context.config().get_bool('directoryservice.use_existing', default=False)
             if use_existing:
@@ -148,12 +144,10 @@ class DirectoryServiceStack(IdeaBaseStack):
         # This is done with the directoryservice helper
         elif provider == constants.DIRECTORYSERVICE_ACTIVE_DIRECTORY:
 
-            root_credentials_provided = self.context.config().get_bool('directoryservice.root_credentials_provided', default=False)
-            assert root_credentials_provided is True
-            root_username_secret_arn = self.context.config().get_string('directoryservice.root_username_secret_arn')
-            assert Utils.is_not_empty(root_username_secret_arn)
-            root_password_secret_arn = self.context.config().get_string('directoryservice.root_password_secret_arn')
-            assert Utils.is_not_empty(root_password_secret_arn)
+            service_account_credentials_provided = self.context.config().get_bool('directoryservice.service_account_credentials_provided', default=False)
+            assert service_account_credentials_provided is True
+            service_account_credentials_secret_arn = self.context.config().get_string('directoryservice.service_account_credentials_secret_arn')
+            assert Utils.is_not_empty(service_account_credentials_secret_arn)
 
             self.build_ad_automation_sqs_queue()
             self.build_activedirectory_cluster_settings()
@@ -261,8 +255,7 @@ class DirectoryServiceStack(IdeaBaseStack):
             ],
             base_os=base_os,
             infra_config={
-                'LDAP_ROOT_USERNAME_SECRET_ARN': '${__LDAP_ROOT_USERNAME_SECRET_ARN__}',
-                'LDAP_ROOT_PASSWORD_SECRET_ARN': '${__LDAP_ROOT_PASSWORD_SECRET_ARN__}',
+                'LDAP_SERVICE_ACCOUNT_CREDENTIALS_SECRET_ARN': '${__LDAP_SERVICE_ACCOUNT_CREDENTIALS_SECRET_ARN__}',
                 'LDAP_TLS_CERTIFICATE_SECRET_ARN': '${__LDAP_TLS_CERTIFICATE_SECRET_ARN__}',
                 'LDAP_TLS_PRIVATE_KEY_SECRET_ARN': '${__LDAP_TLS_PRIVATE_KEY_SECRET_ARN__}'
             },
@@ -271,8 +264,7 @@ class DirectoryServiceStack(IdeaBaseStack):
         ).build()
 
         substituted_userdata = cdk.Fn.sub(user_data, {
-            '__LDAP_ROOT_USERNAME_SECRET_ARN__': self.openldap_credentials.get_username_secret_arn(),
-            '__LDAP_ROOT_PASSWORD_SECRET_ARN__': self.openldap_credentials.get_password_secret_arn(),
+            '__LDAP_SERVICE_ACCOUNT_CREDENTIALS_SECRET_ARN__': self.openldap_credentials.get_credentials_secret_arn(),
             '__LDAP_TLS_CERTIFICATE_SECRET_ARN__': self.openldap_certs.get_att_string('certificate_secret_arn'),
             '__LDAP_TLS_PRIVATE_KEY_SECRET_ARN__': self.openldap_certs.get_att_string('private_key_secret_arn')
         })
@@ -400,8 +392,7 @@ class DirectoryServiceStack(IdeaBaseStack):
             'security_group_id': self.openldap_security_group.security_group_id,
             'iam_role_arn': self.openldap_role.role_arn,
             'instance_profile_arn': self.openldap_instance_profile.ref,
-            'root_username_secret_arn': self.openldap_credentials.admin_username.ref,
-            'root_password_secret_arn': self.openldap_credentials.admin_password.ref,
+            'service_account_credentials_secret_arn': self.openldap_credentials.admin_credentials.ref,
             'tls_certificate_secret_arn': self.openldap_certs.get_att_string('certificate_secret_arn'),
             'tls_private_key_secret_arn': self.openldap_certs.get_att_string('private_key_secret_arn')
         }
@@ -420,8 +411,7 @@ class DirectoryServiceStack(IdeaBaseStack):
         }
         if self.activedirectory is not None:
             cluster_settings['directory_id'] = self.activedirectory.ad.ref
-            cluster_settings['root_username_secret_arn'] = self.activedirectory.credentials.get_username_secret_arn()
-            cluster_settings['root_password_secret_arn'] = self.activedirectory.credentials.get_password_secret_arn()
+            cluster_settings['service_account_credentials_secret_arn'] = self.activedirectory.credentials.get_credentials_secret_arn()
 
         self.update_cluster_settings(cluster_settings)
 

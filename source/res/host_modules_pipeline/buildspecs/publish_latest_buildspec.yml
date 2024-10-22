@@ -1,0 +1,13 @@
+version: 0.2
+
+env:
+  variables:
+    HOST_MODULES_PIPELINE_PATH: "source/res/host_modules_pipeline"
+  shell: bash
+
+phases:
+  build:
+    commands:
+      - echo Building because changes were detected...
+      - chmod +x $HOST_MODULES_PIPELINE_PATH/scripts/publish_latest.sh
+      - $HOST_MODULES_PIPELINE_PATH/scripts/publish_latest.sh $CODEBUILD_SRC_DIR_BuildOutputX86_64 $CODEBUILD_SRC_DIR_BuildOutputArm64

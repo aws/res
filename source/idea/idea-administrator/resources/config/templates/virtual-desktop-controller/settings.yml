@@ -141,9 +141,11 @@ external_nlb:
   access_logs: true
 
 dcv_session:
-  idle_timeout: 1440 # in minutes
+  idle_timeout: 43200 # in minutes # default is 30 days
   idle_timeout_warning: 300 # in seconds
   cpu_utilization_threshold: 30 # in percentage
+  enforce_schedule: true
+  transition_state: Stop
   max_root_volume_memory: 1000 # in GB
   additional_security_groups: []
   allowed_sessions_per_user: 5
@@ -200,6 +202,9 @@ dcv_session:
     stopped:
       enabled: true
       email_template: virtual-desktop-controller.session-stopped
+    stopped_idle:
+      enabled: true
+      email_template: virtual-desktop-controller.stopped_idle
     deleting:
       enabled: false
       email_template: virtual-desktop-controller.session-deleting

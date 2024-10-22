@@ -17,8 +17,6 @@ import { HashRouter } from "react-router-dom";
 import "@cloudscape-design/global-styles/index.css";
 import "./index.scss";
 import IdeaWebPortal from "./App";
-import { ToastContainer } from "react-toastify";
-import "react-toastify/dist/ReactToastify.css";
 import { AppContext } from "./common";
 import Utils from "./common/utils";
 import * as serviceWorkerRegistration from "./service-worker-registration";
@@ -138,7 +136,6 @@ const initializeApp = (props: InitializeAppProps) => {
 
     root.render(
         <HashRouter>
-            <ToastContainer />
             <IdeaWebPortal />
         </HashRouter>
     );

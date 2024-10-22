@@ -13,7 +13,7 @@ function Mount-SharedStorage
 
   $shares = [System.Collections.ArrayList]::new()
   {%- for name, storage in context.config.get_config('shared-storage').items() %}
-  {%- if context.eval_shared_storage_scope(shared_storage=storage) %}
+  {%- if storage is mapping and context.eval_shared_storage_scope(shared_storage=storage) %}
   {%- if storage['provider'] == 'fsx_netapp_ontap' and 'mount_drive' in storage and 'cifs_share_name' in storage['fsx_netapp_ontap']['volume'] %}
   $shares.Add(@{MountDrive='{{ storage['mount_drive'] }}:'; Path='\\{{ storage['fsx_netapp_ontap']['svm']['smb_dns'] }}\{{ storage['fsx_netapp_ontap']['volume']['cifs_share_name']}}'}) | Out-Null
   {%- endif %}

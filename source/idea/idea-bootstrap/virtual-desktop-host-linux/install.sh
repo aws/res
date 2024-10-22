@@ -85,6 +85,7 @@ if [[ ! -f ${INSTALL_FINISHED_LOCK} ]]; then
   RES_BASE_OS=$BASE_OS
   GPU_FAMILY=$GPU_FAMILY
   IDEA_CLUSTER_NAME=$RES_ENVIRONMENT_NAME
+  environment_name=$RES_ENVIRONMENT_NAME
   BOOTSTRAP_DIR=/root/bootstrap
   PATH=/bin:/usr/bin:/sbin:/usr/sbin:/usr/local/bin:/opt/idea/python/latest/bin
   ## [END] RES Environment VDI Installation
@@ -129,6 +130,10 @@ if [[ ! -f ${INSTALL_FINISHED_LOCK} ]]; then
     /bin/bash "${SCRIPT_DIR}/../common/system_packages.sh" -o $RES_BASE_OS -r $AWS_REGION -n $RES_ENVIRONMENT_NAME -s "${SCRIPT_DIR}"
     # End: Install System Packages
 
+    # Begin : Install Host Modules
+    /bin/bash "${SCRIPT_DIR}/../common/install_host_modules.sh" -o $RES_BASE_OS -r $AWS_REGION -n $RES_ENVIRONMENT_NAME -s "${SCRIPT_DIR}"
+    # End: Install Host Modules
+
     # Begin: Install NFS Utils and dependency items
     /bin/bash "${SCRIPT_DIR}/../common/nfs_utils.sh" -o $RES_BASE_OS -s "${SCRIPT_DIR}"
     # End: Install NFS Utils and dependency items
@@ -149,9 +154,9 @@ if [[ ! -f ${INSTALL_FINISHED_LOCK} ]]; then
     /bin/bash "${SCRIPT_DIR}/../common/python.sh" -o $RES_BASE_OS -r $AWS_REGION -n $RES_ENVIRONMENT_NAME  -s "${SCRIPT_DIR}" -a "res" -i "/opt/idea/python"
     # End: Install Python
 
-    # Begin: Install Custom Credential Broker requirements
-    res_pip install --user -r ${SCRIPT_DIR}/custom-credential-broker/requirements.txt
-    # End: Install Custom Credential Broker
+    # Begin: Install vdi helper requirements
+    res_pip install --user -r ${SCRIPT_DIR}/../vdi-helper/requirements.txt
+    # End: Install vdi helper requirements
 
     if [[ $GPU_FAMILY =~ ^(NVIDIA|AMD)$ ]]; then
         # Begin: Disable Nouveau Drivers

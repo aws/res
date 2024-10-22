@@ -13,14 +13,14 @@
 
 import React, { Component, RefObject } from "react";
 
-import { FileBrowserClient } from "../../client";
+import { ClusterSettingsClient, FileBrowserClient } from "../../client";
 import { AppContext } from "../../common";
 import { ListFilesResult } from "../../client/data-model";
 import { LocalStorageService } from "../../service";
 import Utils from "../../common/utils";
-import { Alert, Box, Button, CodeEditor, ColumnLayout, Container, Header, Link, Modal, SpaceBetween, StatusIndicator, Tabs, Tiles } from "@cloudscape-design/components";
-import { toast } from "react-toastify";
+import { Alert, Box, Button, CodeEditor, ColumnLayout, Container, Header, Link, Modal, SpaceBetween, StatusIndicator, Tabs, Tiles, FlashbarProps } from "@cloudscape-design/components";
 import { ChonkyActions, FileData, FileNavbar, FileBrowser, FileToolbar, FileList, FileContextMenu, defineFileAction } from "chonky";
+import dot from "dot-object";
 
 import "ace-builds/css/ace.css";
 import "ace-builds/css/theme/dawn.css";
@@ -36,7 +36,7 @@ import { IdeaSideNavigationProps } from "../../components/side-navigation";
 import IdeaAppLayout, { IdeaAppLayoutProps } from "../../components/app-layout";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import { KeyValue } from "../../components/key-value";
-import { Constants } from "../../common/constants";
+import { Constants, ErrorCodes, ErrorMessages } from "../../common/constants";
 import IdeaConfirm from "../../components/modals";
 import { withRouter } from "../../navigation/navigation-utils";
 
@@ -56,6 +56,8 @@ export interface IdeaFileBrowserState {
     sshHostIp: string;
     sshAccess: boolean;
     fileTransferMethod: string;
+    isLoading: boolean;
+    isFileBrowserEnabled: boolean;
 }
 
 export interface IdeaFileEditorProps {
@@ -212,9 +214,12 @@ class IdeaFileEditorModal extends Component<IdeaFileEditorProps, IdeaFileEditorS
                                                 showStatus(true);
                                             })
                                             .catch((error) => {
-                                                if (error.errorCode === "UNAUTHORIZED_ACCESS") {
-                                                    showStatus(false, "Permission Denied");
-                                                } else {
+                                                if (error.errorCode === ErrorCodes.UNAUTHORIZED_ACCESS) {
+                                                    showStatus(false, ErrorMessages.PERMISSION_DENIED);
+                                                } else if (error.errorCode === ErrorCodes.DISABLED_FEATURE) {
+                                                    showStatus(false, ErrorMessages.DISABLED_FILE_BROWSER_BY_ADMIN);
+                                                }
+                                                else {
                                                     showStatus(false, error.message);
                                                 }
                                             });
@@ -273,6 +278,7 @@ const FILE_BROWSER_API_PATH = "/cluster-manager/api/v1";
 class IdeaFileBrowser extends Component<IdeaFileBrowserProps, IdeaFileBrowserState> {
     fileEditor: RefObject<IdeaFileEditorModal>;
     _fileBrowserClient: FileBrowserClient;
+    _clusterSettingsClient: ClusterSettingsClient;
     createFolderForm: RefObject<IdeaForm>;
     deleteFileConfirmModal: RefObject<IdeaConfirm>;
     localStorage: LocalStorageService;
@@ -300,11 +306,14 @@ class IdeaFileBrowser extends Component<IdeaFileBrowserProps, IdeaFileBrowserSta
             downloadPpkLoading: false,
             sshHostIp: "",
             sshAccess: false,
+            isFileBrowserEnabled: false,
+            isLoading: true,
             fileTransferMethod: "file-zilla",
             filesToDelete: [],
             showDeleteConfirmModal: false,
         };
         this._fileBrowserClient = AppContext.get().client().fileBrowser();
+        this._clusterSettingsClient = AppContext.get().client().clusterSettings();
         this.createFolderForm = React.createRef();
         this.deleteFileConfirmModal = React.createRef();
     }
@@ -323,6 +332,20 @@ class IdeaFileBrowser extends Component<IdeaFileBrowserProps, IdeaFileBrowserSta
         }, 100);
     }
 
+    setFlashbarMessage(type: FlashbarProps.Type, content: string, header?: React.ReactNode, action?: React.ReactNode) {
+        this.props.onFlashbarChange({
+          items: [
+            {
+              type,
+              header,
+              content,
+              action,
+              dismissible: true,
+            }
+          ]
+        })
+    }
+
     componentDidMount() {
         AppContext.get()
             .getClusterSettingsService()
@@ -334,16 +357,38 @@ class IdeaFileBrowser extends Component<IdeaFileBrowserProps, IdeaFileBrowserSta
                 });
             })
             .catch((error) => {
-                if (error.errorCode === "MODULE_NOT_FOUND") {
+                if (error.errorCode === ErrorCodes.MODULE_NOT_FOUND) {
                     this.setState({
                         sshAccess: false,
                     });
                 }
             });
-        this.adjustFileBrowserHeight();
-        this.listFavorites();
         const cwd = this.props.searchParams.get("cwd");
-        this.listFiles(cwd ? cwd : undefined).finally();
+        this.listFiles(cwd ? cwd : undefined)
+            .catch((error) => {
+                if (error.errorCode === ErrorCodes.DISABLED_FEATURE) {
+                    this.setFlashbarMessage("error", ErrorMessages.DISABLED_FILE_BROWSER_BY_ADMIN);
+                    this.setState({
+                        isFileBrowserEnabled: false,
+                    });
+                }
+                if (error.errorCode === ErrorCodes.UNAUTHORIZED_ACCESS) {
+                    this.setFlashbarMessage("error", ErrorMessages.DISABLED_FILE_BROWSER_NEW_USER);
+                    this.setState({
+                        isFileBrowserEnabled: false,
+                    });
+                }
+            })
+            .finally( () => {
+                    this.setState({
+                        isLoading: false,
+                    },
+                    () => {
+                        this.adjustFileBrowserHeight();
+                        this.listFavorites();
+                    });
+                }
+            );
     }
 
     componentWillUnmount() {
@@ -355,6 +400,10 @@ class IdeaFileBrowser extends Component<IdeaFileBrowserProps, IdeaFileBrowserSta
         return this._fileBrowserClient;
     }
 
+    clusterSettingsClient(): ClusterSettingsClient {
+        return this._clusterSettingsClient;
+    }
+
     convert(payload?: ListFilesResult, cwd?: string): FileData[] {
         if (payload?.listing == null) {
             return [];
@@ -362,7 +411,7 @@ class IdeaFileBrowser extends Component<IdeaFileBrowserProps, IdeaFileBrowserSta
         const files: any = [];
         payload.listing.forEach((entry) => {
             const notSlashInternal: boolean = !(entry.name === "internal" && cwd === "/");
-            if(notSlashInternal){
+            if(notSlashInternal) {
                 files.push({
                     id: entry.file_id,
                     name: entry.name,
@@ -380,7 +429,7 @@ class IdeaFileBrowser extends Component<IdeaFileBrowserProps, IdeaFileBrowserSta
         const tokens = cwd.split("/");
         const result: FileData[] = [];
         let index = 0;
-        result.push({ id: "root", name: "root", isDir: true, folderChain: true, index: index++ });
+        result.push({ id: "root", name: "root", isDir: true, folderChain: true,  openable: false, index: index++ });
         tokens.forEach((token) => {
             if (Utils.isEmpty(token)) {
                 return true;
@@ -406,20 +455,6 @@ class IdeaFileBrowser extends Component<IdeaFileBrowserProps, IdeaFileBrowserSta
         return "/" + tokens.join("/");
     }
 
-    showToast(id: string, message: string, type: "warning" | "info" = "warning") {
-        if (type === "warning") {
-            toast.warn(message, {
-                autoClose: 2000,
-                toastId: id,
-            });
-        } else if (type === "info") {
-            toast.info(message, {
-                autoClose: 2000,
-                toastId: id,
-            });
-        }
-    }
-
     listFiles(cwd?: string): Promise<boolean> {
         return this.fileBrowserClient()
             .listFiles({
@@ -431,6 +466,7 @@ class IdeaFileBrowser extends Component<IdeaFileBrowserProps, IdeaFileBrowserSta
                 this.setState({
                     files: this.convert(result, result.cwd),
                     folderChain: this.buildFolderChain(result.cwd!),
+                    isFileBrowserEnabled: true,
                 });
             })
             .then(() => {
@@ -533,7 +569,18 @@ class IdeaFileBrowser extends Component<IdeaFileBrowserProps, IdeaFileBrowserSta
         };
 
         if (files.length === 1) {
-            download(this.getFilePath(files[0]));
+            this.clusterSettingsClient()
+                .getModuleSettings({module_id: Constants.MODULE_SHARED_STORAGE})
+                .then((sharedStorageSettings) => {
+                    if (dot.pick(Constants.SHARED_STORAGE_FILE_BROWSER_KEY, sharedStorageSettings.settings)) {
+                        download(this.getFilePath(files[0]));
+                    } else {
+                        this.setFlashbarMessage("error", ErrorMessages.DISABLED_FILE_BROWSER_BY_ADMIN);
+                        this.setState({
+                            isFileBrowserEnabled: false,
+                        });
+                    }
+                });
         } else {
             const file_paths: string[] = [];
             files.forEach((file) => file_paths.push(this.getFilePath(file)));
@@ -541,8 +588,18 @@ class IdeaFileBrowser extends Component<IdeaFileBrowserProps, IdeaFileBrowserSta
                 .downloadFiles({
                     files: file_paths,
                 })
+                .catch((error) => {
+                    if (error.errorCode === ErrorCodes.DISABLED_FEATURE) {
+                        this.setFlashbarMessage("error", ErrorMessages.DISABLED_FILE_BROWSER_BY_ADMIN);
+                        this.setState({
+                            isFileBrowserEnabled: false,
+                        });
+                    } else {
+                        this.setFlashbarMessage("error", error.message);
+                    }
+                })
                 .then((result) => {
-                    download(result.download_url!);
+                    download(result?.download_url!);
                 });
         }
     }
@@ -554,7 +611,14 @@ class IdeaFileBrowser extends Component<IdeaFileBrowserProps, IdeaFileBrowserSta
         if (payload.folderChain) {
             this.listFiles(this.getCwd(payload.index))
                 .catch((error) => {
-                    this.showToast(error.errorCode, error.message);
+                    if (error.errorCode === ErrorCodes.DISABLED_FEATURE) {
+                        this.setFlashbarMessage("error", ErrorMessages.DISABLED_FILE_BROWSER_BY_ADMIN);
+                        this.setState({
+                            isFileBrowserEnabled: false,
+                        });
+                    } else {
+                        this.setFlashbarMessage("error", error.message);
+                    }
                 })
                 .finally();
         } else if (payload.isDir) {
@@ -567,7 +631,14 @@ class IdeaFileBrowser extends Component<IdeaFileBrowserProps, IdeaFileBrowserSta
             }
             this.listFiles(targetDir)
                 .catch((error) => {
-                    this.showToast(error.errorCode, error.message);
+                    if (error.errorCode === ErrorCodes.DISABLED_FEATURE) {
+                        this.setFlashbarMessage("error", ErrorMessages.DISABLED_FILE_BROWSER_BY_ADMIN);
+                        this.setState({
+                            isFileBrowserEnabled: false,
+                        });
+                    } else {
+                        this.setFlashbarMessage("error", error.message);
+                    }
                 })
                 .finally();
         } else {
@@ -580,7 +651,18 @@ class IdeaFileBrowser extends Component<IdeaFileBrowserProps, IdeaFileBrowserSta
             return;
         }
         if (payload.isDir) {
-            this.listFiles(payload.path).then(() => {
+            this.listFiles(payload.path)
+            .catch((error) => {
+                if (error.errorCode === ErrorCodes.DISABLED_FEATURE) {
+                    this.setFlashbarMessage("error", ErrorMessages.DISABLED_FILE_BROWSER_BY_ADMIN);
+                    this.setState({
+                        isFileBrowserEnabled: false,
+                    });
+                } else {
+                    this.setFlashbarMessage("error", error.message);
+                }
+            })
+            .then(() => {
                 this.setState(
                     {
                         activeTabId: "files",
@@ -633,10 +715,15 @@ class IdeaFileBrowser extends Component<IdeaFileBrowserProps, IdeaFileBrowserSta
                 });
             })
             .catch((error) => {
-                if (error.errorCode === "NOT_A_TEXT_FILE") {
+                if (error.errorCode === ErrorCodes.NOT_A_TEXT_FILE) {
                     this.downloadFiles([file]);
+                } else if (error.errorCode === ErrorCodes.DISABLED_FEATURE) {
+                    this.setFlashbarMessage("error", ErrorMessages.DISABLED_FILE_BROWSER_BY_ADMIN);
+                    this.setState({
+                        isFileBrowserEnabled: false,
+                    });
                 } else {
-                    toast(error.message);
+                    this.setFlashbarMessage("error", error.message);
                 }
             });
     }
@@ -650,7 +737,7 @@ class IdeaFileBrowser extends Component<IdeaFileBrowserProps, IdeaFileBrowserSta
                 const uppy = new Uppy()
                     .use(Dashboard, {
                         animateOpenClose: false,
-                        closeModalOnClickOutside: false,
+                        closeModalOnClickOutside: true,
                         browserBackButtonClose: true,
                         proudlyDisplayPoweredByUppy: false,
                         fileManagerSelectionType: "both",
@@ -665,9 +752,27 @@ class IdeaFileBrowser extends Component<IdeaFileBrowserProps, IdeaFileBrowserSta
                         fieldName: "files[]",
                         method: "PUT",
                         bundle: true,
+                        responseType: "text",
+                        validateStatus(statusCode, responseText, response) {
+                            return JSON.parse(responseText).success
+                        },
+                        getResponseError(responseText, xhr) {
+                            return JSON.parse(responseText)
+                        },
                     });
                 const dashboard: Dashboard = uppy.getPlugin("Dashboard")!;
                 dashboard.openModal();
+                uppy.on("upload-error", (file, error : any) => {
+                    if (error.error_code === ErrorCodes.DISABLED_FEATURE) {
+                        this.setFlashbarMessage("error", ErrorMessages.DISABLED_FILE_BROWSER_BY_ADMIN);
+                        this.setState({
+                            isFileBrowserEnabled: false,
+                        });
+                        dashboard.closeModal();
+                    } else {
+                        this.setFlashbarMessage("error", error.error_code);
+                    }
+                });
                 uppy.on("complete", () => {
                     this.listFiles(this.getCwd(-1)).finally();
                 });
@@ -698,7 +803,15 @@ class IdeaFileBrowser extends Component<IdeaFileBrowserProps, IdeaFileBrowserSta
                             this.getCreateFolderForm().hideModal();
                         })
                         .catch((error) => {
-                            this.getCreateFolderForm().setError(error.errorCode, error.message);
+                            if (error.errorCode === ErrorCodes.DISABLED_FEATURE) {
+                                this.getCreateFolderForm().setError(error.errorCode, ErrorMessages.DISABLED_FILE_BROWSER_BY_ADMIN);
+                                this.setFlashbarMessage("error", ErrorMessages.DISABLED_FILE_BROWSER_BY_ADMIN);
+                                this.setState({
+                                    isFileBrowserEnabled: false,
+                                });
+                            } else {
+                                this.getCreateFolderForm().setError(error.errorCode, error.message);
+                            }
                         });
                 }}
                 params={[
@@ -742,13 +855,30 @@ class IdeaFileBrowser extends Component<IdeaFileBrowserProps, IdeaFileBrowserSta
                             files: toDelete,
                         })
                         .then(() => {
-                            this.listFiles(this.getCwd(-1)).finally();
+                            this.listFiles(this.getCwd(-1))
+                            .catch((error) => {
+                                if (error.errorCode === ErrorCodes.DISABLED_FEATURE) {
+                                    this.setFlashbarMessage("error", ErrorMessages.DISABLED_FILE_BROWSER_BY_ADMIN);
+                                    this.setState({
+                                        isFileBrowserEnabled: false,
+                                    });
+                                } else {
+                                    this.setFlashbarMessage("error", error.message);
+                                }
+                            })
+                            .finally();
                         })
                         .catch((error) => {
-                            if (error.errorCode === "UNAUTHORIZED_ACCESS") {
-                                this.showToast(error.errorCode, "Permission denied");
-                            } else {
-                                this.showToast(error.errorCode, error.message);
+                            if (error.errorCode === ErrorCodes.UNAUTHORIZED_ACCESS) {
+                                this.setFlashbarMessage("error", "Permission denied");
+                            } else if (error.errorCode === ErrorCodes.DISABLED_FEATURE) {
+                                this.setFlashbarMessage("error", ErrorMessages.DISABLED_FILE_BROWSER_BY_ADMIN);
+                                this.setState({
+                                    isFileBrowserEnabled: false,
+                                });
+                            } 
+                            else {
+                                this.setFlashbarMessage("error", error.message);
                             }
                         });
                 }}
@@ -817,6 +947,451 @@ class IdeaFileBrowser extends Component<IdeaFileBrowserProps, IdeaFileBrowserSta
             return actions;
         };
 
+        const buildLoadingContent = () => {
+            return (
+                <div style={{ marginTop: "20px" }}>
+                    <Box variant="p" textAlign="center">
+                        <StatusIndicator type="loading"/>
+                    </Box>
+                </div>
+            )
+        }
+
+        const buildDisabledPageContent = () => {
+            return (
+                <Box textAlign="center" variant="p" color="text-body-secondary" padding={{ top: "xxxl", bottom: "s" }}>
+                    <b>No access to files.</b>
+                    <br/>File access has been disabled.
+                </Box>
+            )
+        }
+
+        const buildFileBrowserContent = () => {
+            return (
+            <div style={{ marginTop: "20px" }}>
+                {this.state.showDeleteConfirmModal && this.buidlDeleteFileConfirmModal()}
+                {this.buildCreateFolderForm()}
+                {this.buildFileEditor()}
+                {/*<Container>*/}
+                <Tabs
+                    onChange={(event) => {
+                        this.setState(
+                            {
+                                activeTabId: event.detail.activeTabId,
+                            },
+                            () => {
+                                this.adjustFileBrowserHeight();
+                            }
+                        );
+                    }}
+                    activeTabId={this.state.activeTabId}
+                    tabs={[
+                        {
+                            id: "files",
+                            label: "My Files",
+                            content: (
+                                <Container disableContentPaddings={true}>
+                                    <div className="soca-file-browser" style={{ height: "100vh - 200px" }}>
+                                        <FileBrowser
+                                            darkMode={AppContext.get().isDarkMode()}
+                                            folderChain={this.state.folderChain}
+                                            files={this.state.files}
+                                            fileActions={getFileBrowserActions()}
+                                            disableDragAndDrop={true}
+                                            onFileAction={(event) => {
+                                                const eventId: string = event.id;
+                                                if (event.id === ChonkyActions.OpenFiles.id) {
+                                                    this.onOpenSelection(event.payload.targetFile);
+                                                } else if (event.id === ChonkyActions.UploadFiles.id) {
+                                                    this.showUploadModal();
+                                                } else if (event.id === ChonkyActions.DownloadFiles.id) {
+                                                    this.downloadFiles(event.state.selectedFiles);
+                                                } else if (event.id === ChonkyActions.CreateFolder.id) {
+                                                    this.getCreateFolderForm().showModal();
+                                                } else if (event.id === ChonkyActions.DeleteFiles.id) {
+                                                    this.deleteFiles(event.state.selectedFiles);
+                                                } else if (event.id === ChonkyActions.CopyFiles.id) {
+                                                    if (event.state.selectedFiles && event.state.selectedFiles.length > 0) {
+                                                        const name = event.state.selectedFiles[0].name;
+                                                        const path = getPath(name);
+                                                        Utils.copyToClipBoard(path).then((status) => {
+                                                            if (status) {
+                                                                this.setFlashbarMessage("info", `${name} path copied to clipboard`);
+                                                            }
+                                                        });
+                                                    }
+                                                } else if (eventId === "soca_refresh") {
+                                                    this.listFiles(this.getCwd(-1))
+                                                    .catch((error) => {
+                                                        if (error.errorCode === ErrorCodes.DISABLED_FEATURE) {
+                                                            this.setFlashbarMessage("error", ErrorMessages.DISABLED_FILE_BROWSER_BY_ADMIN);
+                                                            this.setState({
+                                                                isFileBrowserEnabled: false,
+                                                            });
+                                                        } else {
+                                                            this.setFlashbarMessage("error", error.message);
+                                                        }
+                                                    })
+                                                    .finally();
+                                                } else if (eventId === "soca_submit_job") {
+                                                    if (event.state.selectedFiles && event.state.selectedFiles.length > 0) {
+                                                        this.props.navigate(`/soca/jobs/submit-job?input_file=${this.getCwd(-1)}/${event.state.selectedFiles[0].name}`);
+                                                    }
+                                                } else if (eventId === "soca_favorite") {
+                                                    if (event.state.selectedFiles && event.state.selectedFiles.length > 0) {
+                                                        event.state.selectedFiles.forEach((file) => this.addFavorite(file));
+                                                    }
+                                                } else if (eventId === "soca_tail_log_file") {
+                                                    if (event.state.selectedFiles && event.state.selectedFiles.length > 0) {
+                                                        this.listFiles(this.getCwd(-1))
+                                                        .then(() => {
+                                                            Utils.openNewTab(`/#/home/file-browser/tail?file=${this.getCwd(-1)}/${event.state.selectedFiles[0].name}&cwd=${this.getCwd(-1)}`);
+                                                        })
+                                                        .catch((error) => {
+                                                            if (error.errorCode === ErrorCodes.DISABLED_FEATURE) {
+                                                                this.setFlashbarMessage("error", ErrorMessages.DISABLED_FILE_BROWSER_BY_ADMIN);
+                                                                this.setState({
+                                                                    isFileBrowserEnabled: false,
+                                                                });
+                                                            } else {
+                                                                this.setFlashbarMessage("error", error.message);
+                                                            }
+                                                        })
+                                                    }
+                                                }
+                                            }}
+                                            defaultFileViewActionId={ChonkyActions.EnableListView.id}
+                                            disableDefaultFileActions={[ChonkyActions.CopyFiles.id, ChonkyActions.ToggleHiddenFiles.id, ChonkyActions.ToggleShowFoldersFirst.id]}
+                                        >
+                                            <FileNavbar />
+                                            <FileToolbar />
+                                            <FileList />
+                                            <FileContextMenu />
+                                        </FileBrowser>
+                                    </div>
+                                </Container>
+                            ),
+                        },
+                        {
+                            id: "favorites",
+                            label: "Favorites",
+                            content: (
+                                <Container disableContentPaddings={true}>
+                                    <div className="soca-file-browser" style={{ height: "100vh - 200px" }}>
+                                        <FileBrowser
+                                            darkMode={AppContext.get().isDarkMode()}
+                                            folderChain={this.state.folderChain}
+                                            files={this.state.favorites}
+                                            fileActions={getFavoriteActions()}
+                                            disableDragAndDrop={true}
+                                            onFileAction={(event) => {
+                                                const eventId: string = event.id;
+                                                if (event.id === ChonkyActions.OpenFiles.id) {
+                                                    this.onOpenFavorite(event.payload.targetFile);
+                                                } else if (eventId === "soca_submit_job") {
+                                                    const targetFile = event.state.selectedFiles[0];
+                                                    this.props.navigate(`/soca/jobs/submit-job?input_location=${targetFile.path}`);
+                                                } else if (eventId === "soca_remove_favorite") {
+                                                    if (event.state.selectedFiles && event.state.selectedFiles.length > 0) {
+                                                        event.state.selectedFiles.forEach((file) => this.removeFavorite(file));
+                                                    }
+                                                }
+                                            }}
+                                            defaultFileViewActionId={ChonkyActions.EnableListView.id}
+                                            disableDefaultFileActions={[ChonkyActions.CopyFiles.id, ChonkyActions.ToggleHiddenFiles.id, ChonkyActions.ToggleShowFoldersFirst.id]}
+                                        >
+                                            <FileToolbar />
+                                            <FileList />
+                                            <FileContextMenu />
+                                        </FileBrowser>
+                                    </div>
+                                </Container>
+                            ),
+                        },
+                        {
+                            id: "file-transfer",
+                            label: "File Transfer",
+                            disabled: !this.state.sshAccess,
+                            content: (
+                                <SpaceBetween size={"s"}>
+                                    <Container>
+                                        <b>File Transfer Method</b>
+                                        <br />
+                                        <p>We recommend using below methods to transfer large files to your RES environment. Select an option below.</p>
+                                        <Tiles
+                                            value={this.state.fileTransferMethod}
+                                            columns={3}
+                                            items={[
+                                                {
+                                                    label: <b>FileZilla</b>,
+                                                    description: "Available for download on Windows, MacOS and Linux",
+                                                    value: "file-zilla",
+                                                },
+                                                {
+                                                    label: <b>WinSCP</b>,
+                                                    description: "Available for download on Windows Only",
+                                                    value: "winscp",
+                                                },
+                                                {
+                                                    label: <b>AWS Transfer</b>,
+                                                    description: "Your RES environment must be using Amazon EFS to use AWS Transfer",
+                                                    value: "aws-transfer",
+                                                },
+                                            ]}
+                                            onChange={(event) => {
+                                                this.setState({
+                                                    fileTransferMethod: event.detail.value,
+                                                });
+                                            }}
+                                        />
+                                    </Container>
+                                    {this.state.fileTransferMethod === "file-zilla" && (
+                                        <Container header={<Header variant={"h3"}>FileZilla</Header>}>
+                                            <SpaceBetween size={"s"}>
+                                                <Box>
+                                                    <h2>Step 1: Download FileZilla</h2>
+                                                    <ul>
+                                                        <li>
+                                                            <Link external={true} href={"https://filezilla-project.org/download.php?platform=osx"}>
+                                                                Download FileZilla (MacOS)
+                                                            </Link>
+                                                        </li>
+                                                        <li>
+                                                            <Link external={true} href={"https://filezilla-project.org/download.php?platform=win64"}>
+                                                                Download FileZilla (Windows)
+                                                            </Link>
+                                                        </li>
+                                                        <li>
+                                                            <Link external={true} href={"https://filezilla-project.org/download.php?platform=linux"}>
+                                                                Download FileZilla (Linux)
+                                                            </Link>
+                                                        </li>
+                                                    </ul>
+                                                </Box>
+                                                <Box>
+                                                    <h2>Step 2: Download Key File</h2>
+                                                    <SpaceBetween size={"l"} direction={"horizontal"}>
+                                                        <Button variant={"normal"} onClick={() => this.onDownloadPrivateKey("pem")} loading={this.state.downloadPemLoading}>
+                                                            <FontAwesomeIcon icon={faDownload} /> Download Key File [*.pem] (MacOS / Linux)
+                                                        </Button>
+                                                        <Button variant={"normal"} onClick={() => this.onDownloadPrivateKey("ppk")} loading={this.state.downloadPpkLoading}>
+                                                            <FontAwesomeIcon icon={faDownload} /> Download Key File [*.ppk] (Windows)
+                                                        </Button>
+                                                    </SpaceBetween>
+                                                </Box>
+                                                <Box>
+                                                    <h2>Step 3: Configure FileZilla</h2>
+                                                    <p>
+                                                        Open FileZilla and select <b>File &gt; Site Manager</b> to create a new Site using below options:
+                                                    </p>
+                                                    <Container>
+                                                        <ColumnLayout columns={2}>
+                                                            <KeyValue title="Host" value={this.state.sshHostIp} />
+                                                            <KeyValue title="Port" value={"22"} />
+                                                            <KeyValue title="Protocol" value={"SFTP"} />
+                                                            <KeyValue title="Logon Type" value={"Key File"} />
+                                                            <KeyValue title="User" value={AppContext.get().auth().getUsername()} />
+                                                            <KeyValue title="Key File" value={"/path/to/key-file (downloaded in Step 2)"} />
+                                                        </ColumnLayout>
+                                                    </Container>
+                                                    <p>
+                                                        <b>Save</b> the settings and click <b>Connect</b>
+                                                    </p>
+                                                </Box>
+                                                <Box>
+                                                    <h2>Step 4: Connect and transfer file to FileZilla</h2>
+                                                    <p>During your first connection, you will be asked whether or not you want to trust {this.state.sshHostIp}. Check "Always Trust this Host" and Click "Ok".</p>
+                                                    <p>Once connected, simply drag & drop to upload/download files.</p>
+                                                </Box>
+                                            </SpaceBetween>
+                                        </Container>
+                                    )}
+                                    {this.state.fileTransferMethod === "winscp" && (
+                                        <Container header={<Header variant={"h3"}>WinSCP (Windows)</Header>}>
+                                            <SpaceBetween size={"s"}>
+                                                <Box>
+                                                    <Alert onDismiss={() => false} dismissAriaLabel="Close alert" header="Info">
+                                                        WinSCP is only available on Windows. Please use alternate methods (FileZilla, AWS FTP) if you are running Linux/Mac clients.
+                                                    </Alert>
+                                                    <h2>Step 1: Download WinSCP</h2>
+                                                    <ul>
+                                                        <li>
+                                                            <Link external={true} href={"https://winscp.net/eng/download.php"}>
+                                                                Download WinSCP (Windows)
+                                                            </Link>
+                                                        </li>
+                                                    </ul>
+                                                </Box>
+                                                <Box>
+                                                    <h2>Step 2: Download Key File</h2>
+                                                    <SpaceBetween size={"l"} direction={"horizontal"}>
+                                                        <Button variant={"normal"} onClick={() => this.onDownloadPrivateKey("pem")} loading={this.state.downloadPemLoading}>
+                                                            <FontAwesomeIcon icon={faDownload} /> Download Key File [*.pem] (MacOS / Linux)
+                                                        </Button>
+                                                        <Button variant={"normal"} onClick={() => this.onDownloadPrivateKey("ppk")} loading={this.state.downloadPpkLoading}>
+                                                            <FontAwesomeIcon icon={faDownload} /> Download Key File [*.ppk] (Windows)
+                                                        </Button>
+                                                    </SpaceBetween>
+                                                </Box>
+                                                <Box>
+                                                    <h2>Step 3: Configure WinSCP</h2>
+                                                    <p>
+                                                        Open WinSCP and select <b>File &gt; Site Manager</b> to create a new Site using below options:
+                                                    </p>
+                                                    <Container>
+                                                        <ColumnLayout columns={2}>
+                                                            <KeyValue title="Host Name" value={this.state.sshHostIp} />
+                                                            <KeyValue title="Port Number" value={"22"} />
+                                                            <KeyValue title="File Protocol" value={"SFTP"} />
+                                                            <KeyValue title="Logon Type" value={"Key File"} />
+                                                            <KeyValue title="User Name" value={AppContext.get().auth().getUsername()} />
+                                                            <KeyValue title="Password" value={"Leave Blank and click Advanced. Click SSH > Authentication Page and load your key under Private Key File."} />
+
+                                                            <KeyValue title="Key File" value={"/path/to/key-file (downloaded in Step 2)"} />
+                                                        </ColumnLayout>
+                                                    </Container>
+                                                    <p>
+                                                        <b>Save</b> the settings and click <b>Connect</b>
+                                                    </p>
+                                                </Box>
+                                                <Box>
+                                                    <h2>Step 4: Connect and transfer file to WinSCP</h2>
+                                                    <p>During your first connection, you will be asked whether or not you want to trust {this.state.sshHostIp}. Check "Always Trust this Host" and Click "Ok".</p>
+                                                    <p>Once connected, simply drag & drop to upload/download files.</p>
+                                                </Box>
+                                            </SpaceBetween>
+                                        </Container>
+                                    )}
+                                    {this.state.fileTransferMethod === "aws-transfer" && (
+                                        <Container header={<Header variant={"h3"}>AWS Transfer</Header>}>
+                                            <SpaceBetween size={"s"}>
+                                                <Box>
+                                                    <Alert onDismiss={() => false} dismissAriaLabel="Close alert" header="Limitations">
+                                                        Your RES environment must be using Amazon EFS to use AWS Transfer
+                                                    </Alert>
+                                                    <h2>Step 1: Configure AWS Transfer</h2>
+                                                    <ul>
+                                                        <li>
+                                                            Open AWS Console and navigate to the service named <b>AWS Transfer Family</b> then click <b>Create Server</b>
+                                                        </li>
+                                                        <li>
+                                                            Select <b>SFTP (SSH File Transfer Protocol) - file transfer over Secure Shell</b>
+                                                        </li>
+                                                        <li>
+                                                            Select <b>Service Managed</b> as identity provider
+                                                        </li>
+                                                        <li>
+                                                            Choose <b>Endpoint type</b> depending on your setup. It's recommended to use <b>VPC hosted</b> for IP restrictions via your security groups. <b>Publicly accessible</b> means your AWS Transfer endpoint won't be protected by IP safelist.
+                                                        </li>
+                                                        <li>
+                                                            Select <b>Amazon EFS</b> as Domain
+                                                        </li>
+                                                        <li>
+                                                            Select <b>Create a new role</b> and use the latest <b>TransferSecurityPolicy</b> available
+                                                        </li>
+                                                        . Leave everything else as default.
+                                                        <li>
+                                                            In the <b>Review and create</b> section click <b>Create server</b>
+                                                        </li>
+                                                    </ul>
+
+                                                    <h2>Step 2: Create IAM role for your AWS Transfer Users</h2>
+                                                    <ul>
+                                                        <li>
+                                                            Open AWS Console and navigate to the service named <b>IAM</b> then click <b>Roles</b> on the left sidebar and finally click <b>Create Role</b>
+                                                        </li>
+                                                        <li>
+                                                            Select <b>AWS Service</b> as Trusted Entity Type and select <b>Transfer</b> as Use Case
+                                                        </li>
+                                                        <li>
+                                                            Select the AWS managed policy named <b>AmazonElasticFileSystemClientReadWriteAccess</b>
+                                                        </li>
+                                                        <li>
+                                                            Select a Role name (for example <b>TransferEFSClient</b> and save it
+                                                        </li>
+                                                    </ul>
+
+                                                    <h2>Step 3: Download PEM Key File (Public)</h2>
+                                                    <ul>
+                                                        <li>
+                                                            Download your <b>public</b> SSH key. You can retrieve it under <b>$HOME/.ssh/id_rsa.pub</b>
+                                                        </li>
+                                                    </ul>
+
+                                                    <h2>Step 4: Download your PEM key File (Private)</h2>
+                                                    <SpaceBetween size={"l"} direction={"horizontal"}>
+                                                        <Button variant={"normal"} onClick={() => this.onDownloadPrivateKey("pem")} loading={this.state.downloadPemLoading}>
+                                                            <FontAwesomeIcon icon={faDownload} /> Download Key File [*.pem] (MacOS / Linux)
+                                                        </Button>
+                                                    </SpaceBetween>
+
+                                                    <h2>Step 5: Register your AWS Transfer Users</h2>
+                                                    <Alert onDismiss={() => false} dismissAriaLabel="Close alert" header="User Information">
+                                                        <p>
+                                                            You will need your user UID/GID. You can retrieve this value by typing <b>id {AppContext.get().auth().getUsername()}</b> on your RES environment. In the example below, the UID is 5001 and GID is also 5001
+                                                        </p>
+                                                        <code>
+                                                            #id {AppContext.get().auth().getUsername()} <br />
+                                                            uid=5001({AppContext.get().auth().getUsername()}) gid=5001({AppContext.get().auth().getUsername()}) groups=5001({AppContext.get().auth().getUsername()})
+                                                        </code>
+                                                    </Alert>
+
+                                                    <p>
+                                                        Open AWS Console and navigate to the service named <b>AWS Transfer Family</b> select the server you have created and click <b>Add User</b> and enter the following information.
+                                                    </p>
+
+                                                    <Container>
+                                                        <ColumnLayout columns={2}>
+                                                            <KeyValue title="Username" value={AppContext.get().auth().getUsername()} />
+                                                            <KeyValue title="User ID" value={"The Posix UID of your user you have retrieved via `id` command"} />
+                                                            <KeyValue title="Group ID" value={"The Posix GID of your user you have retrieved via `id` command"} />
+                                                            <KeyValue title="Role" value={"The IAM role you have created (ex: TransferEFSClient)"} />
+                                                            <KeyValue title="Home Directory" value={"Select your RES EFS file system you have mounted as /home"} />
+                                                            <KeyValue title="SSH Public Key" value={"The content of your SSH public key retrieved during Step 3"} />
+                                                        </ColumnLayout>
+                                                    </Container>
+
+                                                    <h2>Step 6: Test</h2>
+                                                    <p>
+                                                        Open AWS Console and navigate to the service named <b>AWS Transfer Family</b> select the server you have created, and retrieve the <b>Endpoint</b> under <b>Endpoint Details</b>.
+                                                    </p>
+                                                    <Alert onDismiss={() => false} dismissAriaLabel="Close alert" header="Endpoint Information">
+                                                        Your endpoint use the following syntax:{" "}
+                                                        <b>
+                                                            {"s-<UNIQUE_ID>"}-.server.transfer.{"<AWS_REGION>"}.amazonaws.com
+                                                        </b>
+                                                    </Alert>
+
+                                                    <p>Connect to your AWS Transfer endpoint using your favorite FTP application via command line such as: </p>
+                                                    <code>
+                                                        sftp -i {"/PATH/TO/PRIVATE_KEY"} {AppContext.get().auth().getUsername()}@{"<AWS_TRANSFER_ENDPOINT>"}
+                                                    </code>
+                                                    <p>Alternatively, you can use WinSCP/FileZilla. Refer to the instructions available on this website and use your AWS Transfer endpoint as hostname.</p>
+                                                </Box>
+                                            </SpaceBetween>
+                                        </Container>
+                                    )}
+                                </SpaceBetween>
+                            ),
+                        },
+                    ]}
+                />
+                {/*</Container>*/}
+            </div>
+            )
+        }
+
+        const buildContent = () => {
+            if (this.state.isLoading) {
+                return buildLoadingContent();
+            }
+            if (this.state.isFileBrowserEnabled) {
+                return buildFileBrowserContent();
+            } else {
+                return buildDisabledPageContent();
+            }
+        }
+
         return (
             <IdeaAppLayout
                 ideaPageId={this.props.ideaPageId}
@@ -846,394 +1421,7 @@ class IdeaFileBrowser extends Component<IdeaFileBrowserProps, IdeaFileBrowserSta
                 ]}
                 contentType={"default"}
                 disableContentHeaderOverlap={true}
-                content={
-                    <div style={{ marginTop: "20px" }}>
-                        {this.state.showDeleteConfirmModal && this.buidlDeleteFileConfirmModal()}
-                        {this.buildCreateFolderForm()}
-                        {this.buildFileEditor()}
-                        {/*<Container>*/}
-                        <Tabs
-                            onChange={(event) => {
-                                this.setState(
-                                    {
-                                        activeTabId: event.detail.activeTabId,
-                                    },
-                                    () => {
-                                        this.adjustFileBrowserHeight();
-                                    }
-                                );
-                            }}
-                            activeTabId={this.state.activeTabId}
-                            tabs={[
-                                {
-                                    id: "files",
-                                    label: "My Files",
-                                    content: (
-                                        <Container disableContentPaddings={true}>
-                                            <div className="soca-file-browser" style={{ height: "100vh - 200px" }}>
-                                                <FileBrowser
-                                                    darkMode={AppContext.get().isDarkMode()}
-                                                    folderChain={this.state.folderChain}
-                                                    files={this.state.files}
-                                                    fileActions={getFileBrowserActions()}
-                                                    disableDragAndDrop={true}
-                                                    onFileAction={(event) => {
-                                                        const eventId: string = event.id;
-                                                        if (event.id === ChonkyActions.OpenFiles.id) {
-                                                            this.onOpenSelection(event.payload.targetFile);
-                                                        } else if (event.id === ChonkyActions.UploadFiles.id) {
-                                                            this.showUploadModal();
-                                                        } else if (event.id === ChonkyActions.DownloadFiles.id) {
-                                                            this.downloadFiles(event.state.selectedFiles);
-                                                        } else if (event.id === ChonkyActions.CreateFolder.id) {
-                                                            this.getCreateFolderForm().showModal();
-                                                        } else if (event.id === ChonkyActions.DeleteFiles.id) {
-                                                            this.deleteFiles(event.state.selectedFiles);
-                                                        } else if (event.id === ChonkyActions.CopyFiles.id) {
-                                                            if (event.state.selectedFiles && event.state.selectedFiles.length > 0) {
-                                                                const name = event.state.selectedFiles[0].name;
-                                                                const path = getPath(name);
-                                                                Utils.copyToClipBoard(path).then((status) => {
-                                                                    if (status) {
-                                                                        this.showToast(path, `${name} path copied to clipboard`, "info");
-                                                                    }
-                                                                });
-                                                            }
-                                                        } else if (eventId === "soca_refresh") {
-                                                            this.listFiles(this.getCwd(-1)).finally();
-                                                        } else if (eventId === "soca_submit_job") {
-                                                            if (event.state.selectedFiles && event.state.selectedFiles.length > 0) {
-                                                                this.props.navigate(`/soca/jobs/submit-job?input_file=${this.getCwd(-1)}/${event.state.selectedFiles[0].name}`);
-                                                            }
-                                                        } else if (eventId === "soca_favorite") {
-                                                            if (event.state.selectedFiles && event.state.selectedFiles.length > 0) {
-                                                                event.state.selectedFiles.forEach((file) => this.addFavorite(file));
-                                                            }
-                                                        } else if (eventId === "soca_tail_log_file") {
-                                                            if (event.state.selectedFiles && event.state.selectedFiles.length > 0) {
-                                                                Utils.openNewTab(`/#/home/file-browser/tail?file=${this.getCwd(-1)}/${event.state.selectedFiles[0].name}&cwd=${this.getCwd(-1)}`);
-                                                            }
-                                                        }
-                                                    }}
-                                                    defaultFileViewActionId={ChonkyActions.EnableListView.id}
-                                                    disableDefaultFileActions={[ChonkyActions.CopyFiles.id, ChonkyActions.ToggleHiddenFiles.id, ChonkyActions.ToggleShowFoldersFirst.id]}
-                                                >
-                                                    <FileNavbar />
-                                                    <FileToolbar />
-                                                    <FileList />
-                                                    <FileContextMenu />
-                                                </FileBrowser>
-                                            </div>
-                                        </Container>
-                                    ),
-                                },
-                                {
-                                    id: "favorites",
-                                    label: "Favorites",
-                                    content: (
-                                        <Container disableContentPaddings={true}>
-                                            <div className="soca-file-browser" style={{ height: "100vh - 200px" }}>
-                                                <FileBrowser
-                                                    darkMode={AppContext.get().isDarkMode()}
-                                                    folderChain={this.state.folderChain}
-                                                    files={this.state.favorites}
-                                                    fileActions={getFavoriteActions()}
-                                                    disableDragAndDrop={true}
-                                                    onFileAction={(event) => {
-                                                        const eventId: string = event.id;
-                                                        if (event.id === ChonkyActions.OpenFiles.id) {
-                                                            this.onOpenFavorite(event.payload.targetFile);
-                                                        } else if (eventId === "soca_submit_job") {
-                                                            const targetFile = event.state.selectedFiles[0];
-                                                            this.props.navigate(`/soca/jobs/submit-job?input_location=${targetFile.path}`);
-                                                        } else if (eventId === "soca_remove_favorite") {
-                                                            if (event.state.selectedFiles && event.state.selectedFiles.length > 0) {
-                                                                event.state.selectedFiles.forEach((file) => this.removeFavorite(file));
-                                                            }
-                                                        }
-                                                    }}
-                                                    defaultFileViewActionId={ChonkyActions.EnableListView.id}
-                                                    disableDefaultFileActions={[ChonkyActions.CopyFiles.id, ChonkyActions.ToggleHiddenFiles.id, ChonkyActions.ToggleShowFoldersFirst.id]}
-                                                >
-                                                    <FileToolbar />
-                                                    <FileList />
-                                                    <FileContextMenu />
-                                                </FileBrowser>
-                                            </div>
-                                        </Container>
-                                    ),
-                                },
-                                {
-                                    id: "file-transfer",
-                                    label: "File Transfer",
-                                    disabled: !this.state.sshAccess,
-                                    content: (
-                                        <SpaceBetween size={"s"}>
-                                            <Container>
-                                                <b>File Transfer Method</b>
-                                                <br />
-                                                <p>We recommend using below methods to transfer large files to your RES environment. Select an option below.</p>
-                                                <Tiles
-                                                    value={this.state.fileTransferMethod}
-                                                    columns={3}
-                                                    items={[
-                                                        {
-                                                            label: <b>FileZilla</b>,
-                                                            description: "Available for download on Windows, MacOS and Linux",
-                                                            value: "file-zilla",
-                                                        },
-                                                        {
-                                                            label: <b>WinSCP</b>,
-                                                            description: "Available for download on Windows Only",
-                                                            value: "winscp",
-                                                        },
-                                                        {
-                                                            label: <b>AWS Transfer</b>,
-                                                            description: "Your RES environment must be using Amazon EFS to use AWS Transfer",
-                                                            value: "aws-transfer",
-                                                        },
-                                                    ]}
-                                                    onChange={(event) => {
-                                                        this.setState({
-                                                            fileTransferMethod: event.detail.value,
-                                                        });
-                                                    }}
-                                                />
-                                            </Container>
-                                            {this.state.fileTransferMethod === "file-zilla" && (
-                                                <Container header={<Header variant={"h3"}>FileZilla</Header>}>
-                                                    <SpaceBetween size={"s"}>
-                                                        <Box>
-                                                            <h2>Step 1: Download FileZilla</h2>
-                                                            <ul>
-                                                                <li>
-                                                                    <Link external={true} href={"https://filezilla-project.org/download.php?platform=osx"}>
-                                                                        Download FileZilla (MacOS)
-                                                                    </Link>
-                                                                </li>
-                                                                <li>
-                                                                    <Link external={true} href={"https://filezilla-project.org/download.php?platform=win64"}>
-                                                                        Download FileZilla (Windows)
-                                                                    </Link>
-                                                                </li>
-                                                                <li>
-                                                                    <Link external={true} href={"https://filezilla-project.org/download.php?platform=linux"}>
-                                                                        Download FileZilla (Linux)
-                                                                    </Link>
-                                                                </li>
-                                                            </ul>
-                                                        </Box>
-                                                        <Box>
-                                                            <h2>Step 2: Download Key File</h2>
-                                                            <SpaceBetween size={"l"} direction={"horizontal"}>
-                                                                <Button variant={"normal"} onClick={() => this.onDownloadPrivateKey("pem")} loading={this.state.downloadPemLoading}>
-                                                                    <FontAwesomeIcon icon={faDownload} /> Download Key File [*.pem] (MacOS / Linux)
-                                                                </Button>
-                                                                <Button variant={"normal"} onClick={() => this.onDownloadPrivateKey("ppk")} loading={this.state.downloadPpkLoading}>
-                                                                    <FontAwesomeIcon icon={faDownload} /> Download Key File [*.ppk] (Windows)
-                                                                </Button>
-                                                            </SpaceBetween>
-                                                        </Box>
-                                                        <Box>
-                                                            <h2>Step 3: Configure FileZilla</h2>
-                                                            <p>
-                                                                Open FileZilla and select <b>File &gt; Site Manager</b> to create a new Site using below options:
-                                                            </p>
-                                                            <Container>
-                                                                <ColumnLayout columns={2}>
-                                                                    <KeyValue title="Host" value={this.state.sshHostIp} />
-                                                                    <KeyValue title="Port" value={"22"} />
-                                                                    <KeyValue title="Protocol" value={"SFTP"} />
-                                                                    <KeyValue title="Logon Type" value={"Key File"} />
-                                                                    <KeyValue title="User" value={AppContext.get().auth().getUsername()} />
-                                                                    <KeyValue title="Key File" value={"/path/to/key-file (downloaded in Step 2)"} />
-                                                                </ColumnLayout>
-                                                            </Container>
-                                                            <p>
-                                                                <b>Save</b> the settings and click <b>Connect</b>
-                                                            </p>
-                                                        </Box>
-                                                        <Box>
-                                                            <h2>Step 4: Connect and transfer file to FileZilla</h2>
-                                                            <p>During your first connection, you will be asked whether or not you want to trust {this.state.sshHostIp}. Check "Always Trust this Host" and Click "Ok".</p>
-                                                            <p>Once connected, simply drag & drop to upload/download files.</p>
-                                                        </Box>
-                                                    </SpaceBetween>
-                                                </Container>
-                                            )}
-                                            {this.state.fileTransferMethod === "winscp" && (
-                                                <Container header={<Header variant={"h3"}>WinSCP (Windows)</Header>}>
-                                                    <SpaceBetween size={"s"}>
-                                                        <Box>
-                                                            <Alert onDismiss={() => false} dismissAriaLabel="Close alert" header="Info">
-                                                                WinSCP is only available on Windows. Please use alternate methods (FileZilla, AWS FTP) if you are running Linux/Mac clients.
-                                                            </Alert>
-                                                            <h2>Step 1: Download WinSCP</h2>
-                                                            <ul>
-                                                                <li>
-                                                                    <Link external={true} href={"https://winscp.net/eng/download.php"}>
-                                                                        Download WinSCP (Windows)
-                                                                    </Link>
-                                                                </li>
-                                                            </ul>
-                                                        </Box>
-                                                        <Box>
-                                                            <h2>Step 2: Download Key File</h2>
-                                                            <SpaceBetween size={"l"} direction={"horizontal"}>
-                                                                <Button variant={"normal"} onClick={() => this.onDownloadPrivateKey("pem")} loading={this.state.downloadPemLoading}>
-                                                                    <FontAwesomeIcon icon={faDownload} /> Download Key File [*.pem] (MacOS / Linux)
-                                                                </Button>
-                                                                <Button variant={"normal"} onClick={() => this.onDownloadPrivateKey("ppk")} loading={this.state.downloadPpkLoading}>
-                                                                    <FontAwesomeIcon icon={faDownload} /> Download Key File [*.ppk] (Windows)
-                                                                </Button>
-                                                            </SpaceBetween>
-                                                        </Box>
-                                                        <Box>
-                                                            <h2>Step 3: Configure WinSCP</h2>
-                                                            <p>
-                                                                Open WinSCP and select <b>File &gt; Site Manager</b> to create a new Site using below options:
-                                                            </p>
-                                                            <Container>
-                                                                <ColumnLayout columns={2}>
-                                                                    <KeyValue title="Host Name" value={this.state.sshHostIp} />
-                                                                    <KeyValue title="Port Number" value={"22"} />
-                                                                    <KeyValue title="File Protocol" value={"SFTP"} />
-                                                                    <KeyValue title="Logon Type" value={"Key File"} />
-                                                                    <KeyValue title="User Name" value={AppContext.get().auth().getUsername()} />
-                                                                    <KeyValue title="Password" value={"Leave Blank and click Advanced. Click SSH > Authentication Page and load your key under Private Key File."} />
-
-                                                                    <KeyValue title="Key File" value={"/path/to/key-file (downloaded in Step 2)"} />
-                                                                </ColumnLayout>
-                                                            </Container>
-                                                            <p>
-                                                                <b>Save</b> the settings and click <b>Connect</b>
-                                                            </p>
-                                                        </Box>
-                                                        <Box>
-                                                            <h2>Step 4: Connect and transfer file to WinSCP</h2>
-                                                            <p>During your first connection, you will be asked whether or not you want to trust {this.state.sshHostIp}. Check "Always Trust this Host" and Click "Ok".</p>
-                                                            <p>Once connected, simply drag & drop to upload/download files.</p>
-                                                        </Box>
-                                                    </SpaceBetween>
-                                                </Container>
-                                            )}
-                                            {this.state.fileTransferMethod === "aws-transfer" && (
-                                                <Container header={<Header variant={"h3"}>AWS Transfer</Header>}>
-                                                    <SpaceBetween size={"s"}>
-                                                        <Box>
-                                                            <Alert onDismiss={() => false} dismissAriaLabel="Close alert" header="Limitations">
-                                                                Your RES environment must be using Amazon EFS to use AWS Transfer
-                                                            </Alert>
-                                                            <h2>Step 1: Configure AWS Transfer</h2>
-                                                            <ul>
-                                                                <li>
-                                                                    Open AWS Console and navigate to the service named <b>AWS Transfer Family</b> then click <b>Create Server</b>
-                                                                </li>
-                                                                <li>
-                                                                    Select <b>SFTP (SSH File Transfer Protocol) - file transfer over Secure Shell</b>
-                                                                </li>
-                                                                <li>
-                                                                    Select <b>Service Managed</b> as identity provider
-                                                                </li>
-                                                                <li>
-                                                                    Choose <b>Endpoint type</b> depending on your setup. It's recommended to use <b>VPC hosted</b> for IP restrictions via your security groups. <b>Publicly accessible</b> means your AWS Transfer endpoint won't be protected by IP safelist.
-                                                                </li>
-                                                                <li>
-                                                                    Select <b>Amazon EFS</b> as Domain
-                                                                </li>
-                                                                <li>
-                                                                    Select <b>Create a new role</b> and use the latest <b>TransferSecurityPolicy</b> available
-                                                                </li>
-                                                                . Leave everything else as default.
-                                                                <li>
-                                                                    In the <b>Review and create</b> section click <b>Create server</b>
-                                                                </li>
-                                                            </ul>
-
-                                                            <h2>Step 2: Create IAM role for your AWS Transfer Users</h2>
-                                                            <ul>
-                                                                <li>
-                                                                    Open AWS Console and navigate to the service named <b>IAM</b> then click <b>Roles</b> on the left sidebar and finally click <b>Create Role</b>
-                                                                </li>
-                                                                <li>
-                                                                    Select <b>AWS Service</b> as Trusted Entity Type and select <b>Transfer</b> as Use Case
-                                                                </li>
-                                                                <li>
-                                                                    Select the AWS managed policy named <b>AmazonElasticFileSystemClientReadWriteAccess</b>
-                                                                </li>
-                                                                <li>
-                                                                    Select a Role name (for example <b>TransferEFSClient</b> and save it
-                                                                </li>
-                                                            </ul>
-
-                                                            <h2>Step 3: Download PEM Key File (Public)</h2>
-                                                            <ul>
-                                                                <li>
-                                                                    Download your <b>public</b> SSH key. You can retrieve it under <b>$HOME/.ssh/id_rsa.pub</b>
-                                                                </li>
-                                                            </ul>
-
-                                                            <h2>Step 4: Download your PEM key File (Private)</h2>
-                                                            <SpaceBetween size={"l"} direction={"horizontal"}>
-                                                                <Button variant={"normal"} onClick={() => this.onDownloadPrivateKey("pem")} loading={this.state.downloadPemLoading}>
-                                                                    <FontAwesomeIcon icon={faDownload} /> Download Key File [*.pem] (MacOS / Linux)
-                                                                </Button>
-                                                            </SpaceBetween>
-
-                                                            <h2>Step 5: Register your AWS Transfer Users</h2>
-                                                            <Alert onDismiss={() => false} dismissAriaLabel="Close alert" header="User Information">
-                                                                <p>
-                                                                    You will need your user UID/GID. You can retrieve this value by typing <b>id {AppContext.get().auth().getUsername()}</b> on your RES environment. In the example below, the UID is 5001 and GID is also 5001
-                                                                </p>
-                                                                <code>
-                                                                    #id {AppContext.get().auth().getUsername()} <br />
-                                                                    uid=5001({AppContext.get().auth().getUsername()}) gid=5001({AppContext.get().auth().getUsername()}) groups=5001({AppContext.get().auth().getUsername()})
-                                                                </code>
-                                                            </Alert>
-
-                                                            <p>
-                                                                Open AWS Console and navigate to the service named <b>AWS Transfer Family</b> select the server you have created and click <b>Add User</b> and enter the following information.
-                                                            </p>
-
-                                                            <Container>
-                                                                <ColumnLayout columns={2}>
-                                                                    <KeyValue title="Username" value={AppContext.get().auth().getUsername()} />
-                                                                    <KeyValue title="User ID" value={"The Posix UID of your user you have retrieved via `id` command"} />
-                                                                    <KeyValue title="Group ID" value={"The Posix GID of your user you have retrieved via `id` command"} />
-                                                                    <KeyValue title="Role" value={"The IAM role you have created (ex: TransferEFSClient)"} />
-                                                                    <KeyValue title="Home Directory" value={"Select your RES EFS file system you have mounted as /home"} />
-                                                                    <KeyValue title="SSH Public Key" value={"The content of your SSH public key retrieved during Step 3"} />
-                                                                </ColumnLayout>
-                                                            </Container>
-
-                                                            <h2>Step 6: Test</h2>
-                                                            <p>
-                                                                Open AWS Console and navigate to the service named <b>AWS Transfer Family</b> select the server you have created, and retrieve the <b>Endpoint</b> under <b>Endpoint Details</b>.
-                                                            </p>
-                                                            <Alert onDismiss={() => false} dismissAriaLabel="Close alert" header="Endpoint Information">
-                                                                Your endpoint use the following syntax:{" "}
-                                                                <b>
-                                                                    {"s-<UNIQUE_ID>"}-.server.transfer.{"<AWS_REGION>"}.amazonaws.com
-                                                                </b>
-                                                            </Alert>
-
-                                                            <p>Connect to your AWS Transfer endpoint using your favorite FTP application via command line such as: </p>
-                                                            <code>
-                                                                sftp -i {"/PATH/TO/PRIVATE_KEY"} {AppContext.get().auth().getUsername()}@{"<AWS_TRANSFER_ENDPOINT>"}
-                                                            </code>
-                                                            <p>Alternatively, you can use WinSCP/FileZilla. Refer to the instructions available on this website and use your AWS Transfer endpoint as hostname.</p>
-                                                        </Box>
-                                                    </SpaceBetween>
-                                                </Container>
-                                            )}
-                                        </SpaceBetween>
-                                    ),
-                                },
-                            ]}
-                        />
-                        {/*</Container>*/}
-                    </div>
-                }
+                content={buildContent()}
             />
         );
     }

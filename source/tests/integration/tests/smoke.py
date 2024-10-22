@@ -9,18 +9,29 @@
 #  OR CONDITIONS OF ANY KIND, express or implied. See the License for the specific language governing permissions
 #  and limitations under the License.
 
+import base64
 import logging
 import os
+import uuid
 from typing import Optional
 
 import pytest
 
 from ideadatamodel import (  # type: ignore
+    CreateFileRequest,
     CreateSessionRequest,
+    DeleteFilesRequest,
     DeleteSessionRequest,
+    DownloadFilesRequest,
+    GetModuleSettingsRequest,
+    ListFilesRequest,
     Project,
+    ReadFileRequest,
+    SaveFileRequest,
     SocaMemory,
     SocaMemoryUnit,
+    TailFileRequest,
+    UpdateModuleSettingsRequest,
     UpdateSessionRequest,
     VirtualDesktopArchitecture,
     VirtualDesktopBaseOS,
@@ -79,7 +90,7 @@ class TestsSmoke(object):
                     description="RES integ test project",
                     enable_budgets=False,
                 ),
-                [],
+                ["home"],
                 ["RESAdministrators", "group_1", "group_2"],
             )
         ],
@@ -142,3 +153,143 @@ class TestsSmoke(object):
         logger.info(f"leaving session {session.dcv_session_id}...")
         web_driver.quit()
         wait_for_session_connection_count(region, session, 0)
+
+    @pytest.mark.usefixtures("admin")
+    @pytest.mark.parametrize(
+        "admin_username",
+        [
+            "admin1",
+        ],
+    )
+    @pytest.mark.usefixtures("non_admin")
+    @pytest.mark.parametrize(
+        "non_admin_username",
+        [
+            "user1",
+        ],
+    )
+    def test_file_browser_succeed(
+        self,
+        request: FixtureRequest,
+        region: str,
+        admin: ClientAuth,
+        admin_username: str,
+        non_admin: ClientAuth,
+        non_admin_username: str,
+        res_environment: ResEnvironment,
+    ) -> None:
+        """
+        Test the end to end workflow for file browser:
+        """
+        test_unique_id = str(uuid.uuid4())
+        test_dir_name = "smoke-test_" + test_unique_id
+        test_file_name = "test-file_" + test_unique_id + ".txt"
+        for test_enable_file_browser_value in [True, False]:
+            api_invoker_type = request.config.getoption("--api-invoker-type")
+            admin_client = ResClient(res_environment, admin, api_invoker_type)
+            non_admin_client = ResClient(res_environment, non_admin, api_invoker_type)
+
+            original_settings = admin_client.get_module_settings(
+                request=GetModuleSettingsRequest(module_id="shared-storage")
+            )
+            original_file_browser_value = original_settings.settings[
+                "enable_file_browser"
+            ]
+            admin_client.update_module_settings(
+                request=UpdateModuleSettingsRequest(
+                    module_id="shared-storage",
+                    settings={"enable_file_browser": test_enable_file_browser_value},
+                )
+            )
+            updated_file_browser_value = admin_client.get_module_settings(
+                request=GetModuleSettingsRequest(module_id="shared-storage")
+            )
+            assert (
+                updated_file_browser_value.settings["enable_file_browser"]
+                == test_enable_file_browser_value
+            )
+            list_files_response = non_admin_client.list_files(
+                request=ListFilesRequest(
+                    cwd=f"/home/{non_admin_username}",
+                ),
+                should_succeed=test_enable_file_browser_value,
+            )
+            non_admin_client.create_file(
+                request=CreateFileRequest(
+                    cwd=f"/home/{non_admin_username}",
+                    filename=test_dir_name,
+                    is_folder=True,
+                ),
+                should_succeed=test_enable_file_browser_value,
+            )
+            non_admin_client.create_file(
+                request=CreateFileRequest(
+                    cwd=f"/home/{non_admin_username}/{test_dir_name}/",
+                    filename=test_file_name,
+                    is_folder=False,
+                ),
+                should_succeed=test_enable_file_browser_value,
+            )
+            non_admin_client.save_file(
+                request=SaveFileRequest(
+                    file=f"/home/{non_admin_username}/{test_dir_name}/{test_file_name}",
+                    content=base64.b64encode(str.encode("%CONTENT%")),
+                ),
+                should_succeed=test_enable_file_browser_value,
+            )
+            read_file_response = non_admin_client.read_file(
+                request=ReadFileRequest(
+                    file=f"/home/{non_admin_username}/{test_dir_name}/{test_file_name}"
+                ),
+                should_succeed=test_enable_file_browser_value,
+            )
+            tail_file_response = non_admin_client.tail_file(
+                request=TailFileRequest(
+                    file=f"/home/{non_admin_username}/{test_dir_name}/{test_file_name}"
+                ),
+                should_succeed=test_enable_file_browser_value,
+            )
+            download_files_response = non_admin_client.download_files(
+                request=DownloadFilesRequest(
+                    files=[
+                        f"/home/{non_admin_username}/{test_dir_name}/{test_file_name}"
+                    ]
+                ),
+                should_succeed=test_enable_file_browser_value,
+            )
+            non_admin_client.delete_files(
+                request=DeleteFilesRequest(
+                    files=[f"/home/{non_admin_username}/idea_downloads/"]
+                ),
+                should_succeed=test_enable_file_browser_value,
+            )
+            non_admin_client.delete_files(
+                request=DeleteFilesRequest(
+                    files=[f"/home/{non_admin_username}/{test_dir_name}/"]
+                ),
+                should_succeed=test_enable_file_browser_value,
+            )
+            admin_client.update_module_settings(
+                request=UpdateModuleSettingsRequest(
+                    module_id="shared-storage",
+                    settings={"enable_file_browser": original_file_browser_value},
+                )
+            )
+            if test_enable_file_browser_value:
+                assert list_files_response.listing is not None
+                assert (
+                    read_file_response.file
+                    == f"/home/{non_admin_username}/{test_dir_name}/{test_file_name}"
+                )
+                assert read_file_response.content_type == "text/plain"
+                assert (
+                    base64.b64decode(read_file_response.content).decode("utf-8")
+                    == "%CONTENT%"
+                )
+                assert (
+                    tail_file_response.file
+                    == f"/home/{non_admin_username}/{test_dir_name}/{test_file_name}"
+                )
+                assert tail_file_response.next_token is not None
+                assert tail_file_response.lines is not None
+                assert download_files_response.download_url is not None

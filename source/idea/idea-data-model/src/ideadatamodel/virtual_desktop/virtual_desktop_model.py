@@ -47,6 +47,7 @@ class VirtualDesktopSessionState(str, Enum):
     RESUMING = 'RESUMING'
     STOPPING = 'STOPPING'
     STOPPED = 'STOPPED'
+    STOPPED_IDLE = 'STOPPED_IDLE'
     ERROR = 'ERROR'
     DELETING = 'DELETING'
     DELETED = 'DELETED'
@@ -180,6 +181,7 @@ class VirtualDesktopServer(SocaBaseModel):
     security_groups: Optional[List[str]]
     subnet_id: Optional[str]
     key_pair_name: Optional[str]
+    is_idle: Optional[bool]
 
 
 class VirtualDesktopSchedule(SocaBaseModel):
@@ -281,6 +283,7 @@ class VirtualDesktopSession(SocaBaseModel):
     is_launched_by_admin: Optional[bool]
     locked: Optional[bool]
     tags: Optional[list[dict]]
+    is_idle: Optional[bool]
 
     # Transient field, to be used for API responses only.
     failure_reason: Optional[str]

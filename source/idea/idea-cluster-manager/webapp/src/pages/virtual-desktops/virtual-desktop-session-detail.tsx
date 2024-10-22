@@ -289,7 +289,7 @@ class VirtualDesktopSessionDetail extends Component<VirtualDesktopSessionDetailP
                                     disabled: this.state.session.state !== "READY",
                                     content: (
                                         <Container header={<Header variant={"h2"}>Session Health (Coming Soon)</Header>}>
-                                            <li>Additional eVDI Session information from NICE DCV Broker will be displayed.</li>
+                                            <li>Additional eVDI Session information from Amazon DCV Broker will be displayed.</li>
                                         </Container>
                                     ),
                                 },
