@@ -16,13 +16,13 @@ import { Navigate } from "react-router-dom";
 import { IdeaAppNavigationProps } from "../../navigation/navigation-utils";
 import { withRouter } from "../../navigation/navigation-utils";
 import { AppContext } from "../../common";
-import { Constants } from "../../common/constants";
 import Utils from "../../common/utils";
 
 export interface IdeaAuthRouteProps extends IdeaAppNavigationProps {
     isLoggedIn: boolean;
     children: React.ReactNode;
-    isProjectOwner?: boolean;
+    hasProjectBasedPermission?: boolean;
+    isFileBrowserEnabled?: boolean;
 }
 
 class IdeaAuthenticatedRoute extends Component<IdeaAuthRouteProps> {
@@ -33,21 +33,30 @@ class IdeaAuthenticatedRoute extends Component<IdeaAuthRouteProps> {
         const isAuthRoute = currentPath.startsWith("/auth/");
         const isVirtualDesktopAdminRoute = currentPath.startsWith("/virtual-desktop");
         const isClusterAdminRoute = currentPath.startsWith("/cluster");
+        const isFileBrowserPath = currentPath.startsWith("/home/file-browser");
+        const isSessionsPath = currentPath.startsWith("/virtual-desktop/sessions");
 
         if (this.props.isLoggedIn) {
             if (isAuthRoute) {
                 return <Navigate to="/" />;
-            } else if (isVirtualDesktopAdminRoute && (!context.getClusterSettingsService().isVirtualDesktopDeployed() || !context.auth().isAdmin())) {
-                if (this.props.isProjectOwner) {
-                  return this.props.children;
-                }  
-                return <Navigate to="/" />;
-            } else if (isClusterAdminRoute && !context.auth().isAdmin()) {
-                if (this.props.isProjectOwner) {
+            } 
+            else if (isSessionsPath && (!context.getClusterSettingsService().isVirtualDesktopDeployed() || !context.auth().isAdmin())) {
+                if (this.props.hasProjectBasedPermission) {
                   return this.props.children;
                 }
                 return <Navigate to="/" />;
-            } else {
+            }
+            else if (isVirtualDesktopAdminRoute && (!context.getClusterSettingsService().isVirtualDesktopDeployed() || !context.auth().isAdmin())) {
+                return <Navigate to="/" />;
+            } else if (isClusterAdminRoute && !context.auth().isAdmin()) {
+                if (this.props.hasProjectBasedPermission) {
+                  return this.props.children;
+                }
+                return <Navigate to="/" />;
+            } else if (isFileBrowserPath && !this.props.isFileBrowserEnabled){
+                return <Navigate to="/" />;
+            }
+            else {
                 return this.props.children;
             }
         } else {

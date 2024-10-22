@@ -661,16 +661,6 @@ class AccountsService:
             self.logger.info(f'Adding username {username} to additional group: {additional_group}')
             self.add_users_to_group([username], additional_group)
 
-        # bootstrap user does not exist in AD, therefore skipping home directory create
-        if not bootstrap_user:
-            self.task_manager.send(
-                task_name='accounts.create-home-directory',
-                payload={
-                    'username': username
-                },
-                message_group_id=username
-            )
-
         return self.user_dao.convert_from_db(created_user)
 
     def modify_user(self, user: User, email_verified: bool = False) -> User:
@@ -798,7 +788,7 @@ class AccountsService:
         # delete user from db
         self.logger.info(f'{log_tag} delete user in ddb')
         self.user_dao.delete_user(username=username)
-        
+
         role_assignments = self.context.role_assignments.list_role_assignments(ListRoleAssignmentsRequest(actor_key=f"{username}:user")).items
         project_id_links = [role_assignment.resource_id for role_assignment in role_assignments if role_assignment.resource_type=='project']
         if project_id_links:

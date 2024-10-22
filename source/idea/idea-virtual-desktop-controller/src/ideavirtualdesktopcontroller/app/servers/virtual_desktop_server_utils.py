@@ -73,7 +73,10 @@ class VirtualDesktopServerUtils:
             for instance in instances:
                 instance_id = Utils.get_value_as_string('InstanceId', instance, None)
                 server = self._server_db.get(instance_id=instance_id)
-                server.state = 'STOPPED'
+                if server.is_idle:
+                    server.state = 'STOPPED_IDLE'
+                else:
+                    server.state = 'STOPPED'
                 self._server_db.update(server)
 
         if Utils.is_not_empty(servers_to_hibernate):

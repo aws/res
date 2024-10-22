@@ -28,6 +28,7 @@ import { SharedStorageFileSystem } from "../../common/shared-storage-utils";
 import { FILESYSTEM_TABLE_COLUMN_DEFINITIONS } from "./filesystem";
 import FilesystemClient from "../../client/filesystem-client";
 import { AuthService } from "../../service";
+import { Constants } from "../../common/constants"
 
 export interface ProjectsProps extends IdeaAppLayoutProps, IdeaSideNavigationProps {
   projectOwnerRoles?: string[]
@@ -68,6 +69,9 @@ const PROJECT_TABLE_COLUMN_DEFINITIONS: TableProps.ColumnDefinition<Project>[] =
         cell: (project) => {
             if (project.enable_budgets) {
                 if (project.budget) {
+                    if(project.budget == Constants.BUDGET_NOT_FOUND) {
+                        return <span style={{ color: "red" }}> Budget Not Found </span>;
+                    }
                     const actualSpend = Utils.asNumber(project.budget.actual_spend?.amount, 0);
                     const limit = Utils.asNumber(project.budget.budget_limit?.amount, 0);
                     const usage = (actualSpend / limit) * 100;
@@ -223,7 +227,7 @@ class Projects extends Component<ProjectsProps, ProjectsState> {
         const projectRoleAssignments: Promise<void>[] = [];
         const projects: Map<string, Project> = new Map();
         const permissions: Map<string, ProjectPermissions> = new Map();
-  
+
         // For every project in `allProjects`, we populate the users/groups columns, and the
         // permissions that the current user has with which they can interact with the project
         for (const project of allProjects) {
@@ -245,9 +249,9 @@ class Projects extends Component<ProjectsProps, ProjectsState> {
                     users: projects.get(roleAssignment.resource_id!)?.users ?? [],
                   }
                 }
-  
+
                 let partOfProject: boolean = false;
-  
+
                 if (roleAssignment.actor_type === "group") {
                   update.ldap_groups.push(roleAssignment.actor_id);
                   if (user.additional_groups?.includes(roleAssignment.actor_id))
@@ -257,22 +261,22 @@ class Projects extends Component<ProjectsProps, ProjectsState> {
                   if (roleAssignment.actor_id === user.username!)
                     partOfProject = true;
                 }
-                
+
                 // if we already have a mapping, use that. Otherwise, use the base project
                 projects.set(roleAssignment.resource_id!, {...project, ...update});
-  
+
                 // If the user is part of the project or is in a group that is part of the project
-                // we update the permissions they have to interact with that project based on the 
+                // we update the permissions they have to interact with that project based on the
                 // union of all groups/user permissions.
-  
+
                 if (partOfProject) {
                   let permission = permissions.get(roleAssignment.resource_id!) ?? {
                     update_personnel: false,
                     update_status: false,
                   }
-  
+
                   const rolePermission = rolePermissions.items.find(perm => perm.role_id === roleAssignment.role_id);
-                  
+
                   if (rolePermission) {
                     permission = {
                       update_personnel: permission.update_personnel || rolePermission.projects.update_personnel,
@@ -508,7 +512,7 @@ class Projects extends Component<ProjectsProps, ProjectsState> {
                             });
                         },
                         // based on if the user is admin or has update_personnel permission for selected project
-                        disabled: !this.canEditProjectDetails(),  
+                        disabled: !this.canEditProjectDetails(),
                     },
                     {
                         id: "toggle-enable-project",
@@ -618,7 +622,7 @@ class Projects extends Component<ProjectsProps, ProjectsState> {
                       exclude_disabled: false
                     }))).projects ?? [];
                   projects = await this.getProjectsWithPermissions(context, projects);
-                  return { listing: projects};  
+                  return { listing: projects};
                 }}
                 columnDefinitions={PROJECT_TABLE_COLUMN_DEFINITIONS}
             />

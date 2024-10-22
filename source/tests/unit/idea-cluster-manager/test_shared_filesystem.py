@@ -25,6 +25,7 @@ from ideasdk.aws import AwsClientProvider
 from ideadatamodel import (
     AddFileSystemToProjectRequest,
     FileSystem,
+    ListGlobalFileSystemsRequest,
     ListOnboardedFileSystemsRequest,
     ListOnboardedFileSystemsResult,
     OnboardLUSTREFileSystemRequest,
@@ -595,6 +596,22 @@ def test_shared_filesystem_onboard_s3_bucket_bucket_arn_with_incorrect_mount_dir
     assert constants.MOUNT_DIRECTORY_ERROR_MESSAGE in exc_info.value.message
 
 
+def test_shared_filesystem_onboard_s3_bucket_bucket_arn_with_home_mount_dir_fail(
+    context: AppContext, monkeypatch: MonkeyPatch
+):
+    request = OnboardS3BucketRequest(
+        object_storage_title="s3_bucket_title",
+        bucket_arn="arn:aws:s3:::example-bucket/prefix",
+        read_only=True,
+        mount_directory="/home",
+    )
+
+    with pytest.raises(exceptions.SocaException) as exc_info:
+        context.shared_filesystem.onboard_s3_bucket(request)
+    assert exc_info.value.error_code == errorcodes.INVALID_PARAMS
+    assert constants.MOUNT_DIRECTORY_HOME_ERROR_MESSAGE in exc_info.value.message
+
+
 def test_shared_filesystem_add_filesystem_to_project_succeed(
     context: AppContext, monkeypatch: MonkeyPatch
 ):
@@ -775,6 +792,7 @@ def get_test_file_systems(areOnboardedFileSystems: bool):
             "mount_dir": "/home",
             "efs": {},
         },
+        "enable_file_browser": False,
     }
     if areOnboardedFileSystems:
         file_systems.update(
@@ -959,6 +977,26 @@ def test_shared_filesystem_list_onboarded_file_systems_filter_by_invalid_provide
     assert "Only use supported storage providers." in exc_info.value.message
 
 
+def test_shared_filesystem_list_global_file_systems(
+    context: AppContext, monkeypatch: MonkeyPatch
+):
+    monkeypatch.setattr(
+        context.shared_filesystem.config.get_config(constants.MODULE_SHARED_STORAGE),
+        "as_plain_ordered_dict",
+        lambda *_: get_test_file_systems(True),
+    )
+    request = ListGlobalFileSystemsRequest()
+    result = context.shared_filesystem.list_global_filesystems(request)
+
+    assert len(result.listing) == 2
+    assert all(
+        constants.FILE_SYSTEM_SCOPE_KEY in fs.storage.keys()
+        and constants.FILE_SYSTEM_GLOBAL_SCOPE
+        in fs.storage.get(constants.FILE_SYSTEM_SCOPE_KEY)
+        for fs in result.listing
+    )
+
+
 def test_shared_filesystem_update_filesystems_to_project_mappings_succeed(
     context: AppContext, monkeypatch: MonkeyPatch
 ):
@@ -975,6 +1013,7 @@ def test_shared_filesystem_update_filesystems_to_project_mappings_succeed(
                             "bucket_arn": "arn:aws:s3:::example-bucket/prefix"
                         },
                         "mount_dir": "/bucket",
+                        "scope": ["project"],
                     },
                 )
             ],

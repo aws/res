@@ -59,13 +59,6 @@ class OpenLDAPClient(AbstractLDAPClient):
     def ldap_sudoers_base(self) -> str:
         return f'ou=Sudoers,{self.ldap_base}'
 
-    @property
-    def ldap_sudoer_filterstr(self) -> str:
-        return '(objectClass=sudoRole)'
-
-    def build_sudoer_dn(self, username: str) -> str:
-        return f'cn={username},{self.ldap_sudoers_base}'
-
     def change_password(self, username: str, password: str):
         encrypted_password = LdapUtils.encrypt_password(password)
         user_dn = self.build_user_dn(username)
@@ -74,9 +67,6 @@ class OpenLDAPClient(AbstractLDAPClient):
         ]
 
         self.modify_s(user_dn, user_attrs)
-
-    def create_service_account(self, username: str, password: str):
-        raise exceptions.general_exception('not supported for OpenLDAP')
 
     def sync_user(self, *,
                   uid: int,
@@ -139,21 +129,3 @@ class OpenLDAPClient(AbstractLDAPClient):
             self.add_s(group_dn, group_attrs)
 
         return self.get_group(group_name)
-
-    def add_sudo_user(self, username: str):
-        user_dn = self.build_sudoer_dn(username)
-        user_attrs = [
-            ('objectClass', [
-                Utils.to_bytes('top'),
-                Utils.to_bytes('sudoRole')
-            ]),
-            ('sudoHost', [Utils.to_bytes('ALL')]),
-            ('sudoUser', [Utils.to_bytes(username)]),
-            ('sudoCommand', [Utils.to_bytes('ALL')])
-        ]
-
-        self.add_s(user_dn, user_attrs)
-
-    def remove_sudo_user(self, username: str):
-        user_dn = self.build_sudoer_dn(username)
-        self.delete_s(user_dn)

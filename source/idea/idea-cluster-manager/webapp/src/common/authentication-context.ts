@@ -188,7 +188,7 @@ export class IdeaAuthenticationContext {
         this.idToken = initiateAuthResult.auth.id_token;
         this.dbUsername = initiateAuthResult.db_username;
         this.role = initiateAuthResult.role;
-        this.claimsProvider = new JwtTokenClaimsProvider(this.accessToken!, 
+        this.claimsProvider = new JwtTokenClaimsProvider(this.accessToken!,
             this.idToken!,
             this.dbUsername!,
             this.role!);
@@ -452,10 +452,11 @@ export class IdeaAuthenticationContext {
         return this.renewalInProgress;
     }
 
-    invoke(url: string, request: any, isPublic: boolean = false): Promise<any> {
+    invoke(url: string, request: any, isPublic: boolean = false, additionalHeader = {}): Promise<any> {
         const invokeApi = () => {
             let headers: any = {
                 "Content-Type": HEADER_CONTENT_TYPE_JSON,
+                ...additionalHeader,
             };
             let fetchOptions = {
                 method: "POST",

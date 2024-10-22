@@ -93,8 +93,7 @@ SocaInputParamSpec:
             - name: infrastructure_host_subnet_ids
             - name: dcv_session_private_subnet_ids
             - name: directory_id
-            - name: directory_service_root_username_secret_arn
-            - name: directory_service_root_password_secret_arn
+            - name: directory_service_service_account_credentials_secret_arn
             - name: storage_internal_provider
             - name: existing_internal_fs_id
             - name: storage_home_provider
@@ -625,26 +624,9 @@ SocaInputParamSpec:
           - param: directory_service_provider
             eq: aws_managed_activedirectory
 
-    - name: directory_service_root_username_secret_arn
-      title: "Microsoft AD Service Account Name"
-      description: "Enter the ARN of the secret containing service account username"
-      param_type: text
-      data_type: str
-      help_text: ~
-      tag: default
-      markdown: ~
-      validate:
-        required: yes
-      when:
-        and:
-          - param: existing_resources
-            contains: directoryservice:aws_managed_activedirectory
-          - param: directory_service_provider
-            eq: aws_managed_activedirectory
-
-    - name: directory_service_root_password_secret_arn
-      title: "AD Service Account Password"
-      description: "Enter the ARN of the secret containing service account password"
+    - name: directory_service_service_account_credentials_secret_arn
+      title: "AD Service Account Credentials"
+      description: "Enter the ARN of the secret containing service account credentials. The username and password for the Active Directory ServiceAccount user formatted as a username:password key/value pair."
       param_type: text
       data_type: str
       help_text: ~

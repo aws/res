@@ -20,18 +20,26 @@ from ideadatamodel import (  # type: ignore
     BatchDeleteRoleAssignmentResponse,
     BatchPutRoleAssignmentRequest,
     BatchPutRoleAssignmentResponse,
+    CreateFileRequest,
+    CreateFileResult,
     CreateProjectRequest,
     CreateProjectResult,
     CreateSessionRequest,
     CreateSessionResponse,
     CreateSoftwareStackRequest,
     CreateSoftwareStackResponse,
+    DeleteFilesRequest,
+    DeleteFilesResult,
     DeleteProjectRequest,
     DeleteProjectResult,
     DeleteSessionRequest,
     DeleteSessionResponse,
     DeleteSoftwareStackRequest,
     DeleteSoftwareStackResponse,
+    DownloadFilesRequest,
+    DownloadFilesResult,
+    GetModuleSettingsRequest,
+    GetModuleSettingsResult,
     GetSessionConnectionInfoRequest,
     GetSessionConnectionInfoResponse,
     GetSessionInfoRequest,
@@ -40,6 +48,8 @@ from ideadatamodel import (  # type: ignore
     GetUserResult,
     ListAllowedInstanceTypesRequest,
     ListAllowedInstanceTypesResponse,
+    ListFilesRequest,
+    ListFilesResult,
     ListRoleAssignmentsRequest,
     ListRoleAssignmentsResponse,
     ListSessionsRequest,
@@ -48,11 +58,17 @@ from ideadatamodel import (  # type: ignore
     ListSoftwareStackResponse,
     ModifyUserRequest,
     ModifyUserResult,
+    ReadFileRequest,
+    ReadFileResult,
     RoleAssignment,
+    SaveFileRequest,
+    SaveFileResult,
     SocaEnvelope,
     SocaHeader,
     SocaPayload,
     SocaPayloadType,
+    TailFileRequest,
+    TailFileResult,
     UpdateModuleSettingsRequest,
     UpdateModuleSettingsResult,
     UpdateSessionRequest,
@@ -87,7 +103,9 @@ class ResClient:
 
         self._endpoint = f"https://{res_environment.web_app_domain_name}"
 
-    def create_project(self, request: CreateProjectRequest) -> CreateProjectResult:
+    def create_project(
+        self, request: CreateProjectRequest, should_succeed: bool = True
+    ) -> CreateProjectResult:
         logger.info(f"creating project {request.project.name}...")
 
         return self._invoke(
@@ -95,9 +113,12 @@ class ResClient:
             "cluster-manager",
             request,
             CreateProjectResult,
+            should_succeed,
         )
 
-    def delete_project(self, request: DeleteProjectRequest) -> DeleteProjectResult:
+    def delete_project(
+        self, request: DeleteProjectRequest, should_succeed: bool = True
+    ) -> DeleteProjectResult:
         project = request.project_name if request.project_name else request.project_id
         logger.info(f"deleting project {project}...")
 
@@ -106,9 +127,12 @@ class ResClient:
             "cluster-manager",
             request,
             DeleteProjectResult,
+            should_succeed,
         )
 
-    def get_user(self, request: GetUserRequest) -> GetUserResult:
+    def get_user(
+        self, request: GetUserRequest, should_succeed: bool = True
+    ) -> GetUserResult:
         logger.info(f"getting user {request.username}...")
 
         return self._invoke(
@@ -116,9 +140,12 @@ class ResClient:
             "cluster-manager",
             request,
             GetUserResult,
+            should_succeed,
         )
 
-    def modify_user(self, request: ModifyUserRequest) -> ModifyUserResult:
+    def modify_user(
+        self, request: ModifyUserRequest, should_succeed: bool = True
+    ) -> ModifyUserResult:
         logger.info(f"modifying user {request.user.username}...")
 
         return self._invoke(
@@ -126,10 +153,11 @@ class ResClient:
             "cluster-manager",
             request,
             ModifyUserResult,
+            should_succeed,
         )
 
     def create_software_stack(
-        self, request: CreateSoftwareStackRequest
+        self, request: CreateSoftwareStackRequest, should_succeed: bool = True
     ) -> CreateSoftwareStackResponse:
         logger.info(f"creating software stack {request.software_stack.name}...")
 
@@ -138,10 +166,11 @@ class ResClient:
             "vdc",
             request,
             CreateSoftwareStackResponse,
+            should_succeed,
         )
 
     def delete_software_stack(
-        self, request: DeleteSoftwareStackRequest
+        self, request: DeleteSoftwareStackRequest, should_succeed: bool = True
     ) -> DeleteSoftwareStackResponse:
         logger.info(f"deleting software stack {request.software_stack.name}...")
 
@@ -150,10 +179,11 @@ class ResClient:
             "vdc",
             request,
             DeleteSoftwareStackResponse,
+            should_succeed,
         )
 
     def list_software_stacks(
-        self, request: ListSoftwareStackRequest
+        self, request: ListSoftwareStackRequest, should_succeed: bool = True
     ) -> ListSoftwareStackResponse:
         logger.info(f"listing software stacks...")
 
@@ -162,10 +192,11 @@ class ResClient:
             "vdc",
             request,
             ListSoftwareStackResponse,
+            should_succeed,
         )
 
     def list_allowed_instance_types(
-        self, request: ListAllowedInstanceTypesRequest
+        self, request: ListAllowedInstanceTypesRequest, should_succeed: bool = True
     ) -> ListAllowedInstanceTypesResponse:
         logger.info(f"listing allowed instance types...")
 
@@ -174,9 +205,12 @@ class ResClient:
             "vdc",
             request,
             ListAllowedInstanceTypesResponse,
+            should_succeed,
         )
 
-    def create_session(self, request: CreateSessionRequest) -> CreateSessionResponse:
+    def create_session(
+        self, request: CreateSessionRequest, should_succeed: bool = True
+    ) -> CreateSessionResponse:
         logger.info(f"creating session {request.session.name}...")
 
         return self._invoke(
@@ -184,10 +218,11 @@ class ResClient:
             "vdc",
             request,
             CreateSessionResponse,
+            should_succeed,
         )
 
     def batch_put_role_assignment(
-        self, request: BatchPutRoleAssignmentRequest
+        self, request: BatchPutRoleAssignmentRequest, should_succeed: bool = True
     ) -> BatchPutRoleAssignmentResponse:
         logger.info(f"entering role assignments {request.items}...")
 
@@ -196,10 +231,11 @@ class ResClient:
             "cluster-manager",
             request,
             BatchPutRoleAssignmentResponse,
+            should_succeed,
         )
 
     def batch_delete_role_assignment(
-        self, request: BatchDeleteRoleAssignmentRequest
+        self, request: BatchDeleteRoleAssignmentRequest, should_succeed: bool = True
     ) -> BatchDeleteRoleAssignmentResponse:
         logger.info(f"deleting role assignments {request.items}...")
 
@@ -208,10 +244,11 @@ class ResClient:
             "cluster-manager",
             request,
             BatchDeleteRoleAssignmentResponse,
+            should_succeed,
         )
 
     def list_role_assignments(
-        self, request: ListRoleAssignmentsRequest
+        self, request: ListRoleAssignmentsRequest, should_succeed: bool = True
     ) -> ListRoleAssignmentsResponse:
         logger.info(f"listing role assignments {request.items}...")
 
@@ -220,10 +257,11 @@ class ResClient:
             "cluster-manager",
             request,
             ListRoleAssignmentsResponse,
+            should_succeed,
         )
 
     def get_session_info(
-        self, request: GetSessionInfoRequest
+        self, request: GetSessionInfoRequest, should_succeed: bool = True
     ) -> GetSessionInfoResponse:
         logger.info(f"getting session info for {request.session.name}...")
 
@@ -232,10 +270,11 @@ class ResClient:
             "vdc",
             request,
             GetSessionInfoResponse,
+            should_succeed,
         )
 
     def get_session_connection_info(
-        self, request: GetSessionConnectionInfoRequest
+        self, request: GetSessionConnectionInfoRequest, should_succeed: bool = True
     ) -> GetSessionConnectionInfoResponse:
         logger.info(
             f"getting connection info for session {request.connection_info.dcv_session_id}..."
@@ -246,9 +285,12 @@ class ResClient:
             "vdc",
             request,
             GetSessionConnectionInfoResponse,
+            should_succeed,
         )
 
-    def list_sessions(self, request: ListSessionsRequest) -> ListSessionsResponse:
+    def list_sessions(
+        self, request: ListSessionsRequest, should_succeed: bool = True
+    ) -> ListSessionsResponse:
         logger.info("listing sessions...")
 
         return self._invoke(
@@ -256,9 +298,12 @@ class ResClient:
             "vdc",
             request,
             ListSessionsResponse,
+            should_succeed,
         )
 
-    def update_session(self, request: UpdateSessionRequest) -> UpdateSessionResponse:
+    def update_session(
+        self, request: UpdateSessionRequest, should_succeed: bool = True
+    ) -> UpdateSessionResponse:
         logger.info(f"updating session {request.session.dcv_session_id}...")
 
         return self._invoke(
@@ -266,6 +311,7 @@ class ResClient:
             "vdc",
             request,
             UpdateSessionResponse,
+            should_succeed,
         )
 
     def join_session(self, session: VirtualDesktopSession) -> WebDriver:
@@ -293,7 +339,9 @@ class ResClient:
 
         return driver
 
-    def delete_sessions(self, request: DeleteSessionRequest) -> DeleteSessionResponse:
+    def delete_sessions(
+        self, request: DeleteSessionRequest, should_succeed: bool = True
+    ) -> DeleteSessionResponse:
         session_names = [session.name for session in request.sessions]
         logger.info(f"deleting sessions {session_names}...")
 
@@ -302,10 +350,24 @@ class ResClient:
             "vdc",
             request,
             DeleteSessionResponse,
+            should_succeed,
+        )
+
+    def get_module_settings(
+        self, request: GetModuleSettingsRequest, should_succeed: bool = True
+    ) -> GetModuleSettingsResult:
+        logger.info(f"getting module settings...")
+
+        return self._invoke(
+            "ClusterSettings.GetModuleSettings",
+            "cluster-manager",
+            request,
+            GetModuleSettingsResult,
+            should_succeed,
         )
 
     def update_module_settings(
-        self, request: UpdateModuleSettingsRequest
+        self, request: UpdateModuleSettingsRequest, should_succeed: bool = True
     ) -> UpdateModuleSettingsResult:
         logger.info(f"updating module settings...")
 
@@ -314,6 +376,112 @@ class ResClient:
             "cluster-manager",
             request,
             UpdateModuleSettingsResult,
+            should_succeed,
+        )
+
+    def list_files(
+        self,
+        request: ListFilesRequest,
+        should_succeed: bool = True,
+    ) -> ListFilesResult:
+        logger.info(f"listing files...")
+
+        return self._invoke(
+            "FileBrowser.ListFiles",
+            "cluster-manager",
+            request,
+            ListFilesResult,
+            should_succeed,
+        )
+
+    def read_file(
+        self,
+        request: ReadFileRequest,
+        should_succeed: bool = True,
+    ) -> ReadFileResult:
+        logger.info(f"reading file...")
+
+        return self._invoke(
+            "FileBrowser.ReadFile",
+            "cluster-manager",
+            request,
+            ReadFileResult,
+            should_succeed,
+        )
+
+    def tail_file(
+        self,
+        request: TailFileRequest,
+        should_succeed: bool = True,
+    ) -> TailFileResult:
+        logger.info(f"tailing file...")
+
+        return self._invoke(
+            "FileBrowser.TailFile",
+            "cluster-manager",
+            request,
+            TailFileResult,
+            should_succeed,
+        )
+
+    def save_file(
+        self,
+        request: SaveFileRequest,
+        should_succeed: bool = True,
+    ) -> SaveFileResult:
+        logger.info(f"saving file...")
+
+        return self._invoke(
+            "FileBrowser.SaveFile",
+            "cluster-manager",
+            request,
+            SaveFileResult,
+            should_succeed,
+        )
+
+    def download_files(
+        self,
+        request: DownloadFilesRequest,
+        should_succeed: bool = True,
+    ) -> DownloadFilesResult:
+        logger.info(f"downloading files...")
+
+        return self._invoke(
+            "FileBrowser.DownloadFiles",
+            "cluster-manager",
+            request,
+            DownloadFilesResult,
+            should_succeed,
+        )
+
+    def create_file(
+        self,
+        request: CreateFileRequest,
+        should_succeed: bool = True,
+    ) -> CreateFileResult:
+        logger.info(f"creating file...")
+
+        return self._invoke(
+            "FileBrowser.CreateFile",
+            "cluster-manager",
+            request,
+            CreateFileResult,
+            should_succeed,
+        )
+
+    def delete_files(
+        self,
+        request: DeleteFilesRequest,
+        should_succeed: bool = True,
+    ) -> DeleteFilesResult:
+        logger.info(f"deleting files...")
+
+        return self._invoke(
+            "FileBrowser.DeleteFiles",
+            "cluster-manager",
+            request,
+            DeleteFilesResult,
+            should_succeed,
         )
 
     def _invoke(
@@ -322,6 +490,7 @@ class ResClient:
         component: str,
         request: SocaPayload,
         response_type: Type[SocaPayloadType],
+        should_succeed: bool = True,
     ) -> SocaPayloadType:
         header = SocaHeader()
         header.namespace = namespace
@@ -341,6 +510,9 @@ class ResClient:
 
         assert (
             context.response_is_success()
+            and should_succeed
+            or not context.response_is_success()
+            and not should_succeed
         ), f'error code: {context.response.get("error_code")} message: {context.response.get("message")}'
 
         return context.get_response_payload_as(response_type)

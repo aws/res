@@ -1,0 +1,14 @@
+version: 0.2
+
+env:
+  variables:
+    HOST_MODULES_PIPELINE_PATH: "source/res/host_modules_pipeline"
+  shell: bash
+
+phases:
+  build:
+    commands:
+      - echo Building because changes were detected...
+      - chmod +x $HOST_MODULES_PIPELINE_PATH/scripts/unit_test.sh
+      - $HOST_MODULES_PIPELINE_PATH/scripts/unit_test.sh
+

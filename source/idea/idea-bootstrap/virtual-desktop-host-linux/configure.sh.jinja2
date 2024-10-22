@@ -63,9 +63,10 @@ if [[ ! -f ${CONFIG_FINISHED_LOCK} ]]; then
   /bin/bash "${SCRIPT_DIR}/../common/configure_amazon_ssm_agent.sh" -o {{ context.base_os }} -s "${SCRIPT_DIR}"
   # End: Configure AWS Systems Manager Agent
 
-  # Begin: Enable executable on custom-credential-broker.py
-  chmod +x ${SCRIPT_DIR}/custom-credential-broker/custom_credential_broker.py
-  # End: Enable executable on custom-credential-broker.py
+  # Begin: Enable executable on vdi-helper python scripts
+  chmod +x ${SCRIPT_DIR}/../vdi-helper/custom_credential_broker.py
+  chmod +x ${SCRIPT_DIR}/../vdi-helper/vdi_auto_stop.py
+  # End: Enable executable on vdi-helper python scripts
 
   # Begin: Configure CloudWatch Agent
   {%- set cloudwatch_agent_config = context.get_cloudwatch_agent_config(additional_log_files=additional_log_files) %}
@@ -126,6 +127,10 @@ if [[ ! -f ${CONFIG_FINISHED_LOCK} ]]; then
   {% if context.config.get_string('scheduler.provider') == 'openpbs' %}
     {% include '_templates/linux/openpbs_client.jinja2' %}
   {% endif %}
+
+  #Begin: Configure SSH Key Gen
+  /bin/bash "${SCRIPT_DIR}/../common/configure_ssh_keygen.sh" -o {{ context.base_os }} -s "${SCRIPT_DIR}" -u "${IDEA_SESSION_OWNER}"
+  #End: Configure SSH Key Gen
 
   BROKER_CERTIFICATE_LOCATION_LOCAL='/etc/dcv/dcv_broker/dcvsmbroker_ca.pem'
   BROKER_HOSTNAME="{{ context.config.get_cluster_internal_endpoint().replace('https://', '') }}"

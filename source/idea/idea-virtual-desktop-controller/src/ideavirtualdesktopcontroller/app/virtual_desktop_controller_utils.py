@@ -82,9 +82,9 @@ class VirtualDesktopControllerUtils:
         # TODO: Deprecate
         bootstrap_context.vars.dcv_host_ready_message = f'{{{escape_chars}"event_group_id{escape_chars}":{escape_chars}"{session.idea_session_id}{escape_chars}",{escape_chars}"event_type{escape_chars}":{escape_chars}"{VirtualDesktopEventType.DCV_HOST_READY_EVENT}{escape_chars}",{escape_chars}"detail{escape_chars}":{{{escape_chars}"idea_session_id{escape_chars}":{escape_chars}"{session.idea_session_id}{escape_chars}",{escape_chars}"idea_session_owner{escape_chars}":{escape_chars}"{session.owner}{escape_chars}"}}}}'
 
-        components = ['virtual-desktop-host-linux', 'nice-dcv-linux']
+        components = ['virtual-desktop-host-linux', 'nice-dcv-linux', 'vdi-helper']
         if session.software_stack.base_os == VirtualDesktopBaseOS.WINDOWS:
-            components = ['virtual-desktop-host-windows']
+            components = ['virtual-desktop-host-windows', 'vdi-helper']
 
         bootstrap_package_archive_file = BootstrapPackageBuilder(
             bootstrap_context=bootstrap_context,
@@ -156,7 +156,7 @@ class VirtualDesktopControllerUtils:
             on_vdi_start_script_commands = ['Import-Module .\\DownloadAndExecuteScript.ps1', '& .\\$env:ON_VDI_START_COMMANDS']
             install_commands = change_directory_command + export_env_variables_commands + on_vdi_start_script_store + on_vdi_configured_script_store + on_vdi_start_script_commands + [
                 'Import-Module .\\Install.ps1',
-                'Install-WindowsEC2Instance -ConfigureForRESVDI'
+                f'Install-WindowsEC2Instance -ConfigureForRESVDI -AWSRegion "{self.context.config().aws_region}" -ENVName "{self.context.config().cluster_name}"'
             ]
 
         https_proxy = self.context.config().get_string('cluster.network.https_proxy', required=False, default='')

@@ -81,6 +81,11 @@ class FileBrowserAPI(BaseAPI):
         if not context.is_authorized_user():
             raise exceptions.unauthorized_access()
 
+        isFileBrowserEnabled = self.context.config().get_bool('shared-storage.enable_file_browser', required=True)
+
+        if not isFileBrowserEnabled:
+            raise exceptions.disabled_feature("FileBrowser")
+
         namespace = context.namespace
 
         if namespace == 'FileBrowser.ListFiles':

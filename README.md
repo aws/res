@@ -4,7 +4,7 @@ Research and Engineering Studio on AWS (RES) is an open source, easy-to-use web-
   		  
 With just a few clicks, scientists and engineers can create and connect to Windows and Linux virtual desktops that come with pre-installed applications, shared data, and collaboration tools they need. With RES, administrators can define permissions, set budgets, and monitor resource utilization through a single web interface.
   		  
-RES virtual desktops are powered by Amazon EC2 instances and NICE DCV. RES is available at no additional charge. You pay only for the AWS resources needed to run your applications.
+RES virtual desktops are powered by Amazon EC2 instances and Amazon DCV. RES is available at no additional charge. You pay only for the AWS resources needed to run your applications.
  
 ## Table of contents
 - [Public Documentation](#public-documentation)

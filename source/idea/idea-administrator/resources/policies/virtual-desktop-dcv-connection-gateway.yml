@@ -52,6 +52,20 @@ Statement:
     Resource: '*'
     Effect: Allow
 
+  {%- if context.config.get_string("vdc.dcv_connection_gateway.certificate.certificate_secret_arn", '') != '' %}
+  - Action:
+      - secretsmanager:GetSecretValue
+    Resource: '{{ context.config.get_string("vdc.dcv_connection_gateway.certificate.certificate_secret_arn") }}'
+    Effect: Allow
+  {%- endif %}
+
+  {%- if context.config.get_string("vdc.dcv_connection_gateway.certificate.private_key_secret_arn", '') != '' %}
+  - Action:
+      - secretsmanager:GetSecretValue
+    Resource: '{{ context.config.get_string("vdc.dcv_connection_gateway.certificate.private_key_secret_arn") }}'
+    Effect: Allow
+  {%- endif %}
+
   - Action:
       - logs:PutRetentionPolicy
     Resource: '*'

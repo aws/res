@@ -1,5 +1,6 @@
 #  Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 #  SPDX-License-Identifier: Apache-2.0
+import os
 from typing import Any
 
 import aws_cdk
@@ -9,7 +10,7 @@ from aws_cdk import assertions
 
 from idea.infrastructure.install.installer import Installer
 from idea.infrastructure.install.parameters.parameters import RESParameters
-from idea.infrastructure.install.stack import PUBLIC_REGISTRY_NAME
+from idea.infrastructure.install.stacks.install_stack import PUBLIC_REGISTRY_NAME
 from idea.infrastructure.install.tasks import Tasks
 from idea.pipeline.stack import DeployStage, PipelineStack
 
@@ -56,7 +57,12 @@ def test_pipeline_created(template: assertions.Template) -> None:
 
 def test_registry_name_set_correctly_from_context() -> None:
     # No context should be public registry name
-    stage = DeployStage(aws_cdk.App(), "Stage", False, RESParameters())
+    stage = DeployStage(
+        aws_cdk.App(),
+        "Stage",
+        False,
+        RESParameters(),
+    )
 
     assert stage.install_stack.registry_name == PUBLIC_REGISTRY_NAME
 

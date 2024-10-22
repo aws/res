@@ -55,7 +55,7 @@ Parameters:
     ConstraintDescription: Qualifier must be an alphanumeric identifier of at most 10 characters
   PublicAccessBlockConfiguration:
     Description: Whether or not to enable S3 Staging Bucket Public Access Block Configuration
-    Default: "true"
+    Default: "false"
     Type: String
     AllowedValues:
       - "true"
@@ -178,7 +178,18 @@ Resources:
       BucketName:
         Fn::If:
           - HasCustomFileAssetsBucketName
-          - Fn::Sub: log-${FileAssetsBucketName}
+          - Fn::Join:
+            - "-"
+            - - Fn::Sub: log-${FileAssetsBucketName}
+              - Fn::Select:
+                - 0
+                - Fn::Split:
+                  - "-"
+                  - Fn::Select:
+                    - 2
+                    - Fn::Split:
+                      - "/"
+                      - !Ref "AWS::StackId"
           - Fn::Sub: log-cdk-${Qualifier}-assets-${AWS::AccountId}-${AWS::Region}
       AccessControl: Private
       BucketEncryption:
@@ -186,10 +197,13 @@ Resources:
           - ServerSideEncryptionByDefault:
               SSEAlgorithm: AES256
       PublicAccessBlockConfiguration:
-        BlockPublicAcls: true
-        BlockPublicPolicy: true
-        IgnorePublicAcls: true
-        RestrictPublicBuckets: true
+        Fn::If:
+          - UsePublicAccessBlockConfiguration
+          - BlockPublicAcls: true
+            BlockPublicPolicy: true
+            IgnorePublicAcls: true
+            RestrictPublicBuckets: true
+          - Ref: AWS::NoValue
     DeletionPolicy: Retain
   LogBucketPolicy:
     Type: AWS::S3::BucketPolicy

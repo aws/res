@@ -34,6 +34,6 @@
   {%- endif %}
   - Action:
       - secretsmanager:GetSecretValue
-    Resource: '{{ context.config.get_string("directoryservice.root_password_secret_arn") }}'
+    Resource: '{{ context.config.get_string("directoryservice.service_account_credentials_secret_arn") }}'
     Effect: Allow
   {%- endif %}

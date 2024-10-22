@@ -1,6 +1,6 @@
 ## Shared Virtual Desktops
 
-Access your Windows & Linux virtual desktops that are shared with you, powered by [AWS NICE DCV](https://aws.amazon.com/hpc/dcv/).
+Access your Windows & Linux virtual desktops that are shared with you, powered by [Amazon DCV](https://aws.amazon.com/hpc/dcv/).
 
 <details>
     <summary markdown="span"><b>Access your desktop</b></summary>

@@ -16,7 +16,7 @@ setup(
     name=ideasdk_meta.__name__,
     version=ideasdk_meta.__version__,
     description='Engineering Studio on AWS SDK',
-    url='https://awslabs.github.io/scale-out-computing-on-aws/',
+    url='https://aws.amazon.com/hpc/res/',
     author='Amazon',
     license='Apache License, Version 2.0',
     package_dir={

@@ -92,6 +92,9 @@ class FileSystemHelper:
         return os.path.join(self.context.config().get_string('shared-storage.home.mount_dir', required=True), self.username)
         # return os.path.join(self.context.config().get_string('shared-storage.home.mount_dir', required=True), self.username)
 
+    def is_file_browser_enabled(self) -> bool:
+        return self.context.config().get_bool('shared-storage.enable_file_browser', required=True)
+
     def has_access(self, file: str) -> bool:
         try:
             user_home = self.get_user_home()
@@ -113,6 +116,9 @@ class FileSystemHelper:
         # only support absolute paths
         if '..' in file:
             raise exceptions.unauthorized_access()
+        
+        if not self.is_file_browser_enabled():
+            raise exceptions.disabled_feature("FileBrowser")
 
         if not pathlib.Path(file).exists():
             # Validate the file path
@@ -296,6 +302,8 @@ class FileSystemHelper:
         with open(file, 'w') as f:
             f.write(content)
 
+        self.logger.info(f'{self.username} has modified the following file: "{file}"')
+
         return SaveFileResult()
 
     async def upload_files(self, cwd: str, files: List[Any]) -> Dict:
@@ -321,6 +329,9 @@ class FileSystemHelper:
         if '..' in cwd:
             raise exceptions.unauthorized_access()
 
+        if not self.is_file_browser_enabled():
+            raise exceptions.disabled_feature("FileBrowser")
+
         files_uploaded = []
         files_skipped = []
         for file in files:
@@ -338,6 +349,9 @@ class FileSystemHelper:
                 self.logger.warning('primary group id not found, chown will not change group ownership')
             shutil.chown(file_path, user=self.username, group=primary_group_id)
             files_uploaded.append(file_path)
+
+        files_uploaded_to_string = '\n'.join([f'"{file}"' for file in files_uploaded])
+        self.logger.info(f'{self.username} has uploaded the following files:\n{files_uploaded_to_string}')
 
         return {
             'success': True,
@@ -383,6 +397,9 @@ class FileSystemHelper:
                 zipfile.write(download_file)
 
         shutil.chown(zip_file_path, user=self.username, group=primary_group_id)
+
+        download_list_to_string = '\n'.join([f'"{file}"' for file in download_list])
+        self.logger.info(f'{self.username} has downloaded the following files:\n{download_list_to_string}')
         return zip_file_path
 
     def create_file(self, request: CreateFileRequest) -> CreateFileResult:
@@ -427,6 +444,7 @@ class FileSystemHelper:
             self.logger.warning('primary group id not found, chown will not change group ownership')
         shutil.chown(create_path, self.username, primary_group_id)
 
+        self.logger.info(f'{self.username} has created the following file: "{create_path}"')
         return CreateFileResult()
 
     def delete_files(self, request: DeleteFilesRequest) -> DeleteFilesResult:

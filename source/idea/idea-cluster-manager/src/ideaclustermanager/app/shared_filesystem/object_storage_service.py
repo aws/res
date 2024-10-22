@@ -65,6 +65,10 @@ class ObjectStorageService:
                                 constants.MOUNT_DIRECTORY_REGEX,
                                 constants.MOUNT_DIRECTORY_ERROR_MESSAGE)
 
+        ApiUtils.validate_input(request.mount_directory,
+                                constants.MOUNT_DIRECTORY_HOME_REGEX,
+                                constants.MOUNT_DIRECTORY_HOME_ERROR_MESSAGE)
+
         if not request.read_only and Utils.is_empty(request.custom_bucket_prefix):
             raise exceptions.invalid_params('read and write access enabled, missing custom_bucket_prefix')
 
@@ -77,7 +81,7 @@ class ObjectStorageService:
                 raise exceptions.invalid_params(constants.IAM_ROLE_ARN_ERROR_MESSAGE)
             if not self._context.aws_util().does_iam_role_exist(role_arn=request.iam_role_arn, filter_tags=[s3_bucket_iam_role_filter_tag]):
                 raise exceptions.invalid_params(constants.S3_BUCKET_IAM_ROLE_ERROR_MESSAGE)
-        
+
         if Utils.is_not_empty(request.projects):
             for project_name in request.projects:
                 ApiUtils.validate_input(project_name,

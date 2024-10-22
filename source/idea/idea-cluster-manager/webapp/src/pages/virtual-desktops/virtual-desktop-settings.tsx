@@ -65,9 +65,9 @@ class VirtualDesktopSettings extends Component<VirtualDesktopSettingsProps, Virt
         return (
             <IdeaForm
                 ref={this.updateDCVSessionSettingsForm}
-                name="update-dcv-session-settings"
+                name="update-session-settings"
                 modal={true}
-                title="Update DCV Session Settings"
+                title="Update Session Settings"
                 onSubmit={() => {
                     if (!this.updateDCVSessionSettingsForm.current?.validate()) {
                         return;
@@ -79,18 +79,29 @@ class VirtualDesktopSettings extends Component<VirtualDesktopSettingsProps, Virt
                             dcv_session: {},
                         },
                     };
+                    const enforce_schedule = Utils.asBoolean(values.enforce_schedule, true);
 
                     if (values.idle_timeout !== String(dot.pick("dcv_session.idle_timeout", this.state.vdcSettings))) {
                         updateSettings.settings.dcv_session[UpdateModuleSettingsValuesDCVSession.IDLE_TIMEOUT] = values.idle_timeout;
                     }
-                    if (values.idle_timeout_warning !== String(dot.pick("dcv_session.idle_timeout_warning", this.state.vdcSettings))) {
-                        updateSettings.settings.dcv_session[UpdateModuleSettingsValuesDCVSession.IDLE_TIMEOUT_WARNING] = values.idle_timeout_warning;
-                    }
+
                     if (values.cpu_utilization_threshold !== String(dot.pick("dcv_session.cpu_utilization_threshold", this.state.vdcSettings))) {
                         updateSettings.settings.dcv_session[UpdateModuleSettingsValuesDCVSession.CPU_UTILIZATION_THRESHOLD] = values.cpu_utilization_threshold;
                     }
                     if (values.allowed_sessions_per_user !== String(dot.pick("dcv_session.allowed_sessions_per_user", this.state.vdcSettings))) {
                         updateSettings.settings.dcv_session[UpdateModuleSettingsValuesDCVSession.ALLOWED_SESSIONS_PER_USER] = values.allowed_sessions_per_user;
+                    }
+                    
+                    if (enforce_schedule != dot.pick("dcv_session.enforce_schedule", this.state.vdcSettings)) {
+                        updateSettings.settings.dcv_session[UpdateModuleSettingsValuesDCVSession.ENFORCE_SCHEDULE] = values.enforce_schedule;
+                    }
+
+                    if(values.transition_state !=  String(dot.pick("dcv_session.transition_state", this.state.vdcSettings))) {
+                        updateSettings.settings.dcv_session[UpdateModuleSettingsValuesDCVSession.TRANSITION_STATE] = values.transition_state;
+                    }
+
+                    if(values.transition_state === 'Terminate') {
+                        updateSettings.settings.dcv_session[UpdateModuleSettingsValuesDCVSession.ENFORCE_SCHEDULE] = false;
                     }
 
                     if (Object.keys(updateSettings.settings.dcv_session).length > 0) {
@@ -103,7 +114,7 @@ class VirtualDesktopSettings extends Component<VirtualDesktopSettingsProps, Virt
                                     items: [
                                         {
                                             type: "success",
-                                            content: "DCV Session settings updated successfully.",
+                                            content: "Session settings updated successfully.",
                                             dismissible: true,
                                         },
                                     ],
@@ -124,37 +135,63 @@ class VirtualDesktopSettings extends Component<VirtualDesktopSettingsProps, Virt
                 params={[
                     {
                         name: "idle_timeout",
-                        title: "Idle Timeout",
+                        title: "Idle Timeout (minutes)",
+                        help_text: "Sessions idle for this time with CPU utilization below the threshold will time out. A 5 minute buffer is automatically added to the specific time to account for boot and startup differences amongst operating systems. For example, if the timeout value is entered as 10 minutes, the VDI sessions will auto-stop after 15 minutes of idle.",
+                        data_type: "int",
                         validate: {
                             required: true,
-                            min: 0,
+                            min: 1,
                             max: 87600,
                         },
                         default: dot.pick("dcv_session.idle_timeout", this.state.vdcSettings),
                     },
                     {
-                        name: "idle_timeout_warning",
-                        title: "Idle Timeout Warning",
+                        name: "cpu_utilization_threshold",
+                        title: "CPU Utilization Threshold (%)",
+                        help_text: "Sessions under this threshold are considered idle. This threshold is used for both schedules and the configurable idle timeout.",
+                        data_type: "int",
                         validate: {
                             required: true,
                             min: 0,
-                            max: 87600,
-                        },
-                        default: dot.pick("dcv_session.idle_timeout_warning", this.state.vdcSettings),
-                    },
-                    {
-                        name: "cpu_utilization_threshold",
-                        title: "CPU Utilization Threshold",
-                        validate: {
-                            required: true,
-                            min: 1,
                             max: 100,
                         },
                         default: dot.pick("dcv_session.cpu_utilization_threshold", this.state.vdcSettings),
                     },
                     {
+                        name: "transition_state",
+                        title: "Transition State",
+                        help_text: "Sessions will transition to this state after idle timeout",
+                        data_type: "str",
+                        param_type: "select",
+                        multiple: false,
+                        choices:[
+                            {
+                                title: "Stop",
+                                value: "Stop"
+                            },
+                            {
+                                title: "Terminate",
+                                value: "Terminate",
+                            }
+                        ],
+                        default: dot.pick("dcv_session.transition_state", this.state.vdcSettings),
+                    },
+                    {
+                        name: "enforce_schedule",
+                        title: "Enforce Schedule",
+                        help_text: "Enable to allow schedule to resume a session that has been stopped for being idle",
+                        data_type: "bool",
+                        param_type: "confirm",
+                        default: Utils.asBoolean(dot.pick("dcv_session.enforce_schedule", this.state.vdcSettings)),
+                        when: {
+                            param: 'transition_state',
+                            eq: 'Stop'
+                        },
+                    },
+                    {
                         name: "allowed_sessions_per_user",
                         title: "Allowed Sessions Per User",
+                        help_text: "Maximum sessions allowed per user",
                         validate: {
                             required: true,
                             min: 0,
@@ -334,28 +371,8 @@ class VirtualDesktopSettings extends Component<VirtualDesktopSettingsProps, Virt
     }
 
     render() {
-        const getVirtualDesktopOpenAPISpecUrl = () => {
-            return `${AppContext.get().getHttpEndpoint()}${Utils.getApiContextPath(Constants.MODULE_VIRTUAL_DESKTOP_CONTROLLER)}/openapi.yml`;
-        };
-
-        const getVirtualDesktopSwaggerEditorUrl = () => {
-            return `https://editor.swagger.io/?url=${getVirtualDesktopOpenAPISpecUrl()}`;
-        };
-
         const getInternalALBUrl = () => {
             return ConfigUtils.getInternalAlbUrl(this.state.clusterSettings);
-        };
-
-        const isClusterBackupEnabled = () => {
-            return Utils.asBoolean(dot.pick("backups.enabled", this.state.clusterSettings));
-        };
-
-        const isVDIBackupEnabled = () => {
-            return Utils.asBoolean(dot.pick("vdi_host_backup.enabled", this.state.vdcSettings));
-        };
-
-        const isBackupEnabled = () => {
-            return isVDIBackupEnabled() && isClusterBackupEnabled();
         };
 
         const isGatewayCertificateSelfSigned = (): boolean => {
@@ -506,24 +523,6 @@ class VirtualDesktopSettings extends Component<VirtualDesktopSettingsProps, Virt
                                                     </KeyValue>
                                                 </ColumnLayout>
                                             </Container>
-                                            <Container
-                                                header={
-                                                    <Header
-                                                        variant={"h2"}
-                                                        info={
-                                                            <Link external={true} href={"https://spec.openapis.org/oas/v3.1.0"}>
-                                                                Info
-                                                            </Link>
-                                                        }
-                                                    >
-                                                        OpenAPI Specification
-                                                    </Header>
-                                                }
-                                            >
-                                                <ColumnLayout variant={"text-grid"} columns={1}>
-                                                    <KeyValue title="eVDI API Spec" value={getVirtualDesktopOpenAPISpecUrl()} type={"external-link"} clipboard />
-                                                </ColumnLayout>
-                                            </Container>
                                         </SpaceBetween>
                                     ),
                                 },
@@ -656,14 +655,15 @@ class VirtualDesktopSettings extends Component<VirtualDesktopSettingsProps, Virt
                                                             />
                                                         }
                                                     >
-                                                        DCV Session
+                                                        Session
                                                     </Header>
                                                 }
                                             >
                                                 <ColumnLayout variant={"text-grid"} columns={3}>
                                                     <KeyValue title="Idle Timeout" value={dot.pick("dcv_session.idle_timeout", this.state.vdcSettings)} suffix={"minutes"} />
-                                                    <KeyValue title="Idle Timeout Warning" value={dot.pick("dcv_session.idle_timeout_warning", this.state.vdcSettings)} suffix={"seconds"} />
                                                     <KeyValue title="CPU Utilization Threshold" value={dot.pick("dcv_session.cpu_utilization_threshold", this.state.vdcSettings)} suffix={"%"} />
+                                                    <KeyValue title="Enforce Schedule" value={dot.pick("dcv_session.enforce_schedule", this.state.vdcSettings)} />
+                                                    <KeyValue title="Transition State" value={dot.pick("dcv_session.transition_state", this.state.vdcSettings)} />
                                                     <KeyValue title="Allowed Sessions Per User" value={dot.pick("dcv_session.allowed_sessions_per_user", this.state.vdcSettings)} />
                                                 </ColumnLayout>
                                             </Container>
@@ -722,7 +722,7 @@ class VirtualDesktopSettings extends Component<VirtualDesktopSettingsProps, Virt
                                     id: "broker",
                                     content: (
                                         <SpaceBetween size={"m"}>
-                                            <Container header={<Header variant={"h2"}>NICE DCV Broker</Header>}>
+                                            <Container header={<Header variant={"h2"}>Amazon DCV Broker</Header>}>
                                                 <ColumnLayout variant={"text-grid"} columns={3}>
                                                     <KeyValue title="Base OS" value={Utils.getOsTitle(dot.pick("dcv_broker.autoscaling.base_os", this.state.vdcSettings))} />
                                                     <KeyValue title="Instance Type" value={dot.pick("dcv_broker.autoscaling.instance_type", this.state.vdcSettings)} />
@@ -755,7 +755,7 @@ class VirtualDesktopSettings extends Component<VirtualDesktopSettingsProps, Virt
                                     id: "connection-gateway",
                                     content: (
                                         <SpaceBetween size={"m"}>
-                                            <Container header={<Header variant={"h2"}>NICE DCV Connection Gateway</Header>}>
+                                            <Container header={<Header variant={"h2"}>Amazon DCV Connection Gateway</Header>}>
                                                 <ColumnLayout variant={"text-grid"} columns={3}>
                                                     <KeyValue title="Base OS" value={Utils.getOsTitle(dot.pick("dcv_connection_gateway.autoscaling.base_os", this.state.vdcSettings))} />
                                                     <KeyValue title="Instance Type" value={dot.pick("dcv_connection_gateway.autoscaling.instance_type", this.state.vdcSettings)} />
@@ -778,28 +778,6 @@ class VirtualDesktopSettings extends Component<VirtualDesktopSettingsProps, Virt
                                                     <KeyValue title="Private Key Secret ARN" value={dot.pick("dcv_connection_gateway.certificate.private_key_secret_arn", this.state.vdcSettings)} clipboard={true} />
                                                 </ColumnLayout>
                                             </Container>
-                                        </SpaceBetween>
-                                    ),
-                                },
-                                {
-                                    label: "Backup",
-                                    id: "backups",
-                                    content: (
-                                        <SpaceBetween size={"l"}>
-                                            <Container header={<Header variant={"h2"}>AWS Backup</Header>}>
-                                                <ColumnLayout variant={"text-grid"} columns={2}>
-                                                    <KeyValue title="Cluster" value={<EnabledDisabledStatusIndicator enabled={isClusterBackupEnabled()} />} type={"react-node"} />
-                                                    <KeyValue title="VDI Host" value={<EnabledDisabledStatusIndicator enabled={isVDIBackupEnabled()} />} type={"react-node"} />
-                                                </ColumnLayout>
-                                            </Container>
-                                            {isBackupEnabled() && (
-                                                <Container header={<Header variant={"h2"}>Backup Plan</Header>}>
-                                                    <ColumnLayout variant={"text-grid"} columns={2}>
-                                                        <KeyValue title="ARN" value={dot.pick("vdi_host_backup.backup_plan.arn", this.state.vdcSettings)} clipboard={true} />
-                                                        <KeyValue title="Selection" value={dot.pick("vdi_host_backup.backup_plan.selection.tags", this.state.vdcSettings)} />
-                                                    </ColumnLayout>
-                                                </Container>
-                                            )}
                                         </SpaceBetween>
                                     ),
                                 },

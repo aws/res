@@ -131,6 +131,12 @@ class ArnBuilder:
         ]
 
     @property
+    def s3_public_host_modules(self) -> List[str]:
+        return [
+            self.get_arn('s3', f'{constants.ARTIFACTS_BUCKET_PREFIX_NAME}-{self.config.get_string("cluster.aws.region")}/host_modules/*', aws_account_id='', aws_region='')
+        ]
+
+    @property
     def alb_listener_rule_arn(self) -> str:
         return self.get_arn(
             service='elasticloadbalancing',
@@ -386,6 +392,10 @@ class ArnBuilder:
     def api_gateway_execute_api_arn(self, api_id: str, stage: str, http_verb: str, resource: str):
         return self.get_arn(service="execute-api", aws_region=self.config.get_string("cluster.aws.region"), resource=f'{api_id}/{stage}/{http_verb}/{resource}')
 
-    def custom_credential_broker_api_gateway_execute_api_arn(self, api_id: str):
-        return self.api_gateway_execute_api_arn(api_id, constants.API_GATEWAY_CUSTOM_CREDENTIAL_BROKER_STAGE, "GET", constants.API_GATEWAY_CUSTOM_CREDENTIAL_BROKER_RESOURCE)
+    def custom_credential_broker_api_gateway_execute_api_arn(self):
+        return self.api_gateway_execute_api_arn("*", constants.API_GATEWAY_CUSTOM_CREDENTIAL_BROKER_STAGE, "GET", constants.API_GATEWAY_CUSTOM_CREDENTIAL_BROKER_RESOURCE)
+
+    def vdi_helper_api_gateway_execute_api_arn(self):
+        return self.api_gateway_execute_api_arn("*", constants.API_GATEWAY_VDI_HELPER_STAGE, "POST", constants.API_GATEWAY_VDI_HELPER_RESOURCE)
+
 

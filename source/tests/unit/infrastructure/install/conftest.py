@@ -9,7 +9,8 @@ from aws_cdk.assertions import Template
 
 from idea.infrastructure.install.installer import Installer
 from idea.infrastructure.install.parameters.parameters import RESParameters
-from idea.infrastructure.install.stack import InstallStack
+from idea.infrastructure.install.stacks.install_stack import InstallStack
+from idea.infrastructure.install.stacks.res_base_stack import ResBaseStack
 from idea.infrastructure.install.tasks import Tasks
 
 INSTALLER_REGISTRY_NAME = "fake-installer-registry-name"
@@ -97,3 +98,13 @@ def stack(
 @pytest.fixture
 def template(stack: InstallStack) -> Template:
     return assertions.Template.from_stack(stack)
+
+
+@pytest.fixture
+def res_base_stack(stack: InstallStack) -> ResBaseStack:
+    return stack.res_base_stack
+
+
+@pytest.fixture
+def res_base_template(res_base_stack: ResBaseStack) -> Template:
+    return assertions.Template.from_stack(res_base_stack.nested_stack)

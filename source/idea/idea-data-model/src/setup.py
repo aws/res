@@ -5,7 +5,7 @@ setup(
     name=ideadatamodel_meta.__name__,
     version=ideadatamodel_meta.__version__,
     description='API Data Models',
-    url='https://awslabs.github.io/scale-out-computing-on-aws/',
+    url='https://aws.amazon.com/hpc/res/',
     author='Amazon',
     license='Apache License, Version 2.0',
     packages=find_packages(exclude='tests'),

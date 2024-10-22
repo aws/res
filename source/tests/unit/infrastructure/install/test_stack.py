@@ -8,7 +8,7 @@ from aws_cdk.assertions import Match, Template
 
 import idea
 from idea.infrastructure.install.parameters.common import CommonKey
-from idea.infrastructure.install.stack import InstallStack
+from idea.infrastructure.install.stacks.install_stack import InstallStack
 from ideadatamodel import constants  # type: ignore
 from tests.unit.infrastructure.install import util
 
@@ -126,6 +126,30 @@ def test_modules_table_creation(
                     },
                 ],
                 **sse_specification,
+            },
+        },
+    )
+
+
+def test_shared_res_library_lambda_layer_creation(
+    stack: InstallStack,
+    template: Template,
+) -> None:
+    util.assert_resource_name_has_correct_type_and_props(
+        stack,
+        template,
+        resources=["RES-library"],
+        cfn_type="AWS::Lambda::LayerVersion",
+        props={
+            "Properties": {
+                "CompatibleRuntimes": [
+                    "python3.9",
+                ],
+                "Content": {
+                    "S3Bucket": Match.any_value(),
+                    "S3Key": Match.any_value(),
+                },
+                "Description": "Shared RES library for Lambda functions",
             },
         },
     )

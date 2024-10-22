@@ -213,6 +213,18 @@ class AddS3Bucket extends Component<AddS3BucketProps, AddS3BucketState> {
                 showHeader={false}
                 showActions={false}
                 useContainers={true}
+                onStateChange={async (request) => {
+                    const param_name = request.param.name
+                    if (param_name === "mount_point") {
+                        const mount_point = request.value
+                        if (!this.isMountPointValid(mount_point)) {
+                            request.ref.setState({
+                                errorCode: "400",
+                                errorMessage: "/home cannot be used as the mount directory for S3 Bucket."
+                            })
+                        }
+                    }
+                }}
                 onFetchOptions={async (request) => {
                   if (request.param === "associate_projects") {
                     if (!this.isAdmin()) {
@@ -272,8 +284,18 @@ class AddS3Bucket extends Component<AddS3BucketProps, AddS3BucketState> {
       return this.addS3BucketForm.current!.getValues().custom_prefix === Constants.SHARED_STORAGE_NO_CUSTOM_PREFIX;
     }
 
+    // Check if the mount directory is /home
+    isMountPointValid(mount_point: string): boolean {
+        return mount_point !== "/home";
+    }
+
     submitForm() {
       const values = this.addS3BucketForm.current!.getValues();
+
+      if (!this.isMountPointValid(values.mount_point)) {
+          this.getAddS3BucketForm().setError("400", "/home cannot be used as the mount directory.");
+          return;  // Prevent form submission if the mount point is invalid
+      }
       const addS3BucketRequest: OnboardS3BucketRequest = {
           object_storage_title: values.title,
           bucket_arn: values.bucket_arn,

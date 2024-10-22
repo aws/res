@@ -54,6 +54,9 @@ chmod +x "${IDEA_SERVICES_PATH}/idea-reboot-do-not-edit-or-delete-idea-notif.sh"
 crontab -l | grep -v "idea-reboot-do-not-edit-or-delete-idea-notif.sh" | crontab -
 (crontab -l; echo "@reboot /bin/bash ${IDEA_SERVICES_PATH}/idea-reboot-do-not-edit-or-delete-idea-notif.sh") | crontab -
 
+mkdir -p "/opt/res"
+(crontab -l; echo "*/1 * * * * /bin/bash ${SCRIPT_DIR}/vdi_idle_check.sh -r ${AWS_REGION} -n ${IDEA_CLUSTER_NAME}") | crontab -
+
 # Instance ready
 mkdir -p ${SEMAPHORE_DIR}
 echo $(date +%s) > ${INSTANCE_READY_LOCK}

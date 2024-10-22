@@ -9,11 +9,13 @@
 #  OR CONDITIONS OF ANY KIND, express or implied. See the License for the specific language governing permissions
 #  and limitations under the License.
 
-import invoke.exceptions
-import tasks.idea as idea
-from invoke import task, Context
 import os
 from typing import List
+
+import invoke.exceptions
+from invoke import Context, task
+
+import tasks.idea as idea
 
 
 def _run_unit_tests(c: Context,
@@ -42,15 +44,17 @@ def _run_unit_tests(c: Context,
         idea.props.project_root_dir,
         idea.props.data_model_src,
         idea.props.sdk_src,
-        idea.props.test_utils_src
+        idea.props.test_utils_src,
+        idea.props.lambda_functions_src,
+        idea.props.library_src
     ]
     if component_src not in python_path:
         python_path.append(component_src)
     if component_tests_src not in python_path:
         python_path.append(component_tests_src)
 
-    with c.cd(component_tests_src):
-        cmd = f'pytest -v --disable-warnings {" ".join(test_params)}'
+    with c.cd(idea.props.project_root_dir):
+        cmd = f'pytest -v --disable-warnings {" ".join([component_tests_src] + test_params)}'
         if capture_output:
             cmd = f'{cmd} --capture=tee-sys'
         if keywords is not None:
@@ -171,6 +175,64 @@ def lambda_functions(c, keywords=None, params=None, capture_output=False, cov_re
     )
     raise SystemExit(exit_code)
 
+@task(iterable=['params'])
+def pipeline(c, keywords=None, params=None, capture_output=False, cov_report=None):
+     # type: (Context, str, List[str], bool, str) -> None
+    """
+    run pipeline unit tests
+    """
+    exit_code = _run_unit_tests(
+        c=c,
+        component_name='pipeline',
+        component_src=idea.props.pipeline_src,
+        component_tests_src=idea.props.pipeline_tests_src,
+        package_name='pipeline',
+        params=params,
+        capture_output=capture_output,
+        keywords=keywords,
+        cov_report=cov_report
+    )
+    raise SystemExit(exit_code)
+
+
+@task(iterable=['params'])
+def infrastructure(c, keywords=None, params=None, capture_output=False, cov_report=None):
+    # type: (Context, str, List[str], bool, str) -> None
+    """
+    run infrastructure unit tests
+    """
+    exit_code = _run_unit_tests(
+        c=c,
+        component_name='infrastructure',
+        component_src=idea.props.infrastructure_src,
+        component_tests_src=idea.props.infrastructure_tests_src,
+        package_name='infrastructure',
+        params=params,
+        capture_output=capture_output,
+        keywords=keywords,
+        cov_report=cov_report
+    )
+    raise SystemExit(exit_code)
+
+@task(iterable=['params'])
+def library(c, keywords=None, params=None, capture_output=False, cov_report=None):
+    # type: (Context, str, List[str], bool, str) -> None
+    """
+    run library unit tests
+    """
+    exit_code = _run_unit_tests(
+        c=c,
+        component_name='library',
+        component_src=idea.props.library_src,
+        component_tests_src=idea.props.library_tests_src,
+        package_name='res',
+        params=params,
+        capture_output=capture_output,
+        keywords=keywords,
+        cov_report=cov_report
+    )
+    raise SystemExit(exit_code)
+
 @task(name='all', iterable=['params'], default=True)
 def run_all(c, keywords=None, params=None, capture_output=False, cov_report=None):
     # type: (Context, str, List[str], bool, str) -> None
@@ -182,7 +244,10 @@ def run_all(c, keywords=None, params=None, capture_output=False, cov_report=None
         administrator,
         cluster_manager,
         virtual_desktop_controller,
-        lambda_functions
+        lambda_functions,
+        pipeline,
+        infrastructure,
+        library
     ]
 
     exit_code = 0

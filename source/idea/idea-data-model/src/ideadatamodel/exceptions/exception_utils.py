@@ -17,6 +17,7 @@ __all__ = (
     'not_supported',
     'file_not_found',
     'unauthorized_access',
+    'disabled_feature',
     'general_exception',
     'app_not_found',
     'invalid_session',
@@ -120,6 +121,15 @@ def unauthorized_access(info: Optional[str] = None) -> SocaException:
         message += f': {info}'
     return SocaException(
         error_code=errorcodes.UNAUTHORIZED_ACCESS,
+        message=message
+    )
+
+def disabled_feature(info: Optional[str] = None) -> SocaException:
+    message = 'Disabled feature'
+    if info is not None:
+        message += f': {info}'
+    return SocaException(
+        error_code=errorcodes.DISABLED_FEATURE,
         message=message
     )
 

@@ -9,17 +9,18 @@
 #  OR CONDITIONS OF ANY KIND, express or implied. See the License for the specific language governing permissions
 #  and limitations under the License.
 
-import tasks.idea as idea
-import tasks.requirements
-from tasks.tools.build_tool import BuildTool
-from tasks.apispec import (
-    cluster_manager as apispec_cluster_manager,
-    virtual_desktop_controller as apispec_virtual_desktop_controller
-)
-
-from invoke import task, Context
 import os
 import shutil
+
+from invoke import Context, task
+
+import tasks.idea as idea
+import tasks.requirements
+from tasks.apispec import cluster_manager as apispec_cluster_manager
+from tasks.apispec import (
+    virtual_desktop_controller as apispec_virtual_desktop_controller,
+)
+from tasks.tools.build_tool import BuildTool
 
 
 @task
@@ -81,6 +82,14 @@ def virtual_desktop_controller(c):
     tool.build()
     apispec_virtual_desktop_controller(c, output_file=os.path.join(tool.output_dir, 'resources', 'api', 'openapi.yml'))
     dcv_connection_gateway(c)
+    
+@task
+def library(c):
+    # type: (Context) -> None
+    """
+    build library
+    """
+    BuildTool(c, 'library').build()
 
 
 @task(name='all', default=True)
@@ -109,5 +118,7 @@ def build_all(c):
     cluster_manager(c)
 
     virtual_desktop_controller(c)
+    
+    library(c)
 
     idea.console.print_header_block('end: build all', style='main')

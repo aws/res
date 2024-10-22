@@ -1,8 +1,9 @@
 #  Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 #  SPDX-License-Identifier: Apache-2.0
+import os
 import pathlib
 import typing
-from typing import Union
+from typing import Optional, Union
 
 import aws_cdk
 from aws_cdk import (
@@ -18,6 +19,7 @@ from aws_cdk import aws_codebuild as codebuild
 from aws_cdk import aws_codecommit as codecommit
 from aws_cdk import aws_ecr as ecr
 from aws_cdk import aws_iam as iam
+from aws_cdk import aws_lambda as lambda_
 from aws_cdk import pipelines
 from constructs import Construct
 
@@ -30,14 +32,15 @@ from idea.constants import (
     INSTALL_STACK_NAME,
 )
 from idea.infrastructure.install.parameters.parameters import RESParameters
-from idea.infrastructure.install.stack import InstallStack
+from idea.infrastructure.install.stacks.install_stack import InstallStack
 from idea.pipeline.integ_tests.integ_test_step_builder import IntegTestStepBuilder
 from idea.pipeline.utils import get_commands_for_scripts
 
-UNITTESTS = [
+UNIT_TESTS = [
     "tests.administrator",
     "tests.cluster-manager",
     "tests.virtual-desktop-controller",
+    "tests.library",
     "tests.sdk",
     "tests.pipeline",
     "tests.infrastructure",
@@ -181,6 +184,28 @@ class PipelineStack(Stack):
             resources=[ecr_repository_arn],
         )
 
+        ssm_access = iam.PolicyStatement(
+            effect=iam.Effect.ALLOW,
+            actions=[
+                "ssm:GetParameter",
+            ],
+            resources=["*"],
+        )
+
+        vpc_access = iam.PolicyStatement(
+            effect=iam.Effect.ALLOW,
+            actions=[
+                "ec2:DescribeVpcs",
+                "ec2:DescribeSubnets",
+                "ec2:DescribeSecurityGroups",
+                "ec2:DescribeRouteTables",
+                "ec2:DescribeNetworkAcls",
+                "ec2:DescribeInternetGateways",
+                "ec2:DescribeVpnGateways",
+            ],
+            resources=["*"],
+        )
+
         # Create a CodeBuild project
         self._pipeline = pipelines.CodePipeline(
             self,
@@ -200,6 +225,8 @@ class PipelineStack(Stack):
                 role_policy=[
                     codebuild_ecr_access,
                     codebuild_ecr_push,
+                    ssm_access,
+                    vpc_access,
                 ],
             ),
         )
@@ -207,10 +234,10 @@ class PipelineStack(Stack):
         audit_wave = self._pipeline.add_wave("SecurityAudit")
         audit_wave.add_post(*self.get_steps_from_tox(SCANS))
         unittest_wave = self._pipeline.add_wave("UnitTests")
-        unittest_wave.add_post(*self.get_steps_from_tox(UNITTESTS))
+        unittest_wave.add_post(*self.get_steps_for_unit_tests(UNIT_TESTS))
 
         coverage_wave = self._pipeline.add_wave("Coverage")
-        coverage_wave.add_post(*self.get_steps_from_tox(COVERAGEREPORTS))
+        coverage_wave.add_post(*self.get_steps_for_unit_tests(COVERAGEREPORTS))
 
         if self._deploy:
             deploy_stage = DeployStage(
@@ -526,6 +553,26 @@ class PipelineStack(Stack):
                     [
                         "source/idea/pipeline/scripts/common/install_commands.sh",
                         "source/idea/pipeline/scripts/tox/install_commands.sh",
+                    ]
+                ),
+                commands=[
+                    f"tox -e {_env}",
+                ],
+            )
+            steps.append(_step)
+        return steps
+
+    @staticmethod
+    def get_steps_for_unit_tests(test_env: list[str]) -> list[pipelines.CodeBuildStep]:
+        steps: list[pipelines.CodeBuildStep] = []
+        for _env in test_env:
+            _step = pipelines.CodeBuildStep(
+                _env,
+                install_commands=get_commands_for_scripts(
+                    [
+                        "source/idea/pipeline/scripts/common/install_commands.sh",
+                        "source/idea/pipeline/scripts/unit_tests/install_commands.sh",
+                        "source/idea/pipeline/scripts/unit_tests/commands.sh",
                     ]
                 ),
                 commands=[

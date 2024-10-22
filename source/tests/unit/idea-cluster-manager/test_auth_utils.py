@@ -19,9 +19,7 @@ import pytest
 import validators
 from ideaclustermanager import AppContext
 from ideaclustermanager.app.accounts.account_tasks import (
-    CreateUserHomeDirectoryTask,
     SyncGroupInDirectoryServiceTask,
-    SyncUserInDirectoryServiceTask,
 )
 from ideaclustermanager.app.accounts.auth_utils import AuthUtils as auth_utils
 from ideaclustermanager.app.accounts.user_home_directory import UserHomeDirectory

@@ -7,9 +7,6 @@ set -ex
 COMMIT_ID=$(echo $CODEBUILD_RESOLVED_SOURCE_VERSION | cut -b -8)
 RELEASE_VERSION=$(echo "$(<RES_VERSION.txt )" | xargs)
 
-# Run tests as defined by `env_list` in tox.ini
-tox -- --junitxml=pytest-report.xml
-
 # Set the CDK context based on the environment variables
 python -c "import os; import json; print(json.dumps(dict(os.environ)))" | tee cdk.context.json
 
@@ -32,7 +29,7 @@ package_name="res-infra-dependencies.tar.gz"
 IFS=',' read -r -a regions <<< "$ONBOARDED_REGIONS"
 for region in "${regions[@]}"
 do
-    AWS_REGION=$region 
+    AWS_REGION=$region
     npx cdk-assets publish -p cdk.out/$INSTALL_STACK_NAME.assets.json -v
     # Overrides if there is an existing install template
     aws s3api put-object --bucket "$ARTIFACTS_BUCKET_PREFIX_NAME-$region" --key "releases/$RELEASE_VERSION/$INSTALL_STACK_NAME.template.json" --body ./cdk.out/$INSTALL_STACK_NAME.template.json

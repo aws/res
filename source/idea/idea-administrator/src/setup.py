@@ -16,7 +16,7 @@ setup(
     name=ideaadministrator_meta.__name__,
     version=ideaadministrator_meta.__version__,
     description='Administrator App',
-    url='https://awslabs.github.io/scale-out-computing-on-aws/',
+    url='https://aws.amazon.com/hpc/res/',
     author='Amazon',
     license='Apache License, Version 2.0',
     packages=find_packages(),

@@ -45,6 +45,7 @@ from ideadatamodel import (
     GetSoftwareStackInfoResponse,
     ListSoftwareStackRequest,
     ListPermissionsRequest,
+    ListPermissionProfilesRequest,
     CreateSoftwareStackFromSessionRequest,
     CreateSoftwareStackFromSessionResponse,
     CreatePermissionProfileResponse,
@@ -378,7 +379,7 @@ class VirtualDesktopAdminAPI(VirtualDesktopAPI):
             else:
                 failed_sessions.append(session)
 
-        success_list, failed_list = self.session_utils.terminate_sessions(valid_sessions)
+        success_list, failed_list = self._terminate_sessions(valid_sessions)
         failed_list.extend(failed_sessions)
         context.success(DeleteSessionResponse(
             success=success_list,
@@ -617,9 +618,42 @@ class VirtualDesktopAdminAPI(VirtualDesktopAPI):
             )
             return
         permission_profile = self.permission_profile_db.update(permission_profile)
+        admin_profile_id = self.context.config().get_string('virtual-desktop-controller.dcv_session.default_profiles.admin', required=True)     
+        # Check whether global admin profile has been updated
+        if (admin_profile_id == permission_profile.profile_id):
+            # All sharing profiles must be updated to propagate globally disabled desktop permissions
+            admin_profile_permissions_dict = self.permission_profile_db.convert_permission_profile_object_to_db_dict(permission_profile)
+            permission_profiles_cursor = None
+            while True:
+                all_permission_profiles = self.permission_profile_db.list(ListPermissionProfilesRequest(cursor=permission_profiles_cursor))
+                for sharing_permission_profile in all_permission_profiles.listing:
+                    if (admin_profile_id == sharing_permission_profile.profile_id):
+                        continue
+                    for permission in sharing_permission_profile.permissions:
+                        if permission.enabled and not admin_profile_permissions_dict[permission.key]:
+                            permission.enabled = False
+                    self.permission_profile_db.update(sharing_permission_profile)
+                if all_permission_profiles.paginator.cursor is None:
+                    break
+                else:
+                    permission_profiles_cursor = all_permission_profiles.paginator.cursor
+            # All current sesssions must be updated to propagate globally disabled desktop permissions
+            sessions_cursor = None
+            while True:
+                all_sessions = self.session_db.list_all_from_db(ListSessionsRequest(cursor=sessions_cursor))
+                for session in all_sessions.listing:
+                    self.session_permissions_utils.events_utils.publish_enforce_session_permissions_event(
+                        session.idea_session_id,
+                        session.owner,
+                    )
+                if all_sessions.paginator.cursor is None:
+                    break
+                else:
+                    sessions_cursor = all_sessions.paginator.cursor
         context.success(UpdatePermissionProfileResponse(
             profile=permission_profile
         ))
+            
 
     def create_permission_profile(self, context: ApiInvocationContext):
         permission_profile = context.get_request_payload_as(CreatePermissionProfileRequest).profile

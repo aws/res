@@ -108,6 +108,5 @@ existing_home_fs_id: ~ # value is required when use_existing_home_fs == true
 
 use_existing_directory_service: false # use_existing_vpc should be true when use_existing_directory_service == true
 directory_id: ~ # value is required when use_existing_directory_service == true
-directory_service_root_username_secret_arn: ~ # value is required when use_existing_directory_service == true
-directory_service_root_password_secret_arn: ~ # value is required when use_existing_directory_service == true
+directory_service_service_account_credentials_secret_arn: ~ # value is required when use_existing_directory_service == true
 

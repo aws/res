@@ -33,7 +33,7 @@ class Utils:
 
     @staticmethod
     def get_instance_id_from_user_arn(user_arn: str):
-        pattern = r'arn:aws:sts::\d+:assumed-role\/[^\/]+\/(i-[a-f0-9]+)'
+        pattern = r'arn:aws(?:-cn|-us-gov)?:sts::\d+:assumed-role\/[^\/]+\/(i-[a-f0-9]+)'
         match = re.search(pattern, user_arn)
         if match:
             return match.group(1)

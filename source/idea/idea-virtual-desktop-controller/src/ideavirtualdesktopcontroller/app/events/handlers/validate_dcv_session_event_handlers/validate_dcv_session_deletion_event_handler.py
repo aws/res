@@ -18,7 +18,8 @@ from ideasdk.utils import Utils
 
 from ideavirtualdesktopcontroller.app.clients.events_client.events_client import VirtualDesktopEvent
 from ideavirtualdesktopcontroller.app.events.handlers.base_event_handler import BaseVirtualDesktopControllerEventHandler
-
+from res.resources import vdi_management, session_permissions
+from res.resources import sessions as user_sessions
 
 class ValidateDCVSessionDeletionEventHandler(BaseVirtualDesktopControllerEventHandler):
 
@@ -26,23 +27,24 @@ class ValidateDCVSessionDeletionEventHandler(BaseVirtualDesktopControllerEventHa
         super().__init__(context, 'validate-dcv-session-deletion-handler')
 
     def _continue_stop_session(self, message_id: str, session: VirtualDesktopSession):
+        session.server.is_idle = session.is_idle if session.is_idle else False
         if session.hibernation_enabled:
             self.log_debug(message_id=message_id, message=f'Continuing to hibernate session... {session.idea_session_id}:{session.name}')
-            self.server_utils.stop_or_hibernate_servers(servers_to_hibernate=[session.server])
+            vdi_management.hibernate_servers(servers=[session.server.dict()])
         else:
             self.log_debug(message_id=message_id, message=f'Continuing to stop session... {session.idea_session_id}:{session.name}')
-            self.server_utils.stop_or_hibernate_servers(servers_to_stop=[session.server])
+            vdi_management.stop_servers(servers=[session.server.dict()])
 
     def _continue_delete_session(self, message_id: str, session: VirtualDesktopSession):
-        self.log_debug(message_id=message_id, message=f'Continuing to delete session... {session.idea_session_id}:{session.name}')
-        self.schedule_utils.delete_schedules_for_session(session)
-        self.session_permission_utils.delete_permissions_for_session(session)
+        self.log_info(message_id=message_id, message=f'Continuing to delete session... {session.idea_session_id}:{session.name}')
+        vdi_management.delete_schedule_for_session(session=session.dict())
+        session_permissions.delete_session_permission_by_id(session_id=session.idea_session_id)
         # delete session entry
-        self.session_db.delete(session)
-        self.server_utils.terminate_dcv_hosts([session.server])
+        user_sessions.delete_session(session=session.dict())
+        vdi_management.terminate_servers([session.server.dict()])
 
     def handle_event(self, message_id: str, sender_id: str, event: VirtualDesktopEvent):
-        if not self.is_sender_controller_role(sender_id):
+        if not self.is_sender_controller_role(sender_id) and not self.is_sender_vdi_helper_lambda(sender_id):
             raise self.message_source_validation_failed(f'Corrupted sender_id: {sender_id}. Ignoring message')
 
         idea_session_id = Utils.get_value_as_string('idea_session_id', event.detail, None)
@@ -66,7 +68,7 @@ class ValidateDCVSessionDeletionEventHandler(BaseVirtualDesktopControllerEventHa
         current_session_info = Utils.get_value_as_dict(session.dcv_session_id, Utils.get_value_as_dict("sessions", response, {}), {})
         state = Utils.get_value_as_string("state", current_session_info, None)
 
-        if Utils.is_empty(state) or state == 'DELETED':
+        if Utils.is_empty(state) or state == 'DELETED' or state == 'UNKNOWN':
             # session is deleted. We can continue.
             self.log_info(message_id=message_id, message=f'RES Session ID: {session.idea_session_id}:{session.name} is deleted with state: {state}. Validation complete.')
             if session.state is VirtualDesktopSessionState.DELETING:

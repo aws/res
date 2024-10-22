@@ -21,6 +21,7 @@ from ideavirtualdesktopcontroller.app.session_permissions.virtual_desktop_sessio
 from ideavirtualdesktopcontroller.app.session_permissions.virtual_desktop_session_permission_utils import VirtualDesktopSessionPermissionUtils
 from ideavirtualdesktopcontroller.app.sessions.virtual_desktop_session_db import VirtualDesktopSessionDB
 from ideavirtualdesktopcontroller.app.virtual_desktop_controller_utils import VirtualDesktopControllerUtils
+from res.resources import vdi_management
 
 
 class VirtualDesktopSessionUtils:
@@ -100,6 +101,7 @@ class VirtualDesktopSessionUtils:
             success_response_list.append(session)
 
         for session in invalid_dcv_sessions:
+            session.server.is_idle = session.is_idle if session.is_idle else False
             if session.hibernation_enabled:
                 servers_to_hibernate.append(session.server)
             else:
@@ -112,7 +114,10 @@ class VirtualDesktopSessionUtils:
             session_map[session.dcv_session_id].failure_reason = session.failure_reason
             fail_response_list.append(session_map[session.dcv_session_id])
 
-        self._server_utils.stop_or_hibernate_servers(servers_to_stop, servers_to_hibernate)
+        stop_server_list = [server.dict() for server in servers_to_stop]
+        hibernate_server_list = [server.dict() for server in servers_to_hibernate]
+        vdi_management.stop_servers(servers=stop_server_list)
+        vdi_management.hibernate_servers(servers=hibernate_server_list)
         return success_response_list, fail_response_list
 
     def resume_sessions(self, sessions: List[VirtualDesktopSession]) -> (List[VirtualDesktopSession], List[VirtualDesktopSession]):
@@ -129,9 +134,9 @@ class VirtualDesktopSessionUtils:
                 fail_response_list.append(session)
                 continue
 
-            if session.state not in {VirtualDesktopSessionState.STOPPED}:
+            if session.state not in {VirtualDesktopSessionState.STOPPED, VirtualDesktopSessionState.STOPPED_IDLE}:
                 # trying to resume a session that is not stopped. Error.
-                session.failure_reason = f'RES Session ID: {session.idea_session_id}:{session.name} for user: {session.owner} is in {session.state} state. Can\'t resume a session not in STOPPED state'
+                session.failure_reason = f'RES Session ID: {session.idea_session_id}:{session.name} for user: {session.owner} is in {session.state} state. Can\'t resume a session not in STOPPED or STOPPED_IDLE state'
                 self._logger.error(session.failure_reason)
                 fail_response_list.append(session)
                 continue
@@ -217,7 +222,7 @@ class VirtualDesktopSessionUtils:
                 continue
 
             self._logger.info(f'Found db entry for {session.idea_session_id}:{session.name} for user: {session.owner}. DCV Session ID: {session.dcv_session_id}')
-            if Utils.is_empty(session.dcv_session_id) or session.state in {VirtualDesktopSessionState.STOPPED}:
+            if Utils.is_empty(session.dcv_session_id) or session.state in {VirtualDesktopSessionState.STOPPED, VirtualDesktopSessionState.STOPPED_IDLE}:
                 self._logger.info(f'dcv session id: {session.dcv_session_id} for user: {session.owner}. Current state: {session.state}. Nothing to delete')
                 stopped_sessions.append(session)
                 continue

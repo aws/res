@@ -1,6 +1,6 @@
 {
   "name": "web-portal", 
-  "version": "2024.08", 
+  "version": "2024.10", 
   "private": true,
   "dependencies": {
     "@cloudscape-design/components": "^3.0.82",
@@ -34,7 +34,6 @@
     "react-markdown": "^8.0.3",
     "react-range": "^1.8.14",
     "react-router-dom": "^6.4.2",
-    "react-toastify": "^9.0.8",
     "rehype-raw": "^6.1.1",
     "remark-gfm": "^3.0.1",
     "uuid": "^9.0.0",

@@ -78,9 +78,8 @@ directoryservice:
   private_ip: 10.1.66.34
   provider: openldap
   public: false
-  root_credentials_provided: false
-  root_password_secret_arn: arn:aws:secretsmanager:us-east-1:123456789012:secret:{{ context.cluster_name }}-openldap-admin-password-ZrFYdN
-  root_username_secret_arn: arn:aws:secretsmanager:us-east-1:123456789012:secret:{{ context.cluster_name }}-openldap-admin-username-aXW622
+  service_account_credentials_provided: false
+  service_account_credentials_secret_arn: arn:aws:secretsmanager:us-east-1:123456789012:secret:{{ context.cluster_name }}-openldap-admin-credentials-ZrFYdN
   security_group_id: sg-044bf2a8bbe4b023a
   tls_certificate_secret_arn: arn:aws:secretsmanager:us-east-1:123456789012:secret:{{ context.cluster_name }}-directoryservice-certificate-FN5MSq
   tls_private_key_secret_arn: arn:aws:secretsmanager:us-east-1:123456789012:secret:{{ context.cluster_name }}-directoryservice-private-key-FRWbNY
@@ -157,6 +156,7 @@ shared-storage:
     scope:
       - cluster
     title: Shared Storage - Home
+  enable_file_browser: false
 
 global-settings:
   module_sets:

@@ -252,6 +252,10 @@ class MySharedVirtualDesktopSessions extends Component<MySharedVirtualDesktopPro
                                 value: "STOPPED",
                             },
                             {
+                                title: "Stopped Idle",
+                                value: "STOPPED_IDLE",
+                            },
+                            {
                                 title: "Stopping",
                                 value: "STOPPING",
                             },

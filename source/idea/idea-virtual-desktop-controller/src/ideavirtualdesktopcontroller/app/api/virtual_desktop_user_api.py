@@ -404,12 +404,13 @@ class VirtualDesktopUserAPI(VirtualDesktopAPI):
             else:
                 failed_sessions.append(session)
 
-        success_list, failed_list = self.session_utils.terminate_sessions(valid_sessions)
+        success_list, failed_list = self._terminate_sessions(valid_sessions)
         failed_list.extend(failed_sessions)
         context.success(DeleteSessionResponse(
             success=success_list,
             failed=failed_list
         ))
+
 
     def reboot_sessions(self, context: ApiInvocationContext):
         sessions = context.get_request_payload_as(RebootSessionRequest).sessions

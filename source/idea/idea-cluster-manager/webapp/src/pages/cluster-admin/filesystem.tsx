@@ -60,14 +60,12 @@ export const FILESYSTEM_TABLE_COLUMN_DEFINITIONS: TableProps.ColumnDefinition<Sh
 
 class FileSystems extends Component<FileSystemProps, FileSystemState> {
     listing: RefObject<IdeaListView>;
-    createFileSystemForm: RefObject<IdeaForm>;
     addFileSystemToProjectForm: RefObject<IdeaForm>;
     removeFileSystemFromProjectForm: RefObject<IdeaForm>;
     onboardFileSystemForm: RefObject<IdeaForm>
     constructor(props: FileSystemProps) {
         super(props);
         this.listing = React.createRef();
-        this.createFileSystemForm = React.createRef();
         this.addFileSystemToProjectForm = React.createRef();
         this.removeFileSystemFromProjectForm = React.createRef();
         this.onboardFileSystemForm = React.createRef();
@@ -336,10 +334,6 @@ class FileSystems extends Component<FileSystemProps, FileSystemState> {
 
     getListing(): IdeaListView {
         return this.listing.current!;
-    }
-
-    getCreateFileSystemForm(): IdeaForm {
-        return this.createFileSystemForm.current!;
     }
 
     isSelected(): boolean {
@@ -725,361 +719,6 @@ class FileSystems extends Component<FileSystemProps, FileSystemState> {
         />
         );
     }
-    buildCreateFileSystemForm() {
-        const getFileSystemProviderChoices = () => {
-            return [
-                {
-                    title: "EFS",
-                    value: Constants.SHARED_STORAGE_PROVIDER_EFS,
-                },
-                {
-                    title: "FSX NetApp ONTAP",
-                    value: Constants.SHARED_STORAGE_PROVIDER_FSX_NETAPP_ONTAP,
-                },
-            ];
-        };
-        return (
-            <IdeaForm
-                ref={this.createFileSystemForm}
-                name="create-filesystem"
-                modal={true}
-                modalSize="medium"
-                title="Create new File System"
-                onSubmit={() => {
-                    if (!this.getCreateFileSystemForm().validate()) {
-                        return;
-                    }
-                    const values = this.getCreateFileSystemForm().getValues();
-                    if (!values.mount_directory && !values.mount_drive) {
-                        this.getCreateFileSystemForm().setError('InvalidParams','one of mount directory or mount drive is required')
-                        return;
-                    }
-                    if (values.filesystem_provider === Constants.SHARED_STORAGE_PROVIDER_EFS) {
-                        this.filesystem()
-                            .createEFSFileSystem(values as CreateEFSFileSystemRequest)
-                            .then((_) => {
-                                this.props.onFlashbarChange({
-                                    items: [
-                                        {
-                                            type: "success",
-                                            content: "EFS File System created successfully.",
-                                            dismissible: true,
-                                        },
-                                    ],
-                                });
-                            })
-                            .catch((error) => {
-                                this.props.onFlashbarChange({
-                                    items: [
-                                        {
-                                            type: "error",
-                                            content: `EFS File System ${values.filesystem_name} create failed. Error: ${error.message}.`,
-                                            dismissible: true,
-                                        },
-                                    ],
-                                });
-                            });
-                    }
-                    if (values.filesystem_provider === Constants.SHARED_STORAGE_PROVIDER_FSX_NETAPP_ONTAP) {
-                        this.filesystem()
-                            .createONTAPFileSystem(values as CreateONTAPFileSystemRequest)
-                            .then((_) => {
-                                this.props.onFlashbarChange({
-                                    items: [
-                                        {
-                                            type: "success",
-                                            content: `FSx ONTAP File System ${values.filesystem_name} created successfully.`,
-                                            dismissible: true,
-                                        },
-                                    ],
-                                });
-                            })
-                            .catch((error) => {
-                                this.props.onFlashbarChange({
-                                    items: [
-                                        {
-                                            type: "error",
-                                            content: `FSx for NetApp ONTAP File System ${values.filesystem_name} create failed. Error: ${error.message}`,
-                                            dismissible: true,
-                                        },
-                                    ],
-                                });
-                            });
-                    }
-                    this.props.onFlashbarChange({
-                        items: [
-                            {
-                                type: "in-progress",
-                                content: "File System create form submitted.",
-                                dismissible: true,
-                            },
-                        ],
-                    });
-                    this.getListing().fetchRecords();
-                    this.getCreateFileSystemForm().hideModal();
-                }}
-                onCancel={() => {
-                    this.getCreateFileSystemForm().hideModal();
-                }}
-                onFetchOptions={(request) => {
-                    if (request.param === "projects") {
-                        return this.projects()
-                            .listProjects({})
-                            .then((result) => {
-                                const listing = result.listing!;
-                                if (listing.length === 0) {
-                                    return {
-                                        listing: [],
-                                    };
-                                } else {
-                                    const choices: SocaUserInputChoice[] = [];
-                                    listing.forEach((value) => {
-                                        choices.push({
-                                            title: `${value.name} (${value.project_id})`,
-                                            value: value.name,
-                                        });
-                                    });
-                                    return {
-                                        listing: choices,
-                                    };
-                                }
-                            });
-                    } else {
-                        return Promise.resolve({
-                            listing: [],
-                        });
-                    }
-                }}
-                params={[
-                    {
-                        name: "filesystem_title",
-                        title: "Title",
-                        description: "Enter a user friendly file system title",
-                        help_text: "Eg. EFS 01",
-                        data_type: "str",
-                        param_type: "text",
-                        validate: {
-                            required: true,
-                            regex: "^[a-zA-Z0-9\\s_-]{3,48}$",
-                            message: "Only use valid alphanumeric, hyphens (-), underscores (_), and spaces ( ) characters for the file system title. Must be between 3 and 48 characters long.",
-                        },
-                    },
-                    {
-                        name: "filesystem_name",
-                        title: "Name",
-                        description: "Enter a file system name",
-                        help_text: "File System name can only use lowercase alphabets, numbers and underscore (_). Must be between 3 and 18 characters long.",
-                        data_type: "str",
-                        param_type: "text",
-                        validate: {
-                            required: true,
-                            regex: "^[a-z0-9_]{3,18}$",
-                            message: "Only use lowercase alphabets, numbers and underscore (_). Must be between 3 and 18 characters long.",
-                        },
-                    },
-                    {
-                        name: "filesystem_provider",
-                        title: "File System Type",
-                        description: "Select applicable file system type",
-                        param_type: "select",
-                        data_type: "str",
-                        validate: {
-                            required: true,
-                        },
-                        choices: getFileSystemProviderChoices(),
-                        default: "efs",
-                    },
-                    {
-                        name: "projects",
-                        title: "Projects",
-                        description: "Select applicable project",
-                        param_type: "select",
-                        multiple: true,
-                        data_type: "str",
-                        dynamic_choices: true,
-                    },
-                    {
-                        name: "subnet_id_1",
-                        title: "Subnet ID 1",
-                        description: "Enter subnet id to create mount target",
-                        data_type: "str",
-                        param_type: "text",
-                        validate: {
-                            required: true,
-                            regex: "^(subnet-)(([0-9a-z]{8})|([0-9a-z]{17}))$",
-                            message: "Enter a valid subnet ID"
-                        },
-                        when: {
-                            param: "filesystem_provider",
-                            eq: Constants.SHARED_STORAGE_PROVIDER_EFS,
-                        },
-                    },
-                    {
-                        name: "subnet_id_2",
-                        title: "Subnet ID 2",
-                        description: "Enter second subnet to create mount target",
-                        help_text: " Subnet ID 1 and Subnet ID 2 should be in two different AZs ",
-                        data_type: "str",
-                        param_type: "text",
-                        validate: {
-                            required: true,
-                            regex: "^(subnet-)(([0-9a-z]{8})|([0-9a-z]{17}))$",
-                            message: "Enter a valid subnet ID"
-                        },
-                        when: {
-                            param: "filesystem_provider",
-                            eq: Constants.SHARED_STORAGE_PROVIDER_EFS,
-                        },
-                    },
-                    {
-                        name: "deployment_type",
-                        title: "Deployment Type",
-                        description: "Enter deployment type for your file system",
-                        help_text: "Single-AZ or Multi-AZ",
-                        data_type: "str",
-                        param_type: "select",
-                        choices: [
-                            {
-                                title: "Single-AZ",
-                                value: Constants.FSX_NETAPP_ONTAP_DEPLOYMENT_TYPE_SINGLE_AZ,
-                            },
-                        ],
-                        default: "SINGLE_AZ_1",
-                        validate: {
-                            required: true,
-                        },
-                        when: {
-                            param: "filesystem_provider",
-                            eq: Constants.SHARED_STORAGE_PROVIDER_FSX_NETAPP_ONTAP,
-                        },
-                    },
-                    {
-                        name: "primary_subnet",
-                        title: "Primary Subnet",
-                        description: "Enter the primary subnet for your file system",
-                        data_type: "str",
-                        param_type: "text",
-                        validate: {
-                            required: true,
-                            regex: "^(subnet-)(([0-9a-z]{8})|([0-9a-z]{17}))$",
-                            message: "Enter a valid subnet ID"
-                        },
-                        when: {
-                            param: "filesystem_provider",
-                            eq: Constants.SHARED_STORAGE_PROVIDER_FSX_NETAPP_ONTAP,
-                        },
-                    },
-                    {
-                        name: "standby_subnet",
-                        title: "Standby Subnet",
-                        description: "Enter standby subnet for your file system (only multi_az file system)",
-                        data_type: "str",
-                        param_type: "text",
-                        validate: {
-                            required: true,
-                            regex: "^(subnet-)(([0-9a-z]{8})|([0-9a-z]{17}))$",
-                            message: "Enter a valid subnet ID"
-                        },
-                        when: {
-                            param: "deployment_type",
-                            eq: Constants.FSX_NETAPP_ONTAP_DEPLOYMENT_TYPE_MULTI_AZ,
-                        },
-                    },
-                    {
-                        name: "storage_capacity",
-                        title: "Storage Capacity",
-                        description: "Enter storage capacity for your file system",
-                        help_text: "SSD storage capacity in GiB",
-                        data_type: "int",
-                        param_type: "text",
-                        validate: {
-                            required: true,
-                            min: 1024,
-                            max: 196608,
-                        },
-                        when: {
-                            param: "filesystem_provider",
-                            eq: Constants.SHARED_STORAGE_PROVIDER_FSX_NETAPP_ONTAP,
-                        },
-                    },
-                    {
-                        name: "volume_security_style",
-                        title: "Volume Security Style",
-                        description: "Enter volume security style",
-                        help_text: "Depending on clients that can modify permissions on volume choose, NFS, SMB, Mixed",
-                        data_type: "str",
-                        param_type: "select",
-                        choices: [
-                            {
-                                title: "UNIX",
-                                value: Constants.FSX_VOLUME_ONTAP_SECURITY_STYLE_UNIX,
-                            },
-                            {
-                                title: "NTFS",
-                                value: Constants.FSX_VOLUME_ONTAP_SECURITY_STYLE_NTFS,
-                            },
-                            {
-                                title: "MIXED",
-                                value: Constants.FSX_VOLUME_ONTAP_SECURITY_STYLE_MIXED,
-                            },
-                        ],
-                        validate: {
-                            required: true,
-                        },
-                        when: {
-                            param: "filesystem_provider",
-                            eq: Constants.SHARED_STORAGE_PROVIDER_FSX_NETAPP_ONTAP,
-                        },
-                        default: Constants.FSX_VOLUME_ONTAP_SECURITY_STYLE_UNIX,
-                    },
-                    {
-                        name: "mount_directory",
-                        title: "Mount Directory",
-                        description: "Enter directory to mount the file system",
-                        help_text: "Mount target cannot contain white spaces or special characters. Only use lowercase alphabets, numbers, and hyphens (-). Must be between 3 and 18 characters long  starting with '/'. Eg. /efs-01",
-                        data_type: "str",
-                        param_type: "text",
-                        validate: {
-                            regex: "(^.{0}$)|(^/([a-z0-9-]+){3,18}$)",
-                            message: "Only use lowercase alphabets, numbers, and hyphens (-). Must be between 3 and 18 characters long starting with '/'.",
-                        },
-                    },
-                    {
-                        name: "mount_drive",
-                        title: "Mount Drive",
-                        description: "Enter drive to mount FSx ONTAP",
-                        help_text: "Mount drive cannot be C and cannot contain white spaces or special characters. Only use an uppercase alphabet. Do not include colon (:)",
-                        data_type: "str",
-                        param_type: "text",
-                        validate: {
-                            regex: "(^.{0}$)|(^[ABD-Z]$)",
-                            message: "Mount drive should be an uppercase alphabet except 'C'",
-                        },
-                        when: {
-                            param: "filesystem_provider", eq: Constants.SHARED_STORAGE_PROVIDER_FSX_NETAPP_ONTAP
-                        },
-                    },
-                    {
-                        name: "file_share_name",
-                        title: "File Share Name",
-                        description: "Enter CIFS fileshare name",
-                        help_text: "Use a valid fileshare name. Only use an uppercase, lowercase alphabet, numbers, hyphens (-) or underscore (_) Must be between 3 and 18 characters long.",
-                        data_type: "str",
-                        param_type: "text",
-                        validate: {
-                            required: true,
-                            regex: "^[a-zA-Z0-9-_]{3,18}$",
-                            message: "Only use an uppercase, lowercase alphabet, numbers, hyphens (-) or underscore (_) Must be between 3 and 18 characters long."
-                        },
-                        when: {
-                            param: "mount_drive",
-                            not_empty: true
-                        },
-                    },
-                ]}
-            />
-        );
-    }
 
     buildListing() {
         return (
@@ -1091,13 +730,6 @@ class FileSystems extends Component<FileSystemProps, FileSystemState> {
                 description="Create and manage file systems for Virtual Desktops"
                 selectionType="single"
                 primaryAction={{
-                    id: "create-filesystem",
-                    text: "Create File System",
-                    onClick: () => {
-                        this.getCreateFileSystemForm().showModal();
-                    },
-                }}
-                secondaryPrimaryAction={{
                     id: "onboard-filesystem",
                     text: "Onboard File System",
                     onClick: () => {
@@ -1110,19 +742,6 @@ class FileSystems extends Component<FileSystemProps, FileSystemState> {
                         id: "add-filesystem-to-project",
                         text: "Add File System to Project",
                         onClick: () => {
-                            const filesystem_name = this.getSelectedFileSystem()?.name!;
-                            if (filesystem_name === 'home') {
-                                this.props.onFlashbarChange({
-                                    items: [
-                                        {
-                                            type: "error",
-                                            content: "home file system is added by default on linux VDIs",
-                                            dismissible: true,
-                                        },
-                                    ],
-                                });
-                                return;
-                            }
                             this.showAddFileSystemToProjectForm();
                         },
                     },
@@ -1263,7 +882,6 @@ class FileSystems extends Component<FileSystemProps, FileSystemState> {
                 ]}
                 content={
                     <div>
-                        {this.buildCreateFileSystemForm()}
                         {this.state.showAddFileSystemToProjectForm && this.buildAddFileSystemToProjectForm()}
                         {this.state.showRemoveFileSystemFromProjectForm && this.buildRemoveFileSystemFromProjectForm()}
                         {this.state.showOnboardFileSystemForm && this.buildOnboardFileSystemForm()}

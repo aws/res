@@ -9,6 +9,7 @@
 #  OR CONDITIONS OF ANY KIND, express or implied. See the License for the specific language governing permissions
 #  and limitations under the License.
 
+import json
 from ideasdk.utils import Utils
 from ideasdk.context import SocaCliContext, SocaContextOptions
 from ideadatamodel import constants
@@ -31,7 +32,7 @@ class DirectoryServiceHelper:
         In order to use an existing AWS Managed Active Directory (or even in case of an On-Prem or Self-Managed AD),
         cluster manager needs to have access to the service account credentials.
 
-        this method helps admins to create the service account credentials as secrets in AWS Secrets manager, with
+        this method helps admins to create the service account credentials as a secret in AWS Secrets manager, with
         appropriate Tags such that cluster manager is authorized to access these credentials via IAM policies
 
         Note:
@@ -58,34 +59,22 @@ class DirectoryServiceHelper:
             constants.IDEA_TAG_MODULE_NAME: constants.MODULE_DIRECTORYSERVICE,
             constants.IDEA_TAG_MODULE_ID: constants.MODULE_DIRECTORYSERVICE
         })
-
-        # create username secret
-        create_username_secret_request = {
-            'Name': f'{self.cluster_name}-{constants.MODULE_DIRECTORYSERVICE}-{purpose}-username',
-            'Description': f'DirectoryService {purpose} username, Cluster: {self.cluster_name}',
-            'SecretString': username,
+        
+        # create credentials secret
+        secret_dict = {username:password}
+        secret_string = json.dumps(secret_dict)
+        create_credentials_secret_request = {
+            'Name': f'{self.cluster_name}-{constants.MODULE_DIRECTORYSERVICE}-{purpose}-credentials',
+            'Description': f'DirectoryService {purpose} credentials, Cluster: {self.cluster_name}',
+            'SecretString': secret_string,
             'Tags': tags
         }
         if Utils.is_not_empty(kms_key_id):
-            create_username_secret_request['KmsKeyId'] = kms_key_id
+            create_credentials_secret_request['KmsKeyId'] = kms_key_id
         # This can produce exception from AWS API for duplicate secret
-        create_username_secret_result = context.aws().secretsmanager().create_secret(**create_username_secret_request)
-        username_secret_arn = Utils.get_value_as_string('ARN', create_username_secret_result)
-
-        # create password secret
-        create_password_secret_request = {
-            'Name': f'{self.cluster_name}-{constants.MODULE_DIRECTORYSERVICE}-{purpose}-password',
-            'Description': f'DirectoryService {purpose} password, Cluster: {self.cluster_name}',
-            'SecretString': password,
-            'Tags': tags
-        }
-        if Utils.is_not_empty(kms_key_id):
-            create_password_secret_request['KmsKeyId'] = kms_key_id
-        # This can produce exception from AWS API for duplicate secret
-        create_password_secret_result = context.aws().secretsmanager().create_secret(**create_password_secret_request)
-        password_secret_arn = Utils.get_value_as_string('ARN', create_password_secret_result)
+        create_credentials_secret_result = context.aws().secretsmanager().create_secret(**create_credentials_secret_request)
+        credentials_secret_arn = Utils.get_value_as_string('ARN', create_credentials_secret_result)
 
         return {
-            'username_secret_arn': username_secret_arn,
-            'password_secret_arn': password_secret_arn
+            'credentials_secret_arn': credentials_secret_arn
         }

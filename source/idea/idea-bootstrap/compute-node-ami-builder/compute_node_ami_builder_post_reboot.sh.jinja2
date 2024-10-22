@@ -32,7 +32,7 @@ else
 
   # clean-up: shared storage mounts
   {% for name, storage in context.config.get_config('shared-storage').items() %}
-  {%- if context.eval_shared_storage_scope(shared_storage=storage) %}
+  {%- if storage is mapping and context.eval_shared_storage_scope(shared_storage=storage) %}
   {%- if storage.provider == 'efs' %}
   remove_efs_from_fstab "{{ storage.mount_dir }}"
   {%- endif %}

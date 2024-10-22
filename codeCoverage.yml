@@ -12,3 +12,4 @@ source/idea/idea-sdk/src/ideasdk/user_input:                          0.8
 source/idea/idea-sdk/src/ideasdk:                                     0.8
 source/idea/infrastructure/install:                                   0.8
 source/idea/idea-administrator/resources/lambda_functions:            0.8
+source/idea/library/src/res:                                          0.8

@@ -34,8 +34,8 @@ def ldap_commands():
 
 
 @ldap_commands.command('search-users', context_settings=constants.CLICK_SETTINGS)
-@click.option('-q', '--query', help="search query (substring of username)")
-def search_users(query: str):
+@click.option('-f', '--users-filter', help="ldap filter for users")
+def search_users(users_filter: str):
     """
     search for users in directory service using ldap
     """
@@ -43,15 +43,13 @@ def search_users(query: str):
     context = build_cli_context(cluster_config=True, enable_aws_client_provider=True, enable_aws_util=True)
     ldap_client = build_ldap_client(context)
 
-    users, _ = ldap_client.search_users(username_filter=SocaFilter(
-        like=query
-    ))
+    users, _ = ldap_client.search_users(users_filter=users_filter)
     context.print_json(users)
 
 
 @ldap_commands.command('search-groups', context_settings=constants.CLICK_SETTINGS)
-@click.option('-q', '--query', help="search query (substring of group name)")
-def search_groups(query: str):
+@click.option('-f', '--groups-filter', help="ldap filter for groups")
+def search_groups(groups_filter: str):
     """
     search for groups in directory service using ldap
     """
@@ -59,9 +57,7 @@ def search_groups(query: str):
     context = build_cli_context(cluster_config=True, enable_aws_client_provider=True, enable_aws_util=True)
     ldap_client = build_ldap_client(context)
 
-    groups, _ = ldap_client.search_groups(group_name_filter=SocaFilter(
-        like=query
-    ))
+    groups, _ = ldap_client.search_groups(groups_filter=groups_filter)
     context.print_json(groups)
 
 
@@ -94,19 +90,15 @@ def delete_group(group):
 
 
 @ldap_commands.command('show-credentials', context_settings=constants.CLICK_SETTINGS)
-@click.option('--username', is_flag=True, help="Print username")
-@click.option('--password', is_flag=True, help="Print password")
-def show_credentials(username: bool, password: bool):
+def show_credentials():
     """
-    print service account credentials
+    print service account credentials secret arn
     """
 
     context = build_cli_context(cluster_config=True, enable_aws_client_provider=True, enable_aws_util=True)
 
-    if username:
-        print(context.config().get_secret('directoryservice.root_username_secret_arn'), end='')
-    if password:
-        print(context.config().get_secret('directoryservice.root_password_secret_arn'), end='')
+    credentials_secrert_arn = context.config().get_string('directoryservice.service_account_credentials_secret_arn', required=True)
+    print(credentials_secrert_arn)
 
 
 def _send_task(context: SocaCliContext, task_name: str, payload: Dict, message_group_id: str, message_dedupe_id: str = None):
@@ -144,24 +136,6 @@ def sync_from_ad():
     context.print('sync task submitted')
 
 
-@ldap_commands.command('sync-user', context_settings=constants.CLICK_SETTINGS)
-@click.option('-u', '--username', required=True, multiple=True, help="username of the user to be synced. accepts multiple inputs eg. -u user1 -u user2")
-def sync_user(username):
-    """
-    sync user account from db to directory service
-    """
-    context = build_cli_context(cluster_config=True, enable_aws_client_provider=True, enable_aws_util=True)
-    for user in username:
-        _send_task(
-            context=context,
-            task_name='accounts.sync-user',
-            payload={
-                'username': user
-            },
-            message_group_id=user
-        )
-
-
 @ldap_commands.command('sync-group', context_settings=constants.CLICK_SETTINGS)
 @click.option('-g', '--group', required=True, multiple=True, help="name of the group to be synced. accepts multiple inputs eg. -g group1 -g group2")
 def sync_group(group):
@@ -178,25 +152,3 @@ def sync_group(group):
             },
             message_group_id=group_name
         )
-
-
-@ldap_commands.command('create-service-account', context_settings=constants.CLICK_SETTINGS)
-@click.option('-u', '--username', required=True, help='username of the service account')
-@click.option('-p', '--password', required=True, help='password of the service account')
-def create_service_account(username: str, password: str):
-    """
-    create a service account with administrator access
-
-    only supported for active directory
-    """
-    context = build_cli_context(cluster_config=True, enable_aws_client_provider=True, enable_aws_util=True)
-    ds_provider = context.config().get_string('directoryservice.provider', required=True)
-    if ds_provider == constants.DIRECTORYSERVICE_OPENLDAP:
-        context.error('service account creation is not supported for OpenLDAP')
-        raise SystemExit(1)
-
-    ldap_client = build_ldap_client(context)
-    with context.spinner(f'creating service account for username: {username} ...'):
-        account = ldap_client.create_service_account(username=username, password=password)
-    context.success('service account created successfully: ')
-    context.print_json(account)

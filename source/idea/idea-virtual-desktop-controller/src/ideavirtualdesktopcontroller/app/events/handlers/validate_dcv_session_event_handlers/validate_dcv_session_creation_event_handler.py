@@ -68,7 +68,7 @@ class ValidateDCVSessionCreationEventHandler(BaseVirtualDesktopControllerEventHa
             session.state = VirtualDesktopSessionState.ERROR
             session = self.session_db.update(session)
             self.log_error(message_id=message_id, message=f'RES Session ID: creation failed {session.idea_session_id}:{session.name} Validation ERROR. count: {counter_db_entry.counter}')
-        elif counter_db_entry.counter > self.VALIDATION_REQUEST_THRESHOLD:
+        elif state == 'UNKNOWN' or counter_db_entry.counter > self.VALIDATION_REQUEST_THRESHOLD:
             # error
             session.state = VirtualDesktopSessionState.ERROR
             session = self.session_db.update(session)

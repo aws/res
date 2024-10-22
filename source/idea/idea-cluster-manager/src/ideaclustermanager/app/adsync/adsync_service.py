@@ -4,8 +4,9 @@
 from ideaclustermanager.app.tasks.task_manager import TaskManager
 from ideasdk.context import SocaContext
 
-from ideaclustermanager.app.accounts.ldapclient.ldap_utils import LdapUtils
 from ideasdk.utils import Utils
+
+from typing import Optional
 
 from ideadatamodel import (
     ListGroupsRequest,
@@ -29,9 +30,9 @@ class ADSyncService:
     def sync_from_ad(self):
         self.task_manager.send(task_name="adsync.sync-from-ad", payload={})
 
-    def fetch_all_ldap_groups(self) -> list[dict]:
+    def fetch_ldap_groups(self, groups_filter: Optional[str] = None) -> list[dict]:
         self.logger.info("Fetching LDAP groups")
-        ldap_groups, _ = self.context.accounts.ldap_client.search_groups()
+        ldap_groups, _ = self.context.accounts.ldap_client.search_groups(groups_filter)
         return ldap_groups
 
     def fetch_all_res_identified_groups(self) -> list[Group]:
@@ -47,7 +48,7 @@ class ADSyncService:
 
         return res_identified_groups
 
-    def sync_all_groups(self, ldap_groups):
+    def sync_groups(self, ldap_groups: list[dict]):
         ldap_groups_by_unique_identifier = {group["name"]: group for group in ldap_groups}
         ldap_group_unique_identifiers = set([group['name'] for group in ldap_groups])
 
@@ -105,18 +106,20 @@ class ADSyncService:
         except Exception as e:
             self.logger.error(f"Error while deleting group {group.name} from RES. Error: {e}")
 
-    def fetch_all_ldap_users_in_group(self, ldap_group_name) -> list[dict]:
+    def fetch_ldap_users_in_group(self, ldap_group_name: str, users_filter: Optional[str]) -> list[dict]:
         ldap_base = self.context.accounts.ldap_client.ldap_base
-        filter_str = (
-            f"(&(objectClass=user)(memberOf=cn={ldap_group_name},{self.context.accounts.ldap_client.ldap_user_base}))"
+        filterstr = (
+            f"(memberOf=cn={ldap_group_name},{self.context.accounts.ldap_client.ldap_user_base})"
         )
+        if users_filter:
+            filterstr = f"(&{filterstr}{users_filter})"
         ldap_users, _ = self.context.accounts.ldap_client.search_users(
-            username_filter=SocaFilter(), ldap_base=ldap_base, filter_str=filter_str
+            ldap_base=ldap_base, users_filter=filterstr
         )
         return ldap_users
 
-    def fetch_ldap_users_in_ou(self) -> list[dict]:
-        ldap_users, _ = self.context.accounts.ldap_client.search_users(username_filter=SocaFilter())
+    def fetch_ldap_users_in_ou(self, users_filter: Optional[str] = None) -> list[dict]:
+        ldap_users, _ = self.context.accounts.ldap_client.search_users(users_filter=users_filter)
         return ldap_users
 
     def consolidate_ldap_users_by_unique_identifier(
@@ -131,11 +134,11 @@ class ADSyncService:
             if ldap_group_name:
                 user['additional_groups'] = list(set(user.get('additional_groups', []) + [ldap_group_name]))
 
-    def get_ldap_users_by_unique_identifier(self, ldap_groups):
+    def get_ldap_users_by_unique_identifier(self, ldap_groups: list[dict], users_filter: Optional[str] = None):
         self.logger.info("Fetching LDAP users")
 
         ldap_users_by_unique_identifier = dict()
-        ldap_users_in_ou = self.fetch_ldap_users_in_ou()
+        ldap_users_in_ou = self.fetch_ldap_users_in_ou(users_filter)
         self.consolidate_ldap_users_by_unique_identifier(
             ldap_users=ldap_users_in_ou,
             ldap_users_by_unique_identifier=ldap_users_by_unique_identifier,
@@ -143,7 +146,7 @@ class ADSyncService:
         )
 
         for ldap_group in ldap_groups:
-            ldap_users_in_group = self.fetch_all_ldap_users_in_group(ldap_group_name=ldap_group['name'])
+            ldap_users_in_group = self.fetch_ldap_users_in_group(ldap_group_name=ldap_group['name'], users_filter=users_filter)
             self.consolidate_ldap_users_by_unique_identifier(
                 ldap_users=ldap_users_in_group,
                 ldap_users_by_unique_identifier=ldap_users_by_unique_identifier,
@@ -166,9 +169,9 @@ class ADSyncService:
 
         return res_identified_users
 
-    def sync_all_users(self, ldap_groups, group_addition_failures):
+    def sync_users(self, ldap_groups: list[dict], group_addition_failures, users_filter: Optional[str] = None):
         admin_group = self.context.accounts.ldap_client.ldap_sudoers_group_name
-        ldap_users_by_unique_identifier = self.get_ldap_users_by_unique_identifier(ldap_groups)
+        ldap_users_by_unique_identifier = self.get_ldap_users_by_unique_identifier(ldap_groups, users_filter)
         ldap_user_unique_identifiers = set(ldap_users_by_unique_identifier.keys())
 
         res_identified_users = self.fetch_all_res_identified_users()

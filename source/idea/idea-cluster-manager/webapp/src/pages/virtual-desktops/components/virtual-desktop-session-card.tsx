@@ -149,7 +149,7 @@ class VirtualDesktopSessionCard extends Component<VirtualDesktopSessionCardProps
 
     canDownloadDcvSessionFile = () => this.getSession().state === "READY";
 
-    canUpdateSession = () => this.getSession().state === "STOPPED";
+    canUpdateSession = () => this.getSession().state === "STOPPED" || this.getSession().state === "STOPPED_IDLE";
 
     canUpdateSessionPermission = () => {
         if (this.getSession().base_os === "windows" && !this.props.isActiveDirectory) {
@@ -167,7 +167,7 @@ class VirtualDesktopSessionCard extends Component<VirtualDesktopSessionCardProps
         return !!status;
     };
 
-    canStart = () => this.getSession().state === "STOPPED";
+    canStart = () => this.getSession().state === "STOPPED" || this.getSession().state === "STOPPED_IDLE";
 
     hasSchedule = (): boolean => {
         const schedule = this.props.session.schedule;

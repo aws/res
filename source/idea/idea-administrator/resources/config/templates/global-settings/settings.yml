@@ -48,6 +48,11 @@ package_config:
       aarch64: https://s3.amazonaws.com/mountpoint-s3-release/latest/arm64/mount-s3.rpm
 
 
+  host_modules:
+    nss: []
+    pam:
+      - ssh_keygen
+
   linux_packages:
     application:
       # Extra package to install on Scheduler host, including OpenPBS dependencies

@@ -2,6 +2,7 @@
 -r idea-virtual-desktop-controller.in
 -r idea-cluster-manager.in
 -r doc.in
+-r library.in
 -r lint.in
 -r build.in
 -r tests.in

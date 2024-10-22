@@ -11,7 +11,7 @@
  * and limitations under the License.
  */
 
-import { SideNavigationProps } from "@cloudscape-design/components";
+import { Popover, SideNavigationProps } from "@cloudscape-design/components";
 import { AppContext } from "../common";
 
 export const IdeaSideNavHeader = (context: AppContext): SideNavigationProps.Header => {
@@ -44,6 +44,9 @@ export const IdeaSideNavItems = (context: AppContext): SideNavigationProps.Item[
             text: "Shared Desktops",
             href: "#/home/shared-desktops",
         });
+    }
+
+    if (context.getClusterSettingsService().getIsFileBrowserEnabled()) {
         userNav.items.push({
             type: "link",
             text: "File Browser",
@@ -88,11 +91,6 @@ export const IdeaSideNavItems = (context: AppContext): SideNavigationProps.Item[
                 },
                 {
                     type: "link",
-                    text: "Desktop Shared Settings",
-                    href: "#/virtual-desktop/permission-profiles",
-                },
-                {
-                    type: "link",
                     text: "Debugging",
                     href: "#/virtual-desktop/debug",
                 },
@@ -109,7 +107,7 @@ export const IdeaSideNavItems = (context: AppContext): SideNavigationProps.Item[
         adminNavItems.push({
             type: "section",
             text: "Environment Management",
-            defaultExpanded: false,
+            defaultExpanded: true,
             items: [
                 {
                     type: "link",
@@ -138,8 +136,16 @@ export const IdeaSideNavItems = (context: AppContext): SideNavigationProps.Item[
                 },
                 {
                     type: "link",
-                    text: "Permission Profiles",
-                    href: "#/cluster/permission-profiles",
+                    text: "Permission policy",
+                    href: "#/cluster/permissions",
+                    // To be removed with 2024.12 release
+                    info: <Popover
+                        triggerType="text"
+                        header="Introducing Permission policy"
+                        content="We've created the Permission policy to align the environment with your organization's security and privacy standards."
+                    >
+                        New
+                    </Popover>
                 },
                 {
                     type: "link",

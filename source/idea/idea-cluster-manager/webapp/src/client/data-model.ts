@@ -55,7 +55,7 @@ export type SocaSpotAllocationStrategy = "capacity-optimized" | "lowest-price" |
 export type SocaJobState = "transition" | "queued" | "held" | "waiting" | "running" | "exit" | "subjob_expired" | "subjob_begun" | "moved" | "finished" | "suspended";
 export type SocaCapacityType = "on-demand" | "spot" | "mixed";
 export type VirtualDesktopSessionType = "CONSOLE" | "VIRTUAL";
-export type VirtualDesktopSessionState = "PROVISIONING" | "CREATING" | "INITIALIZING" | "READY" | "RESUMING" | "STOPPING" | "STOPPED" | "ERROR" | "DELETING" | "DELETED";
+export type VirtualDesktopSessionState = "PROVISIONING" | "CREATING" | "INITIALIZING" | "READY" | "RESUMING" | "STOPPING" | "STOPPED" | "STOPPED_IDLE" | "ERROR" | "DELETING" | "DELETED";
 export type DayOfWeek = "monday" | "tuesday" | "wednesday" | "thursday" | "friday" | "saturday" | "sunday";
 export type VirtualDesktopScheduleType = "WORKING_HOURS" | "STOP_ALL_DAY" | "START_ALL_DAY" | "CUSTOM_SCHEDULE" | "NO_SCHEDULE";
 export type VirtualDesktopSessionPermissionActorType = "USER" | "GROUP";
@@ -457,6 +457,14 @@ export interface S3Bucket {
     }
 }
 
+export interface GlobalPermission {
+    feature_title: string;
+    permission: {
+        onChangePermission(value: boolean): void;
+        description: string;
+    }
+}
+
 export interface AwsProjectBudget {
     budget_name?: string;
     budget_limit?: SocaAmount;
@@ -677,6 +685,15 @@ export interface RemoveUserFromGroupResult {
 }
 export interface CreateProjectRequest {
     project?: Project;
+}
+export interface ListBudgetsRequest {
+    AccountId: string;
+}
+export interface Budget {
+    BudgetName: string;
+}
+export interface ListBudgetsResult {
+    Budgets: Budget[];
 }
 export interface PutRoleAssignmentRequest {
     request_id: string;
@@ -1517,8 +1534,9 @@ export interface GetModuleSettingsRequest {
 // UpdateModuleSettingsRequest types to only allow specific combinations of settings with modules
 export enum UpdateModuleSettingsValuesDCVSession {
     IDLE_TIMEOUT = "idle_timeout",
-    IDLE_TIMEOUT_WARNING = "idle_timeout_warning",
     CPU_UTILIZATION_THRESHOLD = "cpu_utilization_threshold",
+    ENFORCE_SCHEDULE = 'enforce_schedule',
+    TRANSITION_STATE = 'transition_state',
     ALLOWED_SESSIONS_PER_USER = "allowed_sessions_per_user",
     MAX_ROOT_VOLUME_MEMORY = "max_root_volume_memory",
     ALLOWED_INSTANCE_TYPES = "instance_types.allow",
@@ -1548,9 +1566,12 @@ export type UpdateModuleSettingsRequestWebPortal = {
     module_id: "cluster-manager";
     settings: UpdateModuleSettingsWebPortal;
 };
+export type UpdateModuleSettingsFileBrowser = {
+    enable_file_browser: boolean
+};
 export type UpdateModuleSettingsRequest = {
     module_id: string;
-    settings?: UpdateModuleSettingsVDC | UpdateModuleSettingsWebPortal;
+    settings?: UpdateModuleSettingsVDC | UpdateModuleSettingsWebPortal | UpdateModuleSettingsFileBrowser;
 };
 export interface CreateQueueProfileRequest {
     queue_profile?: HpcQueueProfile;

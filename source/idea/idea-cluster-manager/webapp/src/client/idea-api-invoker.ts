@@ -31,6 +31,7 @@ export interface IdeaEnvelope<T> {
     success?: boolean;
     error_code?: string;
     message?: string;
+    additionalHeader?: any;
 }
 
 export interface IdeaApiInvokerProps {
@@ -101,6 +102,8 @@ export class IdeaApiInvoker {
         } else {
             if (request.header?.namespace === "Auth.InitiateAuth") {
                 response = await this.props.authContext?.initiateAuth(request);
+            } else if(request.header?.namespace === "budgets") {
+                response = await this.props.authContext?.invoke(url, request.payload, isPublic, request.additionalHeader);
             } else {
                 response = await this.props.authContext?.invoke(url, request, isPublic);
             }
@@ -121,7 +124,7 @@ export class IdeaApiInvoker {
         return response;
     }
 
-    async invoke_alt<REQ = any | null, RES = any>(namespace: string, payload?: REQ, isPublic: boolean = false): Promise<RES> {
+    async invoke_alt<REQ = any | null, RES = any>(namespace: string, payload?: REQ, isPublic: boolean = false, additionalHeader: any = {}): Promise<RES> {
         const result = await this.invoke<REQ, RES>(
             {
                 header: {
@@ -129,11 +132,14 @@ export class IdeaApiInvoker {
                     request_id: uuid(),
                 },
                 payload: payload ? payload : this.empty(),
+                additionalHeader
             },
-            isPublic
+            isPublic,
         );
         if (result.success) {
-            return result.payload!;
+            return result.payload!;}
+        else if (namespace === "budgets") {
+            return result as RES;
         } else {
             console.error(result);
             throw new IdeaException({

@@ -89,10 +89,17 @@ class ClusterSettingsAPI(BaseAPI):
         if Utils.is_empty(module_id):
             raise exceptions.invalid_params('module_id is required')
 
-        module_config = self.context.config().get_config(module_id, module_id=module_id)
+        module_config = self.context.config().get_config(module_id, module_id=module_id).as_plain_ordered_dict()
+        
+        if not context.is_administrator() and module_id in constants.RESTRICTED_MODULES_FOR_NON_ADMINS:
+            filtered_config = {}
+            for key, value in module_config.items():
+                if key in constants.RESTRICTED_MODULE_NON_ADMIN_PARENT_KEYS[module_id]:
+                    filtered_config[key] = value
+            module_config = filtered_config
 
         context.success(GetModuleSettingsResult(
-            settings=module_config.as_plain_ordered_dict()
+            settings=module_config
         ))
 
     def update_module_settings(self, context: ApiInvocationContext):

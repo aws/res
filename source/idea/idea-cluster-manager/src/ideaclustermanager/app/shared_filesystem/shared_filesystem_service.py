@@ -33,6 +33,8 @@ from ideadatamodel.shared_filesystem import (
     UpdateFileSystemResult,
     RemoveFileSystemRequest,
     RemoveFileSystemResult,
+    ListGlobalFileSystemsRequest,
+    ListGlobalFileSystemsResult
 )
 from ideadatamodel.shared_filesystem.shared_filesystem_api import FSxONTAPDeploymentType
 from ideasdk.utils import Utils, ApiUtils
@@ -572,6 +574,18 @@ class SharedFilesystemService:
 
         return ListOnboardedFileSystemsResult(listing=onboarded_file_systems)
 
+    def list_global_filesystems(self, request: ListGlobalFileSystemsRequest) -> ListGlobalFileSystemsResult:
+        shared_storage_config_dict = self.config.get_config(constants.MODULE_SHARED_STORAGE).as_plain_ordered_dict()
+        global_filesystems: List[FileSystem] = []
+
+        for fs_name, config in shared_storage_config_dict.items():
+            if isinstance(config, dict) and constants.FILE_SYSTEM_SCOPE_KEY in config:
+                scope = config.get(constants.FILE_SYSTEM_SCOPE_KEY)
+                if scope and constants.FILE_SYSTEM_GLOBAL_SCOPE in scope:
+                    global_filesystems.append(FileSystem(name=fs_name, storage=config))
+
+        return ListGlobalFileSystemsResult(listing=global_filesystems)
+
     def _get_file_system_filters(self, filters_list: Optional[List[SocaFilter]]):
         filters_dict = {}
         if filters_list:
@@ -615,19 +629,9 @@ class SharedFilesystemService:
             projects.append(project_name)
             self._update_config_for_filesystem(fs, {constants.FILE_SYSTEM_PROJECTS_KEY: projects})
 
-    def update_filesystems_to_project_mappings(self, filesystem_names: List[str], project_name: str):
-        onboarded_filesystems = self.list_onboarded_file_systems(ListOnboardedFileSystemsRequest()).listing
-        onboarded_filesystem_mount_directories = {fs.get_name(): fs.get_mount_dir() for fs in onboarded_filesystems}
-        mount_directories_used = set()
-        for filesystem_name in filesystem_names:
-            mount_dir = Utils.get_value_as_string(filesystem_name, onboarded_filesystem_mount_directories)
-            if mount_dir is None:
-                self.logger.error(f'File system {filesystem_name} is not onboarded.')
-                raise exceptions.invalid_params(f'Filesystem {filesystem_name} is not valid.')
-            if mount_dir in mount_directories_used:
-                self.logger.error(f'Two or more file systems share the following mount directory: {mount_dir}.')
-                raise exceptions.invalid_params(f'Duplicate filesystems with the mount directory {mount_dir}.')
-            mount_directories_used.add(mount_dir)
+    def update_filesystems_to_project_mappings(self, filesystem_names: List[str], project_name: str, validate_check: bool = True):
+        if validate_check:
+            self.validate_filesystems(filesystem_names)
         self._cleanup_filesystems_to_project_mappings(filesystem_names, project_name)
         filesystems_succeeded = []
         filesystem_name = None
@@ -638,6 +642,22 @@ class SharedFilesystemService:
         except exceptions.SocaException as e:
             self.logger.error(f'Filesystem {filesystem_name} has failed to attach to {project_name} due to {e.message}.')
         return filesystems_succeeded
+
+    def validate_filesystems(self, filesystem_names: List[str]):
+        onboarded_filesystems = self.list_onboarded_file_systems(ListOnboardedFileSystemsRequest()).listing
+        global_filesystems = self.list_global_filesystems(ListGlobalFileSystemsRequest()).listing
+        all_filesystems = onboarded_filesystems + global_filesystems
+        all_filesystems_mount_directories = {fs.get_name(): fs.get_mount_dir() for fs in all_filesystems}
+        mount_directories_used = set()
+        for filesystem_name in filesystem_names:
+            mount_dir = Utils.get_value_as_string(filesystem_name, all_filesystems_mount_directories)
+            if mount_dir is None:
+                self.logger.error(f'File system {filesystem_name} is not onboarded.')
+                raise exceptions.invalid_params(f'Filesystem {filesystem_name} is not valid.')
+            if mount_dir in mount_directories_used:
+                self.logger.error(f'Two or more file systems share the following mount directory: {mount_dir}.')
+                raise exceptions.invalid_params(f'Duplicate filesystems with the mount directory {mount_dir}.')
+            mount_directories_used.add(mount_dir)
 
     def traverse_config(self, config_entries: List[Dict], prefix: str, config: Dict):
         for key in config:
@@ -864,8 +884,9 @@ class SharedFilesystemService:
                     self._update_config_for_filesystem(fs, {constants.FILE_SYSTEM_PROJECTS_KEY: projects})
 
     def get_filesystem(self, filesystem_name: str):
-        filesystems = self.list_onboarded_file_systems(ListOnboardedFileSystemsRequest()).listing
-
+        onboarded_filesystems = self.list_onboarded_file_systems(ListOnboardedFileSystemsRequest()).listing
+        global_filesystems = self.list_global_filesystems(ListGlobalFileSystemsRequest()).listing
+        filesystems = onboarded_filesystems + global_filesystems
         if Utils.is_empty(filesystems):
             raise exceptions.soca_exception(
                 error_code=errorcodes.NO_SHARED_FILESYSTEM_FOUND,

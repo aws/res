@@ -380,9 +380,9 @@ class CdkInvoker:
                 instance_type='t3.medium',
             )
 
-            components = ['virtual-desktop-host-linux', 'nice-dcv-linux']
+            components = ['virtual-desktop-host-linux', 'nice-dcv-linux', 'vdi-helper']
             if vdi_os == BaseOS.WINDOWS:
-                components = ['virtual-desktop-host-windows']
+                components = ['virtual-desktop-host-windows', 'vdi-helper']
 
             builder = BootstrapPackageBuilder(
                 bootstrap_context=bootstrap_context,

@@ -140,16 +140,10 @@ class ConfigGenerator:
             raise exceptions.invalid_params('directory_id is required when use_existing_directory_service = True')
         return value
 
-    def get_directory_service_root_username_secret_arn(self) -> Optional[str]:
-        value = Utils.get_value_as_string('directory_service_root_username_secret_arn', self.user_values)
+    def get_directory_service_service_account_credentials_secret_arn(self) -> Optional[str]:
+        value = Utils.get_value_as_string('directory_service_service_account_credentials_secret_arn', self.user_values)
         if Utils.is_empty(value) and self.get_use_existing_directory_service():
-            raise exceptions.invalid_params('directory_service_root_password_secret_arn is required when use_existing_directory_service = True')
-        return value
-
-    def get_directory_service_root_password_secret_arn(self) -> Optional[str]:
-        value = Utils.get_value_as_string('directory_service_root_password_secret_arn', self.user_values)
-        if Utils.is_empty(value) and self.get_use_existing_directory_service():
-            raise exceptions.invalid_params('directory_service_root_password_secret_arn is required when use_existing_directory_service = True')
+            raise exceptions.invalid_params('directory_service_service_account_credentials_secret_arn is required when use_existing_directory_service = True')
         return value
 
     def get_identity_provider(self) -> str:
@@ -431,8 +425,7 @@ class ConfigGenerator:
             'directory_service_provider': self.get_directory_service_provider(),
             'use_existing_directory_service': self.get_use_existing_directory_service(),
             'directory_id': self.get_directory_id(),
-            'directory_service_root_username_secret_arn': self.get_directory_service_root_username_secret_arn(),
-            'directory_service_root_password_secret_arn': self.get_directory_service_root_password_secret_arn(),
+            'directory_service_service_account_credentials_secret_arn': self.get_directory_service_service_account_credentials_secret_arn(),
             'enable_aws_backup': self.get_enable_aws_backup(),
             'kms_key_type': self.get_kms_key_type(),
             'kms_key_id': self.get_kms_key_id(),

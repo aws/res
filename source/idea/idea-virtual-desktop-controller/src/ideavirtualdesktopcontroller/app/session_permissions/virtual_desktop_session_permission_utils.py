@@ -49,7 +49,8 @@ class VirtualDesktopSessionPermissionUtils:
                 permission_entry = permission_profile.get_permission(permission.key)
                 if permission_entry.enabled:
                     allow_permissions.append(permission.key.replace('_', '-'))
-                else:
+                # 'builtin' cannot be in denied permissions, otherwise session will not render properly.
+                elif permission_entry.key != 'builtin':
                     deny_permissions.append(permission.key.replace('_', '-'))
 
         return allow_permissions, deny_permissions

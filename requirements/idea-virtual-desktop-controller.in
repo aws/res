@@ -1,2 +1,3 @@
 -r idea-sdk.in
+-r library.in
 supervisor~=4.0

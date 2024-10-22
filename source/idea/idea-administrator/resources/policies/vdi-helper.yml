@@ -1,0 +1,77 @@
+Version: '2012-10-17'
+Statement:
+  - Action:
+      - logs:CreateLogGroup
+    Resource: "{{ context.arns.get_lambda_log_group_arn() }}"
+    Effect: Allow
+    Sid: CloudWatchLogsPermissions
+
+  - Action:
+      - logs:CreateLogStream
+      - logs:PutLogEvents
+      - logs:DeleteLogStream
+    Resource: "{{ context.arns.lambda_log_stream_arn }}"
+    Effect: Allow
+    Sid: CloudWatchLogStreamPermissions
+
+  - Action:
+      - ec2:DescribeSubnets
+      - ec2:DescribeNetworkInterfaces
+      - ec2:DeleteNetworkInterface
+      - ec2:DescribeInstances
+    Resource: "*"
+    Effect: Allow
+
+  - Action:
+     - ec2:CreateNetworkInterface
+    Resource:
+      - '{{ context.arns.get_arn("ec2", "subnet/*") }}'
+      - '{{ context.arns.get_arn("ec2", "network-interface/*") }}'
+      - '{{ context.arns.get_arn("ec2", "security-group/*") }}'
+    Effect: Allow
+
+  - Action:
+      - ec2:TerminateInstances
+      - ec2:StopInstances
+    Condition:
+      StringEquals:
+        aws:ResourceTag/res:EnvironmentName: '{{ context.cluster_name }}'
+        aws:ResourceTag/res:ModuleName: vdc
+        aws:ResourceTag/res:NodeType: virtual-desktop-dcv-host
+    Resource: '*'
+    Effect: Allow
+
+  - Action:
+      - sqs:SendMessage
+    Resource:
+      - '{{ context.arns.get_sqs_arn("vdc") + "-events.fifo" }}'
+    Effect: Allow
+
+  - Action:
+      - secretsmanager:GetSecretValue
+    Condition:
+      StringEquals:
+        secretsmanager:ResourceTag/res:EnvironmentName: '{{ context.cluster_name }}'
+        secretsmanager:ResourceTag/res:ModuleName: virtual-desktop-controller
+    Resource: '*'
+    Effect: Allow
+  
+  - Action:
+      - dynamodb:GetItem
+    Resource:
+      - '{{ context.arns.get_ddb_table_arn("cluster-settings") }}'
+    Effect: Allow
+
+  - Action:
+      - dynamodb:GetItem
+      - dynamodb:Query
+      - dynamodb:DeleteItem
+      - dynamodb:UpdateItem
+      - dynamodb:PutItem
+    Resource:
+      - '{{ context.arns.get_ddb_table_arn("vdc.controller.user-sessions") }}'
+      - '{{ context.arns.get_ddb_table_arn("vdc.controller.servers") }}'
+      - '{{ context.arns.get_ddb_table_arn("vdc.controller.session-permissions") }}'
+      - '{{ context.arns.get_ddb_table_arn("vdc.controller.schedules") }}'
+    Effect: Allow
+  

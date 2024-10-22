@@ -16,7 +16,7 @@ from ideadatamodel import (
 from ideasdk.utils import Utils
 from ideavirtualdesktopcontroller.app.clients.events_client.events_client import VirtualDesktopEvent
 from ideavirtualdesktopcontroller.app.events.handlers.base_event_handler import BaseVirtualDesktopControllerEventHandler
-
+from res.resources import vdi_management
 
 class IDEASessionTerminateEventHandler(BaseVirtualDesktopControllerEventHandler):
 
@@ -37,7 +37,7 @@ class IDEASessionTerminateEventHandler(BaseVirtualDesktopControllerEventHandler)
             owner=idea_session_owner,
             force=force
         )
-        success_list, fail_list = self.session_utils.terminate_sessions([session])
+        success_list, fail_list = vdi_management.terminate_sessions([session.dict()])
         # we know there is only 1 session in either of success or fail list
         if Utils.is_not_empty(fail_list):
             raise self.do_not_delete_message_exception(f'Error in stopping RES Session ID: {fail_list[0].idea_session_id}:{fail_list[0].name}. Error: {fail_list[0].failure_reason}. NOT terminating the session now. Will handle later')

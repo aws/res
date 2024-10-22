@@ -4,14 +4,14 @@
 from typing import Any, List
 
 import aws_cdk
-from aws_cdk import assertions
+from aws_cdk import Stack, assertions
 from constructs import IConstruct
 
-from idea.infrastructure.install.stack import InstallStack
+from idea.infrastructure.install.stacks.install_stack import InstallStack
 
 
 def assert_resource_name_has_correct_type_and_props(
-    stack: InstallStack,
+    stack: Stack,
     template: assertions.Template,
     resources: List[str],
     cfn_type: str,
@@ -23,7 +23,7 @@ def assert_resource_name_has_correct_type_and_props(
     assert get_logical_id(stack, resources) in existing
 
 
-def get_logical_id(stack: InstallStack, resources: List[str]) -> str:
+def get_logical_id(stack: Stack, resources: List[str]) -> str:
     node = stack.node
     child: IConstruct = stack
     for resource in resources:

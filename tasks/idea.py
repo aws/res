@@ -6,7 +6,7 @@
 #      http://www.apache.org/licenses/LICENSE-2.0
 #
 #  or in the 'license' file accompanying this file. This file is distributed on an 'AS IS' BASIS, WITHOUT WARRANTIES
-#  OR CONDITIONS OF ANY KIND, express or implied. See the License for the specific language governing permissions
+#  OR CONDITIONS OF ANY KIND, express or mplied. See the License for the specific language governing permissions
 #  and limitations under the License.
 
 """
@@ -15,18 +15,19 @@ IDEA Development Task Utils
 Should not contain any idea-sdk dependencies!
 """
 
-from typing import List, Dict, Optional, Set
 import os
-import sys
-from pathlib import Path
-from rich.console import Console
-from rich.style import Style as RichStyle
 import shutil
 import subprocess
-from questionary import unsafe_prompt
-from invoke import Context
-import yaml
+import sys
 import textwrap
+from pathlib import Path
+from typing import Dict, List, Optional, Set
+
+import yaml
+from invoke import Context
+from questionary import unsafe_prompt
+from rich.console import Console
+from rich.style import Style as RichStyle
 
 IDEA_DEVELOPMENT_ERROR = 'IDEA_DEVELOPMENT_ERROR'
 ERROR_CODE_VENV_NOT_SETUP = 'ERROR_CODE_VENV_NOT_SETUP'
@@ -180,6 +181,42 @@ class SocaDevelopmentProps:
     @property
     def lambda_functions_tests_src(self) -> str:
         return os.path.join(self.project_unit_tests_dir, 'lambda_functions')
+
+    @property
+    def pipeline_project_dir(self) -> str:
+        return os.path.join(self.project_source_dir, 'pipeline')
+
+    @property
+    def pipeline_src(self) -> str:
+        return os.path.join(self.pipeline_project_dir)
+
+    @property
+    def pipeline_tests_src(self) -> str:
+        return os.path.join(self.project_unit_tests_dir, 'pipeline')
+
+    @property
+    def infrastructure_project_dir(self) -> str:
+        return os.path.join(self.project_source_dir, 'infrastructure')
+
+    @property
+    def infrastructure_src(self) -> str:
+        return os.path.join(self.infrastructure_project_dir)
+
+    @property
+    def infrastructure_tests_src(self) -> str:
+        return os.path.join(self.project_unit_tests_dir, 'infrastructure')
+
+    @property
+    def library_project_dir(self) -> str:
+        return os.path.join(self.project_source_dir, 'library')
+
+    @property
+    def library_src(self) -> str:
+        return os.path.join(self.library_project_dir, 'src')
+
+    @property
+    def library_tests_src(self) -> str:
+        return os.path.join(self.library_project_dir, 'tests')
 
     @property
     def virtual_desktop_project_dir(self) -> str:

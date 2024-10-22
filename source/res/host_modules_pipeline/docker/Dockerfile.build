@@ -1,0 +1,43 @@
+FROM public.ecr.aws/amazonlinux/amazonlinux:2
+
+# Install necessary packages
+RUN yum install -y tar gzip pam nss util-linux-user gcc glibc-devel pam-devel nss-devel git jq
+
+# Set the working directory for the host module
+WORKDIR /opt/host_modules
+
+# Install Go
+COPY source/res/host_modules_pipeline/scripts/get_go.sh .
+RUN chmod +x ./get_go.sh
+RUN ./get_go.sh
+
+# Update environment variables for Go
+ENV PATH="/usr/local/go/bin/:${PATH}"
+ENV GOROOT="/usr/local/go"
+ENV CGO_ENABLED=1
+ARG GOARCH
+ENV GOARCH=$GOARCH
+
+# Set the Go proxy for modules
+RUN go env -w GOPROXY=direct
+
+# Cache dependencies
+COPY source/res/host_modules/go.mod source/res/host_modules/go.sum ./
+RUN go mod download
+
+# Copy source code
+COPY source/res/host_modules/ ./
+COPY source/res/host_modules_pipeline/scripts/build_modules.sh .
+
+# Run go mod tidy if needed
+RUN go mod tidy
+
+# Create an output directory (adjust as per your requirements)
+RUN mkdir -p out
+
+# Run build script to iterate through modules.json and build each module
+RUN chmod +x build_modules.sh
+RUN ./build_modules.sh
+
+# Define the default command to run the container
+CMD ["/bin/bash"]

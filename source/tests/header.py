@@ -17,11 +17,16 @@ def test_headers_exist() -> None:
     # TODO: Change the path to include all the source files
     paths = itertools.chain(
         pathlib.Path("source/idea").glob("**/*.py"),
+        pathlib.Path("source/res").glob("**/*.py"),
+        pathlib.Path("source/res").glob("**/*.sh"),
         pathlib.Path("source/idea").glob("**/*.sh"),
     )
     for path in paths:
         if path.parts[2].startswith("idea-"):
             continue
+        if "dcv_swagger_client" in path.parts:
+            continue
+
         if path.stat().st_size > 0:
             with open(path) as f:
                 for line in header_lines:

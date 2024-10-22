@@ -241,7 +241,7 @@ class DeletePermissions:
                 effect=iam.Effect.ALLOW,
                 resources=[
                     f"arn:{aws_cdk.Aws.PARTITION}:s3:::{self.environment_name}-cluster-{aws_cdk.Aws.REGION}-{aws_cdk.Aws.ACCOUNT_ID}",
-                    f"arn:{aws_cdk.Aws.PARTITION}:s3:::log-{self.environment_name}-cluster-{aws_cdk.Aws.REGION}-{aws_cdk.Aws.ACCOUNT_ID}",
+                    f"arn:{aws_cdk.Aws.PARTITION}:s3:::log-{self.environment_name}-cluster-{aws_cdk.Aws.REGION}-{aws_cdk.Aws.ACCOUNT_ID}-*",
                 ],
                 actions=[
                     "s3:DeleteBucket",
@@ -254,7 +254,7 @@ class DeletePermissions:
                 effect=iam.Effect.ALLOW,
                 resources=[
                     f"arn:{aws_cdk.Aws.PARTITION}:s3:::{self.environment_name}-cluster-{aws_cdk.Aws.REGION}-{aws_cdk.Aws.ACCOUNT_ID}/*",
-                    f"arn:{aws_cdk.Aws.PARTITION}:s3:::log-{self.environment_name}-cluster-{aws_cdk.Aws.REGION}-{aws_cdk.Aws.ACCOUNT_ID}/*",
+                    f"arn:{aws_cdk.Aws.PARTITION}:s3:::log-{self.environment_name}-cluster-{aws_cdk.Aws.REGION}-{aws_cdk.Aws.ACCOUNT_ID}-*/*",
                 ],
                 actions=[
                     "s3:DeleteObjectVersion",

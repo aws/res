@@ -59,7 +59,7 @@ from ideavirtualdesktopcontroller.app.software_stacks.virtual_desktop_software_s
 from ideavirtualdesktopcontroller.app.ssm_commands.virtual_desktop_ssm_commands_db import VirtualDesktopSSMCommandsDB
 from ideavirtualdesktopcontroller.app.ssm_commands.virtual_desktop_ssm_commands_utils import VirtualDesktopSSMCommandsUtils
 from ideavirtualdesktopcontroller.app.virtual_desktop_controller_utils import VirtualDesktopControllerUtils
-
+from res.resources import vdi_management
 
 class VirtualDesktopAPI(BaseAPI):
     TEMP_IMAGE_ID = 'TEMP_IMAGE_ID'
@@ -632,9 +632,31 @@ class VirtualDesktopAPI(BaseAPI):
     def _stop_sessions(self, sessions: List[VirtualDesktopSession]) -> (List[VirtualDesktopSession], List[VirtualDesktopSession]):
         if Utils.is_empty(sessions):
             return [], []
+        sessions_list = [session.dict() for session in sessions]
+        success_response_list, failure_response_list =  vdi_management.stop_sessions(sessions_list)
+        success_list = []
+        failure_list = []
+        for session in success_response_list:
+            success_list.append(self.session_db.convert_db_dict_to_session_object(session))
 
-        return self.session_utils.stop_sessions(sessions)
+        for session in failure_response_list:
+            failure_list.append(self.session_db.convert_db_dict_to_session_object(session))
+        return success_list, failure_list
 
+    def _terminate_sessions(self, sessions: List[VirtualDesktopSession]) -> (List[VirtualDesktopSession], List[VirtualDesktopSession]):
+        if not sessions:
+            return [], []
+        sessions_list = [session.dict() for session in sessions]
+        success_response_list, failure_response_list =  vdi_management.terminate_sessions(sessions_list)
+        success_list = []
+        failure_list = []
+        for session in success_response_list:
+            success_list.append(self.session_db.convert_db_dict_to_session_object(session))
+
+        for session in failure_response_list:
+            failure_list.append(self.session_db.convert_db_dict_to_session_object(session))
+        return success_list, failure_list        
+        
     def _resume_sessions(self, sessions: List[VirtualDesktopSession]) -> (List[VirtualDesktopSession], List[VirtualDesktopSession]):
         if Utils.is_empty(sessions):
             return [], []

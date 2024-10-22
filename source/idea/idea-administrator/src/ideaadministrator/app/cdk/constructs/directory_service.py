@@ -16,6 +16,9 @@ __all__ = (
     'OAuthClientIdAndSecret'
 )
 
+import json
+import secrets
+import string
 from ideaadministrator.app.cdk.idea_code_asset import IdeaCodeAsset, SupportedLambdaPlatforms
 from ideadatamodel import constants
 from ideasdk.utils import Utils, GroupNameHelper
@@ -47,7 +50,7 @@ class DirectoryServiceCredentials(SocaBaseConstruct):
                  admin_password: Optional[str] = None):
         super().__init__(context, name)
 
-        self.credentials_provided = self.context.config().get_bool('directoryservice.root_credentials_provided', default=False)
+        self.credentials_provided = self.context.config().get_bool('directoryservice.service_account_credentials_provided', default=False)
 
         if self.credentials_provided:
             return
@@ -55,62 +58,37 @@ class DirectoryServiceCredentials(SocaBaseConstruct):
         kms_key_id = self.context.config().get_string('cluster.secretsmanager.kms_key_id')
 
         ds_provider = self.context.config().get_string('directoryservice.provider', required=True)
-
-        admin_username_key = f'{ds_provider}-admin-username'
-        self.admin_username = secretsmanager.CfnSecret(
+        
+        admin_credentials_key = f'{ds_provider}-admin-credentials'
+        if Utils.is_empty(admin_password):
+            admin_password = self.generate_random_password()
+        self.admin_credentials = secretsmanager.CfnSecret(
             scope,
-            admin_username_key,
-            description=f'{ds_provider} Root Username, Cluster: {self.cluster_name}',
+            admin_credentials_key,
+            description=f'{ds_provider} Root Credentials, Cluster: {self.cluster_name}',
             kms_key_id=kms_key_id,
-            name=self.build_resource_name(admin_username_key),
-            secret_string=admin_username
+            name=self.build_resource_name(admin_credentials_key),
+            secret_string=f'{{"{admin_username}":"{admin_password}"}}'
         )
         # access to the secret is restricted using tags.
-        cdk.Tags.of(self.admin_username).add(constants.IDEA_TAG_MODULE_NAME, constants.MODULE_DIRECTORYSERVICE)
-
-        admin_password_key = f'{ds_provider}-admin-password'
-        if Utils.is_empty(admin_password):
-            self.admin_password = secretsmanager.CfnSecret(
-                scope,
-                admin_password_key,
-                description=f'{ds_provider} Root Password, Cluster: {self.cluster_name}',
-                kms_key_id=kms_key_id,
-                name=self.build_resource_name(admin_password_key),
-                generate_secret_string=secretsmanager.CfnSecret.GenerateSecretStringProperty(
-                    exclude_characters='$@;"\\\'',
-                    password_length=16
-                )
-            )
-        else:
-            self.admin_password = secretsmanager.CfnSecret(
-                scope,
-                admin_password_key,
-                description=f'{ds_provider} Root Password, Cluster: {self.cluster_name}',
-                kms_key_id=kms_key_id,
-                name=self.build_resource_name(admin_password_key),
-                secret_string=admin_password
-            )
-        # access to the secret is restricted using tags.
-        cdk.Tags.of(self.admin_password).add(constants.IDEA_TAG_MODULE_NAME, constants.MODULE_DIRECTORYSERVICE)
+        cdk.Tags.of(self.admin_credentials).add(constants.IDEA_TAG_MODULE_NAME, constants.MODULE_DIRECTORYSERVICE)
 
         suppressions = [
             IdeaNagSuppression(rule_id='AwsSolutions-SMG4', reason='Secret rotation not applicable for DirectoryService credentials.')
         ]
-        self.add_nag_suppression(construct=self.admin_username, suppressions=suppressions)
-        self.add_nag_suppression(construct=self.admin_password, suppressions=suppressions)
+        self.add_nag_suppression(construct=self.admin_credentials, suppressions=suppressions)
 
-    def get_username_secret_arn(self) -> str:
+    def generate_random_password(length=16, exclude_characters='$@;"\\\''):
+        all_characters = string.ascii_letters + string.digits + string.punctuation
+        character_set = ''.join(ch for ch in all_characters if ch not in exclude_characters)
+        password = ''.join(secrets.choice(character_set) for _ in range(length))
+        return password
+
+    def get_credentials_secret_arn(self) -> str:
         if self.credentials_provided:
-            return self.context.config().get_string('directoryservice.root_username_secret_arn', required=True)
+            return self.context.config().get_string('directoryservice.service_account_credentials_secret_arn', required=True)
         else:
-            return self.admin_username.ref
-
-    def get_password_secret_arn(self) -> str:
-        if self.credentials_provided:
-            return self.context.config().get_string('directoryservice.root_password_secret_arn', required=True)
-        else:
-            return self.admin_password.ref
-
+            return self.admin_credentials.ref
 
 class OAuthClientIdAndSecret(SocaBaseConstruct):
     """
@@ -214,12 +192,15 @@ class ActiveDirectory(SocaBaseConstruct):
         vpc_settings = ds.CfnMicrosoftAD.VpcSettingsProperty(
             subnet_ids=self.launch_subnets,
             vpc_id=self.cluster.vpc.vpc_id)
-
+        
+        secret_string = cdk.SecretValue.secrets_manager(self.credentials.get_credentials_secret_arn()).to_string()
+        secret_dict = json.loads(secret_string)
+        password_value = secret_dict[list(secret_dict.keys())[0]]
         ad = ds.CfnMicrosoftAD(
             self.scope,
             self.construct_id,
             name=self.ad_name,
-            password=cdk.SecretValue.secrets_manager(self.credentials.get_password_secret_arn()).to_string(),
+            password=password_value,
             vpc_settings=vpc_settings,
             edition=self.ad_edition,
             enable_sso=self.enable_sso,

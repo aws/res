@@ -136,7 +136,7 @@ class VirtualDesktopDebug extends Component<VirtualDesktopDebugProps, VirtualDes
                 header={
                     <Header
                         variant={"h1"}
-                        description={"View hosts and sessions registered with NICE DCV Broker"}
+                        description={"View hosts and sessions registered with Amazon DCV Broker"}
                         actions={
                             <SpaceBetween direction="horizontal" size="xs">
                                 <Button

@@ -70,6 +70,12 @@ function VirtualDesktopSessionStatusIndicator(props: VirtualDesktopSessionStatus
                     </StatusIndicator>
                 );
             }
+        case "STOPPED_IDLE":
+            return (
+                <StatusIndicator type="info" colorOverride="grey">
+                    Stopped - Idle
+                </StatusIndicator>
+            );
         case "RESUMING":
             return (
                 <StatusIndicator type="in-progress" colorOverride="blue">

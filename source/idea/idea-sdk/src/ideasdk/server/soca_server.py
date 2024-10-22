@@ -812,13 +812,19 @@ class SocaServer(SocaService):
         helper = FileSystemHelper(self._context, username=username)
         try:
             helper.check_access(download_file, check_read=True, check_write=False)
-        except exceptions.SocaException as e:
-            return sanic.response.json({
-                'error_code': e.error_code,
-                'message': e.message,
-                'success': False
-            }, dumps=Utils.to_json)
+        except Exception as e:
+            if isinstance(e, exceptions.SocaException):
+                return sanic.response.json({
+                    'error_code': e.error_code,
+                    'success': False
+                }, dumps=Utils.to_json)
+            else:
+                return sanic.response.json({
+                    'error_code': errorcodes.GENERAL_ERROR,
+                    'success': False
+                }, dumps=Utils.to_json)
 
+        self._logger.info(f'{username} has downloaded the following file: {download_file}')
         return await sanic.response.file(download_file, filename=os.path.basename(download_file))
 
     def _remove_unix_socket(self):
