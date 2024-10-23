@@ -121,13 +121,14 @@ function Start-ADAutomationWaitForAuthorizationAndJoin
 
   if ($authorizationEntry.status -eq "success")
   {
-    Write-Host "[Join AD] authorization successful. joining AD, Domain: $AD_DOMAIN_NAME, OTP: $($authorizationEntry.otp) ..."
+    Write-Host "[Join AD] authorization successful. joining AD, Domain: $AD_DOMAIN_NAME, DC: $authorizationEntry.domain_controller, OTP: $($authorizationEntry.otp) ..."
     $joinCred = New-Object pscredential -ArgumentList ([pscustomobject]@{
       UserName = $null
       Password = (ConvertTo-SecureString -String $($authorizationEntry.otp) -AsPlainText -Force)[0]
     })
     Add-Computer -Domain $AD_DOMAIN_NAME `
                  -Options UnsecuredJoin, PasswordPass `
+                 -Server $authorizationEntry.domain_controller `
                  -Credential $joinCred
   }
   else
