@@ -7,11 +7,11 @@ SCRIPT_DIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
 source "${SCRIPT_DIR}/../common/bootstrap_common.sh"
 
 OPEN_LDAP_DIR=""
-{%- if context.base_os == 'ubuntu2204' %}
-OPEN_LDAP_DIR="/etc/ldap"
-{%- else %}
-OPEN_LDAP_DIR="/etc/openldap"
-{%- endif %}
+if [[ $RES_BASE_OS == "ubuntu2204" ]]; then
+  OPEN_LDAP_DIR="/etc/ldap"
+else
+  OPEN_LDAP_DIR="/etc/openldap"
+fi
 
 if [[ -f "${OPEN_LDAP_DIR}/ldap.conf" ]]; then
   cp ${OPEN_LDAP_DIR}/ldap.conf ${OPEN_LDAP_DIR}/ldap.conf.orig

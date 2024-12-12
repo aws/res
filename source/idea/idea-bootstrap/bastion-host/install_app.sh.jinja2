@@ -1,0 +1,55 @@
+#!/bin/bash
+
+#  Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+#  SPDX-License-Identifier: Apache-2.0
+
+set -x
+
+source /etc/environment
+
+APP_PACKAGE_DOWNLOAD_URI="${1}"
+APP_NAME="bastion-host"
+
+AWS=$(command -v aws)
+# AWS_REGION comes from sourcing /etc/environment
+INSTANCE_REGION=${AWS_REGION}
+S3_BUCKET=$(echo ${APP_PACKAGE_DOWNLOAD_URI} | cut -f3 -d/)
+
+$AWS --region ${INSTANCE_REGION} s3 cp "${APP_PACKAGE_DOWNLOAD_URI}" "${BOOTSTRAP_DIR}/"
+
+PACKAGE_ARCHIVE=$(basename "${APP_PACKAGE_DOWNLOAD_URI}")
+PACKAGE_NAME="${PACKAGE_ARCHIVE%.tar.gz*}"
+PACKAGE_DIR="${BOOTSTRAP_DIR}/${PACKAGE_NAME}"
+mkdir -p ${PACKAGE_DIR}
+tar -xvf ${BOOTSTRAP_DIR}/${PACKAGE_ARCHIVE} -C ${PACKAGE_DIR}
+idea_pip install -r ${PACKAGE_DIR}/requirements.txt
+idea_pip install $(ls ${PACKAGE_DIR}/*-lib.tar.gz)
+mkdir -p ${IDEA_APP_DEPLOY_DIR}/${APP_NAME}
+mkdir -p ${IDEA_APP_DEPLOY_DIR}/logs
+
+{% include '_templates/linux/supervisord.jinja2' %}
+
+ENVIRONMENT="
+    res_test_mode=\"%(ENV_RES_TEST_MODE)s\",
+    RES_TEST_MODE=\"%(ENV_RES_TEST_MODE)s\""
+if [[ ! -z "${IDEA_HTTPS_PROXY}" ]]; then
+    ENVIRONMENT+=",
+    https_proxy=\"%(ENV_IDEA_HTTPS_PROXY)s\",
+    HTTPS_PROXY=\"%(ENV_IDEA_HTTPS_PROXY)s\",
+    no_proxy=\"%(ENV_IDEA_NO_PROXY)s\",
+    NO_PROXY=\"%(ENV_IDEA_NO_PROXY)s\""
+fi
+
+echo "[program:${APP_NAME}]
+environment=${ENVIRONMENT}" > /etc/supervisord.d/${APP_NAME}.ini
+echo "command=/opt/idea/python/latest/bin/resserver
+process_name=${APP_NAME}
+redirect_stderr=true
+stdout_logfile = /opt/idea/app/logs/stdout.log
+stdout_logfile_maxbytes=50MB
+stdout_logfile_backups=10
+startsecs=30
+startretries=3
+" >> /etc/supervisord.d/${APP_NAME}.ini
+
+systemctl restart supervisord

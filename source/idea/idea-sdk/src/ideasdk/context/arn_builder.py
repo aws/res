@@ -398,4 +398,12 @@ class ArnBuilder:
     def vdi_helper_api_gateway_execute_api_arn(self):
         return self.api_gateway_execute_api_arn("*", constants.API_GATEWAY_VDI_HELPER_STAGE, "POST", constants.API_GATEWAY_VDI_HELPER_RESOURCE)
 
+    def get_ad_sync_cluster_arn(self) -> str:
+        return self.get_arn(service='ecs',
+                            resource=f'cluster/{self.config.get_string("cluster.cluster_name")}-ad-sync-cluster')
+
+    def get_ad_sync_task_role_arn(self) -> str:
+        return self.get_arn(service='iam',
+                            aws_region='',
+                            resource=f'role/{self.config.get_string("cluster.cluster_name")}-ad-sync-task-role')
 

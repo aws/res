@@ -1,0 +1,20 @@
+{
+   "modules": [
+     {
+       "name": "test_module",
+       "version": "0.1.0"
+     },
+     {
+       "name": "ssh_keygen",
+       "version": "0.1.0"
+     },
+     {
+       "name": "libnss_cognito",
+       "version": "0.1.0"
+     },
+     {
+       "name": "pam_cognito",
+       "version": "0.1.0"
+     }
+   ]
+}

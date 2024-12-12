@@ -33,6 +33,7 @@ RES_VERSION_IN_TOPOLOGICAL_ORDER = [
     RESVersion.v_2024_06,
     RESVersion.v_2024_08,
     RESVersion.v_2024_10,
+    RESVersion.v_2024_12,
 ]
 
 TABLE_TO_TABLE_KEYS_BY_VERSION: Dict[TableName, Dict[RESVersion, TableKeys]] = {

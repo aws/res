@@ -13,7 +13,7 @@
 
 import React, { Component } from "react";
 import "./App.scss";
-import { IdeaAuthChallenge, IdeaAuthConfirmForgotPassword, IdeaAuthenticatedRoute, IdeaAuthForgotPassword, IdeaAuthLogin, IdeaAuthLoginRedirect } from "./pages/auth";
+import { IdeaAuthChallenge, IdeaAuthConfirmForgotPassword, IdeaAuthenticatedRoute, IdeaAuthForgotPassword, IdeaAuthLogin, IdeaAuthLoginRedirect, RESAuthSignUp, RESAuthVerifyAccount } from "./pages/auth";
 import Home from "./pages/home";
 import { AppContext } from "./common";
 import Users from "./pages/user-management/users";
@@ -35,6 +35,7 @@ import Projects from "./pages/cluster-admin/projects";
 import ConfigureProject from "./pages/cluster-admin/configure-project";
 import FileSystems from "./pages/cluster-admin/filesystem";
 import S3Buckets from "./pages/cluster-admin/s3-bucket";
+import IdentityManagement from "./pages/cluster-admin/identity-management";
 import AddS3Bucket from "./pages/cluster-admin/add-s3-bucket";
 import EditS3Bucket from "./pages/cluster-admin/edit-s3-bucket";
 import { Box, HelpPanel, SideNavigationProps, StatusIndicator } from "@cloudscape-design/components";
@@ -58,6 +59,7 @@ import Permissions from "./pages/permissions/permissions";
 import PermissionProfilesView from "./pages/permissions/view-permission-profile";
 import ConfigurePermissionProfile from "./pages/permissions/configure-permission-profile";
 import ConfigureDesktopSharingProfile from "./pages/permissions/configure-desktop-sharing-profile";
+import { Constants, ErrorCodes } from "./common/constants";
 
 export interface IdeaWebPortalAppProps extends IdeaAppNavigationProps {}
 
@@ -71,6 +73,7 @@ export interface IdeaWebPortalAppState {
     flashbarItems: FlashbarProps.MessageDefinition[];
     isFileBrowserEnabled: boolean;
     projectPermissions?: { isInProject: boolean; canCreateOthersSession: boolean; }
+    isSshEnabled: boolean;
     projectOwnerRoles?: string[];
 }
 
@@ -104,6 +107,7 @@ class IdeaWebPortalApp extends Component<IdeaWebPortalAppProps, IdeaWebPortalApp
             flashbarItems: [],
             isFileBrowserEnabled: false,
             projectPermissions: { isInProject: false, canCreateOthersSession: false },
+            isSshEnabled: false,
             projectOwnerRoles: [],
         };
     }
@@ -136,8 +140,8 @@ class IdeaWebPortalApp extends Component<IdeaWebPortalAppProps, IdeaWebPortalApp
                               include_permissions: true,
                           });
                           const projectRoleAssignments: Promise<void>[] = [];
-                          
-                          // for every project, we check if the user has permission to create sessions for others
+
+                          // for every project, we check if the user has permission to create sessions
                           // in that project
                           for (const project of projects.projects!) {
                               const resource_key = `${project.project_id!}:project`;
@@ -205,6 +209,7 @@ class IdeaWebPortalApp extends Component<IdeaWebPortalAppProps, IdeaWebPortalApp
                         isInitialized: true,
                         isLoggedIn: loginStatus,
                         isFileBrowserEnabled: context.getClusterSettingsService().getIsFileBrowserEnabled(),
+                        isSshEnabled: context.getClusterSettingsService().getIsSshEnabled(),
                         sideNavHeader: IdeaSideNavHeader(context),
                         sideNavItems: IdeaSideNavItems(context),
                     });
@@ -423,6 +428,29 @@ class IdeaWebPortalApp extends Component<IdeaWebPortalAppProps, IdeaWebPortalApp
                             </IdeaAuthenticatedRoute>
                         }
                     />
+                    {
+                        Utils.isSelfSignUpEnabled() &&
+                        Utils.isNativeUserLoginEnabled() && (
+                            <>
+                                <Route
+                                    path="/auth/sign-up"
+                                    element={
+                                        <IdeaAuthenticatedRoute path="/auth/sign-up" isLoggedIn={this.state.isLoggedIn}>
+                                            <RESAuthSignUp />
+                                        </IdeaAuthenticatedRoute>
+                                    }
+                                />
+                                <Route
+                                    path="/auth/verify-account"
+                                    element={
+                                        <IdeaAuthenticatedRoute path="/auth/verify-account" isLoggedIn={this.state.isLoggedIn}>
+                                            <RESAuthVerifyAccount />
+                                        </IdeaAuthenticatedRoute>
+                                    }
+                                />
+                            </>
+                        )
+                    }
 
                     {/*home*/}
                     <Route
@@ -566,7 +594,7 @@ class IdeaWebPortalApp extends Component<IdeaWebPortalAppProps, IdeaWebPortalApp
                     <Route
                         path="/home/ssh-access"
                         element={
-                            <IdeaAuthenticatedRoute isLoggedIn={this.state.isLoggedIn}>
+                            <IdeaAuthenticatedRoute isLoggedIn={this.state.isLoggedIn} isSshEnabled={this.state.isSshEnabled}>
                                 <SSHAccess
                                     ideaPageId="ssh-access"
                                     toolsOpen={this.state.toolsOpen}
@@ -877,6 +905,25 @@ class IdeaWebPortalApp extends Component<IdeaWebPortalAppProps, IdeaWebPortalApp
                             <IdeaAuthenticatedRoute isLoggedIn={this.state.isLoggedIn}>
                                 <EditS3Bucket
                                     ideaPageId="edit-bucket"
+                                    toolsOpen={this.state.toolsOpen}
+                                    tools={this.state.tools}
+                                    onToolsChange={this.onToolsChange}
+                                    onPageChange={this.onPageChange}
+                                    sideNavItems={this.state.sideNavItems}
+                                    sideNavHeader={this.state.sideNavHeader}
+                                    onSideNavChange={this.onSideNavChange}
+                                    onFlashbarChange={this.onFlashbarChange}
+                                    flashbarItems={this.state.flashbarItems}
+                                />
+                            </IdeaAuthenticatedRoute>
+                        }
+                    />
+                    <Route
+                        path="/cluster/identity-management"
+                        element={
+                            <IdeaAuthenticatedRoute isLoggedIn={this.state.isLoggedIn}>
+                                <IdentityManagement
+                                    ideaPageId="identity-management"
                                     toolsOpen={this.state.toolsOpen}
                                     tools={this.state.tools}
                                     onToolsChange={this.onToolsChange}

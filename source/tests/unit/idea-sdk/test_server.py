@@ -23,6 +23,11 @@ from ideasdk.protocols import (
 from ideasdk.server import SocaServer, SocaServerOptions
 from ideasdk.utils import Utils
 from ideatestutils import MockConfig
+from res.constants import (
+    CUSTOM_DOMAIN_NAME_FOR_VDI_KEY,
+    CUSTOM_DOMAIN_NAME_FOR_WEBAPP_KEY,
+)
+from res.utils import table_utils
 
 from ideadatamodel import (
     SocaBaseModel,
@@ -159,6 +164,27 @@ def context():
             config=mock_config.get_config(),
         )
     )
+
+
+@pytest.fixture(scope="session")
+def monkeypatch_session():
+    from _pytest.monkeypatch import MonkeyPatch
+
+    mp = MonkeyPatch()
+    yield mp
+    mp.undo()
+
+
+@pytest.fixture(scope="session", autouse=True)
+def mock_dynamodb(monkeypatch_session):
+    def mock_get_item(table_name, key):
+        if key["key"] == CUSTOM_DOMAIN_NAME_FOR_WEBAPP_KEY:
+            return {"value": "test-webapp.example.com"}
+        elif key["key"] == CUSTOM_DOMAIN_NAME_FOR_VDI_KEY:
+            return {"value": "test-vdi.example.com"}
+        return {"value": None}
+
+    monkeypatch_session.setattr(table_utils, "get_item", mock_get_item)
 
 
 @pytest.fixture(scope="session", autouse=True)

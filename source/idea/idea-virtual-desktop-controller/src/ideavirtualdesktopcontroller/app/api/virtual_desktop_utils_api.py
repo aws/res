@@ -30,6 +30,8 @@ from ideadatamodel.virtual_desktop import (
 from ideasdk.api import ApiInvocationContext
 from ideasdk.utils import Utils
 from ideavirtualdesktopcontroller.app.api.virtual_desktop_api import VirtualDesktopAPI
+from res.exceptions import PermissionProfileNotFound
+from res.resources import permission_profiles
 
 
 class VirtualDesktopUtilsAPI(VirtualDesktopAPI):
@@ -87,8 +89,10 @@ class VirtualDesktopUtilsAPI(VirtualDesktopAPI):
                 error_code=errorcodes.INVALID_PARAMS
             )
             return
-        profile = self.permission_profile_db.get(profile_id=profile_id)
-        if Utils.is_empty(profile):
+        try:
+            profile_dict = permission_profiles.get_permission_profile(profile_id=profile_id)
+            profile = self.permission_profile_db.convert_db_dict_to_permission_profile_object(profile_dict)
+        except PermissionProfileNotFound:
             context.fail(
                 message=f'Invalid profile_id: {profile_id}',
                 error_code=errorcodes.INVALID_PARAMS

@@ -24,7 +24,7 @@ if [[ -z "$BASE_OS" ]]; then
   exit 1
 fi
 
-if [[ $BASE_OS =~ ^(amazonlinux2)$ ]]; then
+if [[ $BASE_OS =~ ^(amzn2)$ ]]; then
   echo "OS is $BASE_OS, no need for this configuration. NO-OP..."
 else
   machine=$(uname -m)

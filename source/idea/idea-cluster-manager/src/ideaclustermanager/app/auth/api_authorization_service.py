@@ -17,10 +17,12 @@ from ideadatamodel import GetRoleRequest, ListRoleAssignmentsRequest
 from ideadatamodel.auth import User
 from ideadatamodel import constants
 from typing import Optional, List, Dict
+from ideasdk.protocols import SocaConfigType
 from ideasdk.utils import Utils
 
 class ClusterManagerApiAuthorizationService(ApiAuthorizationServiceBase):
-    def __init__(self, accounts: AccountsService, roles: RolesService, role_assignments: RoleAssignmentsService):
+    def __init__(self, accounts: AccountsService, config: SocaConfigType, roles: RolesService, role_assignments: RoleAssignmentsService):
+        super().__init__(config)
         self.accounts = accounts
         self.roles = roles
         self.role_assignments = role_assignments

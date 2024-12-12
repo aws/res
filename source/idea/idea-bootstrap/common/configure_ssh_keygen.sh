@@ -47,7 +47,7 @@ case "$BASE_OS" in
   ubuntu2204)
     setup_pam "/etc/pam.d/common-session"
     ;;
-  amazonlinux2|rhel7|rhel8|rhel9)
+  amzn2|rhel7|rhel8|rhel9)
     for file in password-auth system-auth; do
       setup_pam "/etc/pam.d/${file}"
     done

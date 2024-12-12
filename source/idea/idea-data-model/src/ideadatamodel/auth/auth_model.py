@@ -43,6 +43,7 @@ class User(SocaBaseModel):
     synced_on: Optional[datetime]
     role: Optional[str]
     is_active: Optional[bool]
+    identity_source: Optional[str]
 
 
 class Group(SocaBaseModel):
@@ -59,6 +60,7 @@ class Group(SocaBaseModel):
     synced_on: Optional[datetime]
     type: Optional[str]
     role: Optional[str]
+    identity_source: Optional[str]
 
 
 class AuthResult(SocaBaseModel):

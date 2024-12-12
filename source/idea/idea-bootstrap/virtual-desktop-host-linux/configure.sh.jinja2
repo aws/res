@@ -43,6 +43,17 @@ if [[ ! -f ${CONFIG_FINISHED_LOCK} ]]; then
   ## [END] RES VDI Session
   ")
 
+  curr_environment+=$(echo -e "
+  ## [BEGIN] COGNITO VALUES - Do Not Delete
+  COGNITO_MIN_ID="{{ context.vars.cognito_min_id }}"
+  COGNITO_MAX_ID="{{ context.vars.cognito_max_id }}"
+  COGNITO_UID_ATTRIBUTE="{{ context.vars.cognito_uid_attribute }}"
+  COGNITO_DEFAULT_USER_GROUP="{{ context.vars.cognito_default_user_group }}"
+  USER_POOL_ID="{{ context.config.get_string('identity-provider.cognito.user_pool_id', required=True) }}"
+  VDI_CLIENT_ID="{{ context.config.get_string('identity-provider.cognito.vdi_client_id', required=True) }}"
+  ## [END] COGNITO VALUES
+  ")
+
   # Merge Environments
   /bin/bash  "${SCRIPT_DIR}/../common/merge_environments.sh" -r "${curr_environment}" -o /etc/environment
 
@@ -60,7 +71,7 @@ if [[ ! -f ${CONFIG_FINISHED_LOCK} ]]; then
   source "${SCRIPT_DIR}/../common/bootstrap_common.sh"
 
   # Begin: Configure AWS Systems Manager Agent
-  /bin/bash "${SCRIPT_DIR}/../common/configure_amazon_ssm_agent.sh" -o {{ context.base_os }} -s "${SCRIPT_DIR}"
+  /bin/bash "${SCRIPT_DIR}/../common/configure_amazon_ssm_agent.sh" -o "${RES_BASE_OS}" -s "${SCRIPT_DIR}"
   # End: Configure AWS Systems Manager Agent
 
   # Begin: Enable executable on vdi-helper python scripts
@@ -85,6 +96,8 @@ if [[ ! -f ${CONFIG_FINISHED_LOCK} ]]; then
   {% include '_templates/linux/mount_shared_storage.jinja2' %}
 
   {%- include '_templates/linux/restrict_ssh_access_to_session_owner.jinja2' %}
+
+  {%- include '_templates/linux/disable_ssh.jinja2' %}
 
   {%- with  ebs_volume_tags = [
     {'Key':'res:EnvironmentName', 'Value': context.cluster_name },
@@ -128,8 +141,12 @@ if [[ ! -f ${CONFIG_FINISHED_LOCK} ]]; then
     {% include '_templates/linux/openpbs_client.jinja2' %}
   {% endif %}
 
+  {% if context.config.get_bool('identity-provider.cognito.enable_native_user_login') %}
+    /bin/bash "${SCRIPT_DIR}/../common/configure_cognito_modules.sh" -o "${RES_BASE_OS}" -s "${SCRIPT_DIR}" -u "${IDEA_SESSION_OWNER}" -r "${AWS_REGION}" -i "${COGNITO_MIN_ID}" -a "${COGNITO_MAX_ID}" -d "${COGNITO_UID_ATTRIBUTE}" -p "${USER_POOL_ID}" -c "${VDI_CLIENT_ID}" -g "${COGNITO_DEFAULT_USER_GROUP}" -x "${https_proxy}"
+  {% endif %}
+
   #Begin: Configure SSH Key Gen
-  /bin/bash "${SCRIPT_DIR}/../common/configure_ssh_keygen.sh" -o {{ context.base_os }} -s "${SCRIPT_DIR}" -u "${IDEA_SESSION_OWNER}"
+  /bin/bash "${SCRIPT_DIR}/../common/configure_ssh_keygen.sh" -o "${RES_BASE_OS}" -s "${SCRIPT_DIR}" -u "${IDEA_SESSION_OWNER}"
   #End: Configure SSH Key Gen
 
   BROKER_CERTIFICATE_LOCATION_LOCAL='/etc/dcv/dcv_broker/dcvsmbroker_ca.pem'
@@ -240,46 +257,6 @@ if [[ ! -f ${CONFIG_FINISHED_LOCK} ]]; then
   function configure_x_server() {
     # Configure the X server to start automatically when the Linux server boots
     sudo systemctl set-default graphical.target
-
-    {% if context.base_os == 'rhel9' -%}
-
-      {#  rhel9 removed various x related resources and requires additional configuration #}
-
-      echo "OS is {{ context.base_os }}, configuring x windows server"
-
-      {# create the dummmy x driver configuration file #}
-      echo 'Section "Device"
-      Identifier "DummyDevice"
-      Driver "dummy"
-      Option "UseEDID" "false"
-      VideoRam 512000
-  EndSection
-
-  Section "Monitor"
-      Identifier "DummyMonitor"
-      HorizSync   5.0 - 1000.0
-      VertRefresh 5.0 - 200.0
-      Option "ReducedBlanking"
-  EndSection
-
-  Section "Screen"
-      Identifier "DummyScreen"
-      Device "DummyDevice"
-      Monitor "DummyMonitor"
-      DefaultDepth 24
-      SubSection "Display"
-          Viewport 0 0
-          Depth 24
-          Virtual 4096 2160
-      EndSubSection
-  EndSection
-  ' > /etc/X11/xorg.conf
-
-      {# install the x dummy drivers #}
-      dnf install -y xorg-x11-drv-dummy
-    {% else %}
-      echo "OS is {{ context.base_os }}, no need for modified x configuration"
-    {% endif -%}
   }
 
   function start_x_server() {
@@ -293,6 +270,8 @@ if [[ ! -f ${CONFIG_FINISHED_LOCK} ]]; then
 
   function restart_x_server() {
     echo "# restart x server ..."
+    local NVIDIAXCONFIG=$(which nvidia-xconfig)
+    sudo $NVIDIAXCONFIG --preserve-busid --enable-all-gpus
     sudo systemctl isolate multi-user.target
     sudo systemctl isolate graphical.target
     echo "# wait for x server to start ..."
@@ -381,6 +360,8 @@ if [[ ! -f ${CONFIG_FINISHED_LOCK} ]]; then
   }
 
   function verify_x_server_is_up() {
+    max_timeout_in_seconds=120
+    start_time=$(date +%s)
     echo "# validating if x server is running ..."
     sleep 10
     local output=$(x_server_validation_command)
@@ -396,22 +377,34 @@ if [[ ! -f ${CONFIG_FINISHED_LOCK} ]]; then
         echo "Waited 5 times in a row. Was unsuccessful. trying to restart x server again..."
         restart_x_server
       fi
+      current_time=$(date +%s)
+      elapsed=$((current_time - start_time))
+      if [[ $elapsed -ge $max_timeout_in_seconds ]]
+      then
+          echo "Max timeout for verify server reached after $elapsed seconds"
+          break
+      fi
     done
-    echo "x server is up and running...."
+    current_time=$(date +%s)
+    elapsed=$((current_time - start_time))
+    if [[ $elapsed -lt $max_timeout_in_seconds ]]
+    then
+        echo "x server is up and running...."
+    fi
   }
 
   ## -- DCV RELATED EXECUTION BEGINS HERE -- ##
 
-  /bin/bash "${SCRIPT_DIR}/../nice-dcv-linux/disable_wayland_protocol.sh" -o {{ context.base_os }} -s "${SCRIPT_DIR}"
+  /bin/bash "${SCRIPT_DIR}/../nice-dcv-linux/disable_wayland_protocol.sh" -o "${RES_BASE_OS}" -s "${SCRIPT_DIR}"
 
   download_broker_certificate
   configure_dcv_host
   configure_dcv_agent
   configure_usb_remotization
   {% if context.is_gpu_instance_type() -%}
-    /bin/bash "${SCRIPT_DIR}/../nice-dcv-linux/configure_gl.sh" -o {{ context.base_os }} -s "${SCRIPT_DIR}"
+    /bin/bash "${SCRIPT_DIR}/../nice-dcv-linux/configure_gl.sh" -o "${RES_BASE_OS}" -s "${SCRIPT_DIR}"
   {% else %}
-    echo "OS is {{ context.base_os }}, BUT not a GL Machine. No need for this configuration. NO-OP..."
+    echo "OS is "${RES_BASE_OS}", BUT not a GL Machine. No need for this configuration. NO-OP..."
   {% endif %}
   machine=$(uname -m) #x86_64 or aarch64
   if [[ $machine == "x86_64" ]]; then

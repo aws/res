@@ -11,7 +11,7 @@
  * and limitations under the License.
  */
 
-import { Popover, SideNavigationProps } from "@cloudscape-design/components";
+import { Box, Link, Popover, SideNavigationProps } from "@cloudscape-design/components";
 import { AppContext } from "../common";
 
 export const IdeaSideNavHeader = (context: AppContext): SideNavigationProps.Header => {
@@ -36,12 +36,12 @@ export const IdeaSideNavItems = (context: AppContext): SideNavigationProps.Item[
     if (context.getClusterSettingsService().isVirtualDesktopDeployed()) {
         userNav.items.push({
             type: "link",
-            text: "My Virtual Desktops",
+            text: "My virtual desktops",
             href: "#/home/virtual-desktops",
         });
         userNav.items.push({
             type: "link",
-            text: "Shared Desktops",
+            text: "Shared desktops",
             href: "#/home/shared-desktops",
         });
     }
@@ -49,15 +49,15 @@ export const IdeaSideNavItems = (context: AppContext): SideNavigationProps.Item[
     if (context.getClusterSettingsService().getIsFileBrowserEnabled()) {
         userNav.items.push({
             type: "link",
-            text: "File Browser",
+            text: "File browser",
             href: "#/home/file-browser",
         });
     }
 
-    if (context.getClusterSettingsService().isBastionHostDeployed()) {
+    if (context.getClusterSettingsService().getIsSshEnabled()) {
         userNav.items.push({
             type: "link",
-            text: "SSH Access Instructions",
+            text: "SSH access instructions",
             href: "#/home/ssh-access",
         });
     }
@@ -71,7 +71,7 @@ export const IdeaSideNavItems = (context: AppContext): SideNavigationProps.Item[
     if (context.getClusterSettingsService().isVirtualDesktopDeployed() && context.auth().isAdmin()) {
         adminNavItems.push({
             type: "section",
-            text: "Session Management",
+            text: "Session management",
             defaultExpanded: true,
             items: [
                 {
@@ -86,7 +86,7 @@ export const IdeaSideNavItems = (context: AppContext): SideNavigationProps.Item[
                 },
                 {
                     type: "link",
-                    text: "Software Stacks",
+                    text: "Software stacks",
                     href: "#/virtual-desktop/software-stacks",
                 },
                 {
@@ -96,7 +96,7 @@ export const IdeaSideNavItems = (context: AppContext): SideNavigationProps.Item[
                 },
                 {
                     type: "link",
-                    text: "Desktop Settings",
+                    text: "Desktop settings",
                     href: "#/virtual-desktop/settings",
                 },
             ],
@@ -126,40 +126,56 @@ export const IdeaSideNavItems = (context: AppContext): SideNavigationProps.Item[
                 },
                 {
                     type: "link",
-                    text: "File Systems",
+                    text: "File systems",
                     href: "#/cluster/filesystem",
                 },
                 {
                     type: "link",
-                    text: "S3 Buckets",
+                    text: "S3 buckets",
                     href: "#/cluster/s3-bucket",
+                },
+                {
+                    type: "link",
+                    text: "Identity management",
+                    href: "#/cluster/identity-management",
+                    info: (
+                    <Box color="text-status-info" display="inline">
+                        <Popover
+                            header="Introducing Identity management"
+                            size="medium"
+                            triggerType="text"
+                            content={
+                                <>
+                                    A centralized location to manage Cognito users, Active Directory settings, and Single Sign-On.
+                                </>
+                            }
+                            renderWithPortal={true}
+                        >
+                            <Box color="text-status-info" fontSize="body-s" fontWeight="bold">
+                                New
+                            </Box>
+                        </Popover>
+                    </Box>
+                    )
                 },
                 {
                     type: "link",
                     text: "Permission policy",
                     href: "#/cluster/permissions",
-                    // To be removed with 2024.12 release
-                    info: <Popover
-                        triggerType="text"
-                        header="Introducing Permission policy"
-                        content="We've created the Permission policy to align the environment with your organization's security and privacy standards."
-                    >
-                        New
-                    </Popover>
                 },
                 {
                     type: "link",
-                    text: "Environment Status",
+                    text: "Environment status",
                     href: "#/cluster/status",
                 },
                 {
                     type: "link",
-                    text: "Snapshot Management",
+                    text: "Snapshot management",
                     href: "#/cluster/snapshot-management",
                 },
                 {
                     type: "link",
-                    text: "General Settings",
+                    text: "Environment settings",
                     href: "#/cluster/settings",
                 },
             ],

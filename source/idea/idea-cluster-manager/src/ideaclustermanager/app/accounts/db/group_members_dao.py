@@ -10,21 +10,19 @@
 #  and limitations under the License.
 
 from ideasdk.utils import Utils
-from ideadatamodel import exceptions, ListUsersInGroupRequest, ListUsersInGroupResult, SocaPaginator
+from ideadatamodel import exceptions, ListUsersInGroupRequest, ListUsersInGroupResult, SocaPaginator, constants
 from ideasdk.context import SocaContext
 
-from ideaclustermanager.app.accounts.auth_utils import AuthUtils
 from ideaclustermanager.app.accounts.db.user_dao import UserDAO
 
-from typing import List
 from boto3.dynamodb.conditions import Key
+from res.resources import accounts
 
 
 class GroupMembersDAO:
 
-    def __init__(self, context: SocaContext, user_dao: UserDAO, logger=None):
+    def __init__(self, context: SocaContext, logger=None):
         self.context = context
-        self.user_dao = user_dao
         if logger is not None:
             self.logger = logger
         else:
@@ -35,99 +33,7 @@ class GroupMembersDAO:
         return f'{self.context.cluster_name()}.accounts.group-members'
 
     def initialize(self):
-        self.context.aws_util().dynamodb_create_table(
-            create_table_request={
-                'TableName': self.get_table_name(),
-                'AttributeDefinitions': [
-                    {
-                        'AttributeName': 'group_name',
-                        'AttributeType': 'S'
-                    },
-                    {
-                        'AttributeName': 'username',
-                        'AttributeType': 'S'
-                    }
-                ],
-                'KeySchema': [
-                    {
-                        'AttributeName': 'group_name',
-                        'KeyType': 'HASH'
-                    },
-                    {
-                        'AttributeName': 'username',
-                        'KeyType': 'RANGE'
-                    }
-                ],
-                'BillingMode': 'PAY_PER_REQUEST'
-            },
-            wait=True
-        )
         self.table = self.context.aws().dynamodb_table().Table(self.get_table_name())
-
-    def create_membership(self, group_name: str, username: str):
-        username = AuthUtils.sanitize_username(username)
-        if Utils.is_empty(group_name):
-            raise exceptions.invalid_params('group_name is required')
-
-        self.table.put_item(
-            Item={
-                'group_name': group_name,
-                'username': username
-            }
-        )
-
-    def delete_membership(self, group_name: str, username: str):
-        username = AuthUtils.sanitize_username(username)
-        if Utils.is_empty(group_name):
-            raise exceptions.invalid_params('group_name is required')
-
-        self.table.delete_item(
-            Key={
-                'group_name': group_name,
-                'username': username
-            }
-        )
-
-    def has_users_in_group(self, group_name: str) -> bool:
-        query_result = self.table.query(
-            Limit=1,
-            KeyConditions={
-                'group_name': {
-                    'AttributeValueList': [group_name],
-                    'ComparisonOperator': 'EQ'
-                }
-            }
-        )
-        memberships = Utils.get_value_as_list('Items', query_result, [])
-        return len(memberships) > 0
-
-    def get_usernames_in_group(self, group_name: str) -> List[str]:
-        if Utils.is_empty(group_name):
-            raise exceptions.invalid_params('group_name is required')
-
-        usernames = []
-
-        exclusive_start_key = None
-        while True:
-            if exclusive_start_key is not None:
-                query_result = self.table.query(
-                    ExclusiveStartKey=exclusive_start_key,
-                    KeyConditionExpression=Key('group_name').eq(group_name)
-                )
-            else:
-                query_result = self.table.query(
-                    KeyConditionExpression=Key('group_name').eq(group_name)
-                )
-
-            db_user_groups = Utils.get_value_as_list('Items', query_result, [])
-            for db_user_group in db_user_groups:
-                usernames.append(db_user_group['username'])
-
-            exclusive_start_key = Utils.get_any_value('LastEvaluatedKey', query_result)
-            if exclusive_start_key is None:
-                break
-
-        return usernames
 
     def list_users_in_group(self, request: ListUsersInGroupRequest) -> ListUsersInGroupResult:
         group_names = request.group_names
@@ -163,10 +69,10 @@ class GroupMembersDAO:
                 if db_username in username_set:
                     continue
                 username_set.add(db_username)
-                db_user = self.user_dao.get_user(db_username)
+                db_user = accounts.get_user(db_username)
                 if db_user is None:
                     continue
-                user = self.user_dao.convert_from_db(db_user)
+                user = UserDAO.convert_from_db(db_user)
                 users.append(user)
 
             last_evaluated_key = Utils.get_any_value('LastEvaluatedKey', query_result)

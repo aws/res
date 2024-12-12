@@ -121,6 +121,8 @@ class WebPortal:
         app_init_data = {
             'version': ideaclustermanager.__version__,
             'sso': sso_enabled,
+            'enable_self_sign_up':  self.context.config().get_bool('identity-provider.cognito.enable_self_sign_up', False),
+            'enable_native_user_login':  self.context.config().get_bool('identity-provider.cognito.enable_native_user_login', False),
             'cluster_name': self.context.cluster_name(),
             'aws_region': self.context.aws().aws_region(),
             'title': self.context.config().get_string('cluster-manager.web_portal.title', 'Engineering Studio on AWS'),
@@ -252,7 +254,7 @@ class WebPortal:
             email = self.context.token_service.get_email_from_token_username(token_username=cognito_username)
             if not email:
                 self.logger.exception(f'Error: No email defined for cognito user {cognito_username}')
-            
+
             existing_user = self.context.accounts.get_user_by_email(email=email)
             if not existing_user:
                 self.logger.info(f'SSO auth: Unable to process user with email {email}')
@@ -267,7 +269,7 @@ class WebPortal:
                     self.logger.info(f'Could not delete state {state}')
                 return sanic.response.redirect(f'{self.web_resources_context_path}?sso_auth_status=FAIL&error_msg=UserNotFound',
                                 headers=DEFAULT_HTTP_HEADERS)
-                
+
             if not existing_user.enabled:
                 self.logger.error(f'User {existing_user.username} is disabled. Login Denied.')
                 cognito_domain_url = self.context.config().get_string('identity-provider.cognito.domain_url')
@@ -279,7 +281,7 @@ class WebPortal:
                     return sanic.response.redirect(f'{cognito_domain_url}/logout?client_id={client_id}&logout_uri={logout_url}')
                 return sanic.response.redirect(f'{self.web_resources_context_path}?sso_auth_status=FAIL&error_msg=UserNotFound',
                                 headers=DEFAULT_HTTP_HEADERS)
-                
+
             self.logger.debug(f'Updating SSO State for user {cognito_username}: {state}')
             self.context.accounts.sso_state_dao.update_sso_state({
                 'state': state,

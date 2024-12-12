@@ -12,8 +12,10 @@ logger.addHandler(logging.StreamHandler())
 logger.setLevel(logging.INFO)
 
 SESSIONS_TABLE_NAME = "vdc.controller.user-sessions"
+SESSIONS_COUNTER_TABLE_NAME = "vdc.controller.user-sessions-counter"
 SESSION_DB_HASH_KEY = "owner"
-SESSION_DB_RANGE_KEY = "idea_session_id"
+SESSION_DB_RANGE_KEY = SESSIONS_COUNTER_DB_HASH_KEY = "idea_session_id"
+SESSIONS_COUNTER_DB_RANGE_KEY = "counter_type"
 SESSION_DB_UPDATED_ON_KEY = "updated_on"
 SESSION_DB_STATE_KEY = "state"
 SESSION_DB_DCV_SESSION_ID_KEY = "dcv_session_id"

@@ -56,7 +56,7 @@ modules:
     {% if 'bastion-host' in enabled_modules %}
   - name: bastion-host
     id: bastion-host
-    type: stack
+    type: app
     config_files:
       - settings.yml
     {% endif %}

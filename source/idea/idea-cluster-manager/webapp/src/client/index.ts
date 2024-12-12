@@ -14,6 +14,7 @@
 import IdeaApiInvoker from "./idea-api-invoker";
 import AuthClient from "./auth-client";
 import AccountsClient from "./accounts-client";
+import BackendClient from "./backend-client";
 import SchedulerAdminClient from "./scheduler-admin-client";
 import SchedulerClient from "./scheduler-client";
 import FileBrowserClient from "./file-browser-client";
@@ -26,4 +27,4 @@ import EmailTemplatesClient from "./email-templates-client";
 import IdeaClients from "./clients";
 import SnapshotsClient from "./snapshots-client";
 
-export { IdeaApiInvoker, AuthClient, AccountsClient, SchedulerAdminClient, SchedulerClient, FileBrowserClient, VirtualDesktopClient, VirtualDesktopAdminClient, ClusterSettingsClient, ProjectsClient, EmailTemplatesClient, IdeaClients, FileSystemClient, SnapshotsClient };
+export { IdeaApiInvoker, AuthClient, AccountsClient, BackendClient, SchedulerAdminClient, SchedulerClient, FileBrowserClient, VirtualDesktopClient, VirtualDesktopAdminClient, ClusterSettingsClient, ProjectsClient, EmailTemplatesClient, IdeaClients, FileSystemClient, SnapshotsClient };

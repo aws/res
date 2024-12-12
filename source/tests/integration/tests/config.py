@@ -18,8 +18,8 @@ from ideadatamodel import (  # type: ignore
     VirtualDesktopSoftwareStack,
 )
 
-MIN_LINUX_STORAGE = SocaMemory(value=10, unit=SocaMemoryUnit.GB)
-MIN_WINDOWS_STORAGE = SocaMemory(value=30, unit=SocaMemoryUnit.GB)
+MIN_LINUX_STORAGE = SocaMemory(value=50, unit=SocaMemoryUnit.GB)
+MIN_WINDOWS_STORAGE = SocaMemory(value=50, unit=SocaMemoryUnit.GB)
 MIN_RAM = SocaMemory(value=4, unit=SocaMemoryUnit.GB)
 
 TEST_SOFTWARE_STACKS = [

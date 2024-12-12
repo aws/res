@@ -1,6 +1,30 @@
 # Change Log
 This file is used to list changes made in each release of Research and Engineering Studio (RES).
 
+2024.12
+------
+
+**ENHANCEMENTS**
+
+- Added the ability to activate/deactivate SSH access to the RES environment.
+- Added the ability for Active Directory (AD) parameters to now be optional when deploying RES. Parameters can be changed at any time after deployment.
+- Added the ability to use Amazon Cognito users to log into RES and deploy Linux Virtual Desktop Infrastructure (VDI) sessions.
+- Added the ability to deploy RES infrastructure hosts with RHEL 8 or RHEL 9 in addition to the default Amazon Linux 2 OS.
+
+**CHANGES**
+
+- The listing of filesystems to onboard is now done through RES’s AWS Proxy Lambda function.
+- The DynamoDB table creation and default values population for RES has been moved to static CloudFormation stacks.
+- The option to Create Software Stack from an existing session has been removed as it was not working as intended.
+
+**BUG FIXES**
+
+- Resolved an issue where the storage root parameter is now properly defined for Ubuntu VDIs allowing access to the DCV upload/download icon in the session UI.
+- Resolved an issue with VDI auto stop feature in private VPC configuration. 
+- Resolved an issue with failing to launch VDIs for graphic enhanced instance types.
+- Resolved an issue where infrastructure AMI building would fail due to an error in the dependencies file.
+- Resolved an issue with the PublicAccessConfig parameter in the bootstrap stack causing an error in deployments using restricted Service Control Policies (SCP).
+
 2024.10
 ------
 
@@ -20,7 +44,6 @@ This file is used to list changes made in each release of Research and Engineeri
 
 - Resolved an issue where Infrastructure AMI building would error out due to a relative directory structure issue.
 - Resolved an issue where users were unable to connect to VDI instances running AL2 from the EC2 console.
-
 
 2024.08
 ------

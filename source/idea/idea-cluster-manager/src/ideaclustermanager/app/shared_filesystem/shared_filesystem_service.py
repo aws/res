@@ -1,7 +1,9 @@
 import time
 from typing import Optional, List, Dict, Set, Union
 
-from ideaclustermanager.app.shared_filesystem.object_storage_service import ObjectStorageService
+from ideaclustermanager.app.shared_filesystem.object_storage_service import (
+    ObjectStorageService,
+)
 from ideasdk.context import SocaContext
 from ideadatamodel import (
     constants,
@@ -13,7 +15,7 @@ from ideadatamodel import (
     CreateONTAPFileSystemRequest,
     SocaFilter,
     exceptions,
-    errorcodes
+    errorcodes,
 )
 from ideadatamodel.shared_filesystem import (
     AddFileSystemToProjectRequest,
@@ -25,7 +27,6 @@ from ideadatamodel.shared_filesystem import (
     FileSystem,
     FSxONTAPFileSystem,
     FSxLUSTREFileSystem,
-    ListFileSystemInVPCResult,
     OnboardS3BucketRequest,
     ListOnboardedFileSystemsRequest,
     ListOnboardedFileSystemsResult,
@@ -34,7 +35,7 @@ from ideadatamodel.shared_filesystem import (
     RemoveFileSystemRequest,
     RemoveFileSystemResult,
     ListGlobalFileSystemsRequest,
-    ListGlobalFileSystemsResult
+    ListGlobalFileSystemsResult,
 )
 from ideadatamodel.shared_filesystem.shared_filesystem_api import FSxONTAPDeploymentType
 from ideasdk.utils import Utils, ApiUtils
@@ -84,22 +85,23 @@ class SharedFilesystemService:
     def onboard_efs_filesystem(self, request: OnboardEFSFileSystemRequest):
         self._validate_onboard_filesystem_request(request)
         self._validate_filesystem_does_not_exist(request.filesystem_name)
-        self._validate_filesystem_present_in_vpc_and_not_onboarded(request.filesystem_id)
+        self._validate_filesystem_present_in_vpc_and_not_onboarded(
+            request.filesystem_id
+        )
 
         config_entries = self.build_config_for_vpc_efs(request)
 
         self.context.config().db.sync_cluster_settings_in_db(
-            config_entries=config_entries,
-            overwrite=True
+            config_entries=config_entries, overwrite=True
         )
 
-    def build_config_for_vpc_efs(
-        self, request: OnboardEFSFileSystemRequest
-    ):
+    def build_config_for_vpc_efs(self, request: OnboardEFSFileSystemRequest):
         efs_client = self.context.aws().efs()
         filesystem_id = request.filesystem_id
-        describe_fs_result = efs_client.describe_file_systems(FileSystemId=filesystem_id)
-        file_system = describe_fs_result['FileSystems'][0]
+        describe_fs_result = efs_client.describe_file_systems(
+            FileSystemId=filesystem_id
+        )
+        file_system = describe_fs_result["FileSystems"][0]
         config = {
             request.filesystem_name: {
                 "title": request.filesystem_title,
@@ -113,8 +115,8 @@ class SharedFilesystemService:
                     "use_existing_fs": True,
                     "file_system_id": filesystem_id,
                     "dns": f"{filesystem_id}.efs.{self.context.aws().aws_region()}.amazonaws.com",
-                    "encrypted": Utils.get_value_as_string('Encrypted', file_system)
-                }
+                    "encrypted": Utils.get_value_as_string("Encrypted", file_system),
+                },
             }
         }
         config_entries = []
@@ -127,20 +129,22 @@ class SharedFilesystemService:
 
     def create_efs(self, request: CreateEFSFileSystemRequest):
         self._validate_create_filesystem_request(request)
-        self._validate_correct_subnet_selection({request.subnet_id_1, request.subnet_id_2})
+        self._validate_correct_subnet_selection(
+            {request.subnet_id_1, request.subnet_id_2}
+        )
         self._validate_filesystem_does_not_exist(request.filesystem_name)
-        ApiUtils.validate_input(request.mount_directory,
-                                constants.MOUNT_DIRECTORY_REGEX,
-                                constants.MOUNT_DIRECTORY_ERROR_MESSAGE)
+        ApiUtils.validate_input(
+            request.mount_directory,
+            constants.MOUNT_DIRECTORY_REGEX,
+            constants.MOUNT_DIRECTORY_ERROR_MESSAGE,
+        )
         try:
             efs_client = self.context.aws().efs()
             security_group_id = self.config.get_string(
                 f"{constants.MODULE_SHARED_STORAGE}.security_group_id"
             )
 
-            tags_for_fs = self.create_tags(
-                request.filesystem_name
-            )
+            tags_for_fs = self.create_tags(request.filesystem_name)
 
             efs_create_response = efs_client.create_file_system(
                 ThroughputMode="elastic", Encrypted=True, Tags=tags_for_fs
@@ -148,9 +152,7 @@ class SharedFilesystemService:
             efs_filesystem = EFSFileSystem(efs=efs_create_response)
             efs_filesystem_id = efs_filesystem.get_filesystem_id()
 
-            self.efs_check_filesystem_exists(
-                filesystem_id=efs_filesystem_id, wait=True
-            )
+            self.efs_check_filesystem_exists(filesystem_id=efs_filesystem_id, wait=True)
             filesystem_policy = {
                 "Version": "2012-10-17",
                 "Id": "efs-prevent-anonymous-access-policy",
@@ -230,20 +232,31 @@ class SharedFilesystemService:
     def onboard_s3_bucket(self, request: OnboardS3BucketRequest):
         self._object_storage_service.validate_onboard_object_storage_request(request)
 
-        s3_bucket_filter = [SocaFilter(key=constants.FILE_SYSTEM_PROVIDER_KEY, eq=constants.STORAGE_PROVIDER_S3_BUCKET)]
-        onboarded_filesystems = self.list_onboarded_file_systems(ListOnboardedFileSystemsRequest(filters=s3_bucket_filter)).listing
-        onboarded_filesystem_ids = set([fs.get_filesystem_id() for fs in onboarded_filesystems])
+        s3_bucket_filter = [
+            SocaFilter(
+                key=constants.FILE_SYSTEM_PROVIDER_KEY,
+                eq=constants.STORAGE_PROVIDER_S3_BUCKET,
+            )
+        ]
+        onboarded_filesystems = self.list_onboarded_file_systems(
+            ListOnboardedFileSystemsRequest(filters=s3_bucket_filter)
+        ).listing
+        onboarded_filesystem_ids = set(
+            [fs.get_filesystem_id() for fs in onboarded_filesystems]
+        )
 
         # Check if bucket_arn has been onboarded already
         if request.bucket_arn in onboarded_filesystem_ids:
             raise exceptions.soca_exception(
                 error_code=errorcodes.FILESYSTEM_ALREADY_ONBOARDED,
-                message=f"{request.bucket_arn} has already been onboarded. Provide a new bucket ARN."
+                message=f"{request.bucket_arn} has already been onboarded. Provide a new bucket ARN.",
             )
 
         # Check for mount collisions of provided projects and mount directory
         if request.projects:
-            self._validate_mount_directory_and_projects_for_mount_point_collisions(request.mount_directory, request.projects)
+            self._validate_mount_directory_and_projects_for_mount_point_collisions(
+                request.mount_directory, request.projects
+            )
 
         result = self._object_storage_service.build_config_for_s3_bucket(request)
         config = result["config"]
@@ -254,8 +267,7 @@ class SharedFilesystemService:
             config=config,
         )
         self.context.config().db.sync_cluster_settings_in_db(
-            config_entries=config_entries,
-            overwrite=True
+            config_entries=config_entries, overwrite=True
         )
         for entry in config_entries:
             # update local config tree
@@ -266,30 +278,38 @@ class SharedFilesystemService:
     def onboard_ontap_filesystem(self, request: OnboardONTAPFileSystemRequest):
         self._validate_onboard_filesystem_request(request)
         self._validate_filesystem_does_not_exist(request.filesystem_name)
-        self._validate_filesystem_present_in_vpc_and_not_onboarded(request.filesystem_id)
+        self._validate_filesystem_present_in_vpc_and_not_onboarded(
+            request.filesystem_id
+        )
 
         config_entries = self.build_config_for_vpc_ontap(request)
 
         self.context.config().db.sync_cluster_settings_in_db(
-            config_entries=config_entries,
-            overwrite=True
+            config_entries=config_entries, overwrite=True
         )
 
     def build_config_for_vpc_ontap(
-        self, request: OnboardONTAPFileSystemRequest,
+        self,
+        request: OnboardONTAPFileSystemRequest,
     ):
         fsx_client = self.context.aws().fsx()
 
-        describe_svm_response = fsx_client.describe_storage_virtual_machines(StorageVirtualMachineIds=[request.svm_id])
-        describe_volumes_response = fsx_client.describe_volumes(VolumeIds=[request.volume_id])
+        describe_svm_response = fsx_client.describe_storage_virtual_machines(
+            StorageVirtualMachineIds=[request.svm_id]
+        )
+        describe_volumes_response = fsx_client.describe_volumes(
+            VolumeIds=[request.volume_id]
+        )
 
-        svm = FSxONTAPSVM(storage_virtual_machine=describe_svm_response['StorageVirtualMachines'][0])
-        volume = FSxONTAPVolume(volume=describe_volumes_response['Volumes'][0])
+        svm = FSxONTAPSVM(
+            storage_virtual_machine=describe_svm_response["StorageVirtualMachines"][0]
+        )
+        volume = FSxONTAPVolume(volume=describe_volumes_response["Volumes"][0])
 
         config = {
             request.filesystem_name: {
                 "title": request.filesystem_title,
-                "provider":  constants.STORAGE_PROVIDER_FSX_NETAPP_ONTAP,
+                "provider": constants.STORAGE_PROVIDER_FSX_NETAPP_ONTAP,
                 "scope": ["project"],
                 "projects": [],
                 "mount_dir": request.mount_directory,
@@ -326,7 +346,9 @@ class SharedFilesystemService:
 
     def create_fsx_ontap(self, request: CreateONTAPFileSystemRequest):
         self._validate_create_filesystem_request(request)
-        self._validate_correct_subnet_selection({request.primary_subnet, request.standby_subnet})
+        self._validate_correct_subnet_selection(
+            {request.primary_subnet, request.standby_subnet}
+        )
         self._validate_filesystem_does_not_exist(request.filesystem_name)
         if not request.mount_directory and not request.mount_drive:
             raise exceptions.soca_exception(
@@ -335,28 +357,34 @@ class SharedFilesystemService:
             )
 
         if request.mount_directory:
-            ApiUtils.validate_input(request.mount_directory,
-                                    constants.MOUNT_DIRECTORY_REGEX,
-                                    constants.MOUNT_DIRECTORY_ERROR_MESSAGE)
+            ApiUtils.validate_input(
+                request.mount_directory,
+                constants.MOUNT_DIRECTORY_REGEX,
+                constants.MOUNT_DIRECTORY_ERROR_MESSAGE,
+            )
 
         if request.mount_drive:
-            ApiUtils.validate_input(request.mount_drive,
-                                    constants.MOUNT_DRIVE_REGEX,
-                                    constants.MOUNT_DRIVE_ERROR_MESSAGE)
+            ApiUtils.validate_input(
+                request.mount_drive,
+                constants.MOUNT_DRIVE_REGEX,
+                constants.MOUNT_DRIVE_ERROR_MESSAGE,
+            )
 
-            ApiUtils.validate_input(request.file_share_name,
-                                    constants.FILE_SYSTEM_NAME_REGEX,
-                                    constants.FILE_SYSTEM_NAME_ERROR_MESSAGE)
-        ApiUtils.validate_input_range(request.storage_capacity, constants.ONTAP_STORAGE_CAPACITY_RANGE)
+            ApiUtils.validate_input(
+                request.file_share_name,
+                constants.FILE_SYSTEM_NAME_REGEX,
+                constants.FILE_SYSTEM_NAME_ERROR_MESSAGE,
+            )
+        ApiUtils.validate_input_range(
+            request.storage_capacity, constants.ONTAP_STORAGE_CAPACITY_RANGE
+        )
         try:
             fsx_client = self.context.aws().fsx()
             security_group_id = self.config.get_string(
                 f"{constants.MODULE_SHARED_STORAGE}.security_group_id"
             )
 
-            tags_for_fs = self.create_tags(
-                request.filesystem_name
-            )
+            tags_for_fs = self.create_tags(request.filesystem_name)
 
             _subnet_ids = []
             if request.deployment_type == FSxONTAPDeploymentType.SINGLE_AZ:
@@ -462,27 +490,31 @@ class SharedFilesystemService:
     def onboard_lustre_filesystem(self, request: OnboardLUSTREFileSystemRequest):
         self._validate_onboard_filesystem_request(request)
         self._validate_filesystem_does_not_exist(request.filesystem_name)
-        self._validate_filesystem_present_in_vpc_and_not_onboarded(request.filesystem_id)
+        self._validate_filesystem_present_in_vpc_and_not_onboarded(
+            request.filesystem_id
+        )
 
         config_entries = self.build_config_for_vpc_lustre(request)
 
         self.context.config().db.sync_cluster_settings_in_db(
-            config_entries=config_entries,
-            overwrite=True
+            config_entries=config_entries, overwrite=True
         )
 
     def build_config_for_vpc_lustre(
-        self, request: OnboardLUSTREFileSystemRequest,
+        self,
+        request: OnboardLUSTREFileSystemRequest,
     ):
         fsx_client = self.context.aws().fsx()
         filesystem_id = request.filesystem_id
-        describe_file_system_response = fsx_client.describe_file_systems(FileSystemIds=[filesystem_id])
-        if not describe_file_system_response.get('FileSystems'):
+        describe_file_system_response = fsx_client.describe_file_systems(
+            FileSystemIds=[filesystem_id]
+        )
+        if not describe_file_system_response.get("FileSystems"):
             raise exceptions.soca_exception(
                 error_code=errorcodes.INVALID_PARAMS,
                 message=f"File system with ID {filesystem_id} doesn't exist",
             )
-        file_system = describe_file_system_response['FileSystems'][0]
+        file_system = describe_file_system_response["FileSystems"][0]
         mount_name = file_system.get("LustreConfiguration", {}).get("MountName", "")
         config = {
             request.filesystem_name: {
@@ -498,8 +530,8 @@ class SharedFilesystemService:
                     "use_existing_fs": True,
                     "file_system_id": filesystem_id,
                     "dns": f"{filesystem_id}.fsx.{self.context.aws().aws_region()}.amazonaws.com",
-                    "encrypted": Utils.get_value_as_string('Encrypted', file_system)
-                }
+                    "encrypted": Utils.get_value_as_string("Encrypted", file_system),
+                },
             }
         }
         config_entries = []
@@ -510,7 +542,9 @@ class SharedFilesystemService:
         )
         return config_entries
 
-    def update_filesystem(self, request: UpdateFileSystemRequest) -> UpdateFileSystemResult:
+    def update_filesystem(
+        self, request: UpdateFileSystemRequest
+    ) -> UpdateFileSystemResult:
         self._validate_update_filesystem_request(request=request)
         updated_config = {}
         fs = self.get_filesystem(request.filesystem_name)
@@ -521,25 +555,39 @@ class SharedFilesystemService:
             if fs.get_projects() is not None:
                 new_projects_to_attach -= set(fs.get_projects())
             if new_projects_to_attach:
-                self._validate_mount_directory_and_projects_for_mount_point_collisions(fs.get_mount_dir(), list(new_projects_to_attach))
+                self._validate_mount_directory_and_projects_for_mount_point_collisions(
+                    fs.get_mount_dir(), list(new_projects_to_attach)
+                )
             updated_config[constants.FILE_SYSTEM_PROJECTS_KEY] = request.projects
         if updated_config:
             self._update_config_for_filesystem(fs, updated_config)
         return UpdateFileSystemResult()
 
-    def remove_filesystem(self, request: RemoveFileSystemRequest) -> RemoveFileSystemResult:
+    def remove_filesystem(
+        self, request: RemoveFileSystemRequest
+    ) -> RemoveFileSystemResult:
         self._validate_remove_filesystem_request(request)
         fs = self.get_filesystem(request.filesystem_name)
         if fs.get_projects():
-            self.logger.error(f'{fs.get_title()} filesystem has attached projects: {", ".join(fs.get_projects())}.')
-            raise exceptions.invalid_params(f'{fs.get_title()} filesystem has attached projects: {", ".join(fs.get_projects())}.')
-        self.config.db.delete_config_entries(f'{constants.MODULE_SHARED_STORAGE}.{request.filesystem_name}')
+            self.logger.error(
+                f'{fs.get_title()} filesystem has attached projects: {", ".join(fs.get_projects())}.'
+            )
+            raise exceptions.invalid_params(
+                f'{fs.get_title()} filesystem has attached projects: {", ".join(fs.get_projects())}.'
+            )
+        self.config.db.delete_config_entries(
+            f"{constants.MODULE_SHARED_STORAGE}.{request.filesystem_name}"
+        )
         for key in fs.storage.keys():
             if key == fs.get_provider():
                 for storage_config_key in fs.storage[fs.get_provider()].keys():
-                    self.config.pop(f"{constants.MODULE_SHARED_STORAGE}.{request.filesystem_name}.{fs.get_provider()}.{storage_config_key}")
+                    self.config.pop(
+                        f"{constants.MODULE_SHARED_STORAGE}.{request.filesystem_name}.{fs.get_provider()}.{storage_config_key}"
+                    )
             else:
-                self.config.pop(f"{constants.MODULE_SHARED_STORAGE}.{request.filesystem_name}.{key}")
+                self.config.pop(
+                    f"{constants.MODULE_SHARED_STORAGE}.{request.filesystem_name}.{key}"
+                )
         return RemoveFileSystemResult()
 
     def add_filesystem_to_project(self, request: AddFileSystemToProjectRequest):
@@ -548,7 +596,9 @@ class SharedFilesystemService:
         self._check_required_parameters(request=request)
         self.update_filesystem_to_project_mapping(filesystem_name, project_name)
 
-    def remove_filesystem_from_project(self, request: RemoveFileSystemFromProjectRequest):
+    def remove_filesystem_from_project(
+        self, request: RemoveFileSystemFromProjectRequest
+    ):
         filesystem_name = request.filesystem_name
         project_name = request.project_name
         self._check_required_parameters(request=request)
@@ -557,25 +607,39 @@ class SharedFilesystemService:
         projects = fs.get_projects()
         if project_name in projects:
             projects.remove(project_name)
-            self._update_config_for_filesystem(fs, {constants.FILE_SYSTEM_PROJECTS_KEY: projects})
+            self._update_config_for_filesystem(
+                fs, {constants.FILE_SYSTEM_PROJECTS_KEY: projects}
+            )
 
-    def list_onboarded_file_systems(self, request: ListOnboardedFileSystemsRequest) -> ListOnboardedFileSystemsResult:
+    def list_onboarded_file_systems(
+        self, request: ListOnboardedFileSystemsRequest
+    ) -> ListOnboardedFileSystemsResult:
         self._validate_list_onboarded_file_systems_request(request)
-        shared_storage_config_dict = self.config.get_config(constants.MODULE_SHARED_STORAGE).as_plain_ordered_dict()
+        shared_storage_config_dict = self.config.get_config(
+            constants.MODULE_SHARED_STORAGE
+        ).as_plain_ordered_dict()
 
         onboarded_file_systems: List[FileSystem] = []
         filters = self._get_file_system_filters(request.filters)
         for fs_name, config in shared_storage_config_dict.items():
-            if Utils.is_not_empty(Utils.get_as_dict(config)) and constants.FILE_SYSTEM_PROJECTS_KEY in list(
-                config.keys()
-            ):
-                if not filters or (filters and self._matches_file_system_filters(filters, config)):
-                    onboarded_file_systems.append(FileSystem(name=fs_name, storage=config))
+            if Utils.is_not_empty(
+                Utils.get_as_dict(config)
+            ) and constants.FILE_SYSTEM_PROJECTS_KEY in list(config.keys()):
+                if not filters or (
+                    filters and self._matches_file_system_filters(filters, config)
+                ):
+                    onboarded_file_systems.append(
+                        FileSystem(name=fs_name, storage=config)
+                    )
 
         return ListOnboardedFileSystemsResult(listing=onboarded_file_systems)
 
-    def list_global_filesystems(self, request: ListGlobalFileSystemsRequest) -> ListGlobalFileSystemsResult:
-        shared_storage_config_dict = self.config.get_config(constants.MODULE_SHARED_STORAGE).as_plain_ordered_dict()
+    def list_global_filesystems(
+        self, request: ListGlobalFileSystemsRequest
+    ) -> ListGlobalFileSystemsResult:
+        shared_storage_config_dict = self.config.get_config(
+            constants.MODULE_SHARED_STORAGE
+        ).as_plain_ordered_dict()
         global_filesystems: List[FileSystem] = []
 
         for fs_name, config in shared_storage_config_dict.items():
@@ -600,36 +664,48 @@ class SharedFilesystemService:
 
     def _matches_file_system_filters(self, filters_dict: Dict, config: Dict) -> bool:
         if filters_dict.get(constants.FILE_SYSTEM_TITLE_KEY):
-            if config.get(constants.FILE_SYSTEM_TITLE_KEY) is None or (config.get(constants.FILE_SYSTEM_TITLE_KEY) and not config.get(constants.FILE_SYSTEM_TITLE_KEY).lower().startswith(filters_dict.get(constants.FILE_SYSTEM_TITLE_KEY).lower())):
+            if config.get(constants.FILE_SYSTEM_TITLE_KEY) is None or (
+                config.get(constants.FILE_SYSTEM_TITLE_KEY)
+                and not config.get(constants.FILE_SYSTEM_TITLE_KEY)
+                .lower()
+                .startswith(filters_dict.get(constants.FILE_SYSTEM_TITLE_KEY).lower())
+            ):
                 return False
         if filters_dict.get(constants.FILE_SYSTEM_PROVIDER_KEY):
-            if config.get(constants.FILE_SYSTEM_PROVIDER_KEY) is None or (config.get(constants.FILE_SYSTEM_PROVIDER_KEY) and not config.get(constants.FILE_SYSTEM_PROVIDER_KEY) == filters_dict.get(constants.FILE_SYSTEM_PROVIDER_KEY)):
+            if config.get(constants.FILE_SYSTEM_PROVIDER_KEY) is None or (
+                config.get(constants.FILE_SYSTEM_PROVIDER_KEY)
+                and not config.get(constants.FILE_SYSTEM_PROVIDER_KEY)
+                        == filters_dict.get(constants.FILE_SYSTEM_PROVIDER_KEY)
+            ):
                 return False
         if filters_dict.get(constants.FILE_SYSTEM_PROJECTS_KEY):
-            if config.get(constants.FILE_SYSTEM_PROJECTS_KEY) is None or (config.get(constants.FILE_SYSTEM_PROJECTS_KEY) and not filters_dict.get(constants.FILE_SYSTEM_PROJECTS_KEY) in config.get(constants.FILE_SYSTEM_PROJECTS_KEY)):
+            if config.get(constants.FILE_SYSTEM_PROJECTS_KEY) is None or (
+                config.get(constants.FILE_SYSTEM_PROJECTS_KEY)
+                and not filters_dict.get(constants.FILE_SYSTEM_PROJECTS_KEY)
+                        in config.get(constants.FILE_SYSTEM_PROJECTS_KEY)
+            ):
                 return False
         return True
 
-    def list_file_systems_in_vpc(self) -> ListFileSystemInVPCResult:
-        onboarded_filesystems = self.list_onboarded_file_systems(ListOnboardedFileSystemsRequest()).listing
-        onboarded_filesystem_ids = set([fs.get_filesystem_id() for fs in onboarded_filesystems])
-
-        efs_filesystems = self._list_unonboarded_efs_file_systems(onboarded_filesystem_ids)
-        fsx_ontap_filesystems = self._list_unonboarded_ontap_file_systems(onboarded_filesystem_ids)
-        fsx_lustre_filesystems = self._list_unonboarded_lustre_file_systems(onboarded_filesystem_ids)
-
-        return ListFileSystemInVPCResult(efs=efs_filesystems, fsx_ontap=fsx_ontap_filesystems, fsx_lustre=fsx_lustre_filesystems)
-
-    def update_filesystem_to_project_mapping(self, filesystem_name: str, project_name: str):
+    def update_filesystem_to_project_mapping(
+        self, filesystem_name: str, project_name: str
+    ):
         fs = self.get_filesystem(filesystem_name)
         projects = fs.get_projects()
         if Utils.is_empty(projects):
             projects = []
         if project_name not in projects:
             projects.append(project_name)
-            self._update_config_for_filesystem(fs, {constants.FILE_SYSTEM_PROJECTS_KEY: projects})
+            self._update_config_for_filesystem(
+                fs, {constants.FILE_SYSTEM_PROJECTS_KEY: projects}
+            )
 
-    def update_filesystems_to_project_mappings(self, filesystem_names: List[str], project_name: str, validate_check: bool = True):
+    def update_filesystems_to_project_mappings(
+        self,
+        filesystem_names: List[str],
+        project_name: str,
+        validate_check: bool = True,
+    ):
         if validate_check:
             self.validate_filesystems(filesystem_names)
         self._cleanup_filesystems_to_project_mappings(filesystem_names, project_name)
@@ -640,23 +716,39 @@ class SharedFilesystemService:
                 self.update_filesystem_to_project_mapping(filesystem_name, project_name)
                 filesystems_succeeded.append(filesystem_name)
         except exceptions.SocaException as e:
-            self.logger.error(f'Filesystem {filesystem_name} has failed to attach to {project_name} due to {e.message}.')
+            self.logger.error(
+                f"Filesystem {filesystem_name} has failed to attach to {project_name} due to {e.message}."
+            )
         return filesystems_succeeded
 
     def validate_filesystems(self, filesystem_names: List[str]):
-        onboarded_filesystems = self.list_onboarded_file_systems(ListOnboardedFileSystemsRequest()).listing
-        global_filesystems = self.list_global_filesystems(ListGlobalFileSystemsRequest()).listing
+        onboarded_filesystems = self.list_onboarded_file_systems(
+            ListOnboardedFileSystemsRequest()
+        ).listing
+        global_filesystems = self.list_global_filesystems(
+            ListGlobalFileSystemsRequest()
+        ).listing
         all_filesystems = onboarded_filesystems + global_filesystems
-        all_filesystems_mount_directories = {fs.get_name(): fs.get_mount_dir() for fs in all_filesystems}
+        all_filesystems_mount_directories = {
+            fs.get_name(): fs.get_mount_dir() for fs in all_filesystems
+        }
         mount_directories_used = set()
         for filesystem_name in filesystem_names:
-            mount_dir = Utils.get_value_as_string(filesystem_name, all_filesystems_mount_directories)
+            mount_dir = Utils.get_value_as_string(
+                filesystem_name, all_filesystems_mount_directories
+            )
             if mount_dir is None:
-                self.logger.error(f'File system {filesystem_name} is not onboarded.')
-                raise exceptions.invalid_params(f'Filesystem {filesystem_name} is not valid.')
+                self.logger.error(f"File system {filesystem_name} is not onboarded.")
+                raise exceptions.invalid_params(
+                    f"Filesystem {filesystem_name} is not valid."
+                )
             if mount_dir in mount_directories_used:
-                self.logger.error(f'Two or more file systems share the following mount directory: {mount_dir}.')
-                raise exceptions.invalid_params(f'Duplicate filesystems with the mount directory {mount_dir}.')
+                self.logger.error(
+                    f"Two or more file systems share the following mount directory: {mount_dir}."
+                )
+                raise exceptions.invalid_params(
+                    f"Duplicate filesystems with the mount directory {mount_dir}."
+                )
             mount_directories_used.add(mount_dir)
 
     def traverse_config(self, config_entries: List[Dict], prefix: str, config: Dict):
@@ -706,87 +798,119 @@ class SharedFilesystemService:
             else:
                 raise e
 
-    def _validate_onboard_filesystem_request(self, request: CommonOnboardFileSystemRequest):
-        if not request.filesystem_id or not request.filesystem_name or not request.filesystem_title:
+    def _validate_onboard_filesystem_request(
+        self, request: CommonOnboardFileSystemRequest
+    ):
+        if (
+            not request.filesystem_id
+            or not request.filesystem_name
+            or not request.filesystem_title
+        ):
             raise exceptions.soca_exception(
                 error_code=errorcodes.INVALID_PARAMS,
                 message="needed parameters cannot be empty",
             )
-        ApiUtils.validate_input(request.filesystem_title,
-                                constants.FILE_SYSTEM_TITLE_REGEX,
-                                constants.FILE_SYSTEM_TITLE_ERROR_MESSAGE)
+        ApiUtils.validate_input(
+            request.filesystem_title,
+            constants.FILE_SYSTEM_TITLE_REGEX,
+            constants.FILE_SYSTEM_TITLE_ERROR_MESSAGE,
+        )
 
     def _validate_update_filesystem_request(self, request: UpdateFileSystemRequest):
         if Utils.is_empty(request):
-            raise exceptions.invalid_params('missing request')
+            raise exceptions.invalid_params("missing request")
         elif Utils.is_empty(request.filesystem_name):
-            raise exceptions.invalid_params('missing filesystem_name')
+            raise exceptions.invalid_params("missing filesystem_name")
         if request.filesystem_title:
-            ApiUtils.validate_input(request.filesystem_title,
-                                    constants.FILE_SYSTEM_TITLE_REGEX,
-                                    constants.FILE_SYSTEM_TITLE_ERROR_MESSAGE)
+            ApiUtils.validate_input(
+                request.filesystem_title,
+                constants.FILE_SYSTEM_TITLE_REGEX,
+                constants.FILE_SYSTEM_TITLE_ERROR_MESSAGE,
+            )
         if request.projects:
             for project_name in request.projects:
-                ApiUtils.validate_input(project_name,
-                                        constants.PROJECT_ID_REGEX,
-                                        constants.PROJECT_ID_ERROR_MESSAGE)
+                ApiUtils.validate_input(
+                    project_name,
+                    constants.PROJECT_ID_REGEX,
+                    constants.PROJECT_ID_ERROR_MESSAGE,
+                )
 
     def _validate_remove_filesystem_request(self, request: RemoveFileSystemRequest):
         if Utils.is_empty(request):
-            raise exceptions.invalid_params('missing request')
+            raise exceptions.invalid_params("missing request")
         elif Utils.is_empty(request.filesystem_name):
-            raise exceptions.invalid_params('missing filesystem_name')
+            raise exceptions.invalid_params("missing filesystem_name")
 
-    def _validate_mount_directory_and_projects_for_mount_point_collisions(self, mount_directory: str, projects: list[str]):
+    def _validate_mount_directory_and_projects_for_mount_point_collisions(
+        self, mount_directory: str, projects: list[str]
+    ):
         if Utils.is_empty(mount_directory):
-            raise exceptions.invalid_params('missing mount_directory')
+            raise exceptions.invalid_params("missing mount_directory")
         if Utils.is_empty(projects):
-            raise exceptions.invalid_params('missing projects')
+            raise exceptions.invalid_params("missing projects")
         for proj in projects:
-            project_filter = [SocaFilter(key=constants.FILE_SYSTEM_PROJECTS_KEY, eq=proj)]
-            onboarded_filesystems_for_project = self.list_onboarded_file_systems(ListOnboardedFileSystemsRequest(filters=project_filter)).listing
-            mount_directories_used = set([fs.get_mount_dir() for fs in onboarded_filesystems_for_project])
+            project_filter = [
+                SocaFilter(key=constants.FILE_SYSTEM_PROJECTS_KEY, eq=proj)
+            ]
+            onboarded_filesystems_for_project = self.list_onboarded_file_systems(
+                ListOnboardedFileSystemsRequest(filters=project_filter)
+            ).listing
+            mount_directories_used = set(
+                [fs.get_mount_dir() for fs in onboarded_filesystems_for_project]
+            )
             if mount_directory in mount_directories_used:
-                self.logger.error(f'Mount point of {mount_directory} is already used in project {proj}. Specify a different mount point.')
+                self.logger.error(
+                    f"Mount point of {mount_directory} is already used in project {proj}. Specify a different mount point."
+                )
                 raise exceptions.soca_exception(
                     error_code=errorcodes.FILESYSTEM_MOUNT_POINT_COLLISION,
-                    message=f"Mount point of {mount_directory} is already used in project {proj}. Specify a different mount point."
+                    message=f"Mount point of {mount_directory} is already used in project {proj}. Specify a different mount point.",
                 )
 
-    def _validate_list_onboarded_file_systems_request(self, request: ListOnboardedFileSystemsRequest):
+    def _validate_list_onboarded_file_systems_request(
+        self, request: ListOnboardedFileSystemsRequest
+    ):
         if request.filters:
             filter_set = set()
             for f in request.filters:
-                ApiUtils.validate_input(f.key,
+                ApiUtils.validate_input(
+                    f.key,
                     constants.FILE_SYSTEM_FILTER_KEY_REGEX,
-                    constants.FILE_SYSTEM_FILTER_KEY_ERROR_MESSAGE)
+                    constants.FILE_SYSTEM_FILTER_KEY_ERROR_MESSAGE,
+                )
                 if f.key == constants.FILE_SYSTEM_TITLE_KEY:
                     if f.starts_with is None:
                         raise exceptions.soca_exception(
                             error_code=errorcodes.INVALID_PARAMS,
                             message="title filter missing value",
                         )
-                    ApiUtils.validate_input(f.starts_with,
+                    ApiUtils.validate_input(
+                        f.starts_with,
                         constants.FILE_SYSTEM_FILTER_TITLE_REGEX,
-                        constants.FILE_SYSTEM_FILTER_TITLE_ERROR_MESSAGE)
+                        constants.FILE_SYSTEM_FILTER_TITLE_ERROR_MESSAGE,
+                    )
                 elif f.key == constants.FILE_SYSTEM_PROVIDER_KEY:
                     if f.eq is None:
                         raise exceptions.soca_exception(
                             error_code=errorcodes.INVALID_PARAMS,
                             message="provider filter missing value",
                         )
-                    ApiUtils.validate_input(f.eq,
+                    ApiUtils.validate_input(
+                        f.eq,
                         constants.FILE_SYSTEM_FILTER_PROVIDERS_REGEX,
-                        constants.FILE_SYSTEM_FILTER_PROVIDERS_ERROR_MESSAGE)
+                        constants.FILE_SYSTEM_FILTER_PROVIDERS_ERROR_MESSAGE,
+                    )
                 elif f.key == constants.FILE_SYSTEM_PROJECTS_KEY:
                     if f.eq is None:
                         raise exceptions.soca_exception(
                             error_code=errorcodes.INVALID_PARAMS,
                             message="projects filter missing value",
                         )
-                    ApiUtils.validate_input(f.eq,
+                    ApiUtils.validate_input(
+                        f.eq,
                         constants.PROJECT_ID_REGEX,
-                        constants.PROJECT_ID_ERROR_MESSAGE)
+                        constants.PROJECT_ID_ERROR_MESSAGE,
+                    )
                 if f.key in filter_set:
                     raise exceptions.soca_exception(
                         error_code=errorcodes.INVALID_PARAMS,
@@ -795,15 +919,19 @@ class SharedFilesystemService:
                 else:
                     filter_set.add(f.key)
 
-    def _validate_create_filesystem_request(self, request: CommonCreateFileSystemRequest):
+    def _validate_create_filesystem_request(
+        self, request: CommonCreateFileSystemRequest
+    ):
         if not request.filesystem_name or not request.filesystem_title:
             raise exceptions.soca_exception(
                 error_code=errorcodes.INVALID_PARAMS,
                 message="needed parameters cannot be empty",
             )
-        ApiUtils.validate_input(request.filesystem_name,
+        ApiUtils.validate_input(
+            request.filesystem_name,
             constants.FILE_SYSTEM_NAME_REGEX,
-            constants.FILE_SYSTEM_NAME_ERROR_MESSAGE)
+            constants.FILE_SYSTEM_NAME_ERROR_MESSAGE,
+        )
 
     def _validate_filesystem_does_not_exist(self, filesystem_name: str):
         try:
@@ -813,13 +941,18 @@ class SharedFilesystemService:
                     message=f"{filesystem_name} already exists.",
                 )
         except exceptions.SocaException as e:
-            if e.error_code == errorcodes.FILESYSTEM_NOT_FOUND or e.error_code == errorcodes.NO_SHARED_FILESYSTEM_FOUND:
+            if (
+                e.error_code == errorcodes.FILESYSTEM_NOT_FOUND
+                or e.error_code == errorcodes.NO_SHARED_FILESYSTEM_FOUND
+            ):
                 pass
             else:
                 raise e
 
     def _validate_correct_subnet_selection(self, subnet_ids: Set[str]):
-        res_private_subnets = self.config.db.get_config_entry("cluster.network.private_subnets")['value']
+        res_private_subnets = self.config.db.get_config_entry(
+            "cluster.network.private_subnets"
+        )["value"]
         for subnet_id in subnet_ids:
             if subnet_id is not None and subnet_id not in res_private_subnets:
                 self.logger.error(f"{subnet_id} is not a RES private subnet")
@@ -829,20 +962,34 @@ class SharedFilesystemService:
                 )
 
     def _validate_filesystem_present_in_vpc_and_not_onboarded(self, filesystem_id):
-        onboarded_filesystems = self.list_onboarded_file_systems(ListOnboardedFileSystemsRequest()).listing
-        onboarded_filesystem_ids = set([fs.get_filesystem_id() for fs in onboarded_filesystems])
+        onboarded_filesystems = self.list_onboarded_file_systems(
+            ListOnboardedFileSystemsRequest()
+        ).listing
+        onboarded_filesystem_ids = set(
+            [fs.get_filesystem_id() for fs in onboarded_filesystems]
+        )
 
         if filesystem_id in onboarded_filesystem_ids:
             raise exceptions.soca_exception(
-            error_code=errorcodes.FILESYSTEM_ALREADY_ONBOARDED,
-            message=f"{filesystem_id} has already been onboarded"
+                error_code=errorcodes.FILESYSTEM_ALREADY_ONBOARDED,
+                message=f"{filesystem_id} has already been onboarded",
+            )
+
+        efs_filesystems = self._list_unonboarded_efs_file_systems(
+            onboarded_filesystem_ids
+        )
+        fsx_ontap_filesystems = self._list_unonboarded_ontap_file_systems(
+            onboarded_filesystem_ids
+        )
+        fsx_lustre_filesystems = self._list_unonboarded_lustre_file_systems(
+            onboarded_filesystem_ids
         )
 
-        efs_filesystems = self._list_unonboarded_efs_file_systems(onboarded_filesystem_ids)
-        fsx_ontap_filesystems = self._list_unonboarded_ontap_file_systems(onboarded_filesystem_ids)
-        fsx_lustre_filesystems = self._list_unonboarded_lustre_file_systems(onboarded_filesystem_ids)
-
-        filesystems_in_vpc = [*efs_filesystems, *fsx_ontap_filesystems, *fsx_lustre_filesystems]
+        filesystems_in_vpc = [
+            *efs_filesystems,
+            *fsx_ontap_filesystems,
+            *fsx_lustre_filesystems,
+        ]
 
         for filesystem in filesystems_in_vpc:
             if filesystem_id == filesystem.get_filesystem_id():
@@ -850,7 +997,7 @@ class SharedFilesystemService:
 
         raise exceptions.soca_exception(
             error_code=errorcodes.FILESYSTEM_NOT_IN_VPC,
-            message=f"{filesystem_id} not part of the env's VPC thus not accessible"
+            message=f"{filesystem_id} not part of the env's VPC thus not accessible",
         )
 
     def _update_config_for_filesystem(
@@ -872,20 +1019,35 @@ class SharedFilesystemService:
                 value,
             )
 
-    def _cleanup_filesystems_to_project_mappings(self, filesystem_names: List[str], project_name: str):
-        onboarded_filesystems = self.list_onboarded_file_systems(ListOnboardedFileSystemsRequest()).listing
-        onboarded_filesystems_for_project = [fs for fs in onboarded_filesystems if Utils.is_not_empty(fs.get_projects()) and project_name in fs.get_projects()]
+    def _cleanup_filesystems_to_project_mappings(
+        self, filesystem_names: List[str], project_name: str
+    ):
+        onboarded_filesystems = self.list_onboarded_file_systems(
+            ListOnboardedFileSystemsRequest()
+        ).listing
+        onboarded_filesystems_for_project = [
+            fs
+            for fs in onboarded_filesystems
+            if Utils.is_not_empty(fs.get_projects())
+               and project_name in fs.get_projects()
+        ]
         filesystem_names_set = set(filesystem_names)
         for fs in onboarded_filesystems_for_project:
             if fs.get_name() not in filesystem_names_set:
                 projects = fs.get_projects()
                 if project_name in projects:
                     projects.remove(project_name)
-                    self._update_config_for_filesystem(fs, {constants.FILE_SYSTEM_PROJECTS_KEY: projects})
+                    self._update_config_for_filesystem(
+                        fs, {constants.FILE_SYSTEM_PROJECTS_KEY: projects}
+                    )
 
     def get_filesystem(self, filesystem_name: str):
-        onboarded_filesystems = self.list_onboarded_file_systems(ListOnboardedFileSystemsRequest()).listing
-        global_filesystems = self.list_global_filesystems(ListGlobalFileSystemsRequest()).listing
+        onboarded_filesystems = self.list_onboarded_file_systems(
+            ListOnboardedFileSystemsRequest()
+        ).listing
+        global_filesystems = self.list_global_filesystems(
+            ListGlobalFileSystemsRequest()
+        ).listing
         filesystems = onboarded_filesystems + global_filesystems
         if Utils.is_empty(filesystems):
             raise exceptions.soca_exception(
@@ -902,36 +1064,50 @@ class SharedFilesystemService:
             message=f"could not find filesystem {filesystem_name}",
         )
 
-    def _list_unonboarded_efs_file_systems(self, onboarded_filesystem_ids: Set[str]) -> List[EFSFileSystem]:
+    def _list_unonboarded_efs_file_systems(
+        self, onboarded_filesystem_ids: Set[str]
+    ) -> List[EFSFileSystem]:
         try:
             onboarded_internal_filesystem_ids = [
-                self.config.db.get_config_entry("shared-storage.home.efs.file_system_id")['value'],
-                self.config.db.get_config_entry("shared-storage.internal.efs.file_system_id")['value']
+                self.config.db.get_config_entry(
+                    "shared-storage.home.efs.file_system_id"
+                )["value"],
+                self.config.db.get_config_entry(
+                    "shared-storage.internal.efs.file_system_id"
+                )["value"],
             ]
-            env_vpc_id = self.config.db.get_config_entry("cluster.network.vpc_id")['value']
+            env_vpc_id = self.config.db.get_config_entry("cluster.network.vpc_id")[
+                "value"
+            ]
             efs_client = self.context.aws().efs()
             efs_response = efs_client.describe_file_systems()["FileSystems"]
 
             filesystems: List[EFSFileSystem] = []
             for efs in efs_response:
-                if efs['LifeCycleState'] != 'available':
+                if efs["LifeCycleState"] != "available":
                     continue
-                fs_id = efs['FileSystemId']
+                fs_id = efs["FileSystemId"]
                 efs_mt_response = efs_client.describe_mount_targets(FileSystemId=fs_id)
-                if len(efs_mt_response['MountTargets']) == 0:
+                if len(efs_mt_response["MountTargets"]) == 0:
                     continue
-                if env_vpc_id == efs_mt_response['MountTargets'][0]['VpcId'] and \
-                    fs_id not in onboarded_filesystem_ids and \
-                    fs_id not in onboarded_internal_filesystem_ids:
-                    filesystems.append(EFSFileSystem(efs = efs))
+                if (
+                    env_vpc_id == efs_mt_response["MountTargets"][0]["VpcId"]
+                    and fs_id not in onboarded_filesystem_ids
+                    and fs_id not in onboarded_internal_filesystem_ids
+                ):
+                    filesystems.append(EFSFileSystem(efs=efs))
             return filesystems
         except botocore.exceptions.ClientError as e:
             error_message = e.response["Error"]["Message"]
             raise exceptions.general_exception(error_message)
 
-    def _list_unonboarded_ontap_file_systems(self, onboarded_filesystem_ids: Set[str]) -> List[FSxONTAPFileSystem]:
+    def _list_unonboarded_ontap_file_systems(
+        self, onboarded_filesystem_ids: Set[str]
+    ) -> List[FSxONTAPFileSystem]:
         try:
-            env_vpc_id = self.config.db.get_config_entry("cluster.network.vpc_id")['value']
+            env_vpc_id = self.config.db.get_config_entry("cluster.network.vpc_id")[
+                "value"
+            ]
 
             fsx_client = self.context.aws().fsx()
             fsx_response = fsx_client.describe_file_systems()["FileSystems"]
@@ -939,45 +1115,63 @@ class SharedFilesystemService:
 
             filesystems: List[FSxONTAPFileSystem] = []
             for fsx in fsx_response:
-                if fsx['FileSystemType'] != 'ONTAP' or fsx['Lifecycle'] != 'AVAILABLE':
+                if fsx["FileSystemType"] != "ONTAP" or fsx["Lifecycle"] != "AVAILABLE":
                     continue
-                fs_id = fsx['FileSystemId']
-                subnet_response = ec2_client.describe_subnets(SubnetIds=fsx['SubnetIds'])
-                if env_vpc_id == subnet_response['Subnets'][0]['VpcId'] and \
-                    fs_id not in onboarded_filesystem_ids:
+                fs_id = fsx["FileSystemId"]
+                subnet_response = ec2_client.describe_subnets(
+                    SubnetIds=fsx["SubnetIds"]
+                )
+                if (
+                    env_vpc_id == subnet_response["Subnets"][0]["VpcId"]
+                    and fs_id not in onboarded_filesystem_ids
+                ):
                     volume_response = fsx_client.describe_volumes(
-                        Filters=[{
-                            'Name': 'file-system-id',
-                            'Values': [fs_id]
-                        }]
+                        Filters=[{"Name": "file-system-id", "Values": [fs_id]}]
                     )
                     svm_response = fsx_client.describe_storage_virtual_machines(
-                        Filters=[{
-                            'Name': 'file-system-id',
-                            'Values': [fs_id]
-                        }]
+                        Filters=[{"Name": "file-system-id", "Values": [fs_id]}]
                     )
-                    if len(svm_response['StorageVirtualMachines']) == 0 or len(volume_response['Volumes']) == 0:
+                    if (
+                        len(svm_response["StorageVirtualMachines"]) == 0
+                        or len(volume_response["Volumes"]) == 0
+                    ):
                         continue
-                    list_created_svms = list(filter(
-                        lambda svm_obj: svm_obj['Lifecycle'] == "CREATED",
-                        svm_response['StorageVirtualMachines']
-                    ))
-                    list_created_volumes = list(filter(
-                        lambda volume_obj: volume_obj['Lifecycle'] == "CREATED",
-                        volume_response['Volumes']
-                    ))
-                    svm_list = [FSxONTAPSVM(storage_virtual_machine=svm) for svm in list_created_svms]
-                    volume_list = [FSxONTAPVolume(volume=volume) for volume in list_created_volumes]
-                    filesystems.append(FSxONTAPFileSystem(filesystem=fsx, svm=svm_list, volume=volume_list))
+                    list_created_svms = list(
+                        filter(
+                            lambda svm_obj: svm_obj["Lifecycle"] == "CREATED",
+                            svm_response["StorageVirtualMachines"],
+                        )
+                    )
+                    list_created_volumes = list(
+                        filter(
+                            lambda volume_obj: volume_obj["Lifecycle"] == "CREATED",
+                            volume_response["Volumes"],
+                        )
+                    )
+                    svm_list = [
+                        FSxONTAPSVM(storage_virtual_machine=svm)
+                        for svm in list_created_svms
+                    ]
+                    volume_list = [
+                        FSxONTAPVolume(volume=volume) for volume in list_created_volumes
+                    ]
+                    filesystems.append(
+                        FSxONTAPFileSystem(
+                            filesystem=fsx, svm=svm_list, volume=volume_list
+                        )
+                    )
             return filesystems
         except botocore.exceptions.ClientError as e:
             error_message = e.response["Error"]["Message"]
             raise exceptions.general_exception(error_message)
 
-    def _list_unonboarded_lustre_file_systems(self, onboarded_filesystem_ids: Set[str]) -> List[FSxLUSTREFileSystem]:
+    def _list_unonboarded_lustre_file_systems(
+        self, onboarded_filesystem_ids: Set[str]
+    ) -> List[FSxLUSTREFileSystem]:
         try:
-            env_vpc_id = self.config.db.get_config_entry("cluster.network.vpc_id")['value']
+            env_vpc_id = self.config.db.get_config_entry("cluster.network.vpc_id")[
+                "value"
+            ]
 
             fsx_client = self.context.aws().fsx()
             fsx_response = fsx_client.describe_file_systems()["FileSystems"]
@@ -985,12 +1179,16 @@ class SharedFilesystemService:
 
             filesystems: List[FSxLUSTREFileSystem] = []
             for fsx in fsx_response:
-                if fsx['FileSystemType'] != 'LUSTRE' or fsx['Lifecycle'] != 'AVAILABLE':
+                if fsx["FileSystemType"] != "LUSTRE" or fsx["Lifecycle"] != "AVAILABLE":
                     continue
-                fs_id = fsx['FileSystemId']
-                subnet_response = ec2_client.describe_subnets(SubnetIds=fsx['SubnetIds'])
-                if env_vpc_id == subnet_response['Subnets'][0]['VpcId'] and \
-                    fs_id not in onboarded_filesystem_ids:
+                fs_id = fsx["FileSystemId"]
+                subnet_response = ec2_client.describe_subnets(
+                    SubnetIds=fsx["SubnetIds"]
+                )
+                if (
+                    env_vpc_id == subnet_response["Subnets"][0]["VpcId"]
+                    and fs_id not in onboarded_filesystem_ids
+                ):
                     filesystems.append(FSxLUSTREFileSystem(filesystem=fsx))
             return filesystems
         except botocore.exceptions.ClientError as e:

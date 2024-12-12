@@ -55,6 +55,11 @@ export const USER_TABLE_COLUMN_DEFINITIONS: TableProps.ColumnDefinition<User>[] 
         cell: (e) => e.email,
     },
     {
+        id: "identity_source",
+        header: "Identity Source",
+        cell: (e) => e.identity_source,
+    },
+    {
         id: "sudo",
         header: "Is Sudo?",
         cell: (e) => (e.sudo ? "Yes" : "No"),

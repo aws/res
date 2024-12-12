@@ -63,7 +63,7 @@ class InfraAmiPackageTool:
         idea.console.print('getting global settings ...')
         env = Jinja2Utils.env_using_file_system_loader(search_path=idea.props.global_settings_dir)
         template = env.get_template('settings.yml')
-        global_settings = template.render(enabled_modules=['virtual-desktop-controller'], supported_base_os=['amazonlinux2'])
+        global_settings = template.render(enabled_modules=['virtual-desktop-controller'], supported_base_os=['amazonlinux2', 'rhel8', 'rhel9'])
         return yaml.full_load(global_settings)
 
     def get_all_requirement_files(self) -> List[str]:
@@ -126,7 +126,19 @@ class InfraAmiPackageTool:
 #Set up environment variables
 set -ex
 
-RES_BASE_OS=amzn2
+if [[ -f /etc/os-release ]]; then
+  OS_RELEASE_ID=$(grep -E '^(ID)=' /etc/os-release | awk -F'"' '{print $2}')
+  OS_RELEASE_VERSION_ID=$(grep -E '^(VERSION_ID)=' /etc/os-release | awk -F'"' '{print $2}')
+  RES_BASE_OS=$(echo $OS_RELEASE_ID${OS_RELEASE_VERSION_ID%%.*})
+elif [[ -f /usr/lib/os-release ]]; then
+  OS_RELEASE_ID=$(grep -E '^(ID)=' /usr/lib/os-release | awk -F'"' '{print $2}')
+  OS_RELEASE_VERSION_ID=$(grep -E '^(VERSION_ID)=' /usr/lib/os-release | awk -F'"' '{print $2}')
+  RES_BASE_OS=$(echo $OS_RELEASE_ID${OS_RELEASE_VERSION_ID%%.*})
+else
+  echo "Base OS information on Linux instance cannot be found."
+  exit 1
+fi
+
 BOOTSTRAP_DIR=/root/bootstrap
 LOGS_DIR=$BOOTSTRAP_DIR/logs
 LOG_FILE=$LOGS_DIR/userdata.log
@@ -162,10 +174,12 @@ if [[ `$AWS --version | awk -F'[/.]' '{print $2}'` != 2 ]]; then
   rm -rf aws awscliv2.zip
 fi
 
-#Amazon linux extras
-sudo yum install -y amazon-linux-extras
+if [[ $RES_BASE_OS =~ ^(amzn2)$ ]]; then
+  #Amazon linux extras
+  sudo yum install -y amazon-linux-extras
+fi
 
-#AWS SSM Agent: 
+#AWS SSM Agent:
 """
         bash_content += f"""
 systemctl status amazon-ssm-agent
@@ -177,27 +191,52 @@ fi
 #Jq
 yum install -y jq
 
-#efs utils
-yum install -y amazon-efs-utils
-
 #EPEL Repo
 /bin/bash "${SCRIPT_DIR}/../common/epel_repo.sh" -o $RES_BASE_OS -s "${SCRIPT_DIR}"
 
 #System Packages
 """
         linux_packages = global_settings['package_config']['linux_packages']
-        all_linux_packages = " ".join(linux_packages['application'] 
-                 + linux_packages['system'] 
-                 + linux_packages['openldap_client'] 
-                 + linux_packages['openldap_server'] 
-                 + linux_packages['sssd'] 
+        all_linux_packages = " ".join(linux_packages['application']
+                 + linux_packages['system']
+                 + linux_packages['openldap_client']
+                 + linux_packages['openldap_server']
+                 + linux_packages['sssd']
                  + linux_packages['putty']
         )
         bash_content += f"""
 ALL_PACKAGES=({all_linux_packages})
 """
         bash_content += """
-yum install -y ${ALL_PACKAGES[*]}
+yum install -y ${ALL_PACKAGES[*]} --skip-broken
+
+if [[ $RES_BASE_OS =~ ^(rhel8|rhel9)$ ]]; then
+    dnf install -y openssh
+
+    # Install Open LDAP Client.
+    # RHEL 8 and 9 does not support OpenLDAP by default.
+    # As a workaround, install it from the Symas OpenLDAP Repository
+    wget -q https://repo.symas.com/configs/SOLDAP/${RES_BASE_OS}/release26.repo -O /etc/yum.repos.d/soldap-release26.repo
+    dnf install -y symas-openldap-clients
+fi
+"""
+        bash_content += """
+#efs utils
+if [[ $RES_BASE_OS =~ ^(amzn2)$ ]]; then
+  yum install -y amazon-efs-utils
+elif [[ $RES_BASE_OS =~ ^(rhel8|rhel9)$ ]]; then
+  if [[ $RES_BASE_OS =~ ^(rhel8)$ ]]; then
+    yum module install -y rust-toolset
+  elif [[ $RES_BASE_OS =~ ^(rhel9)$ ]]; then
+    dnf install -y rust-toolset
+  fi
+  sudo rm -f -r ./efs-utils
+  git clone https://github.com/aws/efs-utils
+  cd efs-utils
+  make rpm
+  yum -y install build/amazon-efs-utils*rpm
+  cd ..
+fi
 """
         bash_content += """
 #CloudWatch Agent
@@ -277,8 +316,19 @@ rpm --import {global_settings['package_config']['dcv']['gpg_key']}
 """
         bash_content += f"""
 #DCV server
-DCV_SERVER_URL="{global_settings['package_config']['dcv']['host']['x86_64']['linux']['al2']['url']}"
-DCV_SERVER_SHA256_URL="{global_settings['package_config']['dcv']['host']['x86_64']['linux']['al2']['sha256sum']}"
+if [[ $RES_BASE_OS == "amzn2" ]]; then
+  DCV_SERVER_URL="{global_settings['package_config']['dcv']['host']['x86_64']['linux']['al2']['url']}"
+  DCV_SERVER_SHA256_URL="{global_settings['package_config']['dcv']['host']['x86_64']['linux']['al2']['sha256sum']}"
+elif  [[ $RES_BASE_OS == "rhel8" ]]; then
+  DCV_SERVER_URL="{global_settings['package_config']['dcv']['host']['x86_64']['linux']['rhel_centos_rocky8']['url']}"
+  DCV_SERVER_SHA256_URL="{global_settings['package_config']['dcv']['host']['x86_64']['linux']['rhel_centos_rocky8']['sha256sum']}"
+elif [[ $RES_BASE_OS == "rhel9" ]]; then
+  DCV_SERVER_URL="{global_settings['package_config']['dcv']['host']['x86_64']['linux']['rhel_centos_rocky9']['url']}"
+  DCV_SERVER_SHA256_URL="{global_settings['package_config']['dcv']['host']['x86_64']['linux']['rhel_centos_rocky9']['sha256sum']}"
+else
+  echo "Base OS $RES_BASE_OS is not supported."
+  exit 1
+fi
 """
         bash_content += """
 wget $DCV_SERVER_URL
@@ -299,8 +349,19 @@ rm -f $DCV_SERVER_TGZ || true
 """
         bash_content += f"""
 #Gateway
-GATEWAY_URL="{global_settings['package_config']['dcv']['connection_gateway']['x86_64']['linux']['al2']['url']}"
-GATEWAY_SHA256_URL="{global_settings['package_config']['dcv']['connection_gateway']['x86_64']['linux']['al2']['sha256sum']}"
+if [[ $RES_BASE_OS == "amzn2" ]]; then
+  GATEWAY_URL="{global_settings['package_config']['dcv']['connection_gateway']['x86_64']['linux']['al2']['url']}"
+  GATEWAY_SHA256_URL="{global_settings['package_config']['dcv']['connection_gateway']['x86_64']['linux']['al2']['sha256sum']}"
+elif  [[ $RES_BASE_OS == "rhel8" ]]; then
+  GATEWAY_URL="{global_settings['package_config']['dcv']['connection_gateway']['x86_64']['linux']['rhel_centos_rocky8']['url']}"
+  GATEWAY_SHA256_URL="{global_settings['package_config']['dcv']['connection_gateway']['x86_64']['linux']['rhel_centos_rocky8']['sha256sum']}"
+elif [[ $RES_BASE_OS == "rhel9" ]]; then
+  GATEWAY_URL="{global_settings['package_config']['dcv']['connection_gateway']['x86_64']['linux']['rhel_centos_rocky9']['url']}"
+  GATEWAY_SHA256_URL="{global_settings['package_config']['dcv']['connection_gateway']['x86_64']['linux']['rhel_centos_rocky9']['sha256sum']}"
+else
+  echo "Base OS $RES_BASE_OS is not supported."
+  exit 1
+fi
 """
         bash_content += """
 wget $GATEWAY_URL
@@ -319,8 +380,19 @@ yum install -y nc
 """
         bash_content += f"""
 #Broker
-BROKER_URL="{global_settings['package_config']['dcv']['broker']['linux']['al2']['url']}"
-BROKER_SHA256_URL="{global_settings['package_config']['dcv']['broker']['linux']['al2']['sha256sum']}"
+if [[ $RES_BASE_OS == "amzn2" ]]; then
+  BROKER_URL="{global_settings['package_config']['dcv']['broker']['linux']['al2']['url']}"
+  BROKER_SHA256_URL="{global_settings['package_config']['dcv']['broker']['linux']['al2']['sha256sum']}"
+elif  [[ $RES_BASE_OS == "rhel8" ]]; then
+  BROKER_URL="{global_settings['package_config']['dcv']['broker']['linux']['rhel_centos_rocky8']['url']}"
+  BROKER_SHA256_URL="{global_settings['package_config']['dcv']['broker']['linux']['rhel_centos_rocky8']['sha256sum']}"
+elif [[ $RES_BASE_OS == "rhel9" ]]; then
+  BROKER_URL="{global_settings['package_config']['dcv']['broker']['linux']['rhel_centos_rocky9']['url']}"
+  BROKER_SHA256_URL="{global_settings['package_config']['dcv']['broker']['linux']['rhel_centos_rocky9']['sha256sum']}"
+else
+  echo "Base OS $RES_BASE_OS is not supported."
+  exit 1
+fi
 """
         bash_content += """
 wget $BROKER_URL
@@ -341,20 +413,19 @@ rm -f $RM_RPM || true
         with open(os.path.join(self.all_depencencies_dir, self.bash_script_name), 'w') as f:
             f.write(bash_content)
 
-            
+
     def package(self):
         idea.console.print_header_block(f'package infra-ami-deps')
-        
+
         shutil.rmtree(self.output_dir, ignore_errors=True)
         os.makedirs(self.output_dir, exist_ok=True)
         os.makedirs(self.common_dir, exist_ok=True)
         os.makedirs(self.all_depencencies_dir, exist_ok=True)
-        
+
         self.build_infra_python_requirements()
-        
+
         self.copy_common_infra_requirements()
-        
+
         self.create_all_dependencies_script()
-        
-        self.archive()   
-        
+
+        self.archive()

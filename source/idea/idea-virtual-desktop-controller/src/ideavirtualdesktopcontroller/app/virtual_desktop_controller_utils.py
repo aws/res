@@ -74,6 +74,10 @@ class VirtualDesktopControllerUtils:
         bootstrap_context.vars.session_owner = session.owner
         bootstrap_context.vars.idea_session_id = session.idea_session_id
         bootstrap_context.vars.project = session.project.name
+        bootstrap_context.vars.cognito_min_id = constants.COGNITO_MIN_ID_INCLUSIVE
+        bootstrap_context.vars.cognito_max_id = constants.COGNITO_MAX_ID_INCLUSIVE
+        bootstrap_context.vars.cognito_uid_attribute = constants.COGNITO_UID_ATTRIBUTE
+        bootstrap_context.vars.cognito_default_user_group = constants.COGNITO_DEFAULT_USER_GROUP
         if session.software_stack.base_os != VirtualDesktopBaseOS.WINDOWS:
             escape_chars = '\\'
         else:

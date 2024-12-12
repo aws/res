@@ -15,6 +15,7 @@ from ideasdk.auth import TokenService, ApiAuthorizationServiceBase
 from ideadatamodel.api.api_model import ApiAuthorization, ApiAuthorizationType
 from ideasdk.utils import Utils, GroupNameHelper
 from ideadatamodel import constants, get_payload_as, SocaEnvelope, SocaPayload, exceptions, errorcodes
+from ideadatamodel.auth import User
 
 from typing import Optional, Dict, Mapping, Type, TypeVar, Union, List
 import logging
@@ -232,6 +233,16 @@ class ApiInvocationContext(ApiInvocationContextProtocol):
             return None
         authorization = self.get_authorization()
         return authorization.username
+    
+    def get_user(self) -> Optional[User]:
+        """
+        get user using username from the JWT access token
+        should be used for all authenticated APIs to ensure username cannot be spoofed via any payload parameters
+        """
+        if not self._api_authorization_service:
+            return None
+        authorization = self.get_authorization()
+        return self._api_authorization_service.get_user_from_token_username(authorization.username)
 
     @response.setter
     def response(self, response: Union[SocaEnvelope, Dict]):

@@ -6,7 +6,7 @@ from typing import List
 import aws_cdk
 from aws_cdk import aws_iam as iam
 
-from idea.infrastructure.install.constants import INSTALLER_ECR_REPO_NAME_SUFFIX
+from idea.infrastructure.install.constants import RES_ECR_REPO_NAME_SUFFIX
 
 
 class UpdatePermissions:
@@ -43,7 +43,7 @@ class UpdatePermissions:
             iam.PolicyStatement(
                 effect=iam.Effect.ALLOW,
                 resources=[
-                    f"arn:{aws_cdk.Aws.PARTITION}:ecr:{aws_cdk.Aws.REGION}:{aws_cdk.Aws.ACCOUNT_ID}:repository/{self.environment_name}{INSTALLER_ECR_REPO_NAME_SUFFIX}"
+                    f"arn:{aws_cdk.Aws.PARTITION}:ecr:{aws_cdk.Aws.REGION}:{aws_cdk.Aws.ACCOUNT_ID}:repository/{self.environment_name}{RES_ECR_REPO_NAME_SUFFIX}"
                 ],
                 actions=[
                     "ecr:BatchGetImage",

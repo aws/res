@@ -9,14 +9,17 @@
 #  OR CONDITIONS OF ANY KIND, express or implied. See the License for the specific language governing permissions
 #  and limitations under the License.
 
-from ideadatamodel import exceptions, constants
+from ideadatamodel import exceptions, constants, errorcodes
 from ideasdk.utils import Utils
 from ideasdk.config.cluster_config_db import ClusterConfigDB
 from ideasdk.config.soca_config import SocaConfig
+from res.utils import sssd_utils
 from ideasdk.dynamodb.dynamodb_stream_subscriber import DynamoDBStreamSubscriber
 
 from typing import Optional, List, Dict, Any
 from pyhocon import ConfigTree
+
+import copy
 
 
 class ClusterConfig(SocaConfig, DynamoDBStreamSubscriber):
@@ -60,6 +63,8 @@ class ClusterConfig(SocaConfig, DynamoDBStreamSubscriber):
         self.module_info: Optional[Dict] = None
         if not Utils.is_empty(module_id):
             self.set_module_id(module_id)
+
+        self.sssd_settings = None
 
         config = self.db.build_config_from_db()
 
@@ -145,6 +150,9 @@ class ClusterConfig(SocaConfig, DynamoDBStreamSubscriber):
         value = entry.get('value')
         super().put(key, value)
 
+        if sssd_utils.is_sssd_setting(key):
+            self.restart_sssd()
+
     def on_update(self, old_entry: Dict, new_entry: Dict):
         log_message = f'config updated: old - {Utils.to_json(old_entry)}, new - {new_entry}'
         if self.logger is not None:
@@ -154,6 +162,9 @@ class ClusterConfig(SocaConfig, DynamoDBStreamSubscriber):
         key = new_entry['key']
         value = new_entry.get('value')
         super().put(key, value)
+
+        if sssd_utils.is_sssd_setting(key):
+            self.restart_sssd()
 
     def on_delete(self, entry: Dict):
         log_message = f'config deleted: {Utils.to_json(entry)}'
@@ -186,3 +197,34 @@ class ClusterConfig(SocaConfig, DynamoDBStreamSubscriber):
         if Utils.is_empty(internal_alb_dns):
             raise exceptions.cluster_config_error('cluster internal endpoint not found')
         return f'https://{internal_alb_dns}'
+
+    def restart_sssd(self) -> None:
+        sssd_settings = self._get_sssd_settings()
+        if sssd_settings == self.sssd_settings:
+            # SSSD config isn't changed. No need to restart SSSD
+            return
+
+        self.sssd_settings = copy.deepcopy(sssd_settings)
+        sssd_utils.restart_sssd(sssd_settings, self.logger)
+
+    def _get_sssd_settings(self) -> Optional[Dict[str, str]]:
+        sssd_settings = {}
+        for k, v in sssd_utils.SSSD_SETTING_KEY_MAPPINGS.items():
+            try:
+                if v in [
+                    sssd_utils.SERVICE_ACCOUNT_DN_SECRET_KEY,
+                    sssd_utils.SERVICE_ACCOUNT_CREDENTIALS_KEY,
+                    sssd_utils.TLS_CERTIFICATE_SECRET_KEY
+                ]:
+                    sssd_settings[k] = self.get_secret(v)
+                else:
+                    sssd_settings[k] = self.get_string(v)
+
+                if not sssd_settings[k] and v != sssd_utils.TLS_CERTIFICATE_SECRET_KEY:
+                    # Required SSSD related settings are not available yet
+                    return None
+            except Exception as e:
+                self.logger.error(f"Failed to retrieve SSSD related settings: {e}")
+                return None
+
+        return sssd_settings

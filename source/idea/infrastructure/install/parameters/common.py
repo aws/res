@@ -3,6 +3,7 @@
 from dataclasses import dataclass
 from typing import Any, Optional
 
+from idea.infrastructure.install.constants import OPTIONAL_INPUT_PARAMETER_LABEL_SUFFIX
 from idea.infrastructure.install.parameters.base import Attributes, Base, Key
 
 
@@ -59,7 +60,7 @@ class CommonParameters(Base):
             id=CommonKey.CLIENT_PREFIX_LIST,
             type="String",
             description=(
-                "(Optional) A prefix list that covers IPs allowed to directly access the Web UI and SSH "
+                "A prefix list that covers IPs allowed to directly access the Web UI and SSH "
                 "into the bastion host."
             ),
             allowed_pattern="^(pl-[a-z0-9]{8,20})?$",
@@ -92,7 +93,7 @@ class CommonParameters(Base):
         Attributes(
             id=CommonKey.IAM_PERMISSION_BOUNDARY,
             type="String",
-            description="(Optional) You may provide an IAM permission boundary ARN that will be attached to all roles created in RES.",
+            description="You may provide an IAM permission boundary ARN that will be attached to all roles created in RES.",
             allowed_pattern="^(?:arn:(?:aws|aws-us-gov|aws-cn):iam::[0-9]{12}:policy/[A-Za-z0-9\-\_\+\=\,\.\@]{1,128})?$",
             constraint_description="The IAM permission boundary must be a valid ARN.",
         )
@@ -103,7 +104,7 @@ class CommonParameters(Base):
             id=CommonKey.INFRASTRUCTURE_HOST_AMI,
             type="String",
             allowed_pattern="^(ami-[0-9a-f]{8,17})?$",
-            description="(Optional) You may provide a custom AMI id to use for all the infrastructure hosts. The current supported base OS is Amazon Linux 2.",
+            description="You may provide a custom AMI id to use for all the infrastructure hosts. The current supported base operating systems are Amazon Linux 2, RHEL8 and RHEL9.",
             constraint_description="The AMI id must begin with 'ami-' followed by only letters (a-f) or numbers(0-9).",
         )
     )
@@ -165,10 +166,10 @@ class CommonParameterGroups:
         "Parameters": [
             CommonKey.CLUSTER_NAME,
             CommonKey.ADMIN_EMAIL,
-            CommonKey.INFRASTRUCTURE_HOST_AMI,
             CommonKey.SSH_KEY_PAIR,
             CommonKey.CLIENT_IP,
             CommonKey.CLIENT_PREFIX_LIST,
+            CommonKey.INFRASTRUCTURE_HOST_AMI,
             CommonKey.IAM_PERMISSION_BOUNDARY,
         ],
     }
@@ -182,4 +183,18 @@ class CommonParameterGroups:
             CommonKey.INFRASTRUCTURE_HOST_SUBNETS,
             CommonKey.VDI_SUBNETS,
         ],
+    }
+
+
+class CommonParameterLabels:
+    parameter_labels_for_environment_and_installer_details: dict[str, Any] = {
+        CommonKey.CLIENT_PREFIX_LIST: {
+            "default": f"{CommonKey.CLIENT_PREFIX_LIST}{OPTIONAL_INPUT_PARAMETER_LABEL_SUFFIX}"
+        },
+        CommonKey.INFRASTRUCTURE_HOST_AMI: {
+            "default": f"{CommonKey.INFRASTRUCTURE_HOST_AMI}{OPTIONAL_INPUT_PARAMETER_LABEL_SUFFIX}"
+        },
+        CommonKey.IAM_PERMISSION_BOUNDARY: {
+            "default": f"{CommonKey.IAM_PERMISSION_BOUNDARY}{OPTIONAL_INPUT_PARAMETER_LABEL_SUFFIX}"
+        },
     }

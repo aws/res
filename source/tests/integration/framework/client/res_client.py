@@ -10,6 +10,7 @@
 #  and limitations under the License.
 
 import logging
+import time
 from typing import Type
 
 from selenium import webdriver
@@ -40,6 +41,8 @@ from ideadatamodel import (  # type: ignore
     DownloadFilesResult,
     GetModuleSettingsRequest,
     GetModuleSettingsResult,
+    GetPermissionProfileRequest,
+    GetPermissionProfileResponse,
     GetSessionConnectionInfoRequest,
     GetSessionConnectionInfoResponse,
     GetSessionInfoRequest,
@@ -48,6 +51,8 @@ from ideadatamodel import (  # type: ignore
     GetUserResult,
     ListAllowedInstanceTypesRequest,
     ListAllowedInstanceTypesResponse,
+    ListEmailTemplatesRequest,
+    ListEmailTemplatesResult,
     ListFilesRequest,
     ListFilesResult,
     ListRoleAssignmentsRequest,
@@ -85,6 +90,7 @@ from tests.integration.framework.model.api_invocation_context import (
 from tests.integration.framework.model.client_auth import ClientAuth
 
 logger = logging.getLogger(__name__)
+MAX_WAITING_TIME_FOR_SESSION_JOIN_IN_SEC = 60
 
 
 class ResClient:
@@ -315,14 +321,23 @@ class ResClient:
         )
 
     def join_session(self, session: VirtualDesktopSession) -> WebDriver:
+        start_time = time.time()
         get_session_connection_info_request = GetSessionConnectionInfoRequest(
             connection_info=VirtualDesktopSessionConnectionInfo(
                 dcv_session_id=session.dcv_session_id,
             )
         )
-        get_session_connection_info_response = self.get_session_connection_info(
-            get_session_connection_info_request
-        )
+        while True:
+            try:
+                get_session_connection_info_response = self.get_session_connection_info(
+                    get_session_connection_info_request
+                )
+                break
+            except Exception as e:
+                if time.time() - start_time > MAX_WAITING_TIME_FOR_SESSION_JOIN_IN_SEC:
+                    raise e
+                else:
+                    time.sleep(10)
         connection_info = get_session_connection_info_response.connection_info
         logger.info(f"joining session {connection_info.dcv_session_id}...")
 
@@ -481,6 +496,34 @@ class ResClient:
             "cluster-manager",
             request,
             DeleteFilesResult,
+            should_succeed,
+        )
+
+    def get_permission_profile(
+        self,
+        request: GetPermissionProfileRequest,
+        should_succeed: bool = True,
+    ) -> GetPermissionProfileResponse:
+        logger.info(f"getting permission profile...")
+
+        return self._invoke(
+            "VirtualDesktopUtils.GetPermissionProfile",
+            "vdc",
+            request,
+            GetPermissionProfileResponse,
+            should_succeed,
+        )
+
+    def list_email_templates(
+        self, request: ListEmailTemplatesRequest, should_succeed: bool = True
+    ) -> ListEmailTemplatesResult:
+        logger.info("getting list of email templates...")
+
+        return self._invoke(
+            "EmailTemplates.ListEmailTemplates",
+            "cluster-manager",
+            request,
+            ListEmailTemplatesResult,
             should_succeed,
         )
 

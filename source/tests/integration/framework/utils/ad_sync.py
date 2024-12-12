@@ -10,18 +10,17 @@
 #  and limitations under the License.
 
 import time
-from typing import Any, Dict
 
-from tests.integration.framework.utils.remote_command_runner import RemoteCommandRunner
+import res.exceptions as exceptions  # type: ignore
+from res.clients.ad_sync import ad_sync_client  # type: ignore
 
 
-def ad_sync(
-    region: str,
-    cluster_manager: Dict[str, Any],
-) -> None:
-    ad_sync_commands = ["sudo /opt/idea/python/latest/bin/resctl ldap sync-from-ad"]
-    remote_command_runner = RemoteCommandRunner(region)
-    remote_command_runner.run(cluster_manager.get("InstanceId", ""), ad_sync_commands)
+def ad_sync() -> None:
+    try:
+        ad_sync_client.start_ad_sync()
+    except exceptions.ADSyncInProcess:
+        # AD Sync may have been triggered by the scheduler Lambda or Cluster Manager and is still in progress
+        pass
 
     # Wait for the AD sync to complete as this is an async call.
-    time.sleep(30)
+    time.sleep(90)

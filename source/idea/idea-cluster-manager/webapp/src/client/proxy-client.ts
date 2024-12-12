@@ -12,16 +12,44 @@
  */
 
 import {
-    ListBudgetsRequest,
-    ListBudgetsResult,
+    DescribeMountTargetRequest, DescribeMountTargetResult,
+    ListBudgetsRequest, ListEFSRequest, ListFSxRequest, ListFSxSVMRequest, ListFSxVolumeRequest,
+    ListBudgetsResult, ListEFSResult, ListFSxResult, ListFSxSVMResult, ListFSxVolumeResult,
+    ListClusterHostsResult,
 } from "./data-model";
 import IdeaBaseClient, { IdeaBaseClientProps } from "./base-client";
+import { Constants } from "../common/constants";
 
-export interface ProxyClientProps extends IdeaBaseClientProps {}
+export interface ProxyClientProps extends IdeaBaseClientProps {
+}
 
 class ProxyClient extends IdeaBaseClient<ProxyClientProps> {
     listBudgets(req: ListBudgetsRequest): Promise<ListBudgetsResult> {
-        return this.apiInvoker.invoke_alt<ListBudgetsRequest, ListBudgetsResult>("budgets", req, false, {"X-Amz-Target": "AWSBudgetServiceGateway.DescribeBudgets"});
+        return this.apiInvoker.invoke_alt<ListBudgetsRequest, ListBudgetsResult>("budgets", req, false, true, {"X-Amz-Target": "AWSBudgetServiceGateway.DescribeBudgets"});
+    }
+
+    listEFS(req: ListEFSRequest): Promise<ListEFSResult> {
+        return this.apiInvoker.invoke_alt(`${req.AWSRegion}/elasticfilesystem/2015-02-01/file-systems?MaxItems=${Constants.EFS_NUMBER_OF_FS_QUOTA * 10}`, undefined, false, true, {}, "GET");
+    }
+
+    describeEFSMountTarget(req: DescribeMountTargetRequest): Promise<DescribeMountTargetResult> {
+        return this.apiInvoker.invoke_alt(`${req.AWSRegion}/elasticfilesystem/2015-02-01/mount-targets?FileSystemId=${req.FileSystemId}`, req, false, true, {}, "GET");
+    }
+
+    listFSx(req: ListFSxRequest): Promise<ListFSxResult> {
+        return this.apiInvoker.invoke_alt(`${req.AWSRegion}/fsx`, undefined, false, true, {"X-Amz-Target": "AWSSimbaAPIService_v20180301.DescribeFileSystems"});
+    }
+
+    listFSxSVM(req: ListFSxSVMRequest): Promise<ListFSxSVMResult> {
+        return this.apiInvoker.invoke_alt(`${req.AWSRegion}/fsx`, {"Filters": [{"Name": "file-system-id", "Values": req.FileSystemIds}]}, false, true, {"X-Amz-Target": "AWSSimbaAPIService_v20180301.DescribeStorageVirtualMachines"});
+    }
+
+    listFSxVolumes(req: ListFSxVolumeRequest): Promise<ListFSxVolumeResult> {
+        return this.apiInvoker.invoke_alt(`${req.AWSRegion}/fsx`, {"Filters": [{"Name": "file-system-id", "Values": req.FileSystemIds}]}, false, true, {"X-Amz-Target": "AWSSimbaAPIService_v20180301.DescribeVolumes"});
+    }
+
+    listClusterHosts(req: any): Promise<ListClusterHostsResult> {
+        return this.apiInvoker.invoke_alt<any, ListClusterHostsResult>(`${req.AWSRegion}/ec2`, req.QueryStringParameters, false, true, {"Content-Type": "text/plain"});
     }
 }
 

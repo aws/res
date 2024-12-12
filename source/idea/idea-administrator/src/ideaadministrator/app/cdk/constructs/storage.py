@@ -130,6 +130,19 @@ class AmazonEFS(SocaBaseConstruct):
                                 "elasticfilesystem:AccessedViaMountTarget": "true"
                             }
                         }
+                    },
+                    {
+                        "Sid": "efs-enforce-tls",
+                        "Effect": "Deny",
+                        "Principal": {
+                            "AWS": "*"
+                        },
+                        "Action": "*",
+                        "Condition": {
+                            "Bool": {
+                                "aws:SecureTransport": "false"
+                            }
+                        }
                     }
                 ]
             }

@@ -96,12 +96,6 @@ class DirectoryServiceStack(IdeaBaseStack):
 
         provider = self.context.config().get_string('directoryservice.provider', required=True)
         if provider == constants.DIRECTORYSERVICE_OPENLDAP:
-
-            service_account_credentials_provided = self.context.config().get_bool('directoryservice.service_account_credentials_provided', default=False)
-            if service_account_credentials_provided:
-                service_account_credentials_secret_arn = self.context.config().get_string('directoryservice.service_account_credentials_secret_arn')
-                assert Utils.is_not_empty(service_account_credentials_secret_arn)
-
             self.bootstrap_package_uri = self.stack.node.try_get_context('bootstrap_package_uri')
             self.openldap_credentials = DirectoryServiceCredentials(
                 context=self.context,
@@ -117,12 +111,6 @@ class DirectoryServiceStack(IdeaBaseStack):
             self.build_openldap_cluster_settings()
 
         elif provider == constants.DIRECTORYSERVICE_AWS_MANAGED_ACTIVE_DIRECTORY:
-
-            service_account_credentials_provided = self.context.config().get_bool('directoryservice.service_account_credentials_provided', default=False)
-            if service_account_credentials_provided:
-                service_account_credentials_secret_arn = self.context.config().get_string('directoryservice.service_account_credentials_secret_arn')
-                assert Utils.is_not_empty(service_account_credentials_secret_arn)
-
             use_existing = self.context.config().get_bool('directoryservice.use_existing', default=False)
             if use_existing:
                 directory_id = self.context.config().get_string('directoryservice.directory_id')
@@ -143,12 +131,6 @@ class DirectoryServiceStack(IdeaBaseStack):
         # as we do not have write-access to create users after installation
         # This is done with the directoryservice helper
         elif provider == constants.DIRECTORYSERVICE_ACTIVE_DIRECTORY:
-
-            service_account_credentials_provided = self.context.config().get_bool('directoryservice.service_account_credentials_provided', default=False)
-            assert service_account_credentials_provided is True
-            service_account_credentials_secret_arn = self.context.config().get_string('directoryservice.service_account_credentials_secret_arn')
-            assert Utils.is_not_empty(service_account_credentials_secret_arn)
-
             self.build_ad_automation_sqs_queue()
             self.build_activedirectory_cluster_settings()
 

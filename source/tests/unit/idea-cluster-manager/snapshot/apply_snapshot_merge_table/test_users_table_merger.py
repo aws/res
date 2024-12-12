@@ -10,6 +10,7 @@
 #  and limitations under the License.
 
 import pytest
+import res.exceptions as exceptions
 from ideaclustermanager import AppContext
 from ideaclustermanager.app.snapshots.apply_snapshot_merge_table.users_table_merger import (
     UsersTableMerger,
@@ -21,8 +22,9 @@ from ideaclustermanager.app.snapshots.helpers.merged_record_utils import (
     MergedRecordActionType,
     MergedRecordDelta,
 )
+from res.resources import accounts
 
-from ideadatamodel import constants, errorcodes, exceptions
+from ideadatamodel import constants
 
 
 def test_users_table_merger_merge_valid_data_succeed(context: AppContext):
@@ -30,7 +32,7 @@ def test_users_table_merger_merge_valid_data_succeed(context: AppContext):
         {"username": "test_user_1", "role": constants.ADMIN_ROLE, "sudo": True},
         {"username": "test_user_2", "role": constants.USER_ROLE, "sudo": False},
     ]
-    context.accounts.user_dao.create_user(
+    accounts.create_user(
         {
             "username": "test_user_1",
             "email": "test_user_1@example.org",
@@ -45,7 +47,7 @@ def test_users_table_merger_merge_valid_data_succeed(context: AppContext):
             "is_active": True,
         }
     )
-    context.accounts.user_dao.create_user(
+    accounts.create_user(
         {
             "username": "test_user_2",
             "email": "test_user_2@example.org",
@@ -105,9 +107,9 @@ def test_users_table_merger_ignore_nonexistent_user_succeed(context: AppContext)
     assert success
     assert len(record_deltas) == 0
 
-    with pytest.raises(exceptions.SocaException) as exc_info:
+    with pytest.raises(exceptions.UserNotFound) as exc_info:
         context.accounts.get_user("test_user_3")
-    assert exc_info.value.error_code == errorcodes.AUTH_USER_NOT_FOUND
+    assert exc_info.value.args[0] == f"User not found: test_user_3"
 
 
 def test_users_table_merger_ignore_user_without_permission_change_succeed(
@@ -117,7 +119,7 @@ def test_users_table_merger_ignore_user_without_permission_change_succeed(
         {"username": "test_user_3", "role": constants.ADMIN_ROLE, "sudo": True},
     ]
 
-    context.accounts.user_dao.create_user(
+    accounts.create_user(
         {
             "username": "test_user_3",
             "email": "test_user_1@example.org",
@@ -152,7 +154,7 @@ def test_users_table_merger_ignore_user_without_permission_change_succeed(
 def test_users_table_merger_roll_back_original_data_succeed(
     context: AppContext, monkeypatch
 ):
-    context.accounts.user_dao.create_user(
+    accounts.create_user(
         {
             "username": "test_user_4",
             "email": "test_user_1@example.org",
@@ -167,7 +169,7 @@ def test_users_table_merger_roll_back_original_data_succeed(
             "is_active": True,
         }
     )
-    context.accounts.user_dao.create_user(
+    accounts.create_user(
         {
             "username": "test_user_5",
             "email": "test_user_2@example.org",

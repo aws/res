@@ -28,7 +28,10 @@ from ideaadministrator.app.cdk.constructs import (
     IdeaNagSuppression,
     LambdaFunction
 )
-from typing import Optional
+from typing import Optional, List
+from ideadatamodel.constants import (
+    ARTIFACTS_BUCKET_PREFIX_NAME
+)
 import aws_cdk as cdk
 from aws_cdk import (
     aws_ec2 as ec2,
@@ -79,7 +82,6 @@ class ClusterManagerStack(IdeaBaseStack):
         self.cluster = ExistingSocaCluster(self.context, self.stack)
 
         self.oauth2_client_secret: Optional[OAuthClientIdAndSecret] = None
-        self.cluster_tasks_sqs_queue: Optional[SQSQueue] = None
         self.notifications_sqs_queue: Optional[SQSQueue] = None
         self.cluster_manager_role: Optional[Role] = None
         self.cluster_manager_security_group: Optional[WebPortalSecurityGroup] = None
@@ -96,7 +98,6 @@ class ClusterManagerStack(IdeaBaseStack):
         self.build_security_groups()
         self.build_auto_scaling_group()
         self.build_endpoints()
-        self.build_scheduled_event_adsync_infra()
         self.build_configure_sso_lambda()
         self.build_cluster_settings()
 
@@ -197,28 +198,6 @@ class ClusterManagerStack(IdeaBaseStack):
     def build_sqs_queues(self):
 
         kms_key_id = self.context.config().get_string('cluster.sqs.kms_key_id')
-
-        self.cluster_tasks_sqs_queue = SQSQueue(
-            self.context, 'cluster-tasks-sqs-queue', self.stack,
-            queue_name=f'{self.cluster_name}-{self.module_id}-tasks.fifo',
-            fifo=True,
-            content_based_deduplication=True,
-            encryption_master_key=kms_key_id,
-            dead_letter_queue=sqs.DeadLetterQueue(
-                max_receive_count=30,
-                queue=SQSQueue(
-                    self.context, 'cluster-tasks-sqs-queue-dlq', self.stack,
-                    queue_name=f'{self.cluster_name}-{self.module_id}-tasks-dlq.fifo',
-                    fifo=True,
-                    content_based_deduplication=True,
-                    encryption_master_key=kms_key_id,
-                    is_dead_letter_queue=True
-                )
-            )
-        )
-        self.add_common_tags(self.cluster_tasks_sqs_queue)
-        self.add_common_tags(self.cluster_tasks_sqs_queue.dead_letter_queue.queue)
-
         self.notifications_sqs_queue = SQSQueue(
             self.context, 'notifications-sqs-queue', self.stack,
             queue_name=f'{self.cluster_name}-{self.module_id}-notifications.fifo',
@@ -356,7 +335,6 @@ class ClusterManagerStack(IdeaBaseStack):
 
         cdk.Tags.of(self.auto_scaling_group).add(constants.IDEA_TAG_NODE_TYPE, constants.NODE_TYPE_APP)
         cdk.Tags.of(self.auto_scaling_group).add(constants.IDEA_TAG_NAME, f'{self.cluster_name}-{self.module_id}')
-        self.auto_scaling_group.node.add_dependency(self.cluster_tasks_sqs_queue)
         self.auto_scaling_group.node.add_dependency(self.notifications_sqs_queue)
 
         if not enable_detailed_monitoring:
@@ -490,6 +468,12 @@ class ClusterManagerStack(IdeaBaseStack):
             internal_target_group.ref,
             external_target_group.ref
         ]
+    
+    def host_modules(self) -> List[str]:
+        return self.context.config().get_list("global-settings.package_config.host_modules.pam", []) + self.context.config().get_list("global-settings.package_config.host_modules.nss", [])
+
+    def build_host_module_s3_url(self, host_module_name, os_arch):
+        return f's3://{ARTIFACTS_BUCKET_PREFIX_NAME}-{self.aws_region}/host_modules/{host_module_name}/latest/{os_arch}/{host_module_name}.so'
 
     def build_cluster_settings(self):
         cluster_settings = {
@@ -498,66 +482,18 @@ class ClusterManagerStack(IdeaBaseStack):
             'client_secret': self.oauth2_client_secret.client_secret.ref,
             'security_group_id': self.cluster_manager_security_group.security_group_id,
             'iam_role_arn': self.cluster_manager_role.role_arn,
-            'task_queue_url': self.cluster_tasks_sqs_queue.queue_url,
-            'task_queue_arn': self.cluster_tasks_sqs_queue.queue_arn,
             'notifications_queue_url': self.notifications_sqs_queue.queue_url,
             'notifications_queue_arn': self.notifications_sqs_queue.queue_arn,
             'asg_name': self.auto_scaling_group.auto_scaling_group_name,
             'asg_arn': self.auto_scaling_group.auto_scaling_group_arn
         }
 
+        host_modules = self.host_modules()
+        for host_module_name in host_modules:
+            for os_arch in ['x86_64', 'arm64']:
+                cluster_settings[f'host_modules.{host_module_name}.{os_arch}.s3_url'] = self.build_host_module_s3_url(host_module_name, os_arch)
+
         self.update_cluster_settings(cluster_settings)
-
-    def build_scheduled_event_adsync_infra(self):
-        lambda_name = f'{self.module_id}-scheduled-ad-sync'
-        scheduled_ad_sync_lambda_role = Role(
-            context=self.context,
-            name=f'{lambda_name}-role',
-            scope=self.stack,
-            assumed_by=['lambda'],
-            description=f'{lambda_name}-role'
-        )
-
-        scheduled_ad_sync_lambda_role.attach_inline_policy(Policy(
-            context=self.context,
-            name=f'{lambda_name}-policy',
-            scope=self.stack,
-            policy_template_name='scheduled-ad-sync-lambda.yml'
-        ))
-
-        scheduled_ad_sync_lambda = LambdaFunction(
-            context=self.context,
-            name=lambda_name,
-            description=f'{self.module_id} lambda to send scheduled event to trigger ad sync',
-            scope=self.stack,
-            environment={
-                'RES_CLUSTER_MANAGER_TASKS_QUEUE_URL': self.cluster_tasks_sqs_queue.queue_url
-            },
-            timeout_seconds=180,
-            role=scheduled_ad_sync_lambda_role,
-            idea_code_asset=IdeaCodeAsset(
-                lambda_package_name='scheduled_ad_sync_lambda',
-                lambda_platform=SupportedLambdaPlatforms.PYTHON
-            )
-        )
-
-        schedule_trigger_rule = events.Rule(
-            scope=self.stack,
-            id=f'{self.cluster_name}-{self.module_id}-ad-sync-schedule-rule',
-            enabled=True,
-            rule_name=f'{self.cluster_name}-{self.module_id}-ad-sync-schedule-rule',
-            description='Event Rule to Trigger schedule AD sync EVERY 3 hours',
-            schedule=Schedule.cron(
-                minute='0',
-                hour='0/1'  # every 1 hour
-            )
-
-        )
-
-        schedule_trigger_rule.add_target(events_targets.LambdaFunction(
-            scheduled_ad_sync_lambda
-        ))
-        self.add_common_tags(schedule_trigger_rule)
 
     def build_configure_sso_lambda(self):
         lambda_name = f'configure_sso'

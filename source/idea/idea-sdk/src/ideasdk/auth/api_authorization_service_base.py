@@ -12,12 +12,15 @@
 from ideasdk.protocols import ApiAuthorizationServiceProtocol
 from ideadatamodel.api.api_model import ApiAuthorization, ApiAuthorizationType
 from ideadatamodel.auth import User
-from ideadatamodel import exceptions, errorcodes
+from ideadatamodel import constants, exceptions, errorcodes
+from ideasdk.protocols import SocaConfigType
 from ideasdk.utils import Utils
 from typing import Optional, Dict, List
 from abc import abstractmethod
 
 class ApiAuthorizationServiceBase(ApiAuthorizationServiceProtocol):
+    def __init__(self, config: SocaConfigType):
+        self.config = config
 
     @abstractmethod
     def get_user_from_token_username(self, token_username: str) -> Optional[User]:
@@ -46,8 +49,13 @@ class ApiAuthorizationServiceBase(ApiAuthorizationServiceProtocol):
         else:
             user = self.get_user_from_token_username(username)
             username = user.username
+            cluster_admin_username = self.config.get_string('cluster.administrator_username', required=True)
             if not user.enabled:
                 raise exceptions.unauthorized_access(errorcodes.AUTH_USER_IS_DISABLED)
+            elif user.identity_source == constants.COGNITO_USER_IDP_TYPE and not self.config.get_bool('identity-provider.cognito.enable_native_user_login', required=True) and cluster_admin_username != username:
+                raise exceptions.unauthorized_access(errorcodes.COGNITO_NATIVE_AUTH_DISABLED)
+            elif user.identity_source == constants.SSO_USER_IDP_TYPE and not self.config.get_bool('identity-provider.cognito.sso_enabled', required=True):
+                raise exceptions.unauthorized_access(errorcodes.SSO_AUTH_DISABLED)
             authorization_type = self.get_authorization_type(user.role)
 
         return ApiAuthorization(

@@ -70,19 +70,19 @@ class VirtualDesktopControllerApp(ideasdk.app.SocaApp):
         self._initialize_services()
 
     def _initialize_dbs(self):
-        self._session_counter_db = VirtualDesktopSessionCounterDB(self.context).initialize()
-        self._ssm_commands_db = VirtualDesktopSSMCommandsDB(self.context).initialize()
-        self._server_db = VirtualDesktopServerDB(self.context).initialize()
-        self._software_stack_db = VirtualDesktopSoftwareStackDB(self.context).initialize()
-        self._schedule_db = VirtualDesktopScheduleDB(self.context).initialize()
+        self._session_counter_db = VirtualDesktopSessionCounterDB(self.context)
+        self._ssm_commands_db = VirtualDesktopSSMCommandsDB(self.context)
+        self._server_db = VirtualDesktopServerDB(self.context)
+        self._software_stack_db = VirtualDesktopSoftwareStackDB(self.context)
+        self._schedule_db = VirtualDesktopScheduleDB(self.context)
         self._session_db = VirtualDesktopSessionDB(
             context=self.context,
             server_db=self._server_db,
             software_stack_db=self._software_stack_db,
             schedule_db=self._schedule_db
-        ).initialize()
-        self._permission_profile_db = VirtualDesktopPermissionProfileDB(self.context).initialize()
-        self._session_permissions_db = VirtualDesktopSessionPermissionDB(self.context).initialize()
+        )
+        self._permission_profile_db = VirtualDesktopPermissionProfileDB(self.context)
+        self._session_permissions_db = VirtualDesktopSessionPermissionDB(self.context)
 
     def _initialize_clients(self):
         group_name_helper = GroupNameHelper(self.context)
@@ -151,6 +151,7 @@ class VirtualDesktopControllerApp(ideasdk.app.SocaApp):
         
         self.context.api_authorization_service = VdcApiAuthorizationService(
             accounts_client=self.context.accounts_client,
+            config=self.context.config(),
             token_service= self.context.token_service,
             roles_client=self.context.roles_client,
             role_assignments_client=self.context.role_assignments_client

@@ -5,3 +5,4 @@ pytest-xdist~=3.0
 memory_profiler~=0.0
 defusedxml~=0.0
 selenium~=4.0
+moto~=5.0

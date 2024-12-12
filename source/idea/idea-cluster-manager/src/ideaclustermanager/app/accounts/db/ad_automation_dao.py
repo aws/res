@@ -27,35 +27,6 @@ class ADAutomationDAO:
         return f'{self.context.cluster_name()}.ad-automation'
 
     def initialize(self):
-        self.context.aws_util().dynamodb_create_table(
-            create_table_request={
-                'TableName': self.get_table_name(),
-                'AttributeDefinitions': [
-                    {
-                        'AttributeName': 'instance_id',
-                        'AttributeType': 'S'
-                    },
-                    {
-                        'AttributeName': 'nonce',
-                        'AttributeType': 'S'
-                    }
-                ],
-                'KeySchema': [
-                    {
-                        'AttributeName': 'instance_id',
-                        'KeyType': 'HASH'
-                    },
-                    {
-                        'AttributeName': 'nonce',
-                        'KeyType': 'RANGE'
-                    }
-                ],
-                'BillingMode': 'PAY_PER_REQUEST'
-            },
-            wait=True,
-            ttl=True,
-            ttl_attribute_name='ttl'
-        )
         self.table = self.context.aws().dynamodb_table().Table(self.get_table_name())
 
     def create_ad_automation_entry(self, entry: Dict, ttl=None) -> Dict:

@@ -12,5 +12,5 @@
 
 set -x
 
-DEBIAN_FRONTEND=noninteractive apt install -y policycoreutils sssd-ad sssd-ldap ldap-utils realmd krb5-user sssd-krb5 sssd-tools adcli expect
+DEBIAN_FRONTEND=noninteractive apt install -y policycoreutils sssd-ad sssd-ldap ldap-utils realmd krb5-user sssd-krb5 sssd-tools adcli expect nscd
 sed -i '/^\[libdefaults\]/a\        rdns = false' /etc/krb5.conf

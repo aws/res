@@ -127,6 +127,41 @@ class IdeaAuthLogin extends Component<IdeaAuthProps, IdeaAuthState> {
                                     >
                                         Forgot Password?
                                     </Button>
+                                    {
+                                        Utils.isSelfSignUpEnabled() &&
+                                        Utils.isNativeUserLoginEnabled() && (
+                                            <>
+                                                <Button
+                                                    variant="link"
+                                                    onClick={() => {
+                                                        this.props.navigate("/auth/sign-up");
+                                                    }}
+                                                >
+                                                    Not a user yet? Sign up here
+                                                </Button>
+                                                <Button
+                                                    variant="link"
+                                                    onClick={() => {
+                                                        this.props.navigate("/auth/verify-account");
+                                                    }}
+                                                >
+                                                    Verify account
+                                                </Button>
+                                            </>
+                                        )
+                                    }
+                                    {
+                                        Utils.isSsoEnabled() && (
+                                            <Button
+                                                variant="link"
+                                                onClick={() => {
+                                                    window.location.href = "/sso";
+                                                }}
+                                            >
+                                                Sign in with organization SSO
+                                            </Button>
+                                        )
+                                    }
                                 </div>
                             )}
                             {this.state.loading && (

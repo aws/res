@@ -12,6 +12,7 @@
 from ideasdk.auth.api_authorization_service_base import ApiAuthorizationServiceBase
 from ideasdk.auth.token_service import TokenService
 from ideasdk.client import AccountsClient, RolesClient, RoleAssignmentsClient
+from ideasdk.protocols import SocaConfigType
 from ideasdk.utils import Utils
 from ideadatamodel.auth import GetUserByEmailRequest, GetUserRequest, User
 from ideadatamodel import ListRoleAssignmentsRequest, GetRoleRequest
@@ -19,7 +20,8 @@ from ideadatamodel import exceptions, errorcodes, constants
 from typing import Optional, List, Dict
 
 class VdcApiAuthorizationService(ApiAuthorizationServiceBase):
-    def __init__(self, accounts_client: AccountsClient, token_service: TokenService, roles_client: RolesClient, role_assignments_client: RoleAssignmentsClient):
+    def __init__(self, accounts_client: AccountsClient, config: SocaConfigType, token_service: TokenService, roles_client: RolesClient, role_assignments_client: RoleAssignmentsClient):
+        super().__init__(config)
         self.accounts_client = accounts_client
         self.token_service = token_service
         self.roles_client = roles_client

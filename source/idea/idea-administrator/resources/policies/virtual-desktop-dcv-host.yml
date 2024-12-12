@@ -63,9 +63,10 @@ Statement:
         dynamodb:LeadingKeys:
           - global-settings.package_config.*
           - global-settings.gpu_settings.*
-          - vdc.host_modules.*
+          - cluster-manager.host_modules.*
           - vdc.dcv_session.*
           - vdc.vdi_helper_api_gateway_url
+          - identity-provider.cognito.enable_native_user_login
 
   - Action:
       - execute-api:Invoke
@@ -83,6 +84,15 @@ Statement:
       - s3:GetObject
     Resource:
       {{ context.utils.to_yaml(context.arns.s3_public_host_modules) | indent(6) }}
+    Effect: Allow
+
+  - Action:
+      - cognito-idp:AdminInitiateAuth
+      - cognito-idp:AdminGetUser
+      - cognito-idp:ListGroups
+      - cognito-idp:AdminListGroupsForUser
+      - cognito-idp:ListUsers
+    Resource: '{{ context.arns.user_pool_arn }}'
     Effect: Allow
 
 {% include '_templates/aws-managed-ad.yml' %}

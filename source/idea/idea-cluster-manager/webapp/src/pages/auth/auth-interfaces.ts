@@ -45,6 +45,38 @@ export const AUTH_PARAM_PASSWORD: SocaUserInputParamMetadata = {
     },
 };
 
+export const AUTH_PARAM_SIGNUP_USER_EMAIL: SocaUserInputParamMetadata = {
+    name: "email",
+    title: "Email",
+    param_type: "text",
+    data_type: "str",
+    auto_focus: true,
+    validate: {
+        required: true,
+    },
+};
+
+export const AUTH_PARAM_SIGNUP_USER_PASSWORD: SocaUserInputParamMetadata = {
+    name: "password",
+    title: "Password",
+    help_text: "Minimum 8 characters with numbers and special symbols (@#$*&)",
+    param_type: "password",
+    data_type: "str",
+    validate: {
+        required: true,
+    },
+};
+
+export const AUTH_PARAM_SIGNUP_USER_REENTER_PASSWORD: SocaUserInputParamMetadata = {
+    name: "reenterPassword",
+    title: "Re-enter password",
+    param_type: "password",
+    data_type: "str",
+    validate: {
+        required: true,
+    },
+};
+
 export const AUTH_PARAM_VERIFICATION_CODE: SocaUserInputParamMetadata = {
     name: "verificationCode",
     title: "Verification Code",

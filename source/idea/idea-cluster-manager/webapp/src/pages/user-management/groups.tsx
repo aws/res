@@ -247,13 +247,6 @@ class Groups extends Component<GroupsProps, GroupsState> {
                         .accounts()
                         .listGroups({
                             paginator: this.getListing().getPaginator(),
-                            filters: [
-                                ...this.getListing().getFilters(),
-                                {
-                                    key: "group_type",
-                                    eq: "project",
-                                },
-                            ],
                         });
                 }}
                 columnDefinitions={[
@@ -268,9 +261,9 @@ class Groups extends Component<GroupsProps, GroupsState> {
                         cell: (e) => e.name,
                     },
                     {
-                        id: "type",
-                        header: "Type",
-                        cell: (e) => e.type,
+                        id: "identity_source",
+                        header: "Identity Source",
+                        cell: (e) => e.identity_source,
                     },
                     {
                         id: "group_role",

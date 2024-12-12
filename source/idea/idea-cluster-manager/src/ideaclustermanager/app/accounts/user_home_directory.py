@@ -21,6 +21,7 @@ import pwd
 from cryptography.hazmat.primitives import serialization as crypto_serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
 from cryptography.hazmat.backends import default_backend as crypto_default_backend
+from pathlib import Path
 
 from ideaclustermanager.app.accounts.auth_constants import USER_HOME_DIR_BASE
 from ideasdk.shell import ShellInvoker
@@ -70,8 +71,8 @@ class UserHomeDirectory:
             platform = 'linux'
 
         id_rsa_file = os.path.join(self.ssh_dir, 'id_rsa')
-        if not Utils.is_empty(id_rsa_file):
-            exceptions.general_exception(f'private key not found in home directory for user: {self.user.username}')
+        if not Path(id_rsa_file).exists():
+            raise exceptions.general_exception(f'private key not found in home directory for user: {self.user.username}')
 
         key_format = self.validate_and_sanitize_key_format(key_format)
 
@@ -108,6 +109,6 @@ class UserHomeDirectory:
                     f'{putty_gen_bin} {id_rsa_file} -o {id_rsa_ppk_file}'
                 ])
                 if result.returncode != 0:
-                    raise exceptions.general_exception(f'failed to generate .ppk file: {result}')
+                    raise exceptions.general_exception(f'failed to generate .ppk file for user: {self.user.username}')
 
             return read_private_key_content(id_rsa_ppk_file)

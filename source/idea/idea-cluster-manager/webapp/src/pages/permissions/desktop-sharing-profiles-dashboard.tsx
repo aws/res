@@ -20,10 +20,11 @@ import { TableProps } from "@cloudscape-design/components/table/interfaces";
 import { VirtualDesktopPermission, VirtualDesktopPermissionProfile } from "../../client/data-model";
 import { IdeaSideNavigationProps } from "../../components/side-navigation";
 import { IdeaAppLayoutProps } from "../../components/app-layout";
-import { Link } from "@cloudscape-design/components";
+import { Container, Header, Link } from "@cloudscape-design/components";
 import { withRouter } from "../../navigation/navigation-utils";
 import VirtualDesktopUtilsClient from "../../client/virtual-desktop-utils-client";
 import { Constants } from "../../common/constants";
+import Utils from "../../common/utils";
 
 export interface VirtualDesktopPermissionProfilesProps extends IdeaAppLayoutProps, IdeaSideNavigationProps {}
 
@@ -31,28 +32,35 @@ export interface VirtualDesktopPermissionProfilesState {
     permissionProfileSelected: boolean;
     base_permissions: VirtualDesktopPermission[];
     settings: any;
+    profileCount: number;
 }
 
 const VIRTUAL_DESKTOP_PERMISSION_PROFILE_TABLE_COLUMN_DEFINITIONS: TableProps.ColumnDefinition<VirtualDesktopPermissionProfile>[] = [
     {
         id: "profile_id",
-        header: "Desktop sharing profile ID",
+        header: "Profile ID",
         cell: (e) => <Link href={`/#/cluster/permissions/sharing-profiles/${e.profile_id}`}>{e.profile_id}</Link>,
     },
     {
         id: "title",
-        header: "Title",
+        header: "Profile name",
         cell: (e) => e.title,
     },
     {
         id: "description",
         header: "Description",
-        cell: (e) => e.description ?? "-",
+        cell: (e) => `${
+            e.description 
+            ? e.description.length > 50
+            ? e.description.substring(0, 50) + "..."
+            : e.description
+            : "-"
+        }`,
     },
     {
-        id: "created_on",
-        header: "Created On",
-        cell: (e) => new Date(e.created_on!).toLocaleString(),
+        id: "updated_on",
+        header: "Latest update",
+        cell: (e) => `${e.updated_on ? Utils.convertToRelativeTime(new Date(e.updated_on)) : "-"}`,
     },
 ];
 
@@ -66,6 +74,7 @@ class VirtualDesktopPermissionProfiles extends Component<VirtualDesktopPermissio
             permissionProfileSelected: false,
             base_permissions: [],
             settings: {},
+            profileCount: 0,
         };
     }
 
@@ -128,10 +137,11 @@ class VirtualDesktopPermissionProfiles extends Component<VirtualDesktopPermissio
             <IdeaListView
                 ref={this.listing}
                 title="Desktop sharing profiles"
+                titleVariant="h2"
+                counter={`(${this.state.profileCount})`}
                 preferencesKey={"permission-profile"}
                 showPreferences={true}
                 variant="container"
-                description="Manage your desktop sharing profiles."
                 selectionType="single"
                 primaryAction={{
                     id: "create-permission-profile",
@@ -169,6 +179,7 @@ class VirtualDesktopPermissionProfiles extends Component<VirtualDesktopPermissio
                         key: "profile_id",
                     },
                 ]}
+                filteringPlaceholder="Find profile by ID"
                 onFilter={(filters) => {
                     const token = `${filters[0].value ?? ""}`.trim().toLowerCase();
                     if (token.trim().length === 0) {
@@ -201,6 +212,9 @@ class VirtualDesktopPermissionProfiles extends Component<VirtualDesktopPermissio
                     return this.getVirtualDesktopUtilsClient()
                         .listPermissionProfiles({ filters: this.getListing().getFilters(), paginator: this.getListing().getPaginator() })
                         .then((data) => {
+                            this.setState({
+                                profileCount: data.listing!.filter((profile) => profile.profile_id !== Constants.DCV_SETTINGS_DEFAULT_OWNER_PROFILE_ID).length ?? 0
+                            })
                             return {
                                 ...data,
                                 listing: data.listing!.filter((profile) => profile.profile_id !== Constants.DCV_SETTINGS_DEFAULT_OWNER_PROFILE_ID),

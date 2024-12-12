@@ -42,6 +42,15 @@ def administrator(c):
 
 
 @task
+def ad_sync(c):
+    # type: (Context) -> None
+    """
+    clean ad sync
+    """
+    CleanTool(c, 'ad-sync').clean()
+
+
+@task
 def cluster_manager(c):
     # type: (Context) -> None
     """
@@ -58,7 +67,8 @@ def virtual_desktop_controller(c):
     """
     CleanTool(c, 'idea-virtual-desktop-controller').clean()
     CleanTool(c, 'idea-dcv-connection-gateway').clean()
-    
+
+
 @task
 def library(c):
     # type: (Context) -> None
@@ -66,6 +76,15 @@ def library(c):
     clean library
     """
     CleanTool(c, 'library').clean()
+
+
+@task
+def bastion_host(c):
+    # type: (Context) -> None
+    """
+    clean bastion host
+    """
+    CleanTool(c, 'idea-bastion-host').clean()
 
 
 @task(name='all', default=True)
@@ -83,11 +102,15 @@ def clean_all(c):
 
     administrator(c)
 
+    ad_sync(c)
+
     cluster_manager(c)
 
     virtual_desktop_controller(c)
-    
+
     library(c)
+
+    bastion_host(c)
 
     CleanTool(c, 'all').clean_non_project_items()
 

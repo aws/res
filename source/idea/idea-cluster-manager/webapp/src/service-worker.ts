@@ -149,6 +149,24 @@ self.addEventListener("message", (event) => {
                                 error: error,
                             });
                         });
+                } else if (event.data.options.isAWSProxyRequest) {
+                    IDEA_AUTH_CONTEXT.invoke(
+                        event.data.options.url,
+                        event.data.options.request.payload,
+                        event.data.options.isPublic,
+                        event.data.options.additionalHeader,
+                        event.data.options.httpMethod
+                    )
+                        .then((result) => {
+                            event.ports[0].postMessage({
+                                response: result,
+                            });
+                        })
+                        .catch((error) => {
+                            event.ports[0].postMessage({
+                                error: error,
+                            });
+                        });
                 } else {
                     IDEA_AUTH_CONTEXT.invoke(event.data.options.url, event.data.options.request, event.data.options.isPublic)
                         .then((result) => {

@@ -305,7 +305,9 @@ class AuthService {
                             return false;
                         }
                     } else {
-                        window.location.href = "/sso";
+                        if (!Utils.isNativeUserLoginEnabled()) {
+                            window.location.href = "/sso";
+                        }
                     }
                 }
                 return false;

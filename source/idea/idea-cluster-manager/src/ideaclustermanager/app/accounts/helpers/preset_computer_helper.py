@@ -14,7 +14,7 @@ from ideasdk.utils import Utils
 from ideasdk.shell import ShellInvoker
 from ideadatamodel import exceptions, errorcodes, EC2Instance
 
-from ideaclustermanager.app.accounts.ldapclient.active_directory_client import ActiveDirectoryClient
+from res.clients.ldap_client.active_directory_client import ActiveDirectoryClient
 from ideaclustermanager.app.accounts.db.ad_automation_dao import ADAutomationDAO
 
 from typing import Dict, List, Optional
@@ -34,16 +34,18 @@ class PresetComputeHelper:
         operation will be retried based on SQS visibility timeout settings.
     """
 
-    def __init__(self, context: SocaContext, ldap_client: ActiveDirectoryClient, ad_automation_dao: ADAutomationDAO, sender_id: str, request: Dict):
+    def __init__(self, context: SocaContext, ad_automation_dao: ADAutomationDAO, sender_id: str, request: Dict):
         """
         :param context:
-        :param ldap_client:
         :param ad_automation_dao:
         :param sender_id: SenderId attribute from SQS Message
         :param request: the original request payload envelope
         """
         self.context = context
-        self.ldap_client = ldap_client
+        self.ldap_client = ActiveDirectoryClient(self.context.logger())
+        self.service_account_username, self.service_account_password = (
+            self.ldap_client.fetch_service_account_credentials()
+        )
         self.ad_automation_dao = ad_automation_dao
         self.sender_id = sender_id
         self.request = request
@@ -176,7 +178,7 @@ class PresetComputeHelper:
         ou_computers = self.context.config().get_string('directoryservice.computers.ou', required=True)
         if '=' in ou_computers:
             return ou_computers
-        return f'ou={ou_computers},ou={self.ldap_client.ad_netbios},{self.ldap_client.ldap_base}'
+        return f'ou={ou_computers},ou={self.ldap_client.options.ldap_base}'
 
     @staticmethod
     def get_ldap_computer_filterstr(hostname: str) -> str:
@@ -202,7 +204,7 @@ class PresetComputeHelper:
         ]
         if self.use_ldaps:
             cmd.append("--use-ldaps")
-        cmd.append(self.ldap_client.domain_name.upper())
+        cmd.append(self.ldap_client.options.domain_name.upper())
 
         result = self._shell.invoke(
             cmd=cmd,
@@ -210,7 +212,7 @@ class PresetComputeHelper:
         if result.returncode != 0:
             raise exceptions.soca_exception(
                 error_code=errorcodes.AD_AUTOMATION_PRESET_COMPUTER_RETRY,
-                message=f'{self.log_tag} failed to perform adcli information discovery on AD domain: {self.ldap_client.domain_name}'
+                message=f'{self.log_tag} failed to perform adcli information discovery on AD domain: {self.ldap_client.options.domain_name}'
             )
 
         # self.logger.debug(f'ADCLI Domain info: {result.stdout}')
@@ -261,26 +263,13 @@ class PresetComputeHelper:
         if domain_name is None:
             raise exceptions.soca_exception(
                 error_code=errorcodes.AD_AUTOMATION_PRESET_COMPUTER_RETRY,
-                message=f'{self.log_tag} Unable to validate AD domain discovery for domain-name: {self.ldap_client.domain_name}'
+                message=f'{self.log_tag} Unable to validate AD domain discovery for domain-name: {self.ldap_client.options.domain_name}'
             )
 
-        if domain_name.upper() != self.ldap_client.domain_name.upper():
+        if domain_name.upper() != self.ldap_client.options.domain_name.upper():
             raise exceptions.soca_exception(
                 error_code=errorcodes.AD_AUTOMATION_PRESET_COMPUTER_RETRY,
-                message=f"{self.log_tag} AD domain discovery mismatch for domain-name: Got: {domain_name.upper()} Expected: {self.ldap_client.domain_name.upper()}"
-            )
-
-        # domain-short must be present and match our configuration
-        domain_shortname = Utils.get_value_as_string('domain-short', domain_query, default=None)
-        if domain_shortname is None:
-            raise exceptions.soca_exception(
-                error_code=errorcodes.AD_AUTOMATION_PRESET_COMPUTER_RETRY,
-                message=f'{self.log_tag} Unable to validate AD domain discovery for domain shortname: {self.ldap_client.domain_name}'
-            )
-        if domain_shortname.upper() != self.ldap_client.ad_netbios.upper():
-            raise exceptions.soca_exception(
-                error_code=errorcodes.AD_AUTOMATION_PRESET_COMPUTER_RETRY,
-                message=f'{self.log_tag} AD domain discovery mismatch for shortname: Got: {domain_shortname.upper()} Expected: {self.ldap_client.ad_netbios.upper()}'
+                message=f"{self.log_tag} AD domain discovery mismatch for domain-name: Got: {domain_name.upper()} Expected: {self.ldap_client.options.domain_name.upper()}"
             )
 
         # domain_controllers must be a list of domain controllers
@@ -290,7 +279,7 @@ class PresetComputeHelper:
         if len(domain_controllers) == 0:
             raise exceptions.soca_exception(
                 error_code=errorcodes.AD_AUTOMATION_PRESET_COMPUTER_RETRY,
-                message=f'{self.log_tag} no domain controllers found for AD domain: {self.ldap_client.domain_name}. check your firewall settings and verify if traffic is allowed on port 53.'
+                message=f'{self.log_tag} no domain controllers found for AD domain: {self.ldap_client.options.domain_name}. check your firewall settings and verify if traffic is allowed on port 53.'
             )
 
         return domain_controllers
@@ -318,17 +307,17 @@ class PresetComputeHelper:
             self.ADCLI,
             'delete-computer',
             f'--domain-controller={domain_controller_ip}',
-            f'--login-user={self.ldap_client.ldap_root_username}',
+            f'--login-user={self.service_account_username}',
             '--stdin-password',
-            f'--domain={self.ldap_client.domain_name}',
-            f'--domain-realm={self.ldap_client.domain_name.upper()}',
+            f'--domain={self.ldap_client.options.domain_name}',
+            f'--domain-realm={self.ldap_client.options.domain_name.upper()}',
         ]
         if self.use_ldaps:
             cmd.append("--use-ldaps")
         cmd.append(self.hostname)
 
         delete_computer_result = self._shell.invoke(
-            cmd_input=self.ldap_client.ldap_root_password,
+            cmd_input=self.service_account_password,
             cmd=cmd,
         )
         if delete_computer_result.returncode != 0:
@@ -358,10 +347,10 @@ class PresetComputeHelper:
             self.ADCLI,
             'preset-computer',
             f'--domain-controller={domain_controller_ip}',
-            f'--login-user={self.ldap_client.ldap_root_username}',
+            f'--login-user={self.service_account_username}',
             '--stdin-password',
             f'--one-time-password={one_time_password}',
-            f'--domain={self.ldap_client.domain_name}',
+            f'--domain={self.ldap_client.options.domain_name}',
             f'--domain-ou={self.get_ldap_computers_base()}',
             '--verbose',
         ]
@@ -370,7 +359,7 @@ class PresetComputeHelper:
         cmd.append(self.hostname)
 
         preset_computer_result = self._shell.invoke(
-            cmd_input=self.ldap_client.ldap_root_password,
+            cmd_input=self.service_account_password,
             cmd=cmd,
             skip_error_logging=True
         )

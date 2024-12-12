@@ -1,6 +1,6 @@
 # Begin: FSx Lustre Client Tuning - Pre-Reboot
 # https://docs.aws.amazon.com/fsx/latest/LustreGuide/performance.html#performance-tips
-{%- if context.base_os in ('amazonlinux2', 'rhel8', 'rhel9') %}
+if [[ $RES_BASE_OS =~ ^(amzn2|rhel8|rhel9)$ ]]; then
   NPROCS=$(nproc)
   GB_MEM=$(free --si -g | egrep '^Mem:' | awk '{print $2}')
   log_info "Detected ${NPROCS} CPUs / ${GB_MEM} GiB memory for Lustre performance tuning"
@@ -10,5 +10,5 @@
     echo "options ksocklnd credits=2560" >> /etc/modprobe.d/modprobe.conf
   fi
   set_reboot_required "Lustre client tuning applied"
-{% endif %}
+fi
 # End: FSx Lustre Client Tuning - Pre-Reboot

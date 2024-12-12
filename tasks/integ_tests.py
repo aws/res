@@ -9,11 +9,13 @@
 #  OR CONDITIONS OF ANY KIND, express or implied. See the License for the specific language governing permissions
 #  and limitations under the License.
 
-import invoke.exceptions
-import tasks.idea as idea
-from invoke import task, Context
 import os
 from typing import List, Optional
+
+import invoke.exceptions
+from invoke import Context, task
+
+import tasks.idea as idea
 
 
 def _run_component_integ_tests(
@@ -86,6 +88,7 @@ def _run_integ_tests(
         idea.props.project_root_dir,
         idea.props.data_model_src,
         idea.props.sdk_src,
+        idea.props.library_src,
         idea.props.test_utils_src,
     ]
     if tests_src not in python_path:
@@ -137,6 +140,30 @@ def cluster_manager(
     )
     raise SystemExit(exit_code)
 
+
+@task(iterable=["params"])
+def ad_sync(
+    c, keywords=None, params=None, capture_output=False, cov_report=None
+):
+    # type: (Context, str, List[str], bool, str) -> None
+    """
+    run ad-sync integ tests
+    """
+    exit_code = _run_component_integ_tests(
+        c=c,
+        component_name="ad-sync",
+        component_src=idea.props.ad_sync_src,
+        component_tests_src=idea.props.ad_sync_integ_tests_src,
+        package_name="adsync",
+        params=params,
+        capture_output=capture_output,
+        keywords=keywords,
+        cov_report=cov_report,
+        test_file="test_adsync.py",
+    )
+    raise SystemExit(exit_code)
+
+
 @task(iterable=["params"])
 def smoke(
     c, keywords=None, params=None, capture_output=False, cov_report=None,
@@ -154,5 +181,25 @@ def smoke(
         keywords=keywords,
         test_file="smoke.py",
         num_workers=8,
+    )
+    raise SystemExit(exit_code)
+
+@task(iterable=["params"])
+def vdc(
+    c, keywords=None, params=None, capture_output=False, cov_report=None,
+):
+    # type: (Context, str, List[str], bool, str) -> None
+    """
+    run vdc integ tests
+    """
+    exit_code = _run_integ_tests(
+        c=c,
+        test_id="vdc",
+        tests_src=idea.props.end_to_end_integ_tests_dir,
+        params=params,
+        capture_output=capture_output,
+        keywords=keywords,
+        test_file="vdc.py",
+        num_workers=2,
     )
     raise SystemExit(exit_code)

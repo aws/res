@@ -489,5 +489,5 @@ class FileSystemHelper:
         except KeyError:
             result = None
         if result is not None:
-            return result[3]
+            return result.pw_gid
         return None

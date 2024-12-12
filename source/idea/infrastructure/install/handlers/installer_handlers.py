@@ -13,6 +13,10 @@ import boto3
 import botocore.exceptions
 
 TAG_NAME = "res:EnvironmentName"
+BASTION_HOST_INSTANCE_ID = "bastion-host.instance_id"
+BASTION_HOST_HOSTNAME = "bastion-host.hostname"
+BASTION_HOST_HOSTED_ZONE_ID = "cluster.route53.private_hosted_zone_id"
+BASTION_HOST_HOSTED_ZONE_NAME = "cluster.route53.private_hosted_zone_name"
 
 
 class EnvKeys(str, Enum):
@@ -96,19 +100,6 @@ def unprotect_cognito_user_pool(event: Dict[str, Any], _: Any) -> None:
                     cognito_client.update_user_pool(
                         UserPoolId=pool_id, DeletionProtection="INACTIVE"
                     )
-
-
-def delete_installer_ecr_images(event: Dict[str, Any], _: Any) -> None:
-    installer_ecr_repo_name = event["ResourceProperties"][
-        EnvKeys.INSTALLER_ECR_REPO_NAME
-    ]
-    ecr_client = boto3.client("ecr")
-    paginator = ecr_client.get_paginator("list_images")
-    page_iterator = paginator.paginate(repositoryName=installer_ecr_repo_name)
-    for page in page_iterator:
-        ecr_client.batch_delete_image(
-            repositoryName=installer_ecr_repo_name, imageIds=page["imageIds"]
-        )
 
 
 def handle_custom_resource_lifecycle_event(event: Dict[str, Any], _: Any) -> None:
@@ -221,6 +212,20 @@ def handle_security_group_delete(event: Dict[str, Any], _: Any) -> None:
             for security_group in response["SecurityGroups"]:
                 security_group_id = security_group["GroupId"]
 
+                # Delete hanging ENIs
+                network_interfaces = ec2.describe_network_interfaces(
+                    Filters=[{"Name": "group-id", "Values": [security_group_id]}]
+                )["NetworkInterfaces"]
+
+                for eni in network_interfaces:
+                    ec2.delete_network_interface(
+                        NetworkInterfaceId=eni["NetworkInterfaceId"]
+                    )
+
+                print(
+                    f"Successfully deleted all ENIs associated with security group (ID: {security_group_id})"
+                )
+
                 # Now we can delete the security group
                 ec2.delete_security_group(GroupId=security_group_id)
                 print(
@@ -238,3 +243,140 @@ def handle_security_group_delete(event: Dict[str, Any], _: Any) -> None:
         )
         print(e)
         send_response(url=event["ResponseURL"], response=cr_response)
+
+
+def delete_dcv_broker_tables(event: Dict[str, Any], _: Any) -> None:
+    print(event)
+    request_type = event["RequestType"]
+    if request_type == RequestType.DELETE:
+        environmentName = event["ResourceProperties"]["environment_name"]
+        client = boto3.client("dynamodb")
+        dcvBrokerTables = []
+        lastEvaluatedTableName = None
+        while True:
+            if not lastEvaluatedTableName:
+                response = client.list_tables()
+            else:
+                response = client.list_tables(
+                    ExclusiveStartTableName=lastEvaluatedTableName
+                )
+            dcvBrokerTables.extend(
+                [
+                    table
+                    for table in response["TableNames"]
+                    if table.startswith(f"{environmentName}.vdc.dcv-broker")
+                ]
+            )
+            lastEvaluatedTableName = response.get("LastEvaluatedTableName", None)
+            if not lastEvaluatedTableName:
+                break
+        print("Tables to be deleted: " + str(dcvBrokerTables))
+        for table in dcvBrokerTables:
+            client.delete_table(TableName=table)
+    return
+
+
+def handle_bastion_host_delete(event: Dict[str, Any], _: Any) -> None:
+    cr_response = CustomResourceResponse(
+        Status=CustomResourceResponseStatus.SUCCESS,
+        Reason=CustomResourceResponseStatus.SUCCESS,
+        PhysicalResourceId=event["LogicalResourceId"],
+        StackId=event["StackId"],
+        RequestId=event["RequestId"],
+        LogicalResourceId=event["LogicalResourceId"],
+    )
+    properties = event.get("ResourceProperties", {})
+    cluster_name = properties.get("cluster_name")
+    CLUSTER_SETTINGS_TABLE = f"{cluster_name}.cluster-settings"
+
+    if event["RequestType"] == "Delete":
+        print("Received event for bastion host deletion")
+        # Get the instance_id from the cluster-settings DynamoDB table
+        dynamodb = boto3.resource("dynamodb")
+        table = dynamodb.Table(CLUSTER_SETTINGS_TABLE)
+        response = table.get_item(Key={"key": BASTION_HOST_INSTANCE_ID})
+
+        if "Item" not in response or not response["Item"].get("value"):
+            # Nothing to delete
+            send_response(url=event["ResponseURL"], response=cr_response)
+            return
+
+        instance_id = response["Item"].get("value")
+
+        print(f"Retrieved instance ID {instance_id} from cluster-settings table")
+
+        ec2 = boto3.client("ec2")
+
+        # Terminate EC2 instance
+        ec2.terminate_instances(InstanceIds=[instance_id])
+        print(f"Successfully terminated EC2 instance (ID: {instance_id})")
+
+        # Wait for the instance to be terminated
+        waiter = ec2.get_waiter("instance_terminated")
+        waiter.wait(InstanceIds=[instance_id])
+        print(f"EC2 instance (ID: {instance_id}) has been fully terminated")
+
+        # Delete Route53 "A" record
+        route53 = boto3.client("route53")
+
+        # Retrieve necessary information from DynamoDB
+
+        hostname = (
+            table.get_item(Key={"key": BASTION_HOST_HOSTNAME})
+            .get("Item", {})
+            .get("value", "")
+        )
+        private_hosted_zone_id = (
+            table.get_item(Key={"key": BASTION_HOST_HOSTED_ZONE_ID})
+            .get("Item", {})
+            .get("value", "")
+        )
+        private_hosted_zone_name = (
+            table.get_item(Key={"key": BASTION_HOST_HOSTED_ZONE_NAME})
+            .get("Item", {})
+            .get("value", "")
+        )
+
+        if not all([hostname, private_hosted_zone_id, private_hosted_zone_name]):
+            raise ValueError(
+                "Missing required Route53 information in cluster-settings table"
+            )
+
+        # Get the current record details
+        record_name = f"{hostname}.{private_hosted_zone_name}"
+        response = route53.list_resource_record_sets(
+            HostedZoneId=private_hosted_zone_id,
+            StartRecordName=record_name,
+            StartRecordType="A",
+            MaxItems="1",
+        )
+
+        if response["ResourceRecordSets"]:
+            current_record = response["ResourceRecordSets"][0]
+            if (
+                current_record["Name"].rstrip(".") == record_name.rstrip(".")
+                and current_record["Type"] == "A"
+            ):
+
+                # Delete the record
+                change_batch = {
+                    "Changes": [
+                        {
+                            "Action": "DELETE",
+                            "ResourceRecordSet": {
+                                "Name": current_record["Name"],
+                                "Type": current_record["Type"],
+                                "TTL": current_record["TTL"],
+                                "ResourceRecords": current_record["ResourceRecords"],
+                            },
+                        }
+                    ]
+                }
+
+                route53.change_resource_record_sets(
+                    HostedZoneId=private_hosted_zone_id, ChangeBatch=change_batch
+                )
+        print(
+            f"Successfully deleted Route53 'A' record for {hostname}.{private_hosted_zone_name}"
+        )
+    send_response(url=event["ResponseURL"], response=cr_response)

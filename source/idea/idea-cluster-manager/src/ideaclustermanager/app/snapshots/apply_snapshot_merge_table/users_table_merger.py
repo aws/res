@@ -15,7 +15,9 @@ from ideaclustermanager.app.snapshots.helpers.apply_snapshot_observability_helpe
 from ideaclustermanager.app.snapshots.helpers.merged_record_utils import MergedRecordDelta, MergedRecordActionType
 from ideaclustermanager.app.snapshots.apply_snapshot_merge_table.merge_table import MergeTable
 from ideadatamodel.snapshots.snapshot_model import TableName
-from ideadatamodel import errorcodes, exceptions, constants, User
+from ideadatamodel import constants, User
+import res.exceptions as exceptions
+from res.resources import accounts
 
 from typing import Dict, List, Tuple
 
@@ -34,11 +36,9 @@ class UsersTableMerger(MergeTable):
             user_to_merge = UserDAO.convert_from_db(user_db_record)
             try:
                 existing_user = context.accounts.get_user(user_to_merge.username)
-            except exceptions.SocaException as e:
-                if e.error_code == errorcodes.AUTH_USER_NOT_FOUND:
-                    logger.debug(TABLE_NAME, user_to_merge.username, ApplyResourceStatus.SKIPPED, "the user doesn't exist in the current environment")
-                    continue
-                raise e
+            except exceptions.UserNotFound as e:
+                logger.debug(TABLE_NAME, user_to_merge.username, ApplyResourceStatus.SKIPPED, "the user doesn't exist in the current environment")
+                continue
             except Exception as e:
                 logger.error(TABLE_NAME, user_to_merge.username, ApplyResourceStatus.FAILED_APPLY, str(e))
                 return record_deltas, False
@@ -81,7 +81,11 @@ class UsersTableMerger(MergeTable):
     def apply(context: SocaContext, user: User, logger: ApplySnapshotObservabilityHelper, is_rolling_back: bool = False) -> None:
         expected_resource_status = ApplyResourceStatus.ROLLBACKED if is_rolling_back else ApplyResourceStatus.APPLIED
         if user.role == constants.ADMIN_ROLE:
-            context.accounts.add_admin_user(user.username)
+            accounts.update_user({
+                'username': user.username,
+                'role': 'admin',
+                'sudo': True
+            })
             logger.debug(TABLE_NAME, user.username, expected_resource_status, "setting admin privileges succeeded")
         else:
             context.accounts.remove_admin_user(user.username)

@@ -23,13 +23,13 @@ from ideadatamodel import (
     DeleteRoleAssignmentErrorResponse,
     PutRoleAssignmentRequest,
     PutRoleAssignmentErrorResponse,
-    ListRoleAssignmentsRequest,
-    RoleAssignment,
     errorcodes,
     exceptions,
 )
 
 from ideasdk.context import SocaContext
+
+import res.exceptions as res_exceptions
 
 import copy
 from typing import Dict, List, Optional, Tuple
@@ -133,7 +133,7 @@ class RoleAssignmentsTableMerger(MergeTable):
         RoleAssignmentsTableMerger._resolve_project_ids(db_entry, project_id_mappings)
         role_assignment_actor_key = db_entry[db_utils.ROLE_ASSIGNMENT_DB_ACTOR_KEY]
         role_assignment_resource_key = db_entry[db_utils.ROLE_ASSIGNMENT_DB_RESOURCE_KEY]
-        
+
         try:
             existing_role_assignment = context.role_assignments.get_role_assignment(actor_key = role_assignment_actor_key, resource_key = role_assignment_resource_key)
             if not existing_role_assignment:
@@ -143,10 +143,11 @@ class RoleAssignmentsTableMerger(MergeTable):
                 # If a record exists with same keys in DB, skip creation. Duplicate records should not be created for this table
                 logger.debug(TABLE_NAME, "", None, f"role assignment record with {role_assignment_actor_key} actor key and {role_assignment_resource_key} resoruce key exists. Skipping snapshot application for this record")
                 return db_entry, None
+        except (res_exceptions.UserNotFound, res_exceptions.GroupNotFound) as e:
+            logger.warning(TABLE_NAME, role_assignment_actor_key, None, "Actor not found. Skipping migration for this record")
+            return db_entry, None
         except exceptions.SocaException as e:
-            if e.error_code in [errorcodes.AUTH_USER_NOT_FOUND, errorcodes.AUTH_GROUP_NOT_FOUND]:
-                logger.warning(TABLE_NAME, role_assignment_actor_key, None, "Actor not found. Skipping migration for this record")
-            elif e.error_code in [errorcodes.PROJECT_NOT_FOUND]:
+            if e.error_code in [errorcodes.PROJECT_NOT_FOUND]:
                 logger.warning(TABLE_NAME, role_assignment_resource_key, None, "Project not found. Skipping migration for this record")
             else:
                 raise e

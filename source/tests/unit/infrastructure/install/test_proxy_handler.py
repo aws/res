@@ -1,13 +1,14 @@
+import base64
 import json
 import os
 import typing
-from http.client import HTTPResponse
 from typing import Any, Generator, Optional
 from unittest.mock import MagicMock, Mock, patch
 
 import jwt
 import pytest
 from jwt import ExpiredSignatureError, InvalidTokenError
+from requests import Response
 
 from idea.infrastructure.install import proxy_handler
 from idea.infrastructure.install.proxy_handler import (
@@ -67,13 +68,13 @@ def jwt_error(request: pytest.FixtureRequest) -> Optional[str]:
 def test_get_ddb_user_name() -> None:
     assert proxy_handler.get_ddb_user_name("clusteradmin", None) == "clusteradmin"
     assert proxy_handler.get_ddb_user_name("clusteradmin", "saml") == "clusteradmin"
-    assert proxy_handler.get_ddb_user_name("test1@amazon.com", None) == "test1"
-    assert proxy_handler.get_ddb_user_name("test_1@amazon.com", None) == "test_1"
+    assert proxy_handler.get_ddb_user_name("test1@example.com", None) == "test1"
+    assert proxy_handler.get_ddb_user_name("test_1@example.com", None) == "test_1"
     assert (
-        proxy_handler.get_ddb_user_name("saml_admin_1@amazon.com", "saml") == "admin_1"
+        proxy_handler.get_ddb_user_name("saml_admin_1@example.com", "saml") == "admin_1"
     )
     assert (
-        proxy_handler.get_ddb_user_name("saml_admin_1@amazon.com", "SAML") == "admin_1"
+        proxy_handler.get_ddb_user_name("saml_admin_1@example.com", "SAML") == "admin_1"
     )
 
 
@@ -266,36 +267,28 @@ class MockResponse:
         status: int,
         body: str,
         reason: str,
-    ):
-        self.status = status
-        self.body = body
-        self.reason = reason
-
-    def read(self) -> bytes:
-        return self.body.encode("utf-8")
-
-    def getheaders(self) -> typing.List[typing.Tuple[str, str]]:
-        return [("Content-Type", "application/json")]
-
-
-class HTTPSConnection:
-    def __init__(self, domain: str) -> None:
-        self.domain = domain
-        assert domain == "budgets.amazonaws.com"
-
-    def request(
-        self, http_method: str, path: str, body: Any = None, headers: Any = None
+        headers: dict[str, typing.Any],
     ) -> None:
-        assert http_method == "POST"
-        assert path == "/"
-        assert body == '{"AccountId": "123456789012"}'
-        assert headers == {
-            "Content-Type": "application/x-amz-json-1.1",
-            "X-Amz-Target": "AWSBudgetServiceGateway.DescribeBudgets",
-        }
+        self.status_code = status
+        self.text = body
+        self.reason = reason
+        self.headers = headers
 
-    def getresponse(self) -> HTTPResponse:
-        return typing.cast(HTTPResponse, MockResponse(200, '{"test": "value"}', "Okay"))
+
+def mock_request(
+    method: str = "GET",
+    url: str = "",
+    data: typing.Any = None,
+    headers: typing.Any = None,
+) -> Response:
+    assert method == "POST"
+    assert url == "https://budgets.amazonaws.com/"
+    assert data == '{"AccountId": "123456789012"}'
+    assert headers == {
+        "Content-Type": "application/x-amz-json-1.1",
+        "X-Amz-Target": "AWSBudgetServiceGateway.DescribeBudgets",
+    }
+    return typing.cast(Response, MockResponse(200, '{"test": "value"}', "Okay", {}))
 
 
 @pytest.fixture
@@ -307,7 +300,7 @@ def lambda_context() -> Context:
 
 @pytest.fixture
 def mock_https_connection() -> Generator:  # type: ignore
-    with patch("http.client.HTTPSConnection", new=HTTPSConnection):
+    with patch("requests.request", new=mock_request):
         yield
 
 
@@ -365,7 +358,6 @@ def test_parse_event_path() -> None:
 def test_send_aws_request(
     lambda_context: Context, mock_sigv4_auth: Any, mock_https_connection: Any
 ) -> None:
-
     result = proxy_handler.send_aws_request(
         AWSRequestInfo(
             "POST",
@@ -383,7 +375,7 @@ def test_send_aws_request(
         ),
         "admin1",
     )
-    assert result.status == 200
+    assert result.status_code == 200
 
 
 def test_get_aws_reqeust_info_from_event() -> None:
@@ -399,6 +391,7 @@ def test_get_aws_reqeust_info_from_event() -> None:
     assert (
         str(exc_info.value) == "Invalid event: attribute 'headers' is required in event"
     )
+
     # Test valid event gets parsed correctly
     event = {
         "path": "/awsproxy/us-east-1/fsx/",
@@ -422,16 +415,36 @@ def test_get_aws_reqeust_info_from_event() -> None:
     }
     assert aws_request_info.role_arn == "fake-role-arn"
 
+    # Test base64 encoded body
+    base64_body = base64.b64encode(b'{"SomeData": "value"}').decode("utf-8")
+    event = {
+        "path": "/awsproxy/us-east-1/service/",
+        "httpMethod": "GET",
+        "body": base64_body,
+        "headers": {},
+        "isBase64Encoded": "True",
+        "queryStringParameters": {},
+    }
+    aws_request_info = proxy_handler.get_aws_request_info_from_event(event, "us-east-2")
+    assert aws_request_info.body == b'{"SomeData": "value"}'  # type: ignore[comparison-overlap]
+
+    # Test EC2 service with unquoted body
+    event = {
+        "path": "/awsproxy/us-east-1/ec2/",
+        "httpMethod": "POST",
+        "body": '"Action=DescribeInstances&Version=2016-11-15"',
+        "headers": {},
+        "queryStringParameters": {},
+    }
+    aws_request_info = proxy_handler.get_aws_request_info_from_event(event, "us-east-2")
+    assert aws_request_info.body == "Action=DescribeInstances&Version=2016-11-15"
+
 
 def test_get_sanitized_response() -> None:
     assert proxy_handler.get_sanitized_response(
         typing.cast(
-            HTTPResponse,
-            MockResponse(
-                401,
-                json.dumps({"test": "value"}),
-                "Unauthorized",
-            ),
+            Response,
+            MockResponse(401, json.dumps({"test": "value"}), "Unauthorized", {}),
         )
     ) == {
         "isBase64Encoded": False,
@@ -443,12 +456,8 @@ def test_get_sanitized_response() -> None:
 
     assert proxy_handler.get_sanitized_response(
         typing.cast(
-            HTTPResponse,
-            MockResponse(
-                403,
-                json.dumps({"test": "value"}),
-                "Forbidden",
-            ),
+            Response,
+            MockResponse(403, json.dumps({"test": "value"}), "Forbidden", {}),
         )
     ) == {
         "isBase64Encoded": False,
@@ -460,11 +469,9 @@ def test_get_sanitized_response() -> None:
 
     assert proxy_handler.get_sanitized_response(
         typing.cast(
-            HTTPResponse,
+            Response,
             MockResponse(
-                200,
-                json.dumps({"test": "value"}),
-                "Okay",
+                200, json.dumps({"test": "value"}), "Okay", {"Content-Encoding": "gzip"}
             ),
         )
     ) == {

@@ -152,7 +152,7 @@ class CognitoUserPool:
         self._context.cache().short_term().set(cache_key, user)
         return user
 
-    def admin_create_user(self, username: str, email: str, password: Optional[str] = None, email_verified=False):
+    def admin_create_user(self, username: str, uid: str, email: str, password: Optional[str] = None, email_verified=False):
 
         if email_verified and Utils.is_empty(password):
             raise exceptions.invalid_params('password is required when email_verified=True')
@@ -176,6 +176,10 @@ class CognitoUserPool:
                 {
                     'Name': 'custom:aws_region',
                     'Value': str(self._context.aws().aws_region())
+                },
+                {
+                    'Name': 'custom:uid',
+                    'Value': str(uid)
                 }
             ],
             'DesiredDeliveryMediums': ['EMAIL']
@@ -195,6 +199,60 @@ class CognitoUserPool:
 
         if email_verified:
             self.admin_set_password(username, password, permanent=True)
+
+    def sign_up_user(self, username: str, email: str, password: str):
+
+        sign_up_user_params = {
+            'ClientId': self.get_client_id(),
+            'SecretHash': self.get_secret_hash(username),
+            'Username': username,
+            'Password': password,
+            'UserAttributes': [
+                {
+                    'Name': 'email',
+                    'Value': email
+                },
+            ]
+        }
+
+        self._logger.info(f'Signing up user: {sign_up_user_params}')
+        create_result = self._context.aws().cognito_idp().sign_up(**sign_up_user_params)
+        self._logger.info(f'CreateUserResult: {create_result}')
+
+    def confirm_sign_up(self, username: str, confirmation_code: str):
+        confirm_sign_up_params = {
+            'ClientId': self.get_client_id(),
+            'SecretHash': self.get_secret_hash(username),
+            'Username': username,
+            'ConfirmationCode': confirmation_code
+        }
+        self._logger.info(f'Confirming user: {confirm_sign_up_params}')
+        try:
+            confirm_sign_up_result = self._context.aws().cognito_idp().confirm_sign_up(**confirm_sign_up_params)
+            self._logger.info(f'ConfirmSignUpResult: {confirm_sign_up_result}')
+        except botocore.exceptions.ClientError as e:
+            if e.response['Error']['Code'] == 'CodeMismatchException':
+                raise exceptions.general_exception('Invalid confirmation code')
+            elif e.response['Error']['Code'] == 'UserNotFoundException':
+                raise exceptions.general_exception('User not found')
+            else:
+                raise e
+
+    def resend_confirmation_code(self, username: str):
+        resend_confirmation_code_params = {
+            'ClientId': self.get_client_id(),
+            'SecretHash': self.get_secret_hash(username),
+            'Username': username
+        }
+        self._logger.info(f'Resending confirmation code: {resend_confirmation_code_params}')
+        try:
+            resend_confirmation_code_result = self._context.aws().cognito_idp().resend_confirmation_code(**resend_confirmation_code_params)
+            self._logger.info(f'ResendConfirmationCodeResult: {resend_confirmation_code_result}')
+        except botocore.exceptions.ClientError as e:
+            if e.response['Error']['Code'] == 'UserNotFoundException':
+                raise exceptions.general_exception('User not found')
+            else:
+                raise e
 
     def admin_delete_user(self, username: str):
         if Utils.is_empty(username):
@@ -330,7 +388,8 @@ class CognitoUserPool:
         # In SSO-enabled mode - local auth is not allowed except for clusteradmin
         cluster_admin_username = self._context.config().get_string('cluster.administrator_username', required=True)
         sso_enabled = self._context.config().get_bool('identity-provider.cognito.sso_enabled', required=True)
-        if sso_enabled and (cognito_username != cluster_admin_username):
+        enable_native_user_login = self._context.config().get_bool('identity-provider.cognito.enable_native_user_login', required=True)
+        if sso_enabled and (cognito_username != cluster_admin_username) and not enable_native_user_login:
             self._logger.error(f"Ignoring local authentication request with SSO enabled. Username: {cognito_username}")
             raise exceptions.unauthorized_access(f"Ignoring local authentication request with SSO enabled. Username: {cognito_username}")
         try:

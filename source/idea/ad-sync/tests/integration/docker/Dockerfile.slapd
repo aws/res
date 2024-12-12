@@ -1,0 +1,33 @@
+FROM public.ecr.aws/debian/debian:12
+
+# Install OpenLDAP via slapd
+
+ENV DEBIAN_FRONTEND=noninteractive
+RUN apt-get update && \
+    apt-get install -y slapd ldap-utils gettext
+
+# We need to update the schema so we'll reset the DB from scratch
+RUN rm -fr /etc/ldap/slapd.d/*
+RUN rm -fr /var/lib/ldap/*
+
+# Update the schema to be amenable to MS user entries
+RUN sed -i "s/'mail'/'mail' 'userPrincipalName'/"  /etc/ldap/schema/core.schema
+RUN sed -i 's/sn $ cn/cn/'  /etc/ldap/schema/core.schema
+RUN sed -i "s/'homeDirectory'/('unixHomeDirectory' 'homeDirectory')/" /etc/ldap/schema/nis.schema
+RUN rm -f /etc/ldap/schema/dyngroup*
+
+RUN mkdir -p /opt/res-adsync
+WORKDIR /opt/res-adsync
+
+ARG INTEG_TEST_DIR
+COPY ${INTEG_TEST_DIR} ./
+
+RUN slapd -f /opt/res-adsync/resources/slapd.conf
+
+# convert old into new OLC version
+RUN slaptest -f /opt/res-adsync/resources/slapd.conf -F /etc/ldap/slapd.d
+
+RUN chown openldap:openldap /etc/ldap/slapd.d
+
+# Start slapd daemon
+CMD service slapd start

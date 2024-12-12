@@ -1,8 +1,8 @@
 # Begin: Configure chronyd
-{%- if context.base_os in ('amazonlinux2', 'rhel8', 'rhel9') %}
-yum remove -y ntp
-mv /etc/chrony.conf  /etc/chrony.conf.original
-echo -e "
+if [[ $RES_BASE_OS =~ ^(amzn2|rhel8|rhel9)$ ]]; then
+  yum remove -y ntp
+  mv /etc/chrony.conf  /etc/chrony.conf.original
+  echo -e "
 # use the local instance NTP service, if available
 server 169.254.169.123 prefer iburst minpoll 4 maxpoll 4
 
@@ -29,6 +29,6 @@ logdir /var/log/chrony
 dumponexit
 dumpdir /var/run/chrony
 " > /etc/chrony.conf
-systemctl enable chronyd
-{%- endif %}
+  systemctl enable chronyd
+fi
 # End: Configure chronyd

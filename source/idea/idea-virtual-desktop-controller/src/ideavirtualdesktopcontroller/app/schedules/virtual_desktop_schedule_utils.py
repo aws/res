@@ -9,13 +9,14 @@
 #  OR CONDITIONS OF ANY KIND, express or implied. See the License for the specific language governing permissions
 #  and limitations under the License.
 
-from datetime import time
+from datetime import date, datetime, time, timedelta
 
 import ideavirtualdesktopcontroller
 from ideadatamodel import VirtualDesktopSession, DayOfWeek, VirtualDesktopSchedule, VirtualDesktopScheduleType, VirtualDesktopWeekSchedule
 from ideasdk.utils import Utils, DateTimeUtils
 from ideavirtualdesktopcontroller.app.events.events_utils import EventsUtils
 from ideavirtualdesktopcontroller.app.schedules.virtual_desktop_schedule_db import VirtualDesktopScheduleDB
+from res.resources import schedules
 
 
 class VirtualDesktopScheduleUtils:
@@ -101,15 +102,15 @@ class VirtualDesktopScheduleUtils:
             # THERE IS NO SCHEDULE. DO NOT DO ANYTHING.
             return self._schedule_db.get_empty_schedule(day_of_week)
 
-        return self._schedule_db.create(
-            VirtualDesktopSchedule(
-                day_of_week=DayOfWeek(day_of_week),
-                idea_session_id=idea_session_id,
-                idea_session_owner=idea_session_owner,
-                schedule_type=schedule.schedule_type,
-                start_up_time=schedule.start_up_time,
-                shut_down_time=schedule.shut_down_time,
-            ))
+        schedules_dict = schedules.create_schedule({
+            "day_of_week": DayOfWeek(day_of_week),
+            "idea_session_id": idea_session_id,
+            "idea_session_owner": idea_session_owner,
+            "schedule_type": schedule.schedule_type,
+            "start_up_time": schedule.start_up_time,
+            "shut_down_time": schedule.shut_down_time
+        })
+        return self._schedule_db.convert_db_dict_to_schedule_object(schedules_dict)
 
     def _create_or_update_schedule_for_session_for_day_of_week(self, day_of_week: DayOfWeek, current_schedule: VirtualDesktopSchedule, new_schedule: VirtualDesktopSchedule, idea_session_id: str, idea_session_owner: str) -> VirtualDesktopSchedule:
         self._logger.debug(f'day_of_week: {day_of_week}, current_schedule: {current_schedule}, new_schedule: {new_schedule}, idea_session_id: {idea_session_id}, idea_session_owner: {idea_session_owner}')
@@ -219,37 +220,32 @@ class VirtualDesktopScheduleUtils:
         self._delete_schedule(schedule=session.schedule.sunday)
 
     def trigger_schedule(self, event_time: time, schedule: VirtualDesktopSchedule):
+        if schedule.schedule_type == VirtualDesktopScheduleType.NO_SCHEDULE:
+            pass
+
         should_resume = False
         should_stop = False
-        working_hours_start_up_time = self.context.config().get_string('virtual-desktop-controller.dcv_session.working_hours.start_up_time', required=True)
-        working_hours_shut_down_time = self.context.config().get_string('virtual-desktop-controller.dcv_session.working_hours.shut_down_time', required=True)
 
-        if VirtualDesktopScheduleType[schedule.schedule_type] == VirtualDesktopScheduleType.STOP_ALL_DAY:
-            should_stop = True
-        elif VirtualDesktopScheduleType[schedule.schedule_type] == VirtualDesktopScheduleType.START_ALL_DAY:
+        start_up_time = schedule.start_up_time.split(":")
+        shut_down_time = schedule.shut_down_time.split(":")
+
+        start_up_time = DateTimeUtils.to_time_object(hours=int(start_up_time[0]), minutes=int(start_up_time[1]))
+        start_up_time_with_delta = (datetime.combine(date.today(), start_up_time) + timedelta(minutes=30)).time()
+        shut_down_time = DateTimeUtils.to_time_object(hours=int(shut_down_time[0]), minutes=int(shut_down_time[1]))
+        shut_down_time_with_delta = (datetime.combine(date.today(), shut_down_time) + timedelta(minutes=30)).time()
+
+        if (event_time >= start_up_time) and (event_time < shut_down_time) and (event_time < start_up_time_with_delta):
+            # Schedule events are expected to be sent every 30 minutes. Only the event that is closest to the start-up time should take effect.
+            # This avoids the schedule to resume the VDIs that are stopped manually or automatically.
+            # START SESSION
             should_resume = True
+        elif (event_time >= shut_down_time) and (event_time < shut_down_time_with_delta):
+            # Only the event that is closest to the shut-down time should take effect.
+            # This avoids the schedule to stop the VDIs that are started manually.
+            # STOP SESSION
+            should_stop = True
         else:
-            # CUSTOM OR WORKING HOURS
-            if VirtualDesktopScheduleType[schedule.schedule_type] == VirtualDesktopScheduleType.WORKING_HOURS:
-                start_up_time = working_hours_start_up_time.split(":")
-                shut_down_time = working_hours_shut_down_time.split(":")
-            else:
-                # CUSTOM
-                start_up_time = schedule.start_up_time.split(":")
-                shut_down_time = schedule.shut_down_time.split(":")
-
-            start_up_time = DateTimeUtils.to_time_object(hours=int(start_up_time[0]), minutes=int(shut_down_time[1]))
-            shut_down_time = DateTimeUtils.to_time_object(hours=int(shut_down_time[0]), minutes=int(shut_down_time[1]))
-            if event_time < start_up_time:
-                # should we shut down a running session ?? or leave as is.
-                pass
-            elif (event_time >= start_up_time) and (event_time < shut_down_time):
-                # START SESSION
-                should_resume = True
-            else:
-                # event_time >= shut_down_time:
-                # STOP SESSION
-                should_stop = True
+            pass
 
         if not should_resume and not should_stop:
             # No Action to take.

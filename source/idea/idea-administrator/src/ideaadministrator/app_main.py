@@ -452,8 +452,6 @@ def set_config(cluster_name: str, aws_profile: str, aws_region: str, force: bool
             raise exceptions.cluster_config_error(f'[{index}] Invalid Key: {key}. comma(,) and colon(:) are not allowed in key names.')
         if Utils.is_empty(data_type):
             raise exceptions.cluster_config_error(f'[{index}] Type is required')
-        if Utils.is_empty(value):
-            raise exceptions.cluster_config_error(f'[{index}] Value is required')
 
         is_list = False
         if data_type in ('str', 'string'):

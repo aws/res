@@ -64,6 +64,10 @@ from ideadatamodel import errorcodes, exceptions, constants
 from ideasdk.api import ApiInvocationContext
 from ideasdk.utils import Utils, ApiUtils
 from ideavirtualdesktopcontroller.app.api.virtual_desktop_api import VirtualDesktopAPI
+from res.exceptions import PermissionProfileNotFound
+from res.resources import permission_profiles
+from res.exceptions import SoftwareStackNotFound
+from res.resources import software_stacks
 
 class VirtualDesktopAdminAPI(VirtualDesktopAPI):
 
@@ -232,6 +236,10 @@ class VirtualDesktopAdminAPI(VirtualDesktopAPI):
 
         if Utils.is_empty(software_stack.gpu):
             software_stack.failure_reason = 'software_stack.gpu missing'
+            return software_stack, False
+
+        if Utils.is_empty(software_stack.base_os):
+            software_stack.failure_reason = 'software_stack.base_os'
             return software_stack, False
 
         if Utils.is_empty(software_stack.ami_id):
@@ -513,8 +521,10 @@ class VirtualDesktopAdminAPI(VirtualDesktopAPI):
                 ))
             return
 
-        old_software_stack = self.software_stack_db.get(stack_id=new_software_stack.stack_id, base_os=new_software_stack.base_os)
-        if old_software_stack is None:
+        try:
+            old_software_stack_dict = software_stacks.get_software_stack(stack_id=new_software_stack.stack_id, base_os=new_software_stack.base_os)
+            old_software_stack = self.software_stack_db.convert_db_dict_to_software_stack_object(old_software_stack_dict)
+        except SoftwareStackNotFound:
             new_software_stack.failure_reason = f'Invalid id {new_software_stack.stack_id} with base os {new_software_stack.base_os}'
             context.fail(
                 message=new_software_stack.failure_reason,
@@ -610,8 +620,9 @@ class VirtualDesktopAdminAPI(VirtualDesktopAPI):
 
     def update_permission_profile(self, context: ApiInvocationContext):
         permission_profile = context.get_request_payload_as(UpdatePermissionProfileRequest).profile
-        existing_profile = self.permission_profile_db.get(profile_id=permission_profile.profile_id)
-        if Utils.is_empty(existing_profile):
+        try:
+            existing_profile_dict = permission_profiles.get_permission_profile(profile_id=permission_profile.profile_id)
+        except PermissionProfileNotFound:
             context.fail(
                 error_code=errorcodes.INVALID_PARAMS,
                 message=f'Profile ID: {permission_profile.profile_id} does not exist'
@@ -657,15 +668,18 @@ class VirtualDesktopAdminAPI(VirtualDesktopAPI):
 
     def create_permission_profile(self, context: ApiInvocationContext):
         permission_profile = context.get_request_payload_as(CreatePermissionProfileRequest).profile
-        existing_profile = self.permission_profile_db.get(profile_id=permission_profile.profile_id)
-        if Utils.is_not_empty(existing_profile):
+        try:
+            existing_profile_dict = permission_profiles.get_permission_profile(profile_id=permission_profile.profile_id)
             context.fail(
                 error_code=errorcodes.INVALID_PARAMS,
                 message=f'Profile ID: {permission_profile.profile_id} is not unique. Use a unique name'
             )
             return
-
-        permission_profile = self.permission_profile_db.create(permission_profile)
+        except PermissionProfileNotFound:
+            pass
+        permission_profile_dict = self.permission_profile_db.convert_permission_profile_object_to_db_dict(permission_profile)
+        permission_profile_dict = permission_profiles.create_permission_profile(permission_profile_dict)
+        permission_profile = self.permission_profile_db.convert_db_dict_to_permission_profile_object(permission_profile_dict)
         context.success(CreatePermissionProfileResponse(
             profile=permission_profile
         ))
@@ -679,8 +693,9 @@ class VirtualDesktopAdminAPI(VirtualDesktopAPI):
                 payload=DeletePermissionProfileResponse(
                 ))
             return
-        existing_profile = self.permission_profile_db.get(profile_id=profile_id)
-        if not existing_profile:
+        try:
+            existing_profile_dict = permission_profiles.get_permission_profile(profile_id=profile_id)
+        except PermissionProfileNotFound:
             context.success(DeletePermissionProfileResponse())
             return
 

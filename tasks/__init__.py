@@ -13,13 +13,15 @@ from invoke import Collection
 import os
 
 idea.utils.update_source_paths([
+    idea.props.ad_sync_src,
     idea.props.data_model_src,
     idea.props.sdk_src,
+    idea.props.library_src,
     idea.props.administrator_src,
     idea.props.cluster_manager_src,
     idea.props.virtual_desktop_src,
     idea.props.site_packages,
-    idea.props.lambda_functions_src
+    idea.props.lambda_functions_src,
 ])
 
 import tasks.clean

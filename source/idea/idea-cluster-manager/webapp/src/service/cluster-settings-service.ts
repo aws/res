@@ -33,6 +33,7 @@ class ClusterSettingsService {
     clusterTimezone: string;
     clusterHomeDir: string;
     isFileBrowserEnabled: boolean;
+    isSshEnabled: boolean;
 
     constructor(props: ClusterSettingsServiceProps) {
         this.props = props;
@@ -44,6 +45,7 @@ class ClusterSettingsService {
         this.clusterTimezone = "UTC";
         this.clusterHomeDir = "";
         this.isFileBrowserEnabled = false;
+        this.isSshEnabled = false;
     }
 
     initialize(): Promise<boolean> {
@@ -68,6 +70,10 @@ class ClusterSettingsService {
             .then((sharedStorageSettings) => {
                 this.isFileBrowserEnabled = dot.pick(Constants.SHARED_STORAGE_FILE_BROWSER_KEY, sharedStorageSettings);
                 this.clusterHomeDir = `${sharedStorageSettings?.internal?.mount_dir}/${this.clusterName}`;
+                return this.getModuleSettings(Constants.MODULE_BASTION_HOST);
+            })
+            .then((bastionHostSettings) => {
+                this.isSshEnabled = dot.pick(Constants.BASTION_HOST_INSTANCE_ID_KEY_NAME, bastionHostSettings) !== undefined;
                 return true;
             })
             .catch((error) => {
@@ -83,6 +89,8 @@ class ClusterSettingsService {
                 return false;
             });
     }
+    
+    
 
     fetchInstanceTypes(): Promise<boolean> {
         return this.props.clusterSettings.describeInstanceTypes({}).then((result) => {
@@ -275,6 +283,10 @@ class ClusterSettingsService {
 
     getIsFileBrowserEnabled(): boolean {
         return this.isFileBrowserEnabled;
+    }
+
+    getIsSshEnabled(): boolean {
+        return this.isSshEnabled;
     }
 }
 

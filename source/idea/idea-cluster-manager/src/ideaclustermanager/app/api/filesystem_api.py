@@ -23,10 +23,9 @@ from ideadatamodel.shared_filesystem import (
     UpdateFileSystemRequest,
     RemoveFileSystemRequest,
 )
-from ideadatamodel import (
-    exceptions
-)
+from ideadatamodel import exceptions
 from ideasdk.utils import Utils
+
 
 class FileSystemAPI(BaseAPI):
     def __init__(self, context: ideaclustermanager.AppContext):
@@ -56,7 +55,7 @@ class FileSystemAPI(BaseAPI):
             },
             "FileSystem.UpdateFileSystem": {
                 "scope": self.SCOPE_WRITE,
-                "method": self.update_filesystem
+                "method": self.update_filesystem,
             },
             "FileSystem.RemoveFileSystem": {
                 "scope": self.SCOPE_WRITE,
@@ -65,10 +64,6 @@ class FileSystemAPI(BaseAPI):
             "FileSystem.ListOnboardedFileSystems": {
                 "scope": self.SCOPE_READ,
                 "method": self.list_onboarded_file_systems,
-            },
-            "FileSystem.ListFSinVPC": {
-                "scope": self.SCOPE_READ,
-                "method": self.list_file_systems_in_vpc,
             },
             "FileSystem.OnboardEFSFileSystem": {
                 "scope": self.SCOPE_WRITE,
@@ -84,7 +79,7 @@ class FileSystemAPI(BaseAPI):
             },
             "FileSystem.OnboardS3Bucket": {
                 "scope": self.SCOPE_WRITE,
-                "method": self.onboard_filesystem
+                "method": self.onboard_filesystem,
             },
         }
 
@@ -103,12 +98,12 @@ class FileSystemAPI(BaseAPI):
             raise exceptions.general_exception(str(e.errors()))
 
         context.success(CreateFileSystemResult())
-    
+
     def update_filesystem(self, context: ApiInvocationContext):
         request = context.get_request_payload_as(UpdateFileSystemRequest)
         result = self.context.shared_filesystem.update_filesystem(request)
         context.success(result)
-    
+
     def remove_filesystem(self, context: ApiInvocationContext):
         request = context.get_request_payload_as(RemoveFileSystemRequest)
         result = self.context.shared_filesystem.remove_filesystem(request)
@@ -129,22 +124,26 @@ class FileSystemAPI(BaseAPI):
         result = self.context.shared_filesystem.list_onboarded_file_systems(request)
         context.success(result)
 
-    def list_file_systems_in_vpc(self, context: ApiInvocationContext):
-        result = self.context.shared_filesystem.list_file_systems_in_vpc()
-        context.success(result)
-
     def onboard_filesystem(self, context: ApiInvocationContext):
-        if context.namespace == 'FileSystem.OnboardEFSFileSystem':
-            self.context.shared_filesystem.onboard_efs_filesystem(context.get_request_payload_as(OnboardEFSFileSystemRequest))
+        if context.namespace == "FileSystem.OnboardEFSFileSystem":
+            self.context.shared_filesystem.onboard_efs_filesystem(
+                context.get_request_payload_as(OnboardEFSFileSystemRequest)
+            )
 
-        elif context.namespace == 'FileSystem.OnboardONTAPFileSystem':
-            self.context.shared_filesystem.onboard_ontap_filesystem(context.get_request_payload_as(OnboardONTAPFileSystemRequest))
+        elif context.namespace == "FileSystem.OnboardONTAPFileSystem":
+            self.context.shared_filesystem.onboard_ontap_filesystem(
+                context.get_request_payload_as(OnboardONTAPFileSystemRequest)
+            )
 
-        elif context.namespace == 'FileSystem.OnboardLUSTREFileSystem':
-            self.context.shared_filesystem.onboard_lustre_filesystem(context.get_request_payload_as(OnboardLUSTREFileSystemRequest))
+        elif context.namespace == "FileSystem.OnboardLUSTREFileSystem":
+            self.context.shared_filesystem.onboard_lustre_filesystem(
+                context.get_request_payload_as(OnboardLUSTREFileSystemRequest)
+            )
 
-        elif context.namespace == 'FileSystem.OnboardS3Bucket':
-            self.context.shared_filesystem.onboard_s3_bucket(context.get_request_payload_as(OnboardS3BucketRequest))
+        elif context.namespace == "FileSystem.OnboardS3Bucket":
+            self.context.shared_filesystem.onboard_s3_bucket(
+                context.get_request_payload_as(OnboardS3BucketRequest)
+            )
 
         context.success(OnboardFileSystemResult())
 

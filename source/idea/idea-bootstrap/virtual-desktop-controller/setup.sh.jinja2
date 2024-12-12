@@ -17,18 +17,10 @@ if [ -f /root/bootstrap/semaphore/instance_ready.lock ]; then
   exit 0
 fi
 
-if [[ -f /etc/os-release ]]; then
-  OS_RELEASE_ID=$(grep -E '^(ID)=' /etc/os-release | awk -F'"' '{print $2}')
-  OS_RELEASE_VERSION_ID=$(grep -E '^(VERSION_ID)=' /etc/os-release | awk -F'"' '{print $2}')
-  BASE_OS=$(echo $OS_RELEASE_ID${OS_RELEASE_VERSION_ID%%.*})
-elif [[ -f /usr/lib/os-release ]]; then
-  OS_RELEASE_ID=$(grep -E '^(ID)=' /usr/lib/os-release | awk -F'"' '{print $2}')
-  OS_RELEASE_VERSION_ID=$(grep -E '^(VERSION_ID)=' /usr/lib/os-release | awk -F'"' '{print $2}')
-  BASE_OS=$(echo $OS_RELEASE_ID${OS_RELEASE_VERSION_ID%%.*})
-else
-  echo "Base OS information on Linux instance cannot be found."
-  exit 1
-fi
+SCRIPT_DIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
+
+source "${SCRIPT_DIR}/../common/bootstrap_common.sh"
+BASE_OS=$(get_base_os)
 
 {% set PATH = '/bin:/usr/bin:/sbin:/usr/sbin:/usr/local/bin:/opt/idea/python/latest/bin' %}
 
@@ -64,16 +56,12 @@ curr_environment+=$(echo -e "
 PATH={{ PATH }}
 ")
 
-SCRIPT_DIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
-
 # Merge Environments
 /bin/bash  "${SCRIPT_DIR}/../common/merge_environments.sh" -r "${curr_environment}" -o /etc/environment
 
 source /etc/environment
 
 echo -n "no" > ${BOOTSTRAP_DIR}/reboot_required.txt
-
-source "${SCRIPT_DIR}/../common/bootstrap_common.sh"
 
 {% include '_templates/linux/idea_proxy.jinja2' %}
 
@@ -109,6 +97,8 @@ log_warning "cloudwatch_agent_config not provided."
 # End: Install/Configure CloudWatch Agent
 
 {%- include '_templates/linux/restrict_ssh.jinja2' %}
+
+{%- include '_templates/linux/disable_ssh.jinja2' %}
 
 {%- if context.is_metrics_provider_prometheus() %}
   {%- include '_templates/linux/prometheus.jinja2' %}
@@ -168,8 +158,6 @@ log_warning "cloudwatch_agent_config not provided."
 {%- endwith %}
 
 {% include '_templates/linux/mount_shared_storage.jinja2' %}
-
-{% include '_templates/linux/join_directoryservice.jinja2' %}
 
 /bin/bash ${SCRIPT_DIR}/install_app.sh "{{context.vars.controller_package_uri}}"
 

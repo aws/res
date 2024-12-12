@@ -50,23 +50,10 @@ fi
 
 if [[ ! -f ${INSTALL_FINISHED_LOCK} ]]; then
 
-  if [[ -f /etc/os-release ]]; then
-    OS_RELEASE_ID=$(grep -E '^(ID)=' /etc/os-release | awk -F'"' '{print $2}')
-    OS_RELEASE_VERSION_ID=$(grep -E '^(VERSION_ID)=' /etc/os-release | awk -F'"' '{print $2}')
-    BASE_OS=$(echo $OS_RELEASE_ID${OS_RELEASE_VERSION_ID%%.*})
-    if [[ -z "${OS_RELEASE_ID}" ]]; then
-      # Base OS is Ubuntu
-      OS_RELEASE_ID=$(grep -E '^(ID)=' /etc/os-release | awk -F'=' '{print $2}')
-      BASE_OS=$(echo $OS_RELEASE_ID$OS_RELEASE_VERSION_ID | sed -e 's/\.//g')
-    fi
-  elif [[ -f /usr/lib/os-release ]]; then
-    OS_RELEASE_ID=$(grep -E '^(ID)=' /usr/lib/os-release | awk -F'"' '{print $2}')
-    OS_RELEASE_VERSION_ID=$(grep -E '^(VERSION_ID)=' /usr/lib/os-release | awk -F'"' '{print $2}')
-    BASE_OS=$(echo $OS_RELEASE_ID${OS_RELEASE_VERSION_ID%%.*})
-  else
-    echo "Base OS information on Linux instance cannot be found."
-    exit 1
-  fi
+  SCRIPT_DIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
+
+  source "${SCRIPT_DIR}/../common/bootstrap_common.sh"
+  BASE_OS=$(get_base_os)
 
   timestamp=$(date +%s)
   echo "Installation logged in /root/bootstrap/logs/install.log.${timestamp}"
@@ -91,14 +78,10 @@ if [[ ! -f ${INSTALL_FINISHED_LOCK} ]]; then
   ## [END] RES Environment VDI Installation
   ")
 
-  SCRIPT_DIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
-
   # Merge Environments
   /bin/bash  "${SCRIPT_DIR}/../common/merge_environments.sh" -r "${curr_environment}" -o /etc/environment
 
   source /etc/environment
-
-  source "${SCRIPT_DIR}/../common/bootstrap_common.sh"
 
   echo -n "no" > ${BOOTSTRAP_DIR}/reboot_required.txt
 

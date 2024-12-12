@@ -33,51 +33,6 @@ class RoleAssignmentsDAO:
         return f'{self.context.cluster_name()}.authz.role-assignments'
 
     def initialize(self):
-        self.context.aws_util().dynamodb_create_table(
-            create_table_request={
-                'TableName': self.get_role_assignments_table_name(),
-                'AttributeDefinitions': [
-                    {
-                        'AttributeName': 'actor_key',
-                        'AttributeType': 'S'
-                    },
-                    {
-                        'AttributeName': 'resource_key',
-                        'AttributeType': 'S'
-                    }
-                ],
-                'KeySchema': [
-                    {
-                        'AttributeName': 'actor_key',
-                        'KeyType': 'HASH'
-                    },
-                    {
-                        'AttributeName': 'resource_key',
-                        'KeyType': 'RANGE'
-                    }
-                ],
-                'GlobalSecondaryIndexes': [
-                    {
-                        'IndexName': GSI_RESOURCE_KEY,
-                        'KeySchema': [
-                            {
-                                'AttributeName': 'resource_key',
-                                'KeyType': 'HASH'
-                            },
-                            {
-                                'AttributeName': 'actor_key',
-                                'KeyType': 'RANGE'
-                            },
-                        ],
-                        'Projection': {
-                            'ProjectionType': 'ALL'
-                        }
-                    }
-                ],
-                'BillingMode': 'PAY_PER_REQUEST'
-            },
-            wait=True
-        )
         self.role_assignments_table = self.context.aws().dynamodb_table().Table(self.get_role_assignments_table_name())
 
         # ToDo: Add GSI for role_id if it doesn't exist

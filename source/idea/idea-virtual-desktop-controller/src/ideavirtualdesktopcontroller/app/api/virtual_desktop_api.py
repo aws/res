@@ -9,8 +9,10 @@
 #  OR CONDITIONS OF ANY KIND, express or implied. See the License for the specific language governing permissions
 #  and limitations under the License.
 import random
+import re
 from abc import abstractmethod
 from typing import List, Optional
+import uuid
 
 import ideavirtualdesktopcontroller
 from ideadatamodel import (
@@ -59,7 +61,8 @@ from ideavirtualdesktopcontroller.app.software_stacks.virtual_desktop_software_s
 from ideavirtualdesktopcontroller.app.ssm_commands.virtual_desktop_ssm_commands_db import VirtualDesktopSSMCommandsDB
 from ideavirtualdesktopcontroller.app.ssm_commands.virtual_desktop_ssm_commands_utils import VirtualDesktopSSMCommandsUtils
 from ideavirtualdesktopcontroller.app.virtual_desktop_controller_utils import VirtualDesktopControllerUtils
-from res.resources import vdi_management
+from res.exceptions import SoftwareStackNotFound
+from res.resources import software_stacks, vdi_management
 
 class VirtualDesktopAPI(BaseAPI):
     TEMP_IMAGE_ID = 'TEMP_IMAGE_ID'
@@ -243,7 +246,14 @@ class VirtualDesktopAPI(BaseAPI):
             exceptions.invalid_params('missing session')
 
         if Utils.is_empty(session.idea_session_id):
-            exceptions.invalid_params('missing session.res_session_id')
+            raise exceptions.invalid_params('missing session.res_session_id')
+
+        if not isinstance(session.idea_session_id, str):
+            raise exceptions.invalid_params("session.res_session_id must be type string")
+        try:
+            uuid.UUID(session.idea_session_id)
+        except:
+            raise exceptions.invalid_params('incorrect format for session.res_session_id')
         return True
     
     # Get a list of projects where the current user is linked
@@ -278,8 +288,10 @@ class VirtualDesktopAPI(BaseAPI):
             session.failure_reason = 'missing session.software_stack.stack_id and/or session.software_stack.base_os'
             return session, False
 
-        software_stack = self.software_stack_db.get(stack_id=session.software_stack.stack_id, base_os=session.software_stack.base_os)
-        if Utils.is_empty(software_stack):
+        try:
+            software_stack_dict = software_stacks.get_software_stack(stack_id=session.software_stack.stack_id, base_os=session.software_stack.base_os)
+            software_stack = self.software_stack_db.convert_db_dict_to_software_stack_object(software_stack_dict)
+        except SoftwareStackNotFound:
             session.failure_reason = f'Invalid session.software_stack.stack_id: {session.software_stack.stack_id} and/or session.software_stack.base_os: {session.software_stack.base_os}'
             return session, False
 

@@ -10,8 +10,6 @@
 #  and limitations under the License.
 from typing import Optional, Dict
 
-import yaml
-
 import ideavirtualdesktopcontroller
 from ideadatamodel import (
     exceptions,
@@ -39,161 +37,16 @@ class VirtualDesktopSoftwareStackDB(VirtualDesktopNotifiableDB):
     def __init__(self, context: ideavirtualdesktopcontroller.AppContext):
         self.context = context
         self._logger = self.context.logger('virtual-desktop-software-stack-db')
-        self.BASE_STACKS_CONFIG_FILE = f'{self.context.get_resources_dir()}/base-software-stack-config.yaml'
         self._table_obj = None
         self._ddb_client = self.context.aws().dynamodb_table()
 
         VirtualDesktopNotifiableDB.__init__(self, context=self.context, table_name=self.table_name, logger=self._logger)
-
-    def initialize(self):
-        exists = self.context.aws_util().dynamodb_check_table_exists(self.table_name, True)
-        if not exists:
-            self.context.aws_util().dynamodb_create_table(
-                create_table_request={
-                    'TableName': self.table_name,
-                    'AttributeDefinitions': [
-                        {
-                            'AttributeName': software_stacks_constants.SOFTWARE_STACK_DB_HASH_KEY,
-                            'AttributeType': 'S'
-                        },
-                        {
-                            'AttributeName': software_stacks_constants.SOFTWARE_STACK_DB_RANGE_KEY,
-                            'AttributeType': 'S'
-                        }
-                    ],
-                    'KeySchema': [
-                        {
-                            'AttributeName': software_stacks_constants.SOFTWARE_STACK_DB_HASH_KEY,
-                            'KeyType': 'HASH'
-                        },
-                        {
-                            'AttributeName': software_stacks_constants.SOFTWARE_STACK_DB_RANGE_KEY,
-                            'KeyType': 'RANGE'
-                        }
-                    ],
-                    'BillingMode': 'PAY_PER_REQUEST'
-                },
-                wait=True
-            )
-            self._create_base_software_stacks()
 
     @property
     def _table(self):
         if Utils.is_empty(self._table_obj):
             self._table_obj = self._ddb_client.Table(self.table_name)
         return self._table_obj
-
-    def _create_base_software_stacks(self):
-        with open(self.BASE_STACKS_CONFIG_FILE, 'r') as f:
-            base_stacks_config = yaml.safe_load(f)
-
-        if Utils.is_empty(base_stacks_config):
-            self._logger.error(f'{self.BASE_STACKS_CONFIG_FILE} file is empty. Returning')
-            return
-
-        for base_os in VirtualDesktopBaseOS:
-            software_stacks_seen = set()
-            self._logger.info(f'Processing base_os: {base_os}')
-            os_config = base_stacks_config.get(base_os)
-            for arch in VirtualDesktopArchitecture:
-                arch_key = arch.replace('_', '-').lower()
-                self._logger.info(f'Processing architecture: {arch_key} within base_os: {base_os}')
-                arch_config = os_config.get(arch_key)
-                if Utils.is_empty(arch_config):
-                    self._logger.error(f'Entry for architecture: {arch_key} within base_os: {base_os}. '
-                                       f'NOT FOUND. Returning')
-                    continue
-
-                default_name = arch_config.get('default-name')
-                default_description = arch_config.get('default-description')
-                default_min_storage_value = arch_config.get('default-min-storage-value')
-                default_min_storage_unit = arch_config.get('default-min-storage-unit')
-                default_min_ram_value = arch_config.get('default-min-ram-value')
-                default_min_ram_unit = arch_config.get('default-min-ram-unit')
-                if Utils.is_empty(default_name) or Utils.is_empty(default_description) or Utils.is_empty(default_min_storage_value) or Utils.is_empty(default_min_storage_unit) or Utils.is_empty(default_min_ram_value) or Utils.is_empty(default_min_ram_unit):
-                    error_message = f'Invalid base-software-stack-config.yaml configuration for OS: {base_os} Arch Config: ' \
-                                    f'{arch}. Missing default-name and/or default-description and/or default-min-storage-value ' \
-                                    f'and/or default-min-storage-unit and/or default-min-ram-value and/or default-min-ram-unit'
-                    self._logger.error(error_message)
-                    raise exceptions.invalid_params(error_message)
-
-                aws_region = self.context.config().get_string('cluster.aws.region', required=True)
-                self._logger.info(f'Processing arch: {arch_key} within base_os: {base_os} '
-                                  f'for aws_region: {aws_region}')
-
-                region_configs = arch_config.get(aws_region)
-                if Utils.is_empty(region_configs):
-                    self._logger.error(f'Entry for arch: {arch_key} within base_os: {base_os}. '
-                                       f'for aws_region: {aws_region} '
-                                       f'NOT FOUND. Returning')
-                    continue
-
-                for region_config in region_configs:
-                    ami_id = region_config.get('ami-id')
-                    if Utils.is_empty(ami_id):
-                        error_message = f'Invalid base-software-stack-config.yaml configuration for OS: {base_os} Arch' \
-                                        f' Config: {arch} AWS-Region: {aws_region}.' \
-                                        f' Missing ami-id'
-                        self._logger.error(error_message)
-                        raise exceptions.general_exception(error_message)
-
-                    ss_id_suffix = region_config.get('ss-id-suffix')
-                    if Utils.is_empty(ss_id_suffix):
-                        error_message = f'Invalid base-software-stack-config.yaml configuration for OS: {base_os} Arch' \
-                                        f' Config: {arch} AWS-Region: {aws_region}.' \
-                                        f' Missing ss-id-suffix'
-                        self._logger.error(error_message)
-                        raise exceptions.general_exception(error_message)
-
-                    gpu_manufacturer = region_config.get('gpu-manufacturer')
-                    if Utils.is_not_empty(gpu_manufacturer) and gpu_manufacturer not in {'AMD', 'NVIDIA', 'NO_GPU'}:
-                        error_message = f'Invalid base-software-stack-config.yaml configuration for OS: {base_os} Arch' \
-                                        f' Config: {arch} AWS-Region: {aws_region}.' \
-                                        f' Invalid gpu-manufacturer {gpu_manufacturer} can be one of AMD, NVIDIA, NO_GPU only'
-
-                        self._logger.error(error_message)
-                        raise exceptions.general_exception(error_message)
-                    elif Utils.is_empty(gpu_manufacturer):
-                        gpu_manufacturer = 'NO_GPU'
-
-                    custom_stack_name = region_config.get('name') \
-                        if Utils.is_not_empty(region_config.get('name')) else default_name
-                    custom_stack_description = region_config.get('description') \
-                        if Utils.is_not_empty(region_config.get('description')) else default_description
-                    custom_stack_min_storage_value = region_config.get('min-storage-value') \
-                        if Utils.is_not_empty(region_config.get('min-storage-value')) else default_min_storage_value
-                    custom_stack_min_storage_unit = region_config.get('min-storage-unit') \
-                        if Utils.is_not_empty(region_config.get('min-storage-unit')) else default_min_storage_unit
-                    custom_stack_min_ram_value = region_config.get('min-ram-value') \
-                        if Utils.is_not_empty(region_config.get('min-ram-value')) else default_min_ram_value
-                    custom_stack_min_ram_unit = region_config.get('min-ram-unit') \
-                        if Utils.is_not_empty(region_config.get('min-ram-unit')) else default_min_ram_unit
-                    custom_stack_gpu_manufacturer = VirtualDesktopGPU(gpu_manufacturer)
-
-                    software_stack_id = f'{software_stacks_constants.BASE_STACK_PREFIX}-{base_os}-{arch_key}-{ss_id_suffix}'
-                    software_stacks_seen.add(software_stack_id)
-                    software_stack_db_entry = self.get(stack_id=software_stack_id, base_os=base_os)
-                    if Utils.is_empty(software_stack_db_entry):
-                        # base SS doesn't exist. creating
-                        self._logger.info(f'software_stack_id: {software_stack_id}, does\'nt exist. CREATING.')
-                        self.create(VirtualDesktopSoftwareStack(
-                            base_os=VirtualDesktopBaseOS(base_os),
-                            stack_id=software_stack_id,
-                            name=custom_stack_name,
-                            description=custom_stack_description,
-                            ami_id=ami_id,
-                            enabled=True,
-                            min_storage=SocaMemory(
-                                value=custom_stack_min_storage_value,
-                                unit=SocaMemoryUnit(custom_stack_min_storage_unit)
-                            ),
-                            min_ram=SocaMemory(
-                                value=custom_stack_min_ram_value,
-                                unit=SocaMemoryUnit(custom_stack_min_ram_unit)
-                            ),
-                            architecture=VirtualDesktopArchitecture(arch),
-                            gpu=custom_stack_gpu_manufacturer
-                        ))
 
     @property
     def table_name(self) -> str:
@@ -261,16 +114,6 @@ class VirtualDesktopSoftwareStackDB(VirtualDesktopNotifiableDB):
         db_dict[software_stacks_constants.SOFTWARE_STACK_DB_PROJECTS_KEY] = project_ids
         return db_dict
 
-    def create(self, software_stack: VirtualDesktopSoftwareStack) -> VirtualDesktopSoftwareStack:
-        db_entry = self.convert_software_stack_object_to_db_dict(software_stack)
-        db_entry[software_stacks_constants.SOFTWARE_STACK_DB_CREATED_ON_KEY] = Utils.current_time_ms()
-        db_entry[software_stacks_constants.SOFTWARE_STACK_DB_UPDATED_ON_KEY] = Utils.current_time_ms()
-        self._table.put_item(
-            Item=db_entry
-        )
-        self.trigger_create_event(db_entry[software_stacks_constants.SOFTWARE_STACK_DB_HASH_KEY], db_entry[software_stacks_constants.SOFTWARE_STACK_DB_RANGE_KEY], new_entry=db_entry)
-        return self.convert_db_dict_to_software_stack_object(db_entry)
-
     def get_with_project_info(self, stack_id: str, base_os: str) -> Optional[VirtualDesktopSoftwareStack]:
         software_stack_db_entry = None
         if Utils.is_empty(stack_id) or Utils.is_empty(base_os):
@@ -304,28 +147,6 @@ class VirtualDesktopSoftwareStackDB(VirtualDesktopNotifiableDB):
         software_stack_projects = [_get_project(project_entry.project_id) for project_entry in software_stack_entry.projects]
         software_stack_entry.projects = software_stack_projects
         return software_stack_entry
-
-    def get(self, stack_id: str, base_os: str) -> Optional[VirtualDesktopSoftwareStack]:
-        software_stack_db_entry = None
-        if Utils.is_empty(stack_id) or Utils.is_empty(base_os):
-            self._logger.error(f'invalid values for stack_id: {stack_id} and/or base_os: {base_os}')
-        else:
-            try:
-                result = self._table.get_item(
-                    Key={
-                        software_stacks_constants.SOFTWARE_STACK_DB_HASH_KEY: base_os,
-                        software_stacks_constants.SOFTWARE_STACK_DB_RANGE_KEY: stack_id
-                    }
-                )
-                software_stack_db_entry = result.get('Item')
-            except self._ddb_client.exceptions.ResourceNotFoundException as _:
-                # in this case we simply need to return None since the resource was not found
-                return None
-            except Exception as e:
-                self._logger.exception(e)
-                raise e
-
-        return self.convert_db_dict_to_software_stack_object(software_stack_db_entry)
 
     def update(self, software_stack: VirtualDesktopSoftwareStack) -> VirtualDesktopSoftwareStack:
         db_entry = self.convert_software_stack_object_to_db_dict(software_stack)

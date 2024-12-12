@@ -39,7 +39,7 @@ source "$SCRIPT_DIR/../common/bootstrap_common.sh"
 case "$BASE_OS" in
   ubuntu2204)
     pam_lib_dir="/usr/lib/x86_64-linux-gnu/security"
-    nss_lib_dir="/usr/lib/x86_64-linux-gnu/"
+    nss_lib_dir="/usr/lib/x86_64-linux-gnu"
     ;;
   amzn2|rhel7|rhel8|rhel9)
     pam_lib_dir="/usr/lib64/security"
@@ -78,14 +78,32 @@ function install_modules () {
 
   modules=$(echo "$response" | jq -r '.value' | jq -r '.[]')
 
+  enable_native_user_login=$($AWS dynamodb get-item \
+                       --region "$AWS_REGION" \
+                       --table-name "$RES_ENVIRONMENT_NAME.cluster-settings" \
+                       --key '{"key": {"S": "identity-provider.cognito.enable_native_user_login"}}' \
+                       --output json \
+                       | jq -f /root/.convert_from_dynamodb_object.jq | jq -r '.Item.value')
+
   echo "$modules" | while read -r module; do
+    # Don't install Cognito modules if enable_native_user_login is disabled
+     if [[ "$enable_native_user_login" =~ "false" ]] && [[ "$module" =~ "cognito" ]]; then
+       continue
+     fi
+
     module_s3_uri=$($AWS dynamodb get-item \
                           --region "$AWS_REGION" \
                           --table-name "$RES_ENVIRONMENT_NAME.cluster-settings" \
-                          --key '{"key": {"S": "vdc.host_modules.'${module}'.'${OS_ARCH}'.s3_url"}}' \
+                          --key '{"key": {"S": "cluster-manager.host_modules.'${module}'.'${OS_ARCH}'.s3_url"}}' \
                           --output text \
                           | awk '/VALUE/ {print $2}')
-    target_location="$TARGET_DIR/$module.so"
+
+
+    if [[ $MODULE_TYPE = "nss" ]]; then
+      target_location="$TARGET_DIR/$module.so.2"
+    else
+      target_location="$TARGET_DIR/$module.so"
+    fi
 
     echo "Downloading $module from $module_s3_uri..."
     aws s3 cp "$module_s3_uri" "$target_location"

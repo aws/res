@@ -23,6 +23,7 @@ export interface IdeaAuthRouteProps extends IdeaAppNavigationProps {
     children: React.ReactNode;
     hasProjectBasedPermission?: boolean;
     isFileBrowserEnabled?: boolean;
+    isSshEnabled?: boolean;
 }
 
 class IdeaAuthenticatedRoute extends Component<IdeaAuthRouteProps> {
@@ -35,6 +36,7 @@ class IdeaAuthenticatedRoute extends Component<IdeaAuthRouteProps> {
         const isClusterAdminRoute = currentPath.startsWith("/cluster");
         const isFileBrowserPath = currentPath.startsWith("/home/file-browser");
         const isSessionsPath = currentPath.startsWith("/virtual-desktop/sessions");
+        const isSshAccessPath = currentPath.startsWith("/home/ssh-access");
 
         if (this.props.isLoggedIn) {
             if (isAuthRoute) {
@@ -55,15 +57,16 @@ class IdeaAuthenticatedRoute extends Component<IdeaAuthRouteProps> {
                 return <Navigate to="/" />;
             } else if (isFileBrowserPath && !this.props.isFileBrowserEnabled){
                 return <Navigate to="/" />;
-            }
-            else {
+            } else if (isSshAccessPath && !this.props.isSshEnabled){
+                return <Navigate to="/" />;
+            } else {
                 return this.props.children;
             }
         } else {
             if (isAuthRoute) {
                 return this.props.children;
             } else {
-                if (Utils.isSsoEnabled()) {
+                if (Utils.isSsoEnabled() && !Utils.isNativeUserLoginEnabled()) {
                     return <Navigate to="/auth/login-redirect" />;
                 } else {
                     return <Navigate to="/auth/login" />;

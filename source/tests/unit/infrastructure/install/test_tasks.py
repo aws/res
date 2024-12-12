@@ -1,5 +1,6 @@
 #  Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 #  SPDX-License-Identifier: Apache-2.0
+
 import sys
 from typing import Any, Callable
 
@@ -26,6 +27,7 @@ def expected_environment() -> list[Any]:
             "Name": "IDEA_ADMIN_AWS_CREDENTIAL_PROVIDER",
             "Value": "Ec2InstanceMetadata",
         },
+        {"Name": "AWS_STS_REGIONAL_ENDPOINTS", "Value": "regional"},
     ]
 
 
@@ -45,7 +47,7 @@ def test_ecs_cluster_creation(
 def test_create_task_creation(
     stack: InstallStack,
     template: Template,
-    installer_registry_name: str,
+    registry_name: str,
     expected_environment: list[Any],
 ) -> None:
     util.assert_resource_name_has_correct_type_and_props(
@@ -59,7 +61,7 @@ def test_create_task_creation(
                     {
                         "Command": Match.array_with(["/bin/sh", "-c"]),
                         "Environment": expected_environment,
-                        "Image": installer_registry_name,
+                        "Image": registry_name,
                         "LogConfiguration": {
                             "Options": {"awslogs-stream-prefix": "CreateLogStream"}
                         },
@@ -81,7 +83,7 @@ def test_create_task_creation(
 def test_update_task_creation(
     stack: InstallStack,
     template: Template,
-    installer_registry_name: str,
+    registry_name: str,
     expected_environment: list[Any],
 ) -> None:
     util.assert_resource_name_has_correct_type_and_props(
@@ -95,7 +97,7 @@ def test_update_task_creation(
                     {
                         "Command": Match.array_with(["/bin/sh", "-c"]),
                         "Environment": expected_environment,
-                        "Image": installer_registry_name,
+                        "Image": registry_name,
                         "LogConfiguration": {
                             "Options": {"awslogs-stream-prefix": "UpdateLogStream"}
                         },
@@ -117,7 +119,7 @@ def test_update_task_creation(
 def test_delete_task_creation(
     stack: InstallStack,
     template: Template,
-    installer_registry_name: str,
+    registry_name: str,
     expected_environment: list[Any],
 ) -> None:
     util.assert_resource_name_has_correct_type_and_props(
@@ -131,7 +133,7 @@ def test_delete_task_creation(
                     {
                         "Command": Match.array_with(["/bin/sh", "-c"]),
                         "Environment": expected_environment,
-                        "Image": installer_registry_name,
+                        "Image": registry_name,
                         "LogConfiguration": {
                             "Options": {"awslogs-stream-prefix": "DeleteLogStream"}
                         },

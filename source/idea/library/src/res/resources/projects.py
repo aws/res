@@ -11,7 +11,9 @@ logger.addHandler(logging.StreamHandler())
 logger.setLevel(logging.INFO)
 
 GSI_PROJECT_NAME = "project-name-index"
+GSI_PROJECT_NAME_HASH_KEY = "name"
 PROJECTS_TABLE_NAME = "projects"
+PROJECTS_DB_HASH_KEY = "project_id"
 
 
 def get_project(

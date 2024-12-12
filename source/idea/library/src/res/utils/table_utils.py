@@ -7,15 +7,17 @@ from typing import Any, Dict, List, Optional
 
 import boto3
 from boto3.dynamodb.conditions import Attr, Key
+from python_dynamodb_lock.python_dynamodb_lock import DynamoDBLockClient
+from res.constants import ENVIRONMENT_NAME_KEY
 
 
 @lru_cache
 def table(table_name: str) -> Any:
     dynamodb = boto3.resource("dynamodb")
-    return dynamodb.Table(f"{os.environ.get('environment_name')}.{table_name}")
+    return dynamodb.Table(f"{os.environ.get(ENVIRONMENT_NAME_KEY)}.{table_name}")
 
 
-def list_table(table_name: str) -> List[Dict[str, Any]]:
+def list_items(table_name: str) -> List[Dict[str, Any]]:
     """
     Retrieve the items from DDB
     :return: list of items
@@ -64,6 +66,44 @@ def get_item(table_name: str, key: Dict[str, str]) -> Optional[Dict[str, Any]]:
     return item
 
 
+def batch_get_items(
+    table_name: str, keys: List[Dict[str, str]]
+) -> List[Optional[Dict[str, Any]]]:
+    """
+    Retrieves multiple items from a DynamoDB table using batch_get_item.
+
+    Args:
+        table_name (str): The name of the DynamoDB table.
+        keys (List[Dict[str, str]]): A list of primary key dictionaries for the items to retrieve.
+
+    Returns:
+        List[Optional[Dict[str, Any]]]: A list of retrieved items. Each item is either a dictionary
+        with "key" and "value" or None if the item was not found.
+    """
+    dynamodb = boto3.resource("dynamodb")
+    table_name = f"{os.environ.get('environment_name')}.{table_name}"
+
+    # Use the DynamoDB resource to perform the batch_get_item operation
+    response = dynamodb.meta.client.batch_get_item(
+        RequestItems={table_name: {"Keys": keys}}
+    )
+
+    # Extract the items from the response
+    items = response.get("Responses", {}).get(table_name, [])
+
+    # Create a dictionary to map keys to items
+    item_map = {
+        item["key"]: {"key": item["key"], "value": item["value"]} for item in items
+    }
+
+    # Return items in the same order as the input keys, with None for missing items
+    result = []
+    for key in keys:
+        result.append(item_map.get(key["key"]))
+
+    return result
+
+
 def query(
     table_name: str,
     attributes: Dict[str, Any],
@@ -102,7 +142,7 @@ def query(
 
 
 def update_item(
-    table_name: str, key: Dict[str, str], item: Dict[str, Any]
+    table_name: str, key: Dict[str, str], item: Dict[str, Any], versioned: bool = False
 ) -> Dict[str, Any]:
     update_expression_tokens = []
     expression_attr_names = {}
@@ -114,10 +154,16 @@ def update_item(
         update_expression_tokens.append(f"#{attribute_name} = :{attribute_name}")
         expression_attr_names[f"#{attribute_name}"] = attribute_name
         expression_attr_values[f":{attribute_name}"] = attribute_value
+    update_expression = "SET " + ", ".join(update_expression_tokens)
+
+    if versioned:
+        update_expression += " ADD #version :version"
+        expression_attr_values[":version"] = 1
+        expression_attr_names["#version"] = "version"
 
     result = table(table_name).update_item(
         Key=key,
-        UpdateExpression="SET " + ", ".join(update_expression_tokens),
+        UpdateExpression=update_expression,
         ExpressionAttributeNames=expression_attr_names,
         ExpressionAttributeValues=expression_attr_values,
         ReturnValues="ALL_NEW",
@@ -129,20 +175,24 @@ def update_item(
     return updated_item
 
 
-def scan(table_name: str, attributes: Dict[str, Any]) -> List[Dict[str, Any]]:
+def scan(
+    table_name: str, attributes: Optional[Dict[str, Any]] = None
+) -> List[Dict[str, Any]]:
     filter_expression = None
-    for attribute_name, attribute_value in attributes.items():
-        if not filter_expression:
-            filter_expression = Key(attribute_name).eq(attribute_value)
-        else:
-            filter_expression += Key(attribute_name).eq(attribute_value)
+    if attributes:
+        for attribute_name, attribute_value in attributes.items():
+            if not filter_expression:
+                filter_expression = Key(attribute_name).eq(attribute_value)
+            else:
+                filter_expression += Key(attribute_name).eq(attribute_value)
 
     exclusive_start_key = None
     results: List[Dict[str, Any]] = []
     while True:
-        query_params: Dict[str, Any] = {
-            "FilterExpression": filter_expression,
-        }
+        query_params: Dict[str, Any] = {}
+        if filter_expression:
+            query_params["FilterExpression"] = filter_expression
+
         if exclusive_start_key:
             query_params["ExclusiveStartKey"] = exclusive_start_key
 
@@ -155,3 +205,16 @@ def scan(table_name: str, attributes: Dict[str, Any]) -> List[Dict[str, Any]]:
             break
 
     return results
+
+
+def get_distributed_lock_client(table_name: str) -> Any:
+    dynamodb_resource = boto3.resource("dynamodb")
+    return DynamoDBLockClient(
+        dynamodb_resource=dynamodb_resource,
+        table_name=f"{os.environ.get('environment_name')}.{table_name}",
+    )
+
+
+def is_table_empty(table_name: str) -> bool:
+    query_result = table(table_name).scan(Limit=1).get("Items", [])
+    return len(query_result) == 0

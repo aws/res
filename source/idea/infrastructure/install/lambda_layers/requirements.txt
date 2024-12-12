@@ -1,2 +1,5 @@
 pyjwt
 cryptography
+requests
+xmltodict==0.14.1
+types-xmltodict~=0.14

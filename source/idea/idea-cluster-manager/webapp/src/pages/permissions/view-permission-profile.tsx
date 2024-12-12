@@ -2,7 +2,7 @@ import React, { Component, RefObject } from "react";
 import { withRouter } from "../../navigation/navigation-utils";
 import IdeaAppLayout, { IdeaAppLayoutProps } from "../../components/app-layout";
 import { IdeaSideNavigationProps } from "../../components/side-navigation";
-import { Box, Button, ColumnLayout, Container, ExpandableSection, FlashbarProps, FormField, Header, Link, SpaceBetween, StatusIndicator, Table, TabsProps } from "@cloudscape-design/components";
+import { Box, Button, ColumnLayout, Container, FlashbarProps, FormField, Header, Link, SpaceBetween, StatusIndicator, Table, TabsProps } from "@cloudscape-design/components";
 import { GetRoleResponse, Project, ProjectPermissions, Role, RoleAssignment, VDIPermissions } from "../../client/data-model";
 import AuthzClient from "../../client/authz-client";
 import ProjectsClient from "../../client/projects-client";
@@ -10,7 +10,6 @@ import { AppContext } from "../../common";
 import { CopyToClipBoard } from "../../components/common";
 import IdeaTabs from "../../components/tabs";
 import Utils from "../../common/utils";
-import IdeaListView from "../../components/list-view/list-view";
 import IdeaTable from "../../components/table";
 import { Constants } from "../../common/constants";
 
@@ -146,9 +145,9 @@ class PermissionProfilesView extends Component<PermissionProfilesViewProps, Perm
     >
       <ColumnLayout columns={3} borders="vertical">
         <FormField
-          label="Profile ID"
+          label="Role ID"
         >
-          <CopyToClipBoard text={roleId} feedback={"Profile ID copied!"} /> {Utils.asString(roleId)}
+          <CopyToClipBoard text={roleId} feedback={"Role ID copied!"} /> {Utils.asString(roleId)}
         </FormField>
         <FormField
           label="Description"
@@ -264,10 +263,9 @@ class PermissionProfilesView extends Component<PermissionProfilesViewProps, Perm
         <Table
           header={
             <Header
+              counter={`(${numAffectedProjects})`}
               description="List of projects using this project role."
-            >
-              {`Affected projects (${numAffectedProjects})`}
-            </Header>
+            >Affected projects</Header>
           }
           items={this.state.projects}
           loading={this.state.isLoadingProjects}
@@ -276,23 +274,25 @@ class PermissionProfilesView extends Component<PermissionProfilesViewProps, Perm
             {
               id: "name",
               header: "Project name",
-              cell: (project) => <Link
-                variant="primary"
-                external
-                onFollow={() => {
-                  // Navigate directly to the relevant edit project page.
-                  const projectRoles = this.state.projectRoleAssignmentsMap.get(project.project_id!);
-                  this.props.navigate("/cluster/projects/configure", {
-                    state: {
-                      isUpdate: true,
-                      project: project,
-                      projectRoles: projectRoles,
-                      projectPermission: undefined,
-                      fromPage: 'view',
-                    }
-                  });
-                }}
-              >{project.name}</Link>
+              cell: (project) => (
+                  <Link
+                    variant="secondary"
+                    onFollow={() => {
+                      // Navigate directly to the relevant edit project page.
+                      const projectRoles = this.state.projectRoleAssignmentsMap.get(project.project_id!);
+                      this.props.navigate("/cluster/projects/configure", {
+                        state: {
+                          isUpdate: true,
+                          project: project,
+                          projectRoles: projectRoles,
+                          projectPermission: undefined,
+                          fromPage: 'view',
+                        }
+                      });
+                    }}
+                  ><span style={{ fontWeight: 'normal' }}>{project.name}</span>
+                  </Link>
+              )
             },
             {
               id: "groups",

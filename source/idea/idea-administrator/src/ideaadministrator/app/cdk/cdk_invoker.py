@@ -488,18 +488,11 @@ class CdkInvoker:
                 module_set=self.module_set,
             )
 
-            # find the elb account id for the current region
-            with open(ideaadministrator.props.region_elb_account_id_file(), 'r') as f:
-                region_elb_account_id_config = Utils.from_yaml(f.read())
-
-            elb_account_id = Utils.get_value_as_string(self.aws_region, region_elb_account_id_config)
-
             toolkit_stack_content = toolkit_stack_template.render(**{
                 'cluster_name': self.cluster_name,
                 'aws_dns_suffix': aws_client.aws_dns_suffix(),
                 'cluster_s3_bucket': cluster_config.get_string('cluster.cluster_s3_bucket', required=True),
                 'config': cluster_config,
-                'aws_elb_account_id': elb_account_id,
                 'permission_boundary_arn': cluster_config.get_string('cluster.iam.permission_boundary_arn', default='')
             })
             with open(toolkit_stack_target_file, 'w') as f:
@@ -517,7 +510,8 @@ class CdkInvoker:
                 f'--toolkit-stack-name {stack_name} '
                 f'--termination-protection {str(self.termination_protection).lower()} '
                 f'--qualifier {cdk_toolkit_qualifier}',
-                f'--template {toolkit_stack_target_file}'
+                f'--template {toolkit_stack_target_file}',
+                '--public-access-block-configuration false'
             ]
 
             # bootstrap stack tags
@@ -680,6 +674,11 @@ class CdkInvoker:
             upload=upload_release_package
         )
         bootstrap_context.vars.app_package_uri = app_package_uri
+
+        bootstrap_context.vars.cognito_min_id = constants.COGNITO_MIN_ID_INCLUSIVE
+        bootstrap_context.vars.cognito_max_id = constants.COGNITO_MAX_ID_INCLUSIVE
+        bootstrap_context.vars.cognito_uid_attribute = constants.COGNITO_UID_ATTRIBUTE
+        bootstrap_context.vars.cognito_default_user_group = constants.COGNITO_DEFAULT_USER_GROUP
 
         BootstrapUtils.check_and_attach_cloudwatch_logging_and_metrics(
             bootstrap_context=bootstrap_context,
@@ -966,6 +965,7 @@ class CdkInvoker:
             if module_name == constants.MODULE_SCHEDULER and status == 'not-deployed':
                 raise exceptions.general_exception(f'cannot deploy {self.module_id}. module: {module_id} is not yet deployed.')
 
+        upload_release_package = Utils.get_value_as_bool('upload_release_package', kwargs, True)
         render_bootstrap_package = Utils.get_value_as_bool('render_bootstrap_package', kwargs, True)
         force_build_bootstrap = Utils.get_value_as_bool('force_build_bootstrap', kwargs, True)
         upload_bootstrap_package = Utils.get_value_as_bool('upload_bootstrap_package', kwargs, True)
@@ -989,12 +989,31 @@ class CdkInvoker:
             base_os=base_os,
             instance_type=instance_type
         )
+
+        bootstrap_context.vars.cognito_min_id = constants.COGNITO_MIN_ID_INCLUSIVE
+        bootstrap_context.vars.cognito_max_id = constants.COGNITO_MAX_ID_INCLUSIVE
+        bootstrap_context.vars.cognito_uid_attribute = constants.COGNITO_UID_ATTRIBUTE
+        bootstrap_context.vars.cognito_default_user_group = constants.COGNITO_DEFAULT_USER_GROUP
+        
+        app_package_uri = self.upload_release_package(
+            bootstrap_context=bootstrap_context,
+            package_name=f'idea-bastion-host-{ideaadministrator.props.current_release_version}.tar.gz',
+            upload=upload_release_package
+        )
+        bootstrap_context.vars.app_package_uri = app_package_uri
+
         BootstrapUtils.check_and_attach_cloudwatch_logging_and_metrics(
             bootstrap_context=bootstrap_context,
             metrics_namespace=f'{self.cluster_name}/{self.module_id}',
             node_type=constants.NODE_TYPE_INFRA,
-            enable_logging=False,
-            log_files=[]
+            enable_logging=cluster_config.get_bool('bastion-host.cloudwatch_logs.enabled', False),
+            log_files=[
+                CloudWatchAgentLogFileOptions(
+                    file_path='/opt/idea/app/logs/**.log',
+                    log_group_name=f'/{self.cluster_name}/{self.module_id}',
+                    log_stream_name='application_{ip_address}'
+                )
+            ]
         )
 
         bootstrap_package_uri = None

@@ -19,6 +19,7 @@ from constructs import Construct
 from idea.infrastructure.install import proxy_handler, utils
 from idea.infrastructure.install.constants import RES_COMMON_LAMBDA_RUNTIME
 from idea.infrastructure.install.handlers import installer_handlers
+from idea.infrastructure.install.utils import InfraUtils
 
 
 class LambdaCodeParams(TypedDict):
@@ -32,6 +33,9 @@ class ProxyParams(TypedDict):
     ddb_groups_table_name: str
     ddb_cluster_settings_table_name: str
     cluster_name: str
+    http_proxy: str
+    https_proxy: str
+    no_proxy: str
 
 
 proxy_lambda_security_group_name = "proxy-lambda-security-group-id"
@@ -75,11 +79,13 @@ class Proxy(Construct):
         )
 
         security_group_id = self.create_security_group(alb_security_group_id, vpc_id)
-        self.add_vpc_config_to_lambda(
+        InfraUtils.add_vpc_config_to_lambda(
+            self,
             proxy_lambda,
             [security_group_id],
             subnet_ids,
         )
+
         self.remove_ingress_rule_for_alb_sg_on_delete(
             security_group_id, alb_security_group_id
         )
@@ -88,57 +94,6 @@ class Proxy(Construct):
         self.add_target_group_to_alb(
             external_alb_https_listener_arn, endpoint_custom_lambda_arn
         )
-
-    def add_vpc_config_to_lambda(
-        self,
-        proxy_lambda: Function,
-        security_group_ids: typing.List[str],
-        subnet_ids: typing.List[str],
-    ) -> None:
-        function_name = proxy_lambda.function_name
-        vpc_setting_cr = cr.AwsCustomResource(
-            self,
-            "add-vpc-config-to-lambda",
-            on_update=cr.AwsSdkCall(  # will also be called for a CREATE event
-                service="@aws-sdk/client-lambda",
-                action="UpdateFunctionConfigurationCommand",
-                parameters={
-                    "FunctionName": function_name,
-                    "VpcConfig": {
-                        "SubnetIds": subnet_ids,
-                        "SecurityGroupIds": security_group_ids,
-                    },
-                },
-                physical_resource_id=cr.PhysicalResourceId.of(function_name),
-            ),
-            on_delete=cr.AwsSdkCall(
-                service="@aws-sdk/client-lambda",
-                action="UpdateFunctionConfigurationCommand",
-                parameters={
-                    "FunctionName": function_name,
-                    "VpcConfig": {"SubnetIds": [], "SecurityGroupIds": []},
-                },
-                physical_resource_id=cr.PhysicalResourceId.of(function_name),
-            ),
-            policy=cr.AwsCustomResourcePolicy.from_statements(
-                [
-                    aws_iam.PolicyStatement(
-                        actions=["lambda:UpdateFunctionConfiguration"],
-                        resources=[proxy_lambda.function_arn],
-                    ),
-                    # These three actions only takes * as resource
-                    aws_iam.PolicyStatement(
-                        actions=[
-                            "ec2:DescribeSecurityGroups",
-                            "ec2:DescribeSubnets",
-                            "ec2:DescribeVpcs",
-                        ],
-                        resources=["*"],
-                    ),
-                ]
-            ),
-        )
-        vpc_setting_cr.node.add_dependency(proxy_lambda)
 
     def create_proxy_target_group(self, proxy_lambda: Any) -> lb.ApplicationTargetGroup:
         lambda_target = targets.LambdaTarget(proxy_lambda)
@@ -255,6 +210,13 @@ class Proxy(Construct):
                     from_port=53,
                     to_port=53,
                 ),
+                #  Open ports outside well-known range for internet proxy
+                ec2.CfnSecurityGroup.EgressProperty(
+                    ip_protocol="tcp",
+                    cidr_ip="0.0.0.0/0",
+                    from_port=1024,
+                    to_port=65535,
+                ),
             ],
             security_group_ingress=[
                 ec2.CfnSecurityGroup.IngressProperty(
@@ -297,9 +259,7 @@ class Proxy(Construct):
                 [
                     aws_iam.PolicyStatement(
                         actions=["ec2:RevokeSecurityGroupIngress"],
-                        resources=[
-                            f"arn:{aws_cdk.Aws.PARTITION}:ec2:{aws_cdk.Aws.REGION}:{aws_cdk.Aws.ACCOUNT_ID}:security-group/{security_group_id}"
-                        ],
+                        resources=["*"],
                     )
                 ]
             ),
@@ -339,6 +299,9 @@ class Proxy(Construct):
                 "DDB_GROUPS_TABLE_NAME": groups_table_name,
                 "DDB_CLUSTER_SETTINGS_TABLE_NAME": cluster_settings_table_name,
                 "ASSUME_ROLE_ARN": assume_role.role_arn,
+                "HTTP_PROXY": self.params["http_proxy"],
+                "HTTPS_PROXY": self.params["https_proxy"],
+                "NO_PROXY": self.params["no_proxy"],
             },
             # Pass Shared Lambda Layer here
             layers=[self.lambda_layer],
@@ -399,6 +362,10 @@ class Proxy(Construct):
                     "budgets:ViewBudget",
                     "fsx:DescribeFileSystems",
                     "elasticfilesystem:DescribeFileSystems",
+                    "ec2:DescribeInstances",
+                    "elasticfilesystem:DescribeMountTargets",
+                    "fsx:DescribeVolumes",
+                    "fsx:DescribeStorageVirtualMachines",
                 ],
                 resources=["*"],
             )
@@ -439,7 +406,12 @@ class LambdaAndSecurityGroupCleanup(Construct):
         # Create an IAM policy for the Lambda function
         security_group_cleanup_policy = aws_cdk.aws_iam.PolicyStatement(
             effect=aws_cdk.aws_iam.Effect.ALLOW,
-            actions=["ec2:DescribeSecurityGroups", "ec2:DeleteSecurityGroup"],
+            actions=[
+                "ec2:DescribeSecurityGroups",
+                "ec2:DeleteSecurityGroup",
+                "ec2:DeleteNetworkInterface",
+                "ec2:DescribeNetworkInterfaces",
+            ],
             resources=["*"],
         )
 
@@ -460,10 +432,13 @@ class LambdaAndSecurityGroupCleanup(Construct):
         )
 
     def remove_lambda_function(self, lambdas_to_cleanup: typing.List[str]) -> None:
-        for function_name in lambdas_to_cleanup:
+        # Lambda names contain CFn token for cluster name, which cannot be included
+        # in construct IDs. Using count instead to make each function's
+        # custom resource ID unique.
+        for count, function_name in enumerate(lambdas_to_cleanup):
             remove_function_cr = cr.AwsCustomResource(
                 self,
-                "remove-lambda-function",
+                f"remove-lambda-function-{count}",
                 on_delete=cr.AwsSdkCall(
                     service="@aws-sdk/client-lambda",
                     action="DeleteFunctionCommand",
@@ -479,9 +454,7 @@ class LambdaAndSecurityGroupCleanup(Construct):
                     [
                         aws_iam.PolicyStatement(
                             actions=["lambda:DeleteFunction", "lambda:GetFunction"],
-                            resources=[
-                                f"arn:{aws_cdk.Aws.PARTITION}:lambda:{aws_cdk.Aws.REGION}:{aws_cdk.Aws.ACCOUNT_ID}:function:{function_name}"
-                            ],
+                            resources=["*"],
                         ),
                     ]
                 ),
@@ -516,7 +489,7 @@ class ProxyStack(aws_cdk.Stack):
         cluster_name = params["cluster_name"]
         self.proxyConstructCleanup = LambdaAndSecurityGroupCleanup(
             self,
-            "remove-leftover-proxy-resource",
+            "remove-leftover-proxy-resources",
             vpc_id,
             [f"{cluster_name}_{proxy_lambda_name}"],
             [f"{cluster_name}_{proxy_lambda_security_group_name}"],

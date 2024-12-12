@@ -178,7 +178,8 @@ class ConfigureDesktopSharingProfile extends Component<ConfigureDesktopSharingPr
                 this.returnToPreviousPage()
             })
             .catch((error) => {
-                this.getForm()!.setError(error.errorCode, error.message);
+                this.setState({showConfirmationModal: false})
+                this.getForm()!.setError(error.errorCode, `Failed to update ${permissionProfile.title} profile due to internal software error. Please create a new profile to proceed. If the problem persists, contact AWS support.`);
             });
     }
 
@@ -200,22 +201,11 @@ class ConfigureDesktopSharingProfile extends Component<ConfigureDesktopSharingPr
         if (!allowedGlobally) {
             return "Disabled globally";
         }
-
         return enabledLocally ? "Enabled" : "Disabled";
     }
 
-    getSettingStatusType(allowedGlobally: boolean, enabledLocally: boolean): StatusIndicatorProps.Type {
-        if (!allowedGlobally) {
-            return "warning";
-        }
-
+    getSettingStatusType(enabledLocally: boolean): StatusIndicatorProps.Type {
         return enabledLocally ? "success" : "stopped";
-    }
-
-    getSettingDescription(description: string, allowedGlobally: boolean): string | JSX.Element {
-        return allowedGlobally ?
-            description :
-            <>{description}<br /><span style={{font: "inherit", color: "#8d6605"}}>Disabled globally</span></>;
     }
 
     buildProfileDetailsForm(): any {
@@ -251,7 +241,7 @@ class ConfigureDesktopSharingProfile extends Component<ConfigureDesktopSharingPr
                 {
                     name: "description",
                     title: "Profile description",
-                    description: "Optionally add more details to describe the specific profile.",
+                    description: "Add more details to describe the specific profile.",
                     data_type: "str",
                     default: this.buildDefaultDescription(),
                     param_type: "text",
@@ -280,8 +270,13 @@ class ConfigureDesktopSharingProfile extends Component<ConfigureDesktopSharingPr
         >
             <FormField
                 label={setting.name!}
-                description={this.getSettingDescription(setting.description!, allowed)}
+                description={setting.description ?? "-"}
             >
+                <StatusIndicator
+                type={this.getSettingStatusType(enabled)}
+                >
+                    {this.getSettingStatus(allowed, enabled)}
+                </StatusIndicator>
             </FormField>
         </Toggle>
     }
@@ -344,8 +339,10 @@ class ConfigureDesktopSharingProfile extends Component<ConfigureDesktopSharingPr
                 </Box>
             }
         >
-            Update <b>{this.state.profileToEdit?.title}</b> sharing profile.
-            <Alert type="info">Proceeding with this action will impact any existing desktop sharing sessions. Click save for the new settings to take effect or cancel.</Alert>
+            <SpaceBetween direction="vertical" size="xs">
+                <span>Update <b>{this.state.profileToEdit?.title}</b> sharing profile.</span>
+                <Alert type="info">Proceeding with this action will impact any existing desktop sharing sessions. Click 'Save' for the new settings to take effect.</Alert>
+            </SpaceBetween>
         </Modal>
     }
 

@@ -62,7 +62,8 @@ function install_nvidia_grid_drivers () {
     kill $x_server_pid
   fi
 
-  /bin/sh NVIDIA-Linux-x86_64*.run --no-precompiled-interface --run-nvidia-xconfig --no-questions --accept-license --silent
+  chmod +x NVIDIA-Linux-x86_64*.run
+  /bin/sh NVIDIA-Linux-x86_64*.run --no-precompiled-interface --run-nvidia-xconfig --accept-license --silent
   log_info "X server configuration for GPU start..."
   # If you are using NVIDIA vGPU software version 14.x or greater on the G4dn, G5, or G5g instances, disable GSP with the following commands.
   touch /etc/modprobe.d/nvidia.conf

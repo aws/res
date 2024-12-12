@@ -6,22 +6,23 @@ import IdeaForm from "../../components/form";
 import {withRouter} from "../../navigation/navigation-utils";
 import Utils from "../../common/utils";
 import {AppContext} from "../../common";
-import {BatchPutRoleAssignmentResponse, DeleteRoleAssignmentRequest, Project, ProjectPermissions, PutRoleAssignmentRequest, Role, RoleAssignment, ScriptEvents, Scripts, SocaUserInputChoice, SocaUserInputParamMetadata} from "../../client/data-model";
+import {BatchPutRoleAssignmentResponse, DeleteRoleAssignmentRequest, ListUsersResult, ListGroupsResult, Project, ProjectPermissions, PutRoleAssignmentRequest, Role, RoleAssignment, ScriptEvents, Scripts, SocaUserInputChoice, SocaUserInputParamMetadata} from "../../client/data-model";
 import {AccountsClient, ClusterSettingsClient} from "../../client";
 import {Constants} from "../../common/constants";
 import dot from "dot-object";
 import AuthzClient from "../../client/authz-client";
 import { OptionDefinition } from "@cloudscape-design/components/internal/components/option/interfaces";
 import ProxyClient from "../../client/proxy-client";
+import { User, Group } from "../../client/data-model";
 
 export interface ConfigureProjectState {
     isUpdate: boolean
     project?: Project
     projectRoles?: RoleAssignment[];
     attachedUsers: { key: string, value: OptionDefinition, error?: string }[];
-    availableUsers: OptionDefinition[];
+    availableUsers: { label: string, options: OptionDefinition[] }[];
     attachedGroups: { key: string, value: OptionDefinition, error?: string }[];
-    availableGroups: OptionDefinition[];
+    availableGroups: { label: string, options: OptionDefinition[] }[];
     permissionProfiles: Map<string, Role>;
     permissionForProject?: ProjectPermissions;
     budgetNotFound: boolean;
@@ -246,50 +247,92 @@ class ConfigureProject extends Component<ConfigureProjectProps, ConfigureProject
         }
     }
 
-    getUsers() {
-      this.accounts().listUsers().then((result) => {
-          const listing = result.listing!;
-          if (listing.length === 0) {
-              return;
-          }
-          const choices: OptionDefinition[] = [];
-          listing.forEach((value) => {
-              if (value.username !== "clusteradmin") {
-                  choices.push({
-                      label: `${value.username} (${value.uid})`,
-                      value: value.username!,
-                  });
-              }
-          });
-          this.setState({ availableUsers: choices });
+    private async fetchAndProcessUsersGroupsItems<T extends User | Group>(
+      fetchMethod: () => Promise<ListUsersResult | ListGroupsResult>,
+      itemType: 'user' | 'group'
+    ): Promise<void> {
+      const result = await fetchMethod();
+      const listing = result.listing;
+  
+      if (listing?.length === 0) {
+        return;
+      }
+  
+      const ssoItems: T[] = [];
+      const cognitoItems: T[] = [];
+  
+      listing?.forEach((item) => {
+        if (item?.identity_source === Constants.SSO_USER_IDP_TYPE) {
+          ssoItems.push(item as T);
+        } else {
+          cognitoItems.push(item as T);
+        }
       });
+  
+      const getLabel = (item: T) => 
+        itemType === 'user' 
+          ? `${(item as User).username} (${(item as User).uid})`
+          : `${(item as Group).name} (${(item as Group).gid})`;
+  
+      const getValue = (item: T) => 
+        itemType === 'user' ? (item as User).username : (item as Group).name;
+  
+      const choices = [];
+
+      if (ssoItems.length > 0) {
+        choices.push({
+          label: "Single sign-on (SSO)",
+          options: ssoItems.map((item) => ({
+            label: getLabel(item),
+            value: getValue(item),
+          }))
+        });
+      }
+      if (cognitoItems.length > 0) {
+        choices.push({
+          label: "Cognito",
+          options: cognitoItems.map((item) => ({
+            label: getLabel(item),
+            value: getValue(item),
+          }))
+        });
+      }
+
+      if (itemType === 'user') {
+        this.setState({
+          availableUsers: choices
+        })
+      } else {
+        this.setState({
+          availableGroups: choices
+        })
+      }
+    }
+    
+    async getUsers(): Promise<void> {
+      await this.fetchAndProcessUsersGroupsItems(
+        () => this.accounts().listUsers(),
+        'user'
+      );
+    }
+    
+    async getGroups(): Promise<void> {
+      await this.fetchAndProcessUsersGroupsItems(
+        () => this.accounts().listGroups(),
+        'group'
+      );
+    }
+    
+    getAvailableUsersOptionsLength(): number {
+      return this.state.availableUsers.reduce((total, user) => {
+        return total + (user.options?.length || 0);
+      }, 0);
     }
 
-    getGroups() {
-      this.accounts().listGroups({
-          filters: [
-              {
-                  key: "group_type",
-                  eq: "project",
-              },
-          ],
-      })
-      .then((result) => {
-          const listing = result.listing!;
-          if (listing.length === 0) {
-              return {
-                  listing: [],
-              };
-          }
-          const choices: OptionDefinition[] = [];
-          listing.forEach((value) => {
-              choices.push({
-                  label: `${value.name} (${value.gid})`,
-                  value: value.name,
-              });
-          });
-          this.setState({ availableGroups: choices });
-      });
+    getAvailableGroupsOptionsLength(): number {
+      return this.state.availableGroups.reduce((total, group) => {
+        return total + (group.options?.length || 0);
+      }, 0);
     }
 
     getPermissionProfiles() {
@@ -340,7 +383,7 @@ class ConfigureProject extends Component<ConfigureProjectProps, ConfigureProject
             items={this.state.attachedUsers}
             addButtonText={"Add user"}
             disableAddButton={
-              (this.state.attachedUsers.length === this.state.availableUsers.length) ||
+              (this.state.attachedUsers.length === this.getAvailableUsersOptionsLength()) ||
               (this.state.permissionForProject ? !this.state.permissionForProject.update_personnel : !this.isAdmin())
             }
             removeButtonText="Remove"
@@ -401,6 +444,7 @@ class ConfigureProject extends Component<ConfigureProjectProps, ConfigureProject
                         to this project role can grant themselves or
                         others higher privileges for this project by
                         re-assigning personnel to a different project role
+
                       </Box>
                     }
                   }
@@ -435,14 +479,14 @@ class ConfigureProject extends Component<ConfigureProjectProps, ConfigureProject
                 addButtonText={"Add group"}
                 removeButtonText="Remove"
                 disableAddButton={
-                  (this.state.attachedGroups.length === this.state.availableGroups.length) ||
+                  (this.state.attachedGroups.length === this.getAvailableGroupsOptionsLength()) ||
                   (this.state.permissionForProject ? !this.state.permissionForProject.update_personnel : !this.isAdmin())
                 }
                 empty="No groups attached. Click 'Add group' below to get started."
                 definition={[
                   {
                     label: "Groups",
-                    info: <Popover content="Select applicable ldap groups for the Project.">Info</Popover>,
+                    info: <Popover content="Select applicable groups for the Project.">Info</Popover>,
                     control: (item: { key: string, value: OptionDefinition, error?: string }, itemIndex: number) => (
                       <Select
                         key={item.key}
@@ -491,6 +535,7 @@ class ConfigureProject extends Component<ConfigureProjectProps, ConfigureProject
                             to this project role can grant themselves or
                             others higher privileges for this project by
                             re-assigning personnel to a different project role
+
                           </Box>
                         }
                       }
@@ -515,6 +560,7 @@ class ConfigureProject extends Component<ConfigureProjectProps, ConfigureProject
             multiple: true,
             data_type: "str",
             dynamic_choices: true,
+
             container_group_name: "resource_configurations",
             readonly: !this.isAdmin(),
         });
@@ -747,6 +793,7 @@ class ConfigureProject extends Component<ConfigureProjectProps, ConfigureProject
                                                 value: `${name}`,
                                             };
                                             choices.push(choice);
+
                                         }
                                     });
                                     return { listing: choices };
@@ -1027,6 +1074,7 @@ class ConfigureProject extends Component<ConfigureProjectProps, ConfigureProject
         if (this.state.isUpdate) {
             createOrUpdate = async (request: any) => {
                 // Only admin can update project
+
                 const updates = [];
 
                 if (this.isAdmin()) {
@@ -1045,6 +1093,8 @@ class ConfigureProject extends Component<ConfigureProjectProps, ConfigureProject
             homeDirectoryFilesystemName = dot.del("add_home_directory_filesystem", values);
             if (filesystemNames) {
                 combinedFilesystemNames = filesystemNames
+
+
             }
 
             if (homeDirectoryFilesystemName && homeDirectoryFilesystemName !== Constants.SHARED_STORAGE_EBS_VOLUME) {

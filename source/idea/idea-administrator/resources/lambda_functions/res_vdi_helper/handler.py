@@ -14,7 +14,6 @@ from .auth import get_instance_id_from_request_context, validate
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
 
-
 def handler(event: Dict[str, Any], _: Any) -> Dict[str, Any]:
 
     try:

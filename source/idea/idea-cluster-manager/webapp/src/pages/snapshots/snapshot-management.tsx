@@ -35,7 +35,7 @@ class SnapshotManagement extends Component<SnapshotManagementProps> {
                         href: "#/cluster/status",
                     },
                     {
-                        text: "Snapshot Management",
+                        text: "Snapshot management",
                         href: "",
                     },
                 ]}
@@ -43,7 +43,7 @@ class SnapshotManagement extends Component<SnapshotManagementProps> {
                     <Header
                         variant={"h1"}
                     >
-                        Snapshot Management
+                        Snapshot management
                     </Header>
                 }
                 contentType={"default"}

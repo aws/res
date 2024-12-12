@@ -299,10 +299,10 @@ class BuildTool:
             idea.console.print(f'deleting {self.output_archive_file} ...')
             os.remove(self.output_archive_file)
 
-        if self.app_name == 'idea-administrator':
+        if self.app_name == 'idea-administrator' or self.app_name == 'ad-sync':
             files = os.listdir(idea.props.deployment_administrator_dir)
             for file in files:
-                if file == 'Dockerfile' or file == 'cfn_params_2_values.sh':
+                if file == 'Dockerfile' or file == 'cfn_params_2_values.sh' or file == 'python.sh':
                     continue
                 file_path = os.path.join(idea.props.deployment_administrator_dir, file)
                 if os.path.isfile(file_path):

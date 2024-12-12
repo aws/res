@@ -38,17 +38,15 @@ from ideasdk.client.vdc_client import AbstractVirtualDesktopControllerClient
 from ideaclustermanager.app.projects.db.projects_dao import ProjectsDAO
 from ideaclustermanager.app.authz.db.role_assignments_dao import RoleAssignmentsDAO
 from ideaclustermanager.app.accounts.accounts_service import AccountsService
-from ideaclustermanager.app.tasks.task_manager import TaskManager
 
 from typing import List, Set
 
 
 class ProjectsService:
 
-    def __init__(self, context: SocaContext, accounts_service: AccountsService, task_manager: TaskManager, vdc_client: AbstractVirtualDesktopControllerClient):
+    def __init__(self, context: SocaContext, accounts_service: AccountsService, vdc_client: AbstractVirtualDesktopControllerClient):
         self.context = context
         self.accounts_service = accounts_service
-        self.task_manager = task_manager
         self.vdc_client = vdc_client
         self.logger = context.logger('projects')
         self.arn_builder = ArnBuilder(self.context.config())
@@ -388,14 +386,6 @@ class ProjectsService:
         ApiUtils.validate_input(request.username, constants.USERNAME_REGEX, constants.USERNAME_ERROR_MESSAGE)
 
         self.logger.debug(f'get_user_projects() - request: {request}')
-
-        # Probe directory service
-        ds_provider = self.context.config().get_string('directoryservice.provider', required=True)
-        self.logger.debug(f'ProjectsService.get_user_projects() - DS Provider is {ds_provider} ...')
-        if ds_provider in {constants.DIRECTORYSERVICE_ACTIVE_DIRECTORY}:
-            self.logger.debug(f'get_user_projects() - Running in AD mode - performing AD query for {request.username} group memberships...')
-            user_result = self.accounts_service.ldap_client.get_user(username=request.username)
-            self.logger.debug(f'get_user_projects() - User Result: {user_result}')
 
         # This gets all projects for a user via direct project-user role assignments or from any of their group-project assignments
         user = self.context.accounts.get_user(request.username)

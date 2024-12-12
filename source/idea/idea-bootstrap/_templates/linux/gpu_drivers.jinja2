@@ -95,12 +95,12 @@ function install_amd_gpu_drivers() {
   mkdir -p /root/bootstrap/gpu_drivers
   pushd /root/bootstrap/gpu_drivers
 
-  {% if context.base_os == 'ubuntu2204' -%}
+  if [[ $RES_BASE_OS == "ubuntu2204" ]]; then
     wget https://repo.radeon.com/amdgpu-install/6.0.2/ubuntu/jammy/amdgpu-install_6.0.60002-1_all.deb
     DEBIAN_FRONTEND=noninteractive apt install -y ./amdgpu-install_6.0.60002-1_all.deb
 
     amdgpu-install --usecase=workstation --vulkan=pro --opencl=rocr --no-32 -y --accept-eula
-  {%- elif context.base_os in ('amazonlinux2') %}
+  elif [[ $RES_BASE_OS == "amzn2" ]]; then
     local AWS=$(command -v aws)
     local AMD_S3_BUCKET_URL=$($AWS dynamodb get-item \
                         --region "{{ context.aws_region }}" \
@@ -120,9 +120,9 @@ function install_amd_gpu_drivers() {
     rm -f amdgpu-pro-*.tar.xz
     cd amdgpu-pro*
     /bin/sh ./amdgpu-pro-install -y --opencl=pal,legacy
-  {%- elif context.base_os in ('rhel8', 'rhel9') %}
+  elif [[ $RES_BASE_OS =~ ^(rhel8|rhel9)$ ]]; then
     echo "The latest AMD driver hasn't supported the current Linux version yet"
-  {%- endif %}
+  fi
 
   set_reboot_required "Installed AMD GPU Driver"
 

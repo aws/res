@@ -43,6 +43,12 @@ function install_efs_mount_helper_impl() {
   if [[ $BASE_OS =~ ^(amzn2)$ ]]; then
     yum install -y amazon-efs-utils
   elif [[ $BASE_OS =~ ^(rhel8|rhel9)$ ]]; then
+    if [[ $BASE_OS =~ ^(rhel8)$ ]]; then
+      yum module install -y rust-toolset
+    elif [[ $BASE_OS =~ ^(rhel9)$ ]]; then
+      dnf install -y rust-toolset
+    fi
+
     git clone https://github.com/aws/efs-utils
     cd efs-utils
     make rpm

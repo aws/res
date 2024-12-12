@@ -67,6 +67,7 @@ export interface IdeaFormState {
         [k: string]: boolean;
     };
     submitInProgress: boolean;
+    shouldPrimaryActionButtonBeDisabled: boolean;
 }
 
 export interface IdeaFormOnSubmitEvent {
@@ -93,6 +94,7 @@ class IdeaForm extends Component<IdeaFormProps, IdeaFormState> {
             values: this.props.values ? this.props.values : {},
             visibility: {},
             submitInProgress: false,
+            shouldPrimaryActionButtonBeDisabled: false,
         };
     }
 
@@ -106,6 +108,18 @@ class IdeaForm extends Component<IdeaFormProps, IdeaFormState> {
         } else {
             return true;
         }
+    }
+
+    disablePrimaryActionButton(): void {
+        this.setState({
+            shouldPrimaryActionButtonBeDisabled: true
+        })
+    }
+    
+    enablePrimaryActionButton(): void {
+        this.setState({
+            shouldPrimaryActionButtonBeDisabled: false
+        })
     }
 
     showHeader(): boolean {
@@ -314,6 +328,7 @@ class IdeaForm extends Component<IdeaFormProps, IdeaFormState> {
                 )}
                 <Button
                     loading={this.state.submitInProgress}
+                    {...(this.state.shouldPrimaryActionButtonBeDisabled && {disabled: true})}
                     variant="primary"
                     onClick={() => {
                         this.handleOnSubmit();

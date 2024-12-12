@@ -10,6 +10,7 @@
 #  and limitations under the License.
 
 import logging
+import os
 
 import pytest
 
@@ -96,7 +97,9 @@ def pytest_sessionstart(session: pytest.Session) -> None:
 
     # Sync users and groups from AD so that integ tests can run with these users and groups
     logger.info("sync users and groups from AD")
-    ad_sync(region, cluster_managers[0])
+    environment_name = session.config.getoption("--environment-name")
+    os.environ["environment_name"] = environment_name
+    ad_sync()
 
     # Disable ALB attribute for dropping invalid headers
     logger.info(

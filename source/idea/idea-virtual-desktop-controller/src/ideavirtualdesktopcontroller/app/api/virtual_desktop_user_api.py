@@ -12,6 +12,7 @@ from typing import Dict
 
 import ideavirtualdesktopcontroller
 from ideadatamodel import (
+    constants,
     CreateSessionRequest,
     CreateSessionResponse,
     GetSessionConnectionInfoRequest,
@@ -120,7 +121,7 @@ class VirtualDesktopUserAPI(VirtualDesktopAPI):
         if not Utils.is_empty(owner) and owner != context.get_username():
             return "Invalid owner provided. Non Admin users can submit requests for themselves only", False
         return "", True
-    
+
     def _validate_owner_for_create(self, session: VirtualDesktopSession, context: ApiInvocationContext) -> (str, bool):
         '''
         User should be able to create session for themself if they have vdis.create_sessions for this project.
@@ -132,21 +133,21 @@ class VirtualDesktopUserAPI(VirtualDesktopAPI):
         if Utils.is_empty(session.owner):
             session.failure_reason = 'missing session.owner'
             return session, False
-        
+
         self._logger.info(f'Session creation requested by {context.get_username()} in project ID: {session.project.project_id} to be owned by {session.owner}')
-        
+
         if session.owner == context.get_username():
-            if not context.is_authorized(elevated_access=False, scopes=[self.acl.get(context.namespace).get('scope')], 
+            if not context.is_authorized(elevated_access=False, scopes=[self.acl.get(context.namespace).get('scope')],
                                          role_assignment_resource_key=f'{session.project.project_id}:project', permission="vdis.create_sessions"):
                 session.failure_reason = "You're not authorized to create sessions for yourself in this project."
                 return session, False
-        elif not context.is_authorized(elevated_access=False, scopes=[self.acl.get(context.namespace).get('scope')], 
+        elif not context.is_authorized(elevated_access=False, scopes=[self.acl.get(context.namespace).get('scope')],
                                        role_assignment_resource_key=f'{session.project.project_id}:project', permission="vdis.create_terminate_others_sessions"):
             session.failure_reason = "You're not authorized to create sessions for others in this project."
             return session, False
 
         return "", True
-    
+
     def _validate_owner_for_delete(self, session: VirtualDesktopSession, context: ApiInvocationContext) -> (str, bool):
         '''
         User should always be able to terminate their own sessions.
@@ -158,12 +159,12 @@ class VirtualDesktopUserAPI(VirtualDesktopAPI):
         if Utils.is_empty(session.owner):
             session.failure_reason = 'missing session.owner'
             return session, False
-        
-        if session.owner != context.get_username() and not context.is_authorized(elevated_access=False, scopes=[self.acl.get(context.namespace).get('scope')], 
+
+        if session.owner != context.get_username() and not context.is_authorized(elevated_access=False, scopes=[self.acl.get(context.namespace).get('scope')],
                                                                                  role_assignment_resource_key=f'{session.project.project_id}:project', permission='vdis.create_terminate_others_sessions'):
             session.failure_reason = "You're not authorized to terminate others' sessions in this project."
             return session, False
-        
+
         self._logger.info(f'Session termination requested by {context.get_username()} for session ID: {session.idea_session_id} owned by {session.owner}')
 
         return "", True
@@ -245,6 +246,18 @@ class VirtualDesktopUserAPI(VirtualDesktopAPI):
             self._logger.error(session.failure_reason)
             return session, False
 
+        user = context.get_user()
+        if not user.uid and user.identity_source == constants.COGNITO_USER_IDP_TYPE:
+            # User need a `uid` to be able to create a session. This can happen if the CognitoTriggerWorkflow failed to create a `uid` for the user
+            session.failure_reason = 'The system was unable to create an ID for you. Please try logging out of the account and logging back in for an ID to be created'
+            self._logger.error(session.failure_reason)
+            return session, False
+
+        if user.identity_source != constants.SSO_USER_IDP_TYPE and session.software_stack.base_os not in constants.SUPPORTED_LINUX_OS:
+            session.failure_reason = 'Cognito users are not allowed to create non-Linux sessions.'
+            self._logger.error(session.failure_reason)
+            return session, False
+
         session_count_for_user = self.session_db.get_session_count_for_user(session.owner)
         if session_count_for_user >= self.context.config().get_int('virtual-desktop-controller.dcv_session.allowed_sessions_per_user', required=True):
             session.failure_reason = f'User {session.owner} has exceeded the allowed number of sessions: {session_count_for_user}. Please contact the System Administrators if you need to create more sessions.'
@@ -297,6 +310,7 @@ class VirtualDesktopUserAPI(VirtualDesktopAPI):
 
         session = self.complete_create_session_request(session, context)
         session.is_launched_by_admin = False
+        session.logins = self.get_session_logins()
         session = self.session_utils.create_session(session)
 
         if Utils.is_empty(session.failure_reason):
@@ -311,6 +325,16 @@ class VirtualDesktopUserAPI(VirtualDesktopAPI):
                 payload=CreateSessionResponse(
                     session=session
                 ))
+
+    def get_session_logins(self) -> list[str]:
+        logins = []
+        sso_enabled = self.context.config().get_bool('identity-provider.cognito.sso_enabled', required=True)
+        enable_native_user_login = self.context.config().get_bool('identity-provider.cognito.enable_native_user_login', required=True)
+        if sso_enabled:
+            logins.append(constants.SSO_USER_IDP_TYPE)
+        if enable_native_user_login:
+            logins.append(constants.COGNITO_USER_IDP_TYPE)
+        return logins
 
     def get_session_connection_info(self, context: ApiInvocationContext):
         self._logger.info(f'received get session connection info request from user: {context.get_username()}')
@@ -510,8 +534,8 @@ class VirtualDesktopUserAPI(VirtualDesktopAPI):
 
         # Get a list of projects where the current user has permission to manage other user sessions
         user_projects = self.get_user_projects(username=username)
-        projects_to_manage_sessions = [project.project_id for project in user_projects if 
-                                       context.is_authorized(elevated_access=False, scopes=[self.acl.get(context.namespace).get('scope')], 
+        projects_to_manage_sessions = [project.project_id for project in user_projects if
+                                       context.is_authorized(elevated_access=False, scopes=[self.acl.get(context.namespace).get('scope')],
                                                              role_assignment_resource_key=f'{project.project_id}:project', permission='vdis.create_terminate_others_sessions')]
 
         if not projects_to_manage_sessions:
@@ -603,7 +627,6 @@ class VirtualDesktopUserAPI(VirtualDesktopAPI):
 
     def invoke(self, context: ApiInvocationContext):
         namespace = context.namespace
-        
         acl_entry = self.acl.get(namespace)
         if acl_entry is None:
             raise exceptions.unauthorized_access()

@@ -56,6 +56,12 @@ import {
     ResetPasswordResult,
     GetModuleInfoRequest,
     GetModuleInfoResult,
+    SignUpUserRequest,
+    SignUpUserResult,
+    ConfirmSignUpRequest,
+    ConfirmSignUpResult,
+    ResendConfirmationCodeRequest,
+    ResendConfirmationCodeResult,
 } from "./data-model";
 import IdeaBaseClient, { IdeaBaseClientProps } from "./base-client";
 
@@ -68,6 +74,14 @@ class AccountsClient extends IdeaBaseClient<AuthAdminClientProps> {
 
     createUser(req: CreateUserRequest): Promise<CreateUserResult> {
         return this.apiInvoker.invoke_alt<CreateUserRequest, CreateUserResult>("Accounts.CreateUser", req);
+    }
+
+    signUpUser(req: SignUpUserRequest): Promise<SignUpUserResult> {
+        return this.apiInvoker.invoke_alt<SignUpUserRequest, SignUpUserResult>("Accounts.SignUpUser", req, true);
+    }
+
+    confirmSignUp(req: ConfirmSignUpRequest): Promise<ConfirmSignUpResult> {
+        return this.apiInvoker.invoke_alt<ConfirmSignUpRequest, ConfirmSignUpResult>("Accounts.ConfirmSignUp", req, true);
     }
 
     getUser(req: GetUserRequest): Promise<GetUserResult> {
@@ -148,6 +162,10 @@ class AccountsClient extends IdeaBaseClient<AuthAdminClientProps> {
 
     resetPassword(req: ResetPasswordRequest): Promise<ResetPasswordResult> {
         return this.apiInvoker.invoke_alt<ResetPasswordRequest, ResetPasswordResult>("Accounts.ResetPassword", req);
+    }
+
+    resendConfirmationCode(req: ResendConfirmationCodeRequest): Promise<ResendConfirmationCodeResult> {
+        return this.apiInvoker.invoke_alt<ResendConfirmationCodeRequest, ResendConfirmationCodeResult>("Accounts.ResendConfirmationCode", req, true);
     }
 }
 

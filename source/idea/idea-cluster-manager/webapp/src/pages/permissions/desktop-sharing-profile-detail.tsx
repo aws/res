@@ -86,15 +86,10 @@ class VirtualDesktopPermissionProfileDetail extends Component<VirtualDesktopPerm
         if (!allowedGlobally) {
             return "Disabled globally";
         }
-
         return enabledLocally ? "Enabled" : "Disabled";
     }
 
-    getSettingStatusType(allowedGlobally: boolean, enabledLocally: boolean): StatusIndicatorProps.Type {
-        if (!allowedGlobally) {
-            return "warning";
-        }
-
+    getSettingStatusType(enabledLocally: boolean): StatusIndicatorProps.Type {
         return enabledLocally ? "success" : "stopped";
     }
 
@@ -106,8 +101,7 @@ class VirtualDesktopPermissionProfileDetail extends Component<VirtualDesktopPerm
             description={setting.description ?? "-"}
         >
             <StatusIndicator
-                type={this.getSettingStatusType(allowed, enabled)}
-                colorOverride={!allowed ? "blue" : undefined}
+                type={this.getSettingStatusType(enabled)}
             >
                 {this.getSettingStatus(allowed, enabled)}
             </StatusIndicator>
@@ -254,7 +248,7 @@ class VirtualDesktopPermissionProfileDetail extends Component<VirtualDesktopPerm
                         href: "#/cluster/permissions",
                     },
                     {
-                        text: this.getProfileID(),
+                        text: this.state.permissionProfile.title,
                         href: "",
                     },
                 ]}

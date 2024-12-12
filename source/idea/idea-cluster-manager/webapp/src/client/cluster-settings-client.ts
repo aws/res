@@ -18,8 +18,6 @@ import {
     GetModuleSettingsResult,
     UpdateModuleSettingsRequest,
     UpdateModuleSettingsResult,
-    ListClusterHostsRequest,
-    ListClusterHostsResult,
     DescribeInstanceTypesRequest,
     DescribeInstanceTypesResult,
     GetModuleInfoRequest,
@@ -44,10 +42,6 @@ class ClusterSettingsClient extends IdeaBaseClient<ClusterSettingsClientProps> {
 
     updateModuleSettings(req: UpdateModuleSettingsRequest): Promise<UpdateModuleSettingsResult> {
         return this.apiInvoker.invoke_alt<UpdateModuleSettingsRequest, UpdateModuleSettingsResult>("ClusterSettings.UpdateModuleSettings", req);
-    }
-
-    listClusterHosts(req: ListClusterHostsRequest): Promise<ListClusterHostsResult> {
-        return this.apiInvoker.invoke_alt<ListClusterHostsRequest, ListClusterHostsResult>("ClusterSettings.ListClusterHosts", req);
     }
 
     describeInstanceTypes(req: DescribeInstanceTypesRequest): Promise<DescribeInstanceTypesResult> {

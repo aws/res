@@ -355,3 +355,25 @@ def convert_from_dynamodb_object:
 convert_from_dynamodb_object
 ' > /root/.convert_from_dynamodb_object.jq
 }
+
+function get_base_os () {
+  if [[ -f /etc/os-release ]]; then
+    OS_RELEASE_ID=$(grep -E '^(ID)=' /etc/os-release | awk -F'"' '{print $2}')
+    OS_RELEASE_VERSION_ID=$(grep -E '^(VERSION_ID)=' /etc/os-release | awk -F'"' '{print $2}')
+    BASE_OS=$(echo $OS_RELEASE_ID${OS_RELEASE_VERSION_ID%%.*})
+    if [[ -z "${OS_RELEASE_ID}" ]]; then
+      # Base OS is Ubuntu
+      OS_RELEASE_ID=$(grep -E '^(ID)=' /etc/os-release | awk -F'=' '{print $2}')
+      BASE_OS=$(echo $OS_RELEASE_ID$OS_RELEASE_VERSION_ID | sed -e 's/\.//g')
+    fi
+  elif [[ -f /usr/lib/os-release ]]; then
+    OS_RELEASE_ID=$(grep -E '^(ID)=' /usr/lib/os-release | awk -F'"' '{print $2}')
+    OS_RELEASE_VERSION_ID=$(grep -E '^(VERSION_ID)=' /usr/lib/os-release | awk -F'"' '{print $2}')
+    BASE_OS=$(echo $OS_RELEASE_ID${OS_RELEASE_VERSION_ID%%.*})
+  else
+    echo "Base OS information on Linux instance cannot be found."
+    exit 1
+  fi
+
+  echo -n "${BASE_OS}"
+}

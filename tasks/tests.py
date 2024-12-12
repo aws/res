@@ -46,7 +46,8 @@ def _run_unit_tests(c: Context,
         idea.props.sdk_src,
         idea.props.test_utils_src,
         idea.props.lambda_functions_src,
-        idea.props.library_src
+        idea.props.library_src,
+        idea.props.backend_dir
     ]
     if component_src not in python_path:
         python_path.append(component_src)

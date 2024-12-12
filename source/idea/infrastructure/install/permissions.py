@@ -5,7 +5,7 @@ import aws_cdk
 from aws_cdk import aws_iam as iam
 from constructs import Construct, DependencyGroup
 
-from idea.infrastructure.install.constants import INSTALLER_ECR_REPO_NAME_SUFFIX
+from idea.infrastructure.install.constants import RES_ECR_REPO_NAME_SUFFIX
 from idea.infrastructure.install.installer_permissions.create_permissions import (
     CreatePermissions,
 )

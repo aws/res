@@ -83,8 +83,9 @@ class PipelineStack(Stack):
         scope: Construct,
         construct_id: str,
         synthesizer: typing.Optional[IStackSynthesizer] = None,
+        env: Union[aws_cdk.Environment, dict[str, typing.Any], None] = None,
     ) -> None:
-        super().__init__(scope, construct_id, synthesizer=synthesizer)
+        super().__init__(scope, construct_id, synthesizer=synthesizer, env=env)
 
         context_repository_name = self.node.try_get_context("repository_name")
         if context_repository_name:
@@ -256,6 +257,8 @@ class PipelineStack(Stack):
                 component_integ_test_steps = self.get_component_integ_test_steps(
                     COMPONENT_INTEG_TESTS
                 )
+                component_integ_test_steps.append(self.get_ad_sync_integ_test_step())
+
                 smoke_test_step = self.get_smoke_test_step()
                 # Smoke test cannot run with other integ tests in parallel, as it requires to relaunch the web servers
                 # and the servers will become temporarily unresponsive to other integ tests.
@@ -537,6 +540,72 @@ class PipelineStack(Stack):
                         "Resource": "*",
                     }
                 ),
+                iam.PolicyStatement.from_json(
+                    {
+                        "Effect": "Allow",
+                        "Action": [
+                            "dynamodb:GetItem",
+                            "dynamodb:Scan",
+                            "dynamodb:PutItem",
+                            "dynamodb:DeleteItem",
+                        ],
+                        "Resource": [
+                            f"arn:{self.partition}:dynamodb:{self.region}:{self.account}:table/{self.params.cluster_name}.cluster-settings",
+                            f"arn:{self.partition}:dynamodb:{self.region}:{self.account}:table/{self.params.cluster_name}.ad-sync.distributed-lock",
+                        ],
+                    }
+                ),
+                iam.PolicyStatement.from_json(
+                    {
+                        "Effect": "Allow",
+                        "Action": [
+                            "ecs:RunTask",
+                            "ecs:StopTask",
+                            "ecs:ListTasks",
+                        ],
+                        "Resource": "*",
+                        "Condition": {
+                            "ArnEquals": {
+                                "ecs:cluster": f"arn:{self.partition}:ecs:{self.region}:{self.account}:cluster/{self.params.cluster_name}-ad-sync-cluster",
+                            }
+                        },
+                    },
+                ),
+                iam.PolicyStatement.from_json(
+                    {
+                        "Effect": "Allow",
+                        "Action": [
+                            "iam:PassRole",
+                        ],
+                        "Resource": f"arn:{self.partition}:iam::{self.account}:role/{self.params.cluster_name}-ad-sync-task-role",
+                    }
+                ),
+                iam.PolicyStatement.from_json(
+                    {
+                        "Effect": "Allow",
+                        "Action": [
+                            "ec2:DescribeSecurityGroups",
+                        ],
+                        "Resource": "*",
+                    }
+                ),
+            )
+            .build()
+        )
+
+        return step
+
+    def get_ad_sync_integ_test_step(self) -> pipelines.CodeBuildStep:
+        step = (
+            IntegTestStepBuilder(
+                "integ-tests.ad-sync", self.params.cluster_name, self.region
+            )
+            .test_specific_install_command(
+                *get_commands_for_scripts(
+                    ["source/idea/ad-sync/tests/integration/scripts/run_slapd.sh"]
+                ),
+                # Allow communication with the local AD
+                "echo '127.0.0.1       corp.res.com' | sudo tee -a /etc/hosts",
             )
             .build()
         )
@@ -827,6 +896,7 @@ class PipelineStack(Stack):
             effect=iam.Effect.ALLOW,
             actions=[
                 "s3:PutObject",
+                "s3:GetObjectTagging",
                 "s3:getBucketLocation",
                 "s3:ListBucket",
                 "s3:GetObject",
@@ -889,7 +959,8 @@ class DeployStage(Stage):
         parameters: Union[RESParameters, BIParameters],
     ):
         super().__init__(scope, construct_id)
-        registry_name = self.node.try_get_context("registry_name")
+        installer_registry_name = self.node.try_get_context("installer_registry_name")
+        ad_sync_registry_name = self.node.try_get_context("ad_sync_registry_name")
 
         self.batteries_included_stack = None
         if isinstance(parameters, BIParameters) and not use_bi_parameters_from_ssm:
@@ -905,7 +976,8 @@ class DeployStage(Stage):
             self,
             INSTALL_STACK_NAME,
             parameters=parameters,
-            registry_name=registry_name,
+            installer_registry_name=installer_registry_name,
+            ad_sync_registry_name=ad_sync_registry_name,
         )
         if self.batteries_included_stack:
             self.install_stack.add_dependency(target=self.batteries_included_stack)

@@ -51,37 +51,6 @@ class VirtualDesktopSessionCounterDB:
     def table_name(self) -> str:
         return f'{self.context.cluster_name()}.{self.context.module_id()}.controller.user-sessions-counter'
 
-    def initialize(self):
-        exists = self.context.aws_util().dynamodb_check_table_exists(self.table_name, True)
-        if not exists:
-            self.context.aws_util().dynamodb_create_table(
-                create_table_request={
-                    'TableName': self.table_name,
-                    'AttributeDefinitions': [
-                        {
-                            'AttributeName': sessions_constants.USER_SESSION_COUNTER_DB_HASH_KEY,
-                            'AttributeType': 'S'
-                        },
-                        {
-                            'AttributeName': sessions_constants.USER_SESSION_COUNTER_DB_RANGE_KEY,
-                            'AttributeType': 'S'
-                        },
-                    ],
-                    'KeySchema': [
-                        {
-                            'AttributeName': sessions_constants.USER_SESSION_COUNTER_DB_HASH_KEY,
-                            'KeyType': 'HASH'
-                        },
-                        {
-                            'AttributeName': sessions_constants.USER_SESSION_COUNTER_DB_RANGE_KEY,
-                            'KeyType': 'RANGE'
-                        }
-                    ],
-                    'BillingMode': 'PAY_PER_REQUEST'
-                },
-                wait=True
-            )
-
     @staticmethod
     def _convert_session_counter_db_model_to_dict(db_model: VirtualDesktopSessionCounterDBModel) -> Dict:
         return {

@@ -116,7 +116,9 @@ def test_custom_resource_creation(stack: InstallStack, template: Template) -> No
                 },
                 "Timeout": "7200",
             },
-            "DependsOn": [util.get_logical_id(stack, ["Installer", "Installer"])],
+            "DependsOn": [
+                util.get_logical_id(stack, ["Installer", "Installer"]),
+            ],
         },
     )
 

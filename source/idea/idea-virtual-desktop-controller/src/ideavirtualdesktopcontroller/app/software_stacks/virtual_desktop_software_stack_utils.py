@@ -16,6 +16,7 @@ from ideavirtualdesktopcontroller.app.events.events_utils import EventsUtils
 from ideavirtualdesktopcontroller.app.software_stacks.virtual_desktop_software_stack_db import VirtualDesktopSoftwareStackDB
 from ideavirtualdesktopcontroller.app.ssm_commands.virtual_desktop_ssm_commands_db import VirtualDesktopSSMCommandsDB
 from ideavirtualdesktopcontroller.app.virtual_desktop_controller_utils import VirtualDesktopControllerUtils
+from res.resources import software_stacks
 
 
 class VirtualDesktopSoftwareStackUtils:
@@ -30,7 +31,10 @@ class VirtualDesktopSoftwareStackUtils:
 
     def create_software_stack(self, software_stack: VirtualDesktopSoftwareStack) -> VirtualDesktopSoftwareStack:
         software_stack.stack_id = Utils.uuid()
-        return self._software_stack_db.create(software_stack)
+        software_stack_dict = self._software_stack_db.convert_software_stack_object_to_db_dict(software_stack)
+        created_software_stack_dict = software_stacks.create_software_stack(software_stack_dict)
+        created_software_stack = self._software_stack_db.convert_db_dict_to_software_stack_object(created_software_stack_dict)
+        return created_software_stack
 
     def delete_software_stack(self, software_stack: VirtualDesktopSoftwareStack):
         self._software_stack_db.delete(software_stack)

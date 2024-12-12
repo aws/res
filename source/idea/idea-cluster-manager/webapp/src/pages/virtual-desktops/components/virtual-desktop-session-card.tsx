@@ -184,7 +184,7 @@ class VirtualDesktopSessionCard extends Component<VirtualDesktopSessionCardProps
                     </Box>
                     <Box float="right">
                         <Button disabled={!this.canConnect()} onClick={() => this.props.onLaunchSession(this.getSession()).finally()} variant="link">
-                            <FontAwesomeIcon icon={faExternalLinkAlt} /> Connect
+                            Connect <FontAwesomeIcon icon={faExternalLinkAlt} />
                         </Button>
                     </Box>
                 </div>

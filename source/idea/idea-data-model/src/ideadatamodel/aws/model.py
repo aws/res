@@ -45,7 +45,7 @@ class EC2InstanceIdentityDocument(SocaBaseModel):
     accountId: Optional[str]
     architecture: Optional[str]
     availabilityZone: Optional[str]
-    billingProducts: Optional[str]
+    billingProducts: Optional[List[str]]
     devpayProductCodes: Optional[str]
     marketplaceProductCodes: Optional[str]
     imageId: Optional[str]

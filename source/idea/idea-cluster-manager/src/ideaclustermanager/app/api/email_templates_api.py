@@ -17,10 +17,13 @@ from ideadatamodel.email_templates import (
     GetEmailTemplateRequest,
     UpdateEmailTemplateRequest,
     DeleteEmailTemplateRequest,
-    ListEmailTemplatesRequest
+    ListEmailTemplatesResult,
+    CreateEmailTemplateResult,
+    GetEmailTemplateResult
 )
 from ideadatamodel import exceptions
 from ideasdk.utils import Utils
+from res.resources import email_templates
 
 
 class EmailTemplatesAPI(BaseAPI):
@@ -56,13 +59,17 @@ class EmailTemplatesAPI(BaseAPI):
 
     def create_email_template(self, context: ApiInvocationContext):
         request = context.get_request_payload_as(CreateEmailTemplateRequest)
-        result = self.context.email_templates.create_email_template(request)
-        context.success(result)
+        result = email_templates.create_email_template(email_template=request.template)
+        context.success(CreateEmailTemplateResult(
+            template=result
+        ))
 
     def get_email_template(self, context: ApiInvocationContext):
         request = context.get_request_payload_as(GetEmailTemplateRequest)
-        result = self.context.email_templates.get_email_template(request)
-        context.success(result)
+        result = email_templates.get_email_template(email_template=request.template.name)
+        context.success(GetEmailTemplateResult(
+            template=result
+        ))
 
     def update_email_template(self, context: ApiInvocationContext):
         request = context.get_request_payload_as(UpdateEmailTemplateRequest)
@@ -70,9 +77,10 @@ class EmailTemplatesAPI(BaseAPI):
         context.success(result)
 
     def list_email_templates(self, context: ApiInvocationContext):
-        request = context.get_request_payload_as(ListEmailTemplatesRequest)
-        result = self.context.email_templates.list_email_templates(request)
-        context.success(result)
+        result = email_templates.list_email_templates()
+        context.success(ListEmailTemplatesResult(
+            listing=result
+        ))
 
     def delete_email_template(self, context: ApiInvocationContext):
         request = context.get_request_payload_as(DeleteEmailTemplateRequest)

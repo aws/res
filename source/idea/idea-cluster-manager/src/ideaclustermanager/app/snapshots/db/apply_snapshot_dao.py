@@ -38,15 +38,6 @@ class ApplySnapshotDAO:
         return f'{self.context.cluster_name()}.apply-snapshot'
 
     def initialize(self):
-        self.context.aws_util().dynamodb_create_table(
-            create_table_request={
-                'TableName': self.get_table_name(),
-                'AttributeDefinitions': [{'AttributeName': 'apply_snapshot_identifier', 'AttributeType': 'S'}],
-                'KeySchema': [{'AttributeName': 'apply_snapshot_identifier', 'KeyType': 'HASH'}],
-                'BillingMode': 'PAY_PER_REQUEST',
-            },
-            wait=True,
-        )
         self.table = self.context.aws().dynamodb_table().Table(self.get_table_name())
 
     @staticmethod

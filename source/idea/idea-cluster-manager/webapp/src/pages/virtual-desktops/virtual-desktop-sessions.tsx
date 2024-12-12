@@ -778,18 +778,6 @@ class VirtualDesktopSessions extends Component<VirtualDesktopSessionsProps, Virt
                                 });
                         },
                     },
-                    {
-                        id: "create-software-stack",
-                        text: "Create Software Stack",
-                        disabled: !this.canCreateSoftwareStack() || !this.isAdmin(),
-                        disabledReason: "Select exactly 1 session to enable this Action",
-                        onClick: () => {
-                            // we know that there is exactly 1 session
-                            this.getSelectedSessions().forEach((session) => {
-                                this.showCreateSoftwareStackForm(session);
-                            });
-                        },
-                    },
                 ]}
                 showPaginator={true}
                 onRefresh={() => {

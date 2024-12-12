@@ -34,12 +34,6 @@ ad_automation:
   # time to live - for the ad-automation DDB table entry containing OTP and any other attributes
   entry_ttl_seconds: 1800
 
-  # enable or disable service account's password rotation
-  # when set to true, IDEA ADAutomationAgent running in Cluster Manager will try to reset the service account credentials,
-  #  when nearing expiration.
-  # This should be left as 'false' unless you know the AD service account is allowed to update its password in 'activedirectory' mode.
-  enable_root_password_reset: false
-
   # the max amount of time it could take to process the AD automation request.
   sqs_visibility_timeout_seconds: 30
 

@@ -72,7 +72,14 @@ case $BASE_OS in
     dnf install -y dnf-plugins-core
     dnf config-manager --set-enabled codeready-builder-for-rhel-8-rhui-rpms
     sss_cache -E
-    dnf install -y ${EVALUATED_SYSTEM_PKGS[*]} ${APPLICATION_PKGS[*]} ${SSSD_PKGS[*]} ${OPENLDAP_CLIENT_PKGS[*]} --enablerepo codeready-builder-for-rhel-8-rhui-rpms --skip-broken
+    dnf install -y ${EVALUATED_SYSTEM_PKGS[*]} ${APPLICATION_PKGS[*]} ${SSSD_PKGS[*]} --enablerepo codeready-builder-for-rhel-8-rhui-rpms --skip-broken
+    dnf install -y openssh
+
+    # Install Open LDAP Client.
+    # RHEL 8 does not support OpenLDAP by default.
+    # As a workaround, install it from the Symas OpenLDAP Repository https://repo.symas.com/soldap/rhel8/
+    wget -q https://repo.symas.com/configs/SOLDAP/rhel8/release26.repo -O /etc/yum.repos.d/soldap-release26.repo
+    dnf install -y symas-openldap-clients
     ;;
   rhel9)
     dnf install -y dnf-plugins-core
@@ -81,7 +88,13 @@ case $BASE_OS in
     dnf install -y ${EVALUATED_SYSTEM_PKGS[*]} --enablerepo codeready-builder-for-rhel-9-rhui-rpms --skip-broken
     dnf install -y ${APPLICATION_PKGS[*]} --enablerepo codeready-builder-for-rhel-9-rhui-rpms --skip-broken
     dnf install -y ${SSSD_PKGS[*]} --enablerepo codeready-builder-for-rhel-9-rhui-rpms --skip-broken
-    dnf install -y ${OPENLDAP_CLIENT_PKGS[*]} --enablerepo codeready-builder-for-rhel-9-rhui-rpms --skip-broken
+    dnf install -y openssh
+
+    # Install Open LDAP Client.
+     # RHEL 9 does not support OpenLDAP by default.
+     # As a workaround, install it from the Symas OpenLDAP Repository https://repo.symas.com/soldap/rhel9/
+     wget -q https://repo.symas.com/configs/SOLDAP/rhel9/release26.repo -O /etc/yum.repos.d/soldap-release26.repo
+     dnf install -y symas-openldap-clients
     ;;
   *)
     log_warning "Base OS not supported."

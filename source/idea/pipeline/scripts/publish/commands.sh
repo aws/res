@@ -17,9 +17,11 @@ else
   ECR_REPOSITORY_URI=$(aws ecr-public describe-repositories --region us-east-1 --repository-names "$ECR_REPOSITORY" --output text --query "repositories[0].repositoryUri")
 fi
 
+invoke build package
+
 echo Uploading template to buckets
 # Synthesize exclusively the install stack
-npx cdk synth $INSTALL_STACK_NAME -c publish_templates=$PUBLISH_TEMPLATES -c file_asset_prefix="releases/$RELEASE_VERSION/" -c registry_name=$ECR_REPOSITORY_URI:$RELEASE_VERSION-$COMMIT_ID
+npx cdk synth $INSTALL_STACK_NAME -c publish_templates=$PUBLISH_TEMPLATES -c file_asset_prefix="releases/$RELEASE_VERSION/" -c installer_registry_name=$ECR_REPOSITORY_URI:installer-$RELEASE_VERSION-$COMMIT_ID  -c ad_sync_registry_name=$ECR_REPOSITORY_URI:ad-sync-$RELEASE_VERSION-$COMMIT_ID
 ARTIFACT_FOLDER=$([ -z $RELEASE_VERSION ] && echo $COMMIT_ID || echo $RELEASE_VERSION)
 
 invoke package.infra-ami-deps
@@ -40,17 +42,23 @@ done
 
 if [ "$ECR_REPOSITORY_URI_PARAMETER" == "" ]
 then
-  invoke build package
   invoke docker.prepare-artifacts
 
   echo Logging in to Amazon ECR...
   aws --version
   aws ecr-public get-login-password --region us-east-1 | docker login --username AWS --password-stdin public.ecr.aws
 
-  echo Building the Docker image...
-  docker build --build-arg IMAGE_TAG=$RELEASE_VERSION-$COMMIT_ID -t $ECR_REPOSITORY_URI:$RELEASE_VERSION-$COMMIT_ID deployment/ecr/idea-administrator
+  echo Building the Installer Docker image...
+  docker build --build-arg IMAGE_TAG=installer-$RELEASE_VERSION-$COMMIT_ID -t $ECR_REPOSITORY_URI:installer-$RELEASE_VERSION-$COMMIT_ID deployment/ecr/idea-administrator
   docker images
-  echo Pushing the Docker image...
+  echo Pushing the Installer Docker image...
 
-  docker push $ECR_REPOSITORY_URI:$RELEASE_VERSION-$COMMIT_ID
+  docker push $ECR_REPOSITORY_URI:installer-$RELEASE_VERSION-$COMMIT_ID
+
+  echo Building the AD Sync Docker image...
+  docker build --build-arg IMAGE_TAG=ad-sync-$RELEASE_VERSION-$COMMIT_ID -t $ECR_REPOSITORY_URI:ad-sync-$RELEASE_VERSION-$COMMIT_ID deployment/ecr/ad-sync
+  docker images
+  echo Pushing the AD Sync Docker image...
+
+  docker push $ECR_REPOSITORY_URI:ad-sync-$RELEASE_VERSION-$COMMIT_ID
 fi

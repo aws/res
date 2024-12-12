@@ -3,61 +3,61 @@ builtin:
   description: All features
 display:
   name: Display
-  description: Receive visual data from the Amazon DCV server
+  description: View the remote desktop.
 pointer:
   name: Pointer
-  description: View Amazon DCV server mouse position events and pointer shapes
+  description: View mouse of remote desktop.
 mouse:
   name: Mouse
-  description: Input from the client mouse to the Amazon DCV server
+  description: Use local mouse on remote desktop.
 keyboard:
   name: Keyboard
-  description: Input from the client keyboard to the Amazon DCV server
+  description: Use the local keyboard on remote desktop.
 audio_in:
-  name: Audio In
-  description: Send audio from the client to the Amazon DCV server
+  name: Audio in
+  description: Use local microphone on remote desktop.
 audio_out:
-  name: Audio Out
-  description: Receive audio from the Amazon DCV server to the client
+  name: Audio out
+  description: Playback audio from remote desktop.
 clipboard_copy:
-  name: Clipboard Copy
-  description: Copy data from the Amazon DCV server to the client clipboard
+  name: Clipboard copy
+  description: Copy from remote desktop to local clipboard.
 clipboard_paste:
-  name: Clipboard Paste
-  description: Copy data to the Amazon DCV server from the client clipboard
+  name: Clipboard paste
+  description: Copy from local clipboard to remote desktop.
 file_upload:
-  name: File Upload
-  description: Upload files to the session storage
+  name: File upload
+  description: Upload files to remote desktop storage.
 file_download:
-  name: File Download
-  description: Download files from the session storage
+  name: File download
+  description: Download files from remote desktop storage.
 usb:
   name: USB
-  description: Use USB devices from the client
+  description: Use USB devices on remote desktop.
 printer:
   name: Printer
-  description: Create PDFs or XPS files from the Amazon DCV server to the client
+  description: Create PDF or XPS files from remote desktop.
 smartcard:
   name: Smartcard
-  description: Read the smart card from the client
+  description: Use local smartcard on remote desktop.
 stylus:
   name: Stylus
-  description: Input from specialized USB devices, such as 3D pointing devices or graphic tablets
+  description: Use local 3D pointing devices or graphic tablets on remote desktop.
 keyboard_sas:
   name: Keyboard SAS
-  description: 'Use the secure attention sequence (CTRL+Alt+Del). Note: Requires Keyboard permissions as well'
+  description: Use the Secure Attention Sequence (Ctrl+Alt+Del).
 webcam:
-  name: Web Camera
-  description: Use the Web Camera connected to a client device in a session
+  name: Web camera
+  description: Use local webcamera on remote desktop.
 touch:
   name: Touch
-  description: Use native touch events from the client device
+  description: Use local touch events on remote desktop.
 screenshot:
   name: Screenshot
-  description: Save a screenshot of the remote desktop
+  description: Save screenshot of remote desktop.
 gamepad:
   name: Gamepad
-  description: Use gamepads connected to a client computer in a session
+  description: Use local gamepad on remote desktop.
 unsupervised_access:
-  name: Unsupervised Access
+  name: Unsupervised access
   description: Allow a user to connect to session without supervision

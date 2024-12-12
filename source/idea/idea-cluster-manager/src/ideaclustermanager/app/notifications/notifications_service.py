@@ -12,10 +12,10 @@
 from ideasdk.context import SocaContext
 from ideasdk.service import SocaService
 from ideasdk.utils import Utils, Jinja2Utils
-from ideadatamodel import GetEmailTemplateRequest, Notification
+from ideadatamodel import Notification
+from res.resources import email_templates
 
 from ideaclustermanager.app.accounts.accounts_service import AccountsService
-from ideaclustermanager.app.email_templates.email_templates_service import EmailTemplatesService
 
 from typing import Dict
 from concurrent.futures import ThreadPoolExecutor
@@ -27,14 +27,13 @@ MAX_WORKERS = 1  # must be between 1 and 10
 
 class NotificationsService(SocaService):
 
-    def __init__(self, context: SocaContext, accounts: AccountsService, email_templates: EmailTemplatesService):
+    def __init__(self, context: SocaContext, accounts: AccountsService):
         super().__init__(context)
 
         self.context = context
         self.logger = context.logger('notifications')
 
         self.accounts = accounts
-        self.email_templates = email_templates
 
         self.exit = threading.Event()
         self.notifications_queue_url = self.context.config().get_string('cluster-manager.notifications_queue_url', required=True)
@@ -92,7 +91,7 @@ class NotificationsService(SocaService):
                 return
 
             template_name = notification.template_name
-            get_template_result = self.email_templates.get_email_template(GetEmailTemplateRequest(name=template_name))
+            get_template_result = email_templates.get_email_template(email_template_name=template_name)
             template = get_template_result.template
             subject_template = template.subject
             body_template = template.body

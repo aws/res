@@ -12,4 +12,4 @@
 # pkg config for soca-admin. no dependencies.
 
 __name__ = 'idea-administrator'
-__version__ = '2024.10'
+__version__ = '2024.12'

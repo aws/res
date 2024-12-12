@@ -42,29 +42,6 @@ class VirtualDesktopSSMCommandsDB:
         self._table_obj = None
         self._ddb_client = self.context.aws().dynamodb_table()
 
-    def initialize(self):
-        exists = self.context.aws_util().dynamodb_check_table_exists(self.table_name, True)
-        if not exists:
-            self.context.aws_util().dynamodb_create_table(
-                create_table_request={
-                    'TableName': self.table_name,
-                    'AttributeDefinitions': [
-                        {
-                            'AttributeName': ssm_commands_constants.SSM_COMMANDS_DB_HASH_KEY,
-                            'AttributeType': 'S'
-                        }
-                    ],
-                    'KeySchema': [
-                        {
-                            'AttributeName': ssm_commands_constants.SSM_COMMANDS_DB_HASH_KEY,
-                            'KeyType': 'HASH'
-                        }
-                    ],
-                    'BillingMode': 'PAY_PER_REQUEST'
-                },
-                wait=True
-            )
-
     @property
     def _table(self):
         if Utils.is_empty(self._table_obj):

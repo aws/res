@@ -68,7 +68,14 @@ Statement:
     Effect: Allow
 
   - Action:
+      - s3:GetObject
+    Resource:
+      {{ context.utils.to_yaml(context.arns.s3_public_host_modules) | indent(6) }}
+    Effect: Allow
+
+  - Action:
       - dynamodb:GetItem
+      - dynamodb:BatchGetItem
       - dynamodb:Query
       - dynamodb:Scan
       - dynamodb:DescribeTable
@@ -106,6 +113,8 @@ Statement:
       - '{{ context.arns.get_ddb_table_arn("authz.roles") }}'
       - '{{ context.arns.get_ddb_table_arn("authz.role-assignments") }}'
       - '{{ context.arns.get_ddb_table_arn("authz.role-assignments/index/*") }}'
+      - '{{ context.arns.get_ddb_table_arn("ad-sync.distributed-lock") }}'
+
     Effect: Allow
 
   - Action:
@@ -155,7 +164,7 @@ Statement:
     {%- endif %}
 
 
-  # PutSecret value is required so that cluster-manager can refresh directory service credentials when nearing expiration
+  # Permissions for the cluster-manager to create or update the service account DN secret
   - Action:
       - secretsmanager:GetSecretValue
       - secretsmanager:PutSecretValue
@@ -169,9 +178,19 @@ Statement:
     Effect: Allow
 
   - Action:
+      - secretsmanager:CreateSecret
+      - secretsmanager:DescribeSecret
+      - secretsmanager:TagResource
+      - secretsmanager:PutSecretValue
+    Resource: {{ context.arns.get_arn("secretsmanager", "secret:" + context.cluster_name + "-directoryservice-ServiceAccountUserDN*") }}
+    Effect: Allow
+
+    {%- if context.config.get_string("directoryservice.service_account_credentials_secret_arn", '') != '' %}
+  - Action:
       - secretsmanager:GetSecretValue
     Resource: '{{ context.config.get_string("directoryservice.service_account_credentials_secret_arn") }}'
     Effect: Allow
+    {%- endif %}
 
     {%- if context.config.get_string("directoryservice.tls_certificate_secret_arn", '') != '' %}
   - Action:
@@ -196,7 +215,6 @@ Statement:
   - Action:
       - sqs:*
     Resource:
-      - '{{ context.arns.get_sqs_arn(context.module_id + "-tasks.fifo") }}'
       - '{{ context.arns.get_sqs_arn(context.module_id + "-notifications.fifo") }}'
       - '{{ context.arns.get_sqs_arn(context.config.get_module_id("directoryservice") + "-ad-automation.fifo") }}'
     Effect: Allow
@@ -287,5 +305,27 @@ Statement:
     - lambda:InvokeFunction
     Resource:
       - '{{ context.arns.get_lambda_arn("configure_sso") }}'
+    Effect: Allow
+
+  - Action:
+    - ecs:RunTask
+    - ecs:StopTask
+    - ecs:ListTasks
+    Resource: '*'
+    Condition:
+      ArnEquals:
+        ecs:cluster:
+          {{ context.arns.get_ad_sync_cluster_arn() }}
+    Effect: Allow
+
+  - Action:
+      - ec2:DescribeSecurityGroups
+    Resource: '*'
+    Effect: Allow
+
+  - Action:
+      - iam:PassRole
+    Resource:
+      - '{{ context.arns.get_ad_sync_task_role_arn() }}'
     Effect: Allow
 {% include '_templates/custom-kms-key.yml' %}

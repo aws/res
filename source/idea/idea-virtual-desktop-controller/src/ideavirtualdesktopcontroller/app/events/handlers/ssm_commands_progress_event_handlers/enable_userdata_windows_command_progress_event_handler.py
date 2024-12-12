@@ -17,6 +17,8 @@ from ideadatamodel import (
 from ideasdk.utils import Utils
 from ideavirtualdesktopcontroller.app.clients.events_client.events_client import VirtualDesktopEvent
 from ideavirtualdesktopcontroller.app.events.handlers.base_event_handler import BaseVirtualDesktopControllerEventHandler
+from res.exceptions import SoftwareStackNotFound
+from res.resources import software_stacks
 
 
 class EnableUserdataWindowsCommandProgressEventListener(BaseVirtualDesktopControllerEventHandler):
@@ -25,7 +27,11 @@ class EnableUserdataWindowsCommandProgressEventListener(BaseVirtualDesktopContro
         super().__init__(context, 'enable-userdata-windows-command-progress-event-listener')
 
     def _continue_software_stack_creation(self, session: VirtualDesktopSession, software_stack_id: str):
-        software_stack = self.software_stack_db.get(stack_id=software_stack_id, base_os=session.base_os)
+        try:
+            software_stack_dict = software_stacks.get_software_stack(stack_id=software_stack_id, base_os=session.base_os)
+            software_stack = self.software_stack_db.convert_db_dict_to_software_stack_object(software_stack_dict)
+        except SoftwareStackNotFound:
+            software_stack = None
         response = self.controller_utils.create_image_for_instance_id(session.server.instance_id, software_stack.name, software_stack.description)
         software_stack.ami_id = Utils.get_value_as_string('ImageId', response, None)
         self.software_stack_db.update(software_stack)

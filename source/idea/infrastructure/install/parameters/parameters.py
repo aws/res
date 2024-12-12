@@ -7,6 +7,7 @@ from idea.infrastructure.install.parameters import (
     common,
     customdomain,
     directoryservice,
+    internet_proxy,
     shared_storage,
 )
 
@@ -17,6 +18,7 @@ class RESParameters(
     customdomain.CustomDomainParameters,
     directoryservice.DirectoryServiceParameters,
     shared_storage.SharedStorageParameters,
+    internet_proxy.InternetProxyParameters,
 ):
     """
     This is where all the different categories of parameters are combined
@@ -31,6 +33,7 @@ class AllRESParameterGroups(
     customdomain.CustomDomainParameterGroups,
     directoryservice.DirectoryServiceParameterGroups,
     shared_storage.SharedStorageParameterGroups,
+    internet_proxy.InternetProxyParameterGroups,
 ):
     """
     All the parameter groups are collated here
@@ -43,9 +46,16 @@ class AllRESParameterGroups(
                 "ParameterGroups": [
                     common.CommonParameterGroups.parameter_group_for_environment_and_installer_details,
                     common.CommonParameterGroups.parameter_group_for_network_configuration,
-                    directoryservice.DirectoryServiceParameterGroups.parameter_group_for_directory_service,
                     shared_storage.SharedStorageParameterGroups.parameter_group_for_shared_storage,
+                    directoryservice.DirectoryServiceParameterGroups.parameter_group_for_directory_service,
                     customdomain.CustomDomainParameterGroups.parameter_group_for_custom_domain,
-                ]
-            }
+                    internet_proxy.InternetProxyParameterGroups.parameter_group_for_internet_proxy,
+                ],
+                "ParameterLabels": {
+                    **common.CommonParameterLabels.parameter_labels_for_environment_and_installer_details,
+                    **customdomain.CustomDomainParameterLabels.parameter_labels_for_custom_domain,
+                    **directoryservice.DirectoryServiceParameterLabels.parameter_labels_for_directory_service,
+                    **internet_proxy.InternetProxyParameterLabels.parameter_labels_for_internet_proxy,
+                },
+            },
         }

@@ -487,8 +487,11 @@ SOFTWARE_STACK_NAME_ERROR_MESSAGE = SESSION_NAME_ERROR_MESSAGE = "Use any charac
 
 INVALID_RANGE_ERROR_MESSAGE = "Input out of permitted range"
 
-VALID_ROLE_ASSIGNMENT_RESOURCE_TYPES = ["project"]
-VALID_ROLE_ASSIGNMENT_ACTOR_TYPES = ["user","group"]
+PROJECT_ROLE_ASSIGNMENT_TYPE = "project"
+VALID_ROLE_ASSIGNMENT_RESOURCE_TYPES = [PROJECT_ROLE_ASSIGNMENT_TYPE]
+ROLE_ASSIGNMENT_ACTOR_USER_TYPE = "user"
+ROLE_ASSIGNMENT_ACTOR_GROUP_TYPE = "group"
+VALID_ROLE_ASSIGNMENT_ACTOR_TYPES = [ROLE_ASSIGNMENT_ACTOR_USER_TYPE, ROLE_ASSIGNMENT_ACTOR_GROUP_TYPE]
 PROJECT_MEMBER_ROLE_ID = "project_member"
 PROJECT_OWNER_ROLE_ID = "project_owner"
 PROJECT_MEMBER_ROLE_NAME = "Project Member"
@@ -519,6 +522,24 @@ USERNAME_ERROR_MESSAGE = (f"Username (SAM-Account-Name of the AD user) doesn't m
                           f"digits, period, underscore, and hyphen, with the restriction that "
                           f"hyphen is not allowed as first character of the username. "
                           f"The maximum length of username is 20.")
+
+# Cogito username regex follows Ubuntu username standards, the most restrictive
+# of the Linux distros that RES supports.
+# See: https://manpages.ubuntu.com/manpages/focal/en/man5/adduser.conf.5.html
+COGNITO_USERNAME_REGEX = rf'^[a-z][-a-z0-9_]{{0,31}}$'
+COGNITO_USERNAME_ERROR_MESSAGE = (f"Username doesn't match the regex pattern {COGNITO_USERNAME_REGEX}. "
+                          f"Username may only contain lower case ASCII letters (a-z), numbers (0-9),"
+                          f"and the following special characters: underscore (_), and hypen (-)."
+                          f"The maximum length of username is 32.")
+
+COGNITO_USER_IDP_TYPE = 'Native user'
+SSO_USER_IDP_TYPE = 'SSO'
+
+COGNITO_UID_ATTRIBUTE = 'uid'
+COGNITO_MIN_ID_INCLUSIVE = 2000200001
+COGNITO_MAX_ID_INCLUSIVE = 4294967294
+COGNITO_DEFAULT_USER_GROUP = 'res'
+
 
 ROLE_ASSIGNMENT_ACTOR_ID_REGEX = rf'^({AD_SAM_ACCOUNT_NAME_REGEX}|{GROUP_NAME_REGEX})$'
 ROLE_ASSIGNMENT_ACTOR_ID_ERROR_MESSAGE = f"Actor ID doesn't match the regex pattern {ROLE_ASSIGNMENT_ACTOR_ID_REGEX}"

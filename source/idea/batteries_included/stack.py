@@ -157,35 +157,13 @@ class BiStack(Stack):
             self.bi_stack
         )
 
-        def get_credentials_secret_arn() -> str:
-            service_account_username = self.bi_stack.get_att(
-                "Outputs.ServiceAccountUsername"
-            ).to_string()
-            service_account_password_arn = self.bi_stack.get_att(
-                "Outputs.ServiceAccountPasswordSecretArn"
-            ).to_string()
-
-            service_account_password = secretsmanager.Secret.from_secret_attributes(
-                self,
-                id="ServiceAccountPasswordSecretArn",
-                secret_complete_arn=service_account_password_arn,
-            ).secret_value
-
-            credentials_secret = secretsmanager.CfnSecret(
-                scope=self,
-                id="ServiceAccountCredentialsSecret",
-                name=f"{str(parameters.cluster_name)}-service-account-credentials",
-                secret_string=f'{{"{service_account_username}":"{service_account_password.unsafe_unwrap()}"}}',
-                description="Service Account Credentials Secret",
-            )
-            credentials_secret_arn = credentials_secret.ref
-            return credentials_secret_arn
-
         self.service_account_credentials_secret_arn = aws_ssm.StringParameter(
             self,
             id=str(parameters.service_account_credentials_secret_arn),
             parameter_name=str(parameters.service_account_credentials_secret_arn),
-            string_value=get_credentials_secret_arn(),
+            string_value=self.bi_stack.get_att(
+                "Outputs.ServiceAccountCredentialsSecretArn"
+            ).to_string(),
         )
 
         self.service_account_credentials_secret_arn.node.add_dependency(self.bi_stack)

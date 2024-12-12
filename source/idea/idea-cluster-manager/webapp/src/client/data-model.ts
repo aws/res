@@ -112,6 +112,7 @@ export interface User {
     synced_on?: string;
     role?: string;
     is_active?: string;
+    identity_source?: string;
 }
 
 export interface Snapshot {
@@ -335,6 +336,7 @@ export interface Group {
     synced_on?: string;
     role?: string;
     type?: string;
+    identity_source?: string;
 }
 export interface SocaJobEstimatedBudgetUsage {
     budget_name?: string;
@@ -695,6 +697,63 @@ export interface Budget {
 export interface ListBudgetsResult {
     Budgets: Budget[];
 }
+export interface EFS {
+    FileSystemId: string;
+    LifeCycleState: string;
+}
+export interface ListEFSRequest {
+    AWSRegion: string;
+}
+export interface ListEFSResult {
+    FileSystems: EFS[];
+}
+export interface DescribeMountTargetRequest {
+    AWSRegion: string;
+    FileSystemId: string;
+}
+export interface MountTarget {
+    VpcId: string;
+    FileSystemId: string;
+}
+export interface DescribeMountTargetResult {
+    MountTargets: MountTarget[];
+}
+export interface FSx {
+    FileSystemId: string;
+    FileSystemType: 'LUSTRE' | 'ONTAP';
+    Lifecycle: string;
+    VpcId: string;
+}
+export interface ListFSxRequest {
+    AWSRegion: string;
+}
+export interface ListFSxResult {
+    FileSystems: FSx[];
+}
+export interface SVM {
+    FileSystemId: string;
+    Lifecycle: string;
+    StorageVirtualMachineId: string;
+}
+export interface ListFSxSVMRequest {
+    AWSRegion: string;
+    FileSystemIds: string[];
+}
+export interface ListFSxSVMResult {
+    StorageVirtualMachines: SVM[];
+}
+export interface Volume {
+    FileSystemId: string;
+    Lifecycle: string;
+    VolumeId: string;
+}
+export interface ListFSxVolumeRequest {
+    AWSRegion: string;
+    FileSystemIds: string[];
+}
+export interface ListFSxVolumeResult {
+    Volumes: Volume[];
+}
 export interface PutRoleAssignmentRequest {
     request_id: string;
     resource_id: string;
@@ -780,10 +839,12 @@ export interface Role {
 }
 export interface ListRolesRequest {
     paginator?: SocaPaginator;
+    filters?: SocaFilter[];
     include_permissions?: boolean;
 }
 export interface ListRolesResponse {
     paginator?: SocaPaginator;
+    filters?: SocaFilter[];
     items: Role[];
 }
 export interface GetRoleRequest {
@@ -1453,6 +1514,20 @@ export interface CreateUserRequest {
     email_verified?: boolean;
 }
 
+export interface SignUpUserRequest {
+    email: string
+    password: string
+}
+
+export interface ConfirmSignUpRequest {
+    email: string
+    confirmation_code: string
+}
+
+export interface ResendConfirmationCodeRequest {
+    username: string
+}
+
 export interface CreateSnapshotRequest {
     snapshot?: Snapshot;
 }
@@ -1569,10 +1644,48 @@ export type UpdateModuleSettingsRequestWebPortal = {
 export type UpdateModuleSettingsFileBrowser = {
     enable_file_browser: boolean
 };
+export type UpdateModuleSettingsRequestIdentityProvider = {
+    module_id: "identity-provider";
+    settings: UpdateModuleSettingsIdentityProvider;
+};
+export type UpdateModuleSettingsIdentityProvider = {
+    cognito: {
+        enable_self_sign_up?: boolean,
+        enable_native_user_login?: boolean
+    }
+};
 export type UpdateModuleSettingsRequest = {
     module_id: string;
-    settings?: UpdateModuleSettingsVDC | UpdateModuleSettingsWebPortal | UpdateModuleSettingsFileBrowser;
-};
+    settings?: UpdateModuleSettingsVDC | UpdateModuleSettingsWebPortal | UpdateModuleSettingsFileBrowser | UpdateModuleSettingsIdentityProvider | UpdateModuleSettingsDirectoryService;
+}
+export type UpdateModuleSettingsDirectoryService = {
+    [index: string]: any;
+    root_user_dn: string;
+    users: {
+        ou: string;
+    };
+    disable_ad_join: string;
+    ad_short_name: string;
+    ldap_base: string;
+    ldap_connection_uri: string;
+    service_account_credentials_secret_arn: string;
+    users_filter?: string;
+    groups_filter?: string;
+    sudoers: {
+        group_name: string;
+    }
+    sssd: {
+        ldap_id_mapping: string;
+    }
+    groups: {
+        ou: string;
+    }
+    computers: {
+        ou: string;
+    }
+    name: string;
+    tls_certificate_secret_arn?: string;
+}
 export interface CreateQueueProfileRequest {
     queue_profile?: HpcQueueProfile;
 }
@@ -1674,6 +1787,9 @@ export interface JobUpdates {
 export interface CreateUserResult {
     user?: User;
 }
+export interface SignUpUserResult {}
+export interface ConfirmSignUpResult {}
+export interface ResendConfirmationCodeResult {}
 export interface GetModuleSettingsResult {
     settings?: unknown;
 }
@@ -1782,14 +1898,6 @@ export interface OpenPBSInfo {
     version?: string;
     mom_private_dns?: string;
     mom_port?: number;
-}
-export interface ListClusterHostsRequest {
-    paginator?: SocaPaginator;
-    sort_by?: SocaSortBy;
-    date_range?: SocaDateRange;
-    listing?: (SocaBaseModel | unknown)[];
-    filters?: SocaFilter[];
-    instance_ids?: string[];
 }
 export interface CreateSessionRequest {
     session?: VirtualDesktopSession;
@@ -1900,11 +2008,40 @@ export interface ListNodesRequest {
     states?: SocaComputeNodeState[];
 }
 export interface ListClusterHostsResult {
-    paginator?: SocaPaginator;
-    sort_by?: SocaSortBy;
-    date_range?: SocaDateRange;
-    listing?: unknown[];
-    filters?: SocaFilter[];
+    DescribeInstancesResponse: {
+        reservationSet: {
+        item: Array<{
+            instancesSet: {
+            item: {
+                instanceId: string;
+                instanceType: string;
+                instanceState: {
+                name: string;
+                };
+                placement: {
+                availabilityZone: string;
+                };
+                subnetId: string;
+                privateIpAddress: string;
+                imageId: string;
+                tagSet?: {
+                item?: Array<{
+                    key: string;
+                    value: string;
+                }>;
+                };
+                networkInterfaceSet?: {
+                item: {
+                    association?: {
+                    publicIp?: string;
+                    };
+                };
+                };
+            };
+            };
+        }>;
+        };
+    };
 }
 export interface GetHpcLicenseResourceResult {
     license_resource?: HpcLicenseResource;

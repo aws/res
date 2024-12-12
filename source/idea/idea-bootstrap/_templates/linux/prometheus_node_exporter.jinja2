@@ -1,37 +1,38 @@
 # Begin: Install Prometheus Node Exporter
-{%- if context.base_os in ('amazonlinux2', 'rhel8', 'rhel9') and context.is_prometheus_exporter_enabled('node_exporter') %}
-function install_prometheus_node_exporter () {
-  local AWS=$(command -v aws)
-  local MACHINE=$(uname -m)
-  local DOWNLOAD_URL=""
-  if [[ ${MACHINE} == "aarch64" ]]; then
-    local PROMETHEUS_NODE_EXPORTER_ARM64_URL=$($AWS dynamodb get-item \
-                                --region "{{ context.aws_region }}" \
-                                --table-name "{{ context.cluster_name }}.cluster-settings" \
-                                --key '{"key": {"S": "global-settings.package_config.prometheus.exporters.node_exporter.linux.aarch64"}}' \
-                                --output text \
-                                | awk '/VALUE/ {print $2}')
-    DOWNLOAD_URL=$(echo $PROMETHEUS_NODE_EXPORTER_ARM64_URL)
-  else
-    local PROMETHEUS_NODE_EXPORTER_AMD64_URL=$($AWS dynamodb get-item \
-                            --region "{{ context.aws_region }}" \
-                            --table-name "{{ context.cluster_name }}.cluster-settings" \
-                            --key '{"key": {"S": "global-settings.package_config.prometheus.exporters.node_exporter.linux.x86_64"}}' \
-                            --output text \
-                            | awk '/VALUE/ {print $2}')
-    DOWNLOAD_URL=$(echo $PROMETHEUS_NODE_EXPORTER_AMD64_URL)
-  fi
-  local PACKAGE_ARCHIVE=$(basename ${DOWNLOAD_URL})
-  local PACKAGE_NAME="${PACKAGE_ARCHIVE%.tar.gz*}"
-  PROMETHEUS_DIR="/root/bootstrap/prometheus"
-  mkdir -p ${PROMETHEUS_DIR}
-  pushd ${PROMETHEUS_DIR}
-  wget ${DOWNLOAD_URL}
-  tar -xvf ${PACKAGE_ARCHIVE}
-  cp ${PACKAGE_NAME}/node_exporter /usr/local/bin/
-}
-function setup_prometheus_node_exporter_service () {
-  echo "[Unit]
+if [[ $RES_BASE_OS =~ ^(amzn2|rhel8|rhel9)$ ]]; then
+  {%- if context.is_prometheus_exporter_enabled('node_exporter') %}
+  function install_prometheus_node_exporter () {
+    local AWS=$(command -v aws)
+    local MACHINE=$(uname -m)
+    local DOWNLOAD_URL=""
+    if [[ ${MACHINE} == "aarch64" ]]; then
+      local PROMETHEUS_NODE_EXPORTER_ARM64_URL=$($AWS dynamodb get-item \
+                                  --region "{{ context.aws_region }}" \
+                                  --table-name "{{ context.cluster_name }}.cluster-settings" \
+                                  --key '{"key": {"S": "global-settings.package_config.prometheus.exporters.node_exporter.linux.aarch64"}}' \
+                                  --output text \
+                                  | awk '/VALUE/ {print $2}')
+      DOWNLOAD_URL=$(echo $PROMETHEUS_NODE_EXPORTER_ARM64_URL)
+    else
+      local PROMETHEUS_NODE_EXPORTER_AMD64_URL=$($AWS dynamodb get-item \
+                              --region "{{ context.aws_region }}" \
+                              --table-name "{{ context.cluster_name }}.cluster-settings" \
+                              --key '{"key": {"S": "global-settings.package_config.prometheus.exporters.node_exporter.linux.x86_64"}}' \
+                              --output text \
+                              | awk '/VALUE/ {print $2}')
+      DOWNLOAD_URL=$(echo $PROMETHEUS_NODE_EXPORTER_AMD64_URL)
+    fi
+    local PACKAGE_ARCHIVE=$(basename ${DOWNLOAD_URL})
+    local PACKAGE_NAME="${PACKAGE_ARCHIVE%.tar.gz*}"
+    PROMETHEUS_DIR="/root/bootstrap/prometheus"
+    mkdir -p ${PROMETHEUS_DIR}
+    pushd ${PROMETHEUS_DIR}
+    wget ${DOWNLOAD_URL}
+    tar -xvf ${PACKAGE_ARCHIVE}
+    cp ${PACKAGE_NAME}/node_exporter /usr/local/bin/
+  }
+  function setup_prometheus_node_exporter_service () {
+    echo "[Unit]
 Description=Prometheus Node Exporter Service
 After=network.target
 
@@ -44,14 +45,18 @@ ExecStart=/usr/local/bin/node_exporter
 [Install]
 WantedBy=multi-user.target
 " > /etc/systemd/system/node-exporter.service
-}
-install_prometheus_node_exporter
-setup_prometheus_node_exporter_service
-systemctl enable node-exporter
-systemctl start node-exporter
-{%- else %}
-log_info "Prometheus Node Exporter is disabled"
-{%- endif %}
+  }
+  install_prometheus_node_exporter
+  setup_prometheus_node_exporter_service
+  systemctl enable node-exporter
+  systemctl start node-exporter
+  {%- else %}
+  log_info "Prometheus Node Exporter is disabled"
+  {%- endif %}
+else
+  log_warning "Base OS not supported."
+  exit 1
+fi
 # End: Install Prometheus Node Exporter
 
 

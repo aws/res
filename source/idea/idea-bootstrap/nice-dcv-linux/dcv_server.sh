@@ -61,6 +61,9 @@ if ! pre_installed; then
   install_nice_dcv_server $BASE_OS $AWS_REGION $RES_ENVIRONMENT_NAME $GPU_FAMILY
   install_microphone_redirect
   install_usb_support
+  if [[ $BASE_OS =~ ^(rhel9)$ ]]; then
+    install_modified_x_server $BASE_OS
+  fi
 else
   log_info "Found nice-dcv-server pre-installed... skipping installation..."
 fi

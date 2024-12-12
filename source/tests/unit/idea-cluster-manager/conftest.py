@@ -9,6 +9,7 @@
 #  OR CONDITIONS OF ANY KIND, express or implied. See the License for the specific language governing permissions
 #  and limitations under the License.
 
+import os
 import time
 from unittest.mock import MagicMock
 
@@ -31,7 +32,6 @@ from ideaclustermanager.app.shared_filesystem.shared_filesystem_service import (
     SharedFilesystemService,
 )
 from ideaclustermanager.app.snapshots.snapshots_service import SnapshotsService
-from ideaclustermanager.app.tasks.task_manager import TaskManager
 from ideasdk.auth import TokenService, TokenServiceOptions
 from ideasdk.aws import AwsClientProvider, AWSUtil, EC2InstanceTypesDB
 from ideasdk.client.evdi_client import EvdiClient
@@ -39,8 +39,8 @@ from ideasdk.context import SocaContextOptions
 from ideasdk.utils import GroupNameHelper, Utils
 from ideatestutils import IdeaTestProps, MockConfig, MockInstanceTypes
 from ideatestutils.dynamodb.dynamodb_local import DynamoDBLocal
-from mock_ldap_client import MockLdapClient
 from mock_vdc_client import MockVirtualDesktopControllerClient
+from res.resources import accounts
 
 from ideadatamodel import SocaAnyPayload
 
@@ -71,6 +71,20 @@ def context(ddb_local):
     """
 
     print("initializing cluster-manager context ...")
+
+    os.environ["environment_name"] = "idea-mock"
+    boto3.setup_default_session(
+        region_name="us-west-1", aws_access_key_id="test", aws_secret_access_key="test"
+    )
+
+    # Override the endpoint for boto3.resource("dynamodb") to use DynamoDB local
+    dynamodb = boto3.resource("dynamodb", endpoint_url="http://localhost:9000")
+
+    def _resource(service_name: str):
+        if service_name == "dynamodb":
+            return dynamodb
+
+    monkeypatch.setattr(boto3, "resource", _resource)
 
     def mock_function(*_, **__):
         return {}
@@ -257,6 +271,127 @@ def context(ddb_local):
     test_dir = test_props.get_test_dir("cluster-manager-tests")
     monkeypatch.setenv("IDEA_APP_DEPLOY_DIR", test_dir)
 
+    dynamodb_client = create_mock_boto_session().client(
+        "dynamodb", endpoint_url="http://localhost:9000"
+    )
+    os.environ["environment_name"] = "idea-mock"
+
+    # Create user table
+    dynamodb_client.create_table(
+        TableName=f"{os.environ['environment_name']}.accounts.users",
+        AttributeDefinitions=[
+            {"AttributeName": "username", "AttributeType": "S"},
+            {"AttributeName": "role", "AttributeType": "S"},
+            {"AttributeName": "email", "AttributeType": "S"},
+        ],
+        KeySchema=[{"AttributeName": "username", "KeyType": "HASH"}],
+        GlobalSecondaryIndexes=[
+            {
+                "IndexName": "role-index",
+                "KeySchema": [{"AttributeName": "role", "KeyType": "HASH"}],
+                "Projection": {
+                    "ProjectionType": "INCLUDE",
+                    "NonKeyAttributes": ["additional_groups", "username"],
+                },
+            },
+            {
+                "IndexName": "email-index",
+                "KeySchema": [{"AttributeName": "email", "KeyType": "HASH"}],
+                "Projection": {
+                    "ProjectionType": "INCLUDE",
+                    "NonKeyAttributes": ["role", "username", "is_active", "enabled"],
+                },
+            },
+        ],
+        BillingMode="PAY_PER_REQUEST",
+    )
+
+    accounts.create_user(
+        {
+            "username": "clusteradmin",
+            "email": "clusteradmin@example.org",
+            "role": "admin",
+        }
+    )
+
+    # Create group table
+    dynamodb_client.create_table(
+        TableName=f"{os.environ['environment_name']}.accounts.groups",
+        AttributeDefinitions=[{"AttributeName": "group_name", "AttributeType": "S"}],
+        KeySchema=[{"AttributeName": "group_name", "KeyType": "HASH"}],
+        BillingMode="PAY_PER_REQUEST",
+    )
+
+    # Create group members table
+    dynamodb_client.create_table(
+        TableName=f"{os.environ['environment_name']}.accounts.group-members",
+        AttributeDefinitions=[
+            {"AttributeName": "group_name", "AttributeType": "S"},
+            {"AttributeName": "username", "AttributeType": "S"},
+        ],
+        KeySchema=[
+            {"AttributeName": "group_name", "KeyType": "HASH"},
+            {"AttributeName": "username", "KeyType": "RANGE"},
+        ],
+        BillingMode="PAY_PER_REQUEST",
+    )
+
+    # Create role assignment table
+    dynamodb_client.create_table(
+        TableName=f"{os.environ['environment_name']}.authz.role-assignments",
+        AttributeDefinitions=[
+            {"AttributeName": "actor_key", "AttributeType": "S"},
+            {"AttributeName": "resource_key", "AttributeType": "S"},
+        ],
+        KeySchema=[
+            {"AttributeName": "actor_key", "KeyType": "HASH"},
+            {"AttributeName": "resource_key", "KeyType": "RANGE"},
+        ],
+        GlobalSecondaryIndexes=[
+            {
+                "IndexName": "resource-key-index",
+                "KeySchema": [
+                    {"AttributeName": "resource_key", "KeyType": "HASH"},
+                    {"AttributeName": "actor_key", "KeyType": "RANGE"},
+                ],
+                "Projection": {"ProjectionType": "ALL"},
+            }
+        ],
+        BillingMode="PAY_PER_REQUEST",
+    )
+
+    # Create project table
+    dynamodb_client.create_table(
+        TableName=f"{os.environ['environment_name']}.projects",
+        AttributeDefinitions=[
+            {"AttributeName": "project_id", "AttributeType": "S"},
+            {"AttributeName": "name", "AttributeType": "S"},
+        ],
+        KeySchema=[{"AttributeName": "project_id", "KeyType": "HASH"}],
+        GlobalSecondaryIndexes=[
+            {
+                "IndexName": "project-name-index",
+                "KeySchema": [{"AttributeName": "name", "KeyType": "HASH"}],
+                "Projection": {"ProjectionType": "ALL"},
+            }
+        ],
+        BillingMode="PAY_PER_REQUEST",
+    )
+
+    # Create snapshot table
+    dynamodb_client.create_table(
+        TableName=f"{os.environ['environment_name']}.snapshots",
+        KeySchema=[
+            {"AttributeName": "s3_bucket_name", "KeyType": "HASH"},
+            {"AttributeName": "snapshot_path", "KeyType": "RANGE"},
+        ],
+        AttributeDefinitions=[
+            {"AttributeName": "s3_bucket_name", "AttributeType": "S"},
+            {"AttributeName": "snapshot_path", "AttributeType": "S"},
+        ],
+        BillingMode="PAY_PER_REQUEST",
+    )
+
     context = AppContext(
         options=SocaContextOptions(
             cluster_name="idea-mock",
@@ -271,16 +406,7 @@ def context(ddb_local):
     )
     context._config.get_module_id = MagicMock(return_value="IdentityProvider")
     context._config.db = MagicMock(set_config_entry=MagicMock())
-    context.task_manager = TaskManager(context=context, tasks=[])
-    monkeypatch.setattr(
-        context.task_manager,
-        "send",
-        lambda *args, **kwargs: print(
-            f"[TaskManager.send()] args: {args}, kwargs: {kwargs}"
-        ),
-    )
 
-    context.ldap_client = MockLdapClient(context=context)
     context.user_pool = CognitoUserPool(
         context=context,
         options=CognitoUserPoolOptions(
@@ -312,13 +438,10 @@ def context(ddb_local):
 
     context.accounts = AccountsService(
         context=context,
-        ldap_client=context.ldap_client,
         user_pool=context.user_pool,
         evdi_client=EvdiClient(context=context),
-        task_manager=context.task_manager,
         token_service=context.token_service,
     )
-    context.accounts.create_defaults()
 
     context.roles = RolesService(
         context=context,
@@ -332,6 +455,7 @@ def context(ddb_local):
     # api authorization service
     context.api_authorization_service = ClusterManagerApiAuthorizationService(
         accounts=context.accounts,
+        config=context.config(),
         roles=context.roles,
         role_assignments=context.role_assignments,
     )
@@ -341,7 +465,6 @@ def context(ddb_local):
     context.projects = ProjectsService(
         context=context,
         accounts_service=context.accounts,
-        task_manager=context.task_manager,
         vdc_client=context.vdc_client,
     )
 
@@ -354,6 +477,24 @@ def context(ddb_local):
     context.shared_filesystem = SharedFilesystemService(context=context)
 
     yield context
+
+    # Clean up all the tables
+    dynamodb_client.delete_table(
+        TableName=f"{os.environ['environment_name']}.accounts.users"
+    )
+    dynamodb_client.delete_table(
+        TableName=f"{os.environ['environment_name']}.accounts.groups"
+    )
+    dynamodb_client.delete_table(
+        TableName=f"{os.environ['environment_name']}.accounts.group-members"
+    )
+    dynamodb_client.delete_table(
+        TableName=f"{os.environ['environment_name']}.authz.role-assignments"
+    )
+    dynamodb_client.delete_table(TableName=f"{os.environ['environment_name']}.projects")
+    dynamodb_client.delete_table(
+        TableName=f"{os.environ['environment_name']}.snapshots",
+    )
 
     print("cluster manager context clean-up ...")
     monkeypatch.undo()

@@ -55,7 +55,7 @@ Statement:
         secretsmanager:ResourceTag/res:ModuleName: virtual-desktop-controller
     Resource: '*'
     Effect: Allow
-  
+
   - Action:
       - dynamodb:GetItem
     Resource:
@@ -74,4 +74,4 @@ Statement:
       - '{{ context.arns.get_ddb_table_arn("vdc.controller.session-permissions") }}'
       - '{{ context.arns.get_ddb_table_arn("vdc.controller.schedules") }}'
     Effect: Allow
-  
+

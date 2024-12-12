@@ -1,0 +1,16 @@
+# ldapmodify -x -D "cn=Admin,dc=corp,dc=res,dc=com" -w secret -f /opt/res-adsync/resources/res_real.ldif 
+# Create a OU to be used by RES
+dn: OU=RES,OU=corp,DC=corp,DC=res,DC=com
+changetype: add
+objectClass: top
+objectClass: organizationalUnit
+ou: RES
+description: The RES application will limit syncing groups and group-members in the RES OU
+
+# Create a OU to be used by RES to create groups and add users to
+dn: OU=Users,OU=RES,OU=corp,DC=corp,DC=res,DC=com
+changetype: add
+objectClass: top
+objectClass: organizationalUnit
+ou: Users
+description: The RES application will limit syncing groups and group-members in the RES OU

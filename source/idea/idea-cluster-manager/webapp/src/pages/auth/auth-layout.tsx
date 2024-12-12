@@ -40,7 +40,7 @@ class AuthLayout extends Component<AuthLayoutProps, AuthLayoutState> {
             .isLoggedIn()
             .then((status) => {
                 // show loading animation spinner until the initial sso redirect is not complete
-                if (!status && Utils.isSsoEnabled() && typeof window.idea.app.sso_auth_status === "undefined") {
+                if (!status && Utils.isSsoEnabled() && !Utils.isNativeUserLoginEnabled() && typeof window.idea.app.sso_auth_status === "undefined") {
                     return;
                 }
                 this.setState(

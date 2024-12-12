@@ -15,9 +15,10 @@ import { v4 as uuid } from "uuid";
 import IdeaException from "../common/exceptions";
 import { IdeaAuthenticationContext } from "../common/authentication-context";
 import { JwtTokenClaims } from "../common/token-utils";
-import { Constants } from "../common/constants";
+import { Constants, HTTPMethod } from "../common/constants";
 import AppLogger from "../common/app-logger";
 import { AUTH_TOKEN_EXPIRED } from "../common/error-codes";
+
 
 export interface IdeaHeader {
     namespace: string;
@@ -81,7 +82,7 @@ export class IdeaApiInvoker {
         });
     }
 
-    async invoke<REQ = any, RES = any>(request: IdeaEnvelope<REQ>, isPublic: boolean = false): Promise<IdeaEnvelope<RES>> {
+    async invoke<REQ = any, RES = any>(request: IdeaEnvelope<REQ>, isPublic: boolean = false, isAWSProxyRequest: boolean = false, httpMethod:HTTPMethod = "POST"): Promise<IdeaEnvelope<RES>> {
         let url = `${this.props.url}/${request.header!.namespace}`;
 
         if (this.logger.isTrace()) {
@@ -90,20 +91,26 @@ export class IdeaApiInvoker {
 
         let response;
         if (this.props.serviceWorkerRegistration) {
+            let options: any = {
+                url: url,
+                request: request,
+                isPublic: isPublic,
+                isAWSProxyRequest: isAWSProxyRequest
+            }
+            if (isAWSProxyRequest) {
+                options["httpMethod"] = httpMethod;
+                options["additionalHeader"] = request.additionalHeader;
+            }
             const result = await this.invoke_service_worker({
                 type: Constants.ServiceWorker.IDEA_API_INVOCATION,
-                options: {
-                    url: url,
-                    request: request,
-                    isPublic: isPublic,
-                },
+                options: options
             });
             response = result.response;
         } else {
             if (request.header?.namespace === "Auth.InitiateAuth") {
                 response = await this.props.authContext?.initiateAuth(request);
-            } else if(request.header?.namespace === "budgets") {
-                response = await this.props.authContext?.invoke(url, request.payload, isPublic, request.additionalHeader);
+            } else if (isAWSProxyRequest) {
+                response = await this.props.authContext?.invoke(url, request.payload, isPublic, request.additionalHeader, httpMethod);
             } else {
                 response = await this.props.authContext?.invoke(url, request, isPublic);
             }
@@ -124,7 +131,7 @@ export class IdeaApiInvoker {
         return response;
     }
 
-    async invoke_alt<REQ = any | null, RES = any>(namespace: string, payload?: REQ, isPublic: boolean = false, additionalHeader: any = {}): Promise<RES> {
+    async invoke_alt<REQ = any | null, RES = any>(namespace: string, payload?: REQ, isPublic: boolean = false, isAWSProxyRequest: boolean = false, additionalHeader: any = {}, httpMethod:HTTPMethod = "POST" ): Promise<RES> {
         const result = await this.invoke<REQ, RES>(
             {
                 header: {
@@ -135,10 +142,13 @@ export class IdeaApiInvoker {
                 additionalHeader
             },
             isPublic,
+            isAWSProxyRequest,
+            httpMethod
         );
         if (result.success) {
-            return result.payload!;}
-        else if (namespace === "budgets") {
+            return result.payload!
+        }
+        else if (isAWSProxyRequest) {
             return result as RES;
         } else {
             console.error(result);

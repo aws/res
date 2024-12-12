@@ -4,6 +4,7 @@
 from dataclasses import dataclass
 from typing import Any
 
+from idea.infrastructure.install.constants import OPTIONAL_INPUT_PARAMETER_LABEL_SUFFIX
 from idea.infrastructure.install.parameters.base import Attributes, Base, Key
 
 
@@ -83,7 +84,7 @@ class CustomDomainParameters(Base):
 class CustomDomainParameterGroups:
     parameter_group_for_custom_domain: dict[str, Any] = {
         "Label": {
-            "default": "Custom domain details, only needed if you would like to use a custom domain"
+            "default": f"Custom domain details, only needed if you would like to use a custom domain{OPTIONAL_INPUT_PARAMETER_LABEL_SUFFIX}"
         },
         "Parameters": [
             CustomDomainKey.CUSTOM_DOMAIN_NAME_FOR_WEB_APP,
@@ -92,4 +93,24 @@ class CustomDomainParameterGroups:
             CustomDomainKey.CERTIFICATE_SECRET_ARN_FOR_VDI,
             CustomDomainKey.PRIVATE_KEY_SECRET_ARN_FOR_VDI,
         ],
+    }
+
+
+class CustomDomainParameterLabels:
+    parameter_labels_for_custom_domain: dict[str, Any] = {
+        CustomDomainKey.CUSTOM_DOMAIN_NAME_FOR_WEB_APP: {
+            "default": f"{CustomDomainKey.CUSTOM_DOMAIN_NAME_FOR_WEB_APP}{OPTIONAL_INPUT_PARAMETER_LABEL_SUFFIX}"
+        },
+        CustomDomainKey.CUSTOM_DOMAIN_NAME_FOR_VDI: {
+            "default": f"{CustomDomainKey.CUSTOM_DOMAIN_NAME_FOR_VDI}{OPTIONAL_INPUT_PARAMETER_LABEL_SUFFIX}"
+        },
+        CustomDomainKey.ACM_CERTIFICATE_ARN_FOR_WEB_APP: {
+            "default": f"{CustomDomainKey.ACM_CERTIFICATE_ARN_FOR_WEB_APP}{OPTIONAL_INPUT_PARAMETER_LABEL_SUFFIX}"
+        },
+        CustomDomainKey.CERTIFICATE_SECRET_ARN_FOR_VDI: {
+            "default": f"{CustomDomainKey.CERTIFICATE_SECRET_ARN_FOR_VDI}{OPTIONAL_INPUT_PARAMETER_LABEL_SUFFIX}"
+        },
+        CustomDomainKey.PRIVATE_KEY_SECRET_ARN_FOR_VDI: {
+            "default": f"{CustomDomainKey.PRIVATE_KEY_SECRET_ARN_FOR_VDI}{OPTIONAL_INPUT_PARAMETER_LABEL_SUFFIX}"
+        },
     }

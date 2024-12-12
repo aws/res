@@ -35,69 +35,6 @@ class UserDAO:
         return f'{self.context.cluster_name()}.accounts.users'
 
     def initialize(self):
-        self.context.aws_util().dynamodb_create_table(
-            create_table_request={
-                'TableName': self.get_table_name(),
-                'AttributeDefinitions': [
-                    {
-                        'AttributeName': 'username',
-                        'AttributeType': 'S'
-                    },
-                    {
-                        'AttributeName': 'role',
-                        'AttributeType': 'S'
-                    },
-                    {
-                        'AttributeName': 'email',
-                        'AttributeType': 'S'
-                    }
-                ],
-                'KeySchema': [
-                    {
-                        'AttributeName': 'username',
-                        'KeyType': 'HASH'
-                    }
-                ],
-                "GlobalSecondaryIndexes": [
-                    {
-                        "IndexName": "role-index",
-                        "KeySchema": [
-                            {
-                                "AttributeName": "role",
-                                "KeyType": "HASH"
-                            }
-                        ],
-                        "Projection": {
-                            "ProjectionType": "INCLUDE",
-                            "NonKeyAttributes": [
-                                "additional_groups",
-                                "username"
-                            ]
-                        },
-                    },
-                    {
-                        "IndexName": "email-index",
-                        "KeySchema": [
-                            {
-                                "AttributeName": "email",
-                                "KeyType": "HASH"
-                            }
-                        ],
-                        "Projection": {
-                            "ProjectionType": "INCLUDE",
-                            "NonKeyAttributes": [
-                                "role",
-                                "username",
-                                "is_active",
-                                "enabled"
-                            ]
-                        },
-                    }
-                ],
-                'BillingMode': 'PAY_PER_REQUEST'
-            },
-            wait=True
-        )
         self.table = self.context.aws().dynamodb_table().Table(self.get_table_name())
 
     @staticmethod
@@ -120,7 +57,8 @@ class UserDAO:
                 'updated_on': Utils.get_value_as_int('updated_on', user),
                 'role': user['role'] if 'role' in user else None,
                 'synced_on': int(user['synced_on']) if 'synced_on' in user else None,
-                'is_active': user['is_active'] if 'is_active' in user else None
+                'is_active': user['is_active'] if 'is_active' in user else None,
+                'identity_source': user['identity_source'] if 'identity_source' in user else None
             }
         )
 
@@ -161,40 +99,10 @@ class UserDAO:
             db_user['password_max_age'] = int(user.password_max_age)
         if user.additional_groups is not None:
             db_user['additional_groups'] = user.additional_groups
+        if user.identity_source is not None:
+            db_user['identity_source'] = user.identity_source
 
         return db_user
-
-    def create_user(self, user: Dict) -> Dict:
-
-        username = Utils.get_value_as_string('username', user)
-        username = AuthUtils.sanitize_username(username)
-
-        created_user = {
-            **user,
-            'username': username,
-            'created_on': Utils.current_time_ms(),
-            'updated_on': Utils.current_time_ms(),
-            'synced_on': Utils.current_time_ms()
-        }
-
-        self.table.put_item(
-            Item=created_user,
-            ConditionExpression=Attr('username').not_exists()
-        )
-        return created_user
-
-    def get_user(self, username: str) -> Optional[Dict]:
-        username = AuthUtils.sanitize_username(username)
-        _lu_start = Utils.current_time_ms()
-        result = self.table.get_item(
-            Key={
-                'username': username
-            }
-        )
-        _lu_stop = Utils.current_time_ms()
-        if self.logger.isEnabledFor(logging.DEBUG):
-            self.logger.debug(f"user_lookup: {result} - {_lu_stop - _lu_start}ms")
-        return Utils.get_value_as_dict('Item', result)
 
     def get_user_by_email(self, email: str) -> Optional[List[Dict]]:
         email = AuthUtils.sanitize_email(email)
@@ -206,46 +114,6 @@ class UserDAO:
             return None
 
         return result["Items"]
-
-    def update_user(self, user: Dict) -> Dict:
-        username = Utils.get_value_as_string('username', user)
-        username = AuthUtils.sanitize_username(username)
-        user['updated_on'] = Utils.current_time_ms()
-
-        update_expression_tokens = []
-        expression_attr_names = {}
-        expression_attr_values = {}
-
-        for key, value in user.items():
-            if key in ('username', 'created_on'):
-                continue
-            update_expression_tokens.append(f'#{key} = :{key}')
-            expression_attr_names[f'#{key}'] = key
-            expression_attr_values[f':{key}'] = value
-
-        result = self.table.update_item(
-            Key={
-                'username': username
-            },
-            ConditionExpression=Attr('username').eq(username),
-            UpdateExpression='SET ' + ', '.join(update_expression_tokens),
-            ExpressionAttributeNames=expression_attr_names,
-            ExpressionAttributeValues=expression_attr_values,
-            ReturnValues='ALL_NEW'
-        )
-
-        updated_user = result['Attributes']
-        updated_user['username'] = username
-        return updated_user
-
-    def delete_user(self, username: str):
-
-        username = AuthUtils.sanitize_username(username)
-        self.table.delete_item(
-            Key={
-                'username': username
-            }
-        )
 
     def list_users(self, request: ListUsersRequest) -> ListUsersResult:
 

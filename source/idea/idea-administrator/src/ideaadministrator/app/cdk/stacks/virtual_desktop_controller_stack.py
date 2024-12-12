@@ -37,8 +37,7 @@ from ideadatamodel import (
     SocaAnyPayload
 )
 from ideadatamodel.constants import (
-    IDEA_TAG_MODULE_ID,
-    ARTIFACTS_BUCKET_PREFIX_NAME
+    IDEA_TAG_MODULE_ID
 )
 from ideadatamodel.constants import IDEA_TAG_MODULE_ID
 from ideasdk.aws import AwsClientProvider, AWSClientProviderOptions
@@ -701,8 +700,12 @@ class VirtualDesktopControllerStack(IdeaBaseStack):
             environment={
                 # Required by shared library
                 "environment_name": f'{self.cluster_name}',
+                "HTTPS_PROXY": self.context.config().get_string('cluster.network.https_proxy', required=False, default=''),
+                "HTTP_PROXY": self.context.config().get_string('cluster.network.http_proxy', required=False, default=''),
+                "NO_PROXY": self.context.config().get_string('cluster.network.no_proxy', required=False, default=''),
             },
             role=vdi_helper_lambda_role,
+            runtime=aws_lambda.Runtime.PYTHON_3_12
         )
         self.vdi_helper_lambda_function.add_layers(self.shared_library_lambda_layer)
         self.vdi_helper_lambda_function.node.add_dependency(vdi_helper_lambda_role_policy)
@@ -1202,12 +1205,6 @@ class VirtualDesktopControllerStack(IdeaBaseStack):
             external_target_group.target_group_arn
         ]
 
-    def host_modules(self) -> List[str]:
-        return self.context.config().get_list("global-settings.package_config.host_modules.pam", []) + self.context.config().get_list("global-settings.package_config.host_modules.nss", [])
-
-    def build_host_module_s3_url(self, host_module_name, os_arch):
-        return f's3://{ARTIFACTS_BUCKET_PREFIX_NAME}-{self.aws_region}/host_modules/{host_module_name}/latest/{os_arch}/{host_module_name}.so'
-
     def _build_auto_scaling_group(self, component_name: str, security_group: SecurityGroup, iam_role: Role, substituted_userdata: str, node_type: str) -> asg.AutoScalingGroup:
         is_public = self.context.config().get_bool(f'virtual-desktop-controller.{self.CONFIG_MAPPING[component_name]}.autoscaling.public', False) and len(self.cluster.public_subnets) > 0
         if is_public:
@@ -1450,6 +1447,12 @@ class VirtualDesktopControllerStack(IdeaBaseStack):
                 description='Allow all traffic access from Prefix List to DCV Connection Gateway'
             )
 
+        self.dcv_connection_gateway_security_group.add_egress_rule(
+            ec2.Peer.ipv4('0.0.0.0/0'),
+            ec2.Port.udp_range(0, 65535),
+            description='Allow all egress for UDP on DCV Connection Gateway'
+        )
+
     def _build_self_signed_cert_for_dcv_connection_gateway(self):
         self_signed_certificate_lambda_arn = self.context.config().get_string('cluster.self_signed_certificate_lambda_arn', required=True)
         self.dcv_connection_gateway_self_signed_cert = cdk.CustomResource(
@@ -1550,11 +1553,6 @@ class VirtualDesktopControllerStack(IdeaBaseStack):
             'gateway_security_group_id': self.dcv_connection_gateway_security_group.security_group_id,
             'vdi-helper-id':self.vdi_helper_lambda_role_role_id
         }
-
-        host_modules = self.host_modules()
-        for host_module_name in host_modules:
-            for os_arch in ['x86_64', 'arm64']:
-                cluster_settings[f'host_modules.{host_module_name}.{os_arch}.s3_url'] = self.build_host_module_s3_url(host_module_name, os_arch)
 
         if not self.context.config().get_bool('virtual-desktop-controller.dcv_connection_gateway.certificate.provided', default=False):
             cluster_settings['dcv_connection_gateway.certificate.certificate_secret_arn'] = self.dcv_connection_gateway_self_signed_cert.get_att_string('certificate_secret_arn')

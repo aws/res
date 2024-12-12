@@ -1,5 +1,5 @@
 # Begin: Mount Shared Storage
-{%- if context.base_os in ('amazonlinux2', 'rhel8', 'rhel9', 'ubuntu2204') %}
+if [[ $RES_BASE_OS =~ ^(amzn2|rhel8|rhel9|ubuntu2204)$ ]]; then
   {%- if context.has_storage_provider('fsx_lustre') or context.has_storage_provider('fsx_cache') %}
     {% include '_templates/linux/fsx_lustre_client.jinja2' %}
   {%- endif %}
@@ -122,5 +122,5 @@
     # Lustre client tuning for some adjustments takes place _after_ the client mounts have taken place
     {% include '_templates/linux/fsx_lustre_client_tuning_postmount.jinja2' %}
   {%- endif %}
-{%- endif %}
+fi
 # End: Mount Shared Storage

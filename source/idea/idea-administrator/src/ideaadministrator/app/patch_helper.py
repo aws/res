@@ -112,7 +112,8 @@ class PatchHelper:
         if self.module_name in (
             constants.MODULE_DIRECTORYSERVICE,
             constants.MODULE_CLUSTER_MANAGER,
-            constants.MODULE_SCHEDULER
+            constants.MODULE_SCHEDULER,
+            constants.MODULE_BASTION_HOST,
         ):
             return f'sudo /bin/bash /root/bootstrap/latest/{self.module_name}/install_app.sh {package_uri} >> {PATCH_LOG}'
         elif self.module_name == constants.MODULE_VIRTUAL_DESKTOP_CONTROLLER:

@@ -13,6 +13,8 @@ logger.addHandler(logging.StreamHandler())
 logger.setLevel(logging.INFO)
 
 GSI_RESOURCE_KEY = "resource-key-index"
+GSI_RESOURCE_KEY_HASH_KEY = ROLE_ASSIGNMENTS_DB_RANGE_KEY = "resource_key"
+GSI_RESOURCE_KEY_RANGE_KEY = ROLE_ASSIGNMENTS_DB_HASH_KEY = "actor_key"
 ROLE_ASSIGNMENTS_TABLE_NAME = "authz.role-assignments"
 
 

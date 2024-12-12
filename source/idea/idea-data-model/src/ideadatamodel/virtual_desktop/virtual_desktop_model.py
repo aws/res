@@ -283,6 +283,7 @@ class VirtualDesktopSession(SocaBaseModel):
     is_launched_by_admin: Optional[bool]
     locked: Optional[bool]
     tags: Optional[list[dict]]
+    logins: Optional[list[str]]
     is_idle: Optional[bool]
 
     # Transient field, to be used for API responses only.

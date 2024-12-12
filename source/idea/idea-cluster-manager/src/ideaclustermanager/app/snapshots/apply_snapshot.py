@@ -187,7 +187,7 @@ class ApplySnapshot:
             self.merge_transformed_data_for_all_tables(transformed_data)
 
             self.logger.info(f"Apply snapshot operation completed")
-            
+
         except botocore.exceptions.ClientError as e:
             error_message = e.response["Error"]["Message"]
             self.apply_snapshot_dao.update_status(self.apply_snapshot_record, ApplySnapshotStatus.FAILED, error_message)
@@ -265,7 +265,7 @@ class ApplySnapshot:
 
             if not imported:
                 self.logger.error(f'Table "{table_name}" failed import')
-                raise RuntimeError(f'Table "{table_name}" failed import')
+                raise Exception(f'Table "{table_name}" failed import')
         except botocore.exceptions.ClientError as e:
             self.logger.error(f'Table "{table_name}" failed import with error: {e}')
             raise e
@@ -345,15 +345,15 @@ class ApplySnapshot:
                     else:
                         error_message = f"Apply Snapshot {self.apply_snapshot_record.apply_snapshot_identifier} failed to apply {table_name}. Initiating rollback."
                         raise exceptions.table_merge_failed(error_message)
-                    
+
             self.apply_snapshot_dao.update_status(self.apply_snapshot_record, ApplySnapshotStatus.COMPLETED)
 
         except exceptions.SocaException as e:
             error_message = e.message
             self.logger.error(error_message)
-            
+
             self.apply_snapshot_dao.update_status(self.apply_snapshot_record, ApplySnapshotStatus.ROLLBACK_IN_PROGRESS, error_message)
-            
+
             try:
                 _rollback_merged_tables()
                 self.apply_snapshot_dao.update_status(self.apply_snapshot_record, ApplySnapshotStatus.ROLLBACK_COMPLETE, error_message)

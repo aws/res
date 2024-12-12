@@ -11,6 +11,12 @@
 
 from ideasdk.api import BaseAPI, ApiInvocationContext
 from ideadatamodel.auth import (
+    SignUpUserRequest,
+    SignUpUserResult,
+    ConfirmSignUpRequest,
+    ConfirmSignUpResult,
+    ResendConfirmationCodeRequest,
+    ResendConfirmationCodeResult,
     GetUserRequest,
     GetUserResult,
     GetUserByEmailRequest,
@@ -46,6 +52,8 @@ from ideasdk.utils import Utils
 
 import ideaclustermanager
 
+from res.resources import accounts
+
 
 class AccountsAPI(BaseAPI):
 
@@ -56,6 +64,18 @@ class AccountsAPI(BaseAPI):
         self.SCOPE_READ = f'{self.context.module_id()}/read'
 
         self.acl = {
+            'Accounts.SignUpUser': {
+                'scope': self.SCOPE_WRITE,
+                'method': self.sign_up_user
+            },
+            'Accounts.ConfirmSignUp': {
+                'scope': self.SCOPE_WRITE,
+                'method': self.confirm_sign_up
+            },
+            'Accounts.ResendConfirmationCode': {
+                'scope': self.SCOPE_WRITE,
+                'method': self.resend_confirmation_code
+            },
             'Accounts.GetUser': {
                 'scope': self.SCOPE_READ,
                 'method': self.get_user
@@ -139,6 +159,21 @@ class AccountsAPI(BaseAPI):
             return False
         return scope in token_scope.split(' ')
 
+    def sign_up_user(self, context: ApiInvocationContext):
+        request = context.get_request_payload_as(SignUpUserRequest)
+        self.context.accounts.sign_up_user(request)
+        context.success(SignUpUserResult())
+
+    def confirm_sign_up(self, context: ApiInvocationContext):
+        request = context.get_request_payload_as(ConfirmSignUpRequest)
+        self.context.accounts.confirm_sign_up(request)
+        context.success(ConfirmSignUpResult())
+
+    def resend_confirmation_code(self, context: ApiInvocationContext):
+        request = context.get_request_payload_as(ResendConfirmationCodeRequest)
+        self.context.accounts.resend_confirmation_code(request)
+        context.success(ResendConfirmationCodeResult())
+
     def get_user(self, context: ApiInvocationContext):
         request = context.get_request_payload_as(GetUserRequest)
         user = self.context.accounts.get_user(request.username)
@@ -151,15 +186,14 @@ class AccountsAPI(BaseAPI):
 
     def modify_user(self, context: ApiInvocationContext):
         request = context.get_request_payload_as(ModifyUserRequest)
-        email_verified = Utils.get_as_bool(request.email_verified, False)
-        user = self.context.accounts.modify_user(request.user, email_verified)
+        user = self.context.accounts.modify_user(request.user)
         context.success(ModifyUserResult(
             user=user
         ))
 
     def enable_user(self, context: ApiInvocationContext):
         request = context.get_request_payload_as(EnableUserRequest)
-        self.context.accounts.enable_user(request.username)
+        accounts.update_user(user={'username': request.username, 'enabled': True}, force=True)
         context.success(EnableUserResult())
 
     def disable_user(self, context: ApiInvocationContext):
@@ -193,12 +227,18 @@ class AccountsAPI(BaseAPI):
 
     def enable_group(self, context: ApiInvocationContext):
         request = context.get_request_payload_as(EnableGroupRequest)
-        self.context.accounts.enable_group(request.group_name)
+        accounts.update_group({
+            'group_name': request.group_name,
+            'enabled': True
+        }, force=True)
         context.success(EnableGroupResult())
 
     def disable_group(self, context: ApiInvocationContext):
         request = context.get_request_payload_as(DisableGroupRequest)
-        self.context.accounts.disable_group(request.group_name)
+        accounts.update_group({
+            'group_name': request.group_name,
+            'enabled': False
+        }, force=True)
         context.success(DisableGroupResult())
 
     def get_group(self, context: ApiInvocationContext):
@@ -220,7 +260,11 @@ class AccountsAPI(BaseAPI):
 
     def add_admin_user(self, context: ApiInvocationContext):
         request = context.get_request_payload_as(AddAdminUserRequest)
-        self.context.accounts.add_admin_user(request.username)
+        accounts.update_user({
+            'username': request.username,
+            'role': 'admin',
+            'sudo': True
+        })
         user = self.context.accounts.get_user(request.username)
         context.success(AddAdminUserResult(
             user=user
@@ -269,6 +313,15 @@ class AccountsAPI(BaseAPI):
         self.check_admin_authorization_services(context)
 
         acl_entry_scope = Utils.get_value_as_string('scope', acl_entry)
+
+        enable_self_sign_up = self.context.config().get_bool('identity-provider.cognito.enable_self_sign_up', required=True)
+        enable_native_user_login = self.context.config().get_bool('identity-provider.cognito.enable_native_user_login', required=True)
+
+        # If `enable_self_sign_up` is True and `enable_native_user` is True all customers with access to the web app can sign up for, verify, and resend confirmation code for their account
+        if namespace in ['Accounts.SignUpUser', 'Accounts.ConfirmSignUp', 'Accounts.ResendConfirmationCode'] and enable_self_sign_up and enable_native_user_login:
+            acl_entry['method'](context)
+            return
+
         is_authorized = context.is_authorized(elevated_access=True, scopes=[acl_entry_scope])
 
         # Allow if admin
@@ -288,5 +341,5 @@ class AccountsAPI(BaseAPI):
             if self.context.role_assignments.check_permissions_in_any_role(user=user, permissions=["projects.update_personnel"]):
                 acl_entry['method'](context)
                 return
-        
+
         raise exceptions.unauthorized_access()

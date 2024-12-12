@@ -2,10 +2,13 @@
 #  SPDX-License-Identifier: Apache-2.0
 
 import logging
+import uuid
 from typing import Any, Dict, Optional
 
 import res.exceptions as exceptions
-from res.utils import table_utils, time_utils
+from res.clients.events import events_client
+from res.resources import cluster_settings
+from res.utils import aws_utils, table_utils, time_utils
 
 logger = logging.getLogger(__name__)
 logger.addHandler(logging.StreamHandler())
@@ -24,6 +27,26 @@ SCHEDULE_DAYS = [
     "saturday",
     "sunday",
 ]
+
+
+def create_schedule(schedule: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Create schedule in DDB
+    :param schedule: scheduke to be created
+    """
+    if not schedule:
+        raise Exception("schedule is required")
+    schedule[SCHEDULE_DB_RANGE_KEY] = str(uuid.uuid4())
+    created_schedule = table_utils.create_item(
+        table_name=SCHEDULE_DB_TABLE_NAME, item=schedule
+    )
+    events_client.publish_create_event(
+        created_schedule[SCHEDULE_DB_HASH_KEY],
+        created_schedule[SCHEDULE_DB_RANGE_KEY],
+        new_entry=created_schedule,
+        table_name=SCHEDULE_DB_TABLE_NAME,
+    )
+    return created_schedule
 
 
 def delete_schedule(schedule: Dict[str, Any]) -> None:

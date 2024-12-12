@@ -8,17 +8,15 @@ header_lines = [
     "#  SPDX-License-Identifier: Apache-2.0",
 ]
 
-shebangs = {
-    "#!/usr/bin/env bash",
-}
+shebangs = {"#!/usr/bin/env bash", "#!/bin/bash", "#!/bin/bash -e"}
 
 
 def test_headers_exist() -> None:
     # TODO: Change the path to include all the source files
     paths = itertools.chain(
         pathlib.Path("source/idea").glob("**/*.py"),
-        pathlib.Path("source/res").glob("**/*.py"),
-        pathlib.Path("source/res").glob("**/*.sh"),
+        pathlib.Path("source/infra").glob("**/*.py"),
+        pathlib.Path("source/infra").glob("**/*.sh"),
         pathlib.Path("source/idea").glob("**/*.sh"),
     )
     for path in paths:

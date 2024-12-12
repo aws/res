@@ -23,6 +23,7 @@ import IdeaException from "../../common/exceptions";
 import { Constants } from "../../common/constants";
 import IdeaAppLayout, { IdeaAppLayoutProps } from "../../components/app-layout";
 import { withRouter } from "../../navigation/navigation-utils";
+import ProxyClient from "../../client/proxy-client";
 
 export interface ClusterStatusProps extends IdeaAppLayoutProps, IdeaSideNavigationProps {}
 
@@ -43,7 +44,7 @@ function getModuleInfo(module: string): Promise<GetModuleInfoResult> {
             .then((result) => {
                 return result;
             });
-    } else if (module === Constants.MODULE_CLUSTER_MANAGER) {
+    } else if (module === Constants.MODULE_CLUSTER_MANAGER || module === Constants.MODULE_BASTION_HOST) {
         return AppContext.get()
             .client()
             .clusterSettings()
@@ -228,6 +229,10 @@ class ClusterStatus extends Component<ClusterStatusProps, ClusterStatusState> {
         return AppContext.get().client().clusterSettings();
     }
 
+    proxy(): ProxyClient{
+        return AppContext.get().client().proxy()
+    }
+
     componentDidMount() {
         this.loadClusterHosts();
         this.loadClusterModules();
@@ -269,44 +274,61 @@ class ClusterStatus extends Component<ClusterStatusProps, ClusterStatusState> {
             },
             () => {
                 const awsRegion = AppContext.get().getAwsRegion();
+                const queryStringParameters = {
+                    'Action': 'DescribeInstances',
+                    'Version': '2016-11-15',
+                    'Filter.1.Name': 'instance-state-name',
+                    'Filter.1.Value.1': 'pending',
+                    'Filter.1.Value.2': 'stopped',
+                    'Filter.1.Value.3': 'running',
+                    'Filter.2.Name': 'tag:res:EnvironmentName',
+                    'Filter.2.Value.1': AppContext.get().getClusterName(),
+                    'Filter.3.Name': 'tag:res:NodeType',
+                    'Filter.3.Value.1': 'infra',
+                    'Filter.3.Value.2': 'app',
+                    'Filter.3.Value.3': 'ami-builder'
+                };
                 const instances: any = [];
-                this.getClusterSettingsClient()
-                    .listClusterHosts({})
+                this.proxy()
+                    .listClusterHosts({
+                        AWSRegion: awsRegion,
+                        QueryStringParameters: Utils.convertToQueryString(queryStringParameters).replace('"', '')
+                    })
                     .then((result) => {
-                        result.listing?.forEach((host: any) => {
+                        result.DescribeInstancesResponse.reservationSet.item.forEach((host: any) => {
                             let instance: any = {};
-                            host.Tags?.forEach((tag: any) => {
-                                switch (tag.Key) {
+                            host.instancesSet.item.tagSet?.item?.forEach((tag: any) => {
+                                switch (tag.key) {
                                     case "res:ModuleName":
-                                        instance.module_name = tag.Value;
+                                        instance.module_name = tag.value;
                                         break;
                                     case "res:ModuleVersion":
-                                        instance.module_version = tag.Value;
+                                        instance.module_version = tag.value;
                                         break;
                                     case "res:EnvironmentName":
-                                        instance.cluster_name = tag.Value;
+                                        instance.cluster_name = tag.value;
                                         break;
                                     case "res:ModuleId":
-                                        instance.module_id = tag.Value;
+                                        instance.module_id = tag.value;
                                         break;
                                     case "res:NodeType":
-                                        instance.node_type = tag.Value;
+                                        instance.node_type = tag.value;
                                         break;
                                     case "Name":
-                                        instance.instance_name = tag.Value;
+                                        instance.instance_name = tag.value;
                                         break;
                                 }
                             });
 
-                            instance.instance_id = host.InstanceId;
-                            instance.instance_type = host.InstanceType;
-                            instance.instance_state = host.State.Name;
-                            instance.availability_zone = host.Placement.AvailabilityZone;
-                            instance.subnet_id = host.SubnetId;
-                            instance.private_ip = host.PrivateIpAddress;
-                            instance.public_ip = host.PublicIpAddress;
-                            instance.ami_id = host.ImageId;
-                            instance.session_manager_url = Utils.getSessionManagerConnectionUrl(awsRegion, host.InstanceId);
+                            instance.instance_id = host.instancesSet.item.instanceId;
+                            instance.instance_type = host.instancesSet.item.instanceType;
+                            instance.instance_state = host.instancesSet.item.instanceState.name;
+                            instance.availability_zone = host.instancesSet.item.placement.availabilityZone;
+                            instance.subnet_id = host.instancesSet.item.subnetId;
+                            instance.private_ip = host.instancesSet.item.privateIpAddress;
+                            instance.public_ip = host.instancesSet.item.networkInterfaceSet?.item.association?.publicIp;
+                            instance.ami_id = host.instancesSet.item.imageId;
+                            instance.session_manager_url = Utils.getSessionManagerConnectionUrl(awsRegion, host.instancesSet.item.instanceId);
 
                             instances.push(instance);
                         });
@@ -556,7 +578,7 @@ class ClusterStatus extends Component<ClusterStatusProps, ClusterStatusState> {
                         href: "#/cluster/status",
                     },
                     {
-                        text: "Status",
+                        text: "Environment status",
                         href: "",
                     },
                 ]}
@@ -571,7 +593,7 @@ class ClusterStatus extends Component<ClusterStatusProps, ClusterStatusState> {
                             </SpaceBetween>
                         }
                     >
-                        Environment Status
+                        Environment status
                     </Header>
                 }
                 contentType={"default"}

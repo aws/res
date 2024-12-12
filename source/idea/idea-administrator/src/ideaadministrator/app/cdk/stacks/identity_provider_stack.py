@@ -11,10 +11,12 @@
 import os
 from typing import Optional
 
+from aws_cdk import Aws
 import aws_cdk as cdk
 import constructs
 import ideaadministrator
 from aws_cdk import aws_cognito as cognito
+from aws_cdk import custom_resources as cr
 from ideaadministrator import app_constants
 from ideaadministrator.app.cdk.constructs import ExistingSocaCluster, LambdaFunction, Policy, Role, UserPool
 from ideaadministrator.app.cdk.idea_code_asset import IdeaCodeAsset, SupportedLambdaPlatforms
@@ -22,6 +24,7 @@ from ideaadministrator.app.cdk.stacks import IdeaBaseStack
 from ideasdk.utils import Utils
 
 from ideadatamodel import constants, exceptions
+from ideadatamodel import get_cognito_construct_params
 
 
 class IdentityProviderStack(IdeaBaseStack):
@@ -81,6 +84,7 @@ class IdentityProviderStack(IdeaBaseStack):
 
         self.user_pool: Optional[UserPool] = None
         self.oauth_credentials_lambda: Optional[LambdaFunction] = None
+        self.vdi_client_id = ""
 
         provider = self.context.config().get_string('identity-provider.provider', required=True)
         if provider == constants.IDENTITY_PROVIDER_KEYCLOAK:
@@ -104,25 +108,15 @@ class IdentityProviderStack(IdeaBaseStack):
         # Note: do not use the custom dns name, as the dns name might not have been configured during initial deployment.
         # admins must manually update the email invitation template via AWS Console after the stack is deployed.
         external_alb_dns = self.context.config().get_string('cluster.load_balancers.external_alb.load_balancer_dns_name', required=True)
-        external_endpoint = f'https://{external_alb_dns}'
 
         # do not touch the user pool invitation emails after the initial cluster creation.
         # if the user pool is already created, read the existing values and set them again to avoid replacing the values
         # during cdk stack update
         user_pool_id = self.context.config().get_string('identity-provider.cognito.user_pool_id')
 
-        user_invitation_email_subject = f'Invitation to Join RES Environment: {self.cluster_name}'
-        email_message = [
-            '<p>Hello <b>{username},</b></p>',
-            f'<p>You have been invited to join the <b>{self.cluster_name}</b> environment.</p>',
-            f'<p>Your temporary password is:</p>',
-            '<h3>{####}</h3>',
-            '<p>You can sign in to your account using the link below: <br/>',
-            f'<a href="{external_endpoint}">{external_endpoint}</a></p>',
-            f'<p>---<br/>',
-            f'<b>RES Environment Admin</b></p>'
-        ]
-        user_invitation_email_body = os.linesep.join(email_message)
+        cognito_params = get_cognito_construct_params(self.cluster_name, external_alb_dns)
+
+        advanced_security_mode = None if self.aws_region in constants.CAVEATS['COGNITO_ADVANCED_SECURITY_UNAVAIL_REGION_LIST'] else cognito.AdvancedSecurityMode(cognito_params.advanced_security_mode)
 
         self.user_pool = UserPool(
             context=self.context,
@@ -131,11 +125,28 @@ class IdentityProviderStack(IdeaBaseStack):
             props=cognito.UserPoolProps(
                 removal_policy=removal_policy,
                 user_invitation=cognito.UserInvitationConfig(
-                    email_subject=user_invitation_email_subject,
-                    email_body=user_invitation_email_body
-                )
+                    email_subject=cognito_params.user_invitation_email_subject,
+                    email_body=cognito_params.user_invitation_email_body
+                ),
+                self_sign_up_enabled=True,
+                auto_verify=cognito.AutoVerifiedAttrs(email="email" in cognito_params.auto_verified_attributes, phone="phone" in cognito_params.auto_verified_attributes),
+                advanced_security_mode=advanced_security_mode,
             )
         )
+
+        # add app client for vdi to authenticate with cognito
+        client = self.user_pool.user_pool.add_client(
+            id='vdi-client',
+            auth_flows=cognito.AuthFlow(
+                admin_user_password=True
+            ),
+            prevent_user_existence_errors=True,
+            read_attributes= cdk.aws_cognito.ClientAttributes().with_custom_attributes("uid"),
+            write_attributes= cdk.aws_cognito.ClientAttributes().with_standard_attributes(email=True),
+            user_pool_client_name="vdi",
+            disable_o_auth=True
+        )
+        self.vdi_client_id = client.user_pool_client_id
 
         # build lambda function in cluster stack to retrieve the client secret
         # the clientId and client secret is saved in secrets manager for each module
@@ -177,6 +188,7 @@ class IdentityProviderStack(IdeaBaseStack):
         cluster_settings = {
             'deployment_id': self.deployment_id,
             'cognito.user_pool_id': self.user_pool.user_pool.user_pool_id,
+            'cognito.vdi_client_id': self.vdi_client_id,
             'cognito.provider_url': self.user_pool.user_pool.user_pool_provider_url,
             'cognito.domain_url': self.user_pool.domain.base_url(fips=True if self.aws_region in Utils.get_value_as_list('COGNITO_REQUIRE_FIPS_ENDPOINT_REGION_LIST', constants.CAVEATS, []) else False),
             'cognito.oauth_credentials_lambda_arn': self.oauth_credentials_lambda.function_arn

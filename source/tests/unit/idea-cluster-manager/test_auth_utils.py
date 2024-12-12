@@ -17,23 +17,9 @@ from typing import Optional
 
 import pytest
 import validators
-from ideaclustermanager import AppContext
-from ideaclustermanager.app.accounts.account_tasks import (
-    SyncGroupInDirectoryServiceTask,
-)
 from ideaclustermanager.app.accounts.auth_utils import AuthUtils as auth_utils
-from ideaclustermanager.app.accounts.user_home_directory import UserHomeDirectory
-from ideasdk.utils import Utils
-from ideatestutils import IdeaTestProps
 
-from ideadatamodel import (
-    Group,
-    ListUsersRequest,
-    User,
-    constants,
-    errorcodes,
-    exceptions,
-)
+from ideadatamodel import errorcodes, exceptions
 
 
 def test_auth_utils_santize_sub_with_empty_argument_should_fail():

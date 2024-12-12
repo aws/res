@@ -1,6 +1,6 @@
 {
   "name": "web-portal", 
-  "version": "2024.10", 
+  "version": "2024.12", 
   "private": true,
   "dependencies": {
     "@cloudscape-design/components": "^3.0.82",
@@ -11,6 +11,7 @@
     "@fortawesome/free-solid-svg-icons": "^6.2.0",
     "@fortawesome/react-fontawesome": "^0.2.0",
     "@types/dot-object": "^2.1.2",
+    "@types/lodash": "^4.17.10",
     "@types/react": "^18.0.0",
     "@types/react-beautiful-dnd": "^13.1.2",
     "@types/react-dom": "^18.0.0",
@@ -24,6 +25,7 @@
     "chonky-icon-fontawesome": "^2.3.2",
     "dot-object": "^2.1.4",
     "idb": "^7.0.1",
+    "lodash": "^4.17.21",
     "moment": "^2.29.4",
     "moment-timezone": "^0.5.38",
     "nunjucks": "^3.2.3",
@@ -82,7 +84,7 @@
     "minimist": ">=1.2.6",
     "moment": ">=2.29.4",
     "@babel/traverse": ">=7.23.2",
-    "webpack" : ">=5.76.0"
+    "webpack": ">=5.76.0"
   },
   "eslintConfig": {
     "extends": [
@@ -102,5 +104,6 @@
       "last 1 safari version"
     ]
   },
-  "homepage": "."
+  "homepage": ".",
+  "packageManager": "yarn@1.22.22+sha512.a6b2f7906b721bba3d67d4aff083df04dad64c399707841b7acf00f6b133b7ac24255f2652fa22ae3534329dc6180534e98d17432037ff6fd140556e2bb3137e"
 }

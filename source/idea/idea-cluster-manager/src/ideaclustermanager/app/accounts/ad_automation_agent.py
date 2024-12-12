@@ -15,16 +15,12 @@ from ideasdk.context import SocaContext
 from ideasdk.utils import Utils
 from ideadatamodel import exceptions, errorcodes
 
-from ideaclustermanager.app.accounts.ldapclient.active_directory_client import ActiveDirectoryClient
 from ideaclustermanager.app.accounts.db.ad_automation_dao import ADAutomationDAO
 from ideaclustermanager.app.accounts.helpers.preset_computer_helper import PresetComputeHelper
 
 from typing import Dict
 from threading import Thread, Event
-import arrow
 import ldap  # noqa
-import time
-import random
 
 DEFAULT_MAX_MESSAGES = 1
 DEFAULT_WAIT_INTERVAL_SECONDS = 20
@@ -43,11 +39,10 @@ class ADAutomationAgent(SocaService):
     * Expect admins to heavily customize this implementation
     """
 
-    def __init__(self, context: SocaContext, ldap_client: ActiveDirectoryClient):
+    def __init__(self, context: SocaContext):
         super().__init__(context)
         self.context = context
         self.logger = context.logger('ad-automation-agent')
-        self.ldap_client = ldap_client
 
         self.ad_automation_sqs_queue_url = self.context.config().get_string('directoryservice.ad_automation.sqs_queue_url', required=True)
 
@@ -57,94 +52,6 @@ class ADAutomationAgent(SocaService):
         self._stop_event = Event()
         self._automation_thread = Thread(name='ad-automation-thread', target=self.automation_loop)
 
-    def is_password_expired(self) -> bool:
-
-        root_username = self.ldap_client.ldap_root_username
-        user = self.ldap_client.get_user(root_username, trace=False)
-        if user is None:
-            raise exceptions.soca_exception(
-                error_code=errorcodes.GENERAL_ERROR,
-                message='ActiveDirectory admin user not found'
-            )
-
-        password_last_set = Utils.get_value_as_int('password_last_set', user, 0)
-        password_max_age = Utils.get_value_as_int('password_max_age', user)
-
-        password_expiry_date = None
-        if password_last_set != 0:
-            password_last_set_date = arrow.get(password_last_set)
-            password_expiry_date = password_last_set_date.shift(days=password_max_age)
-
-        if password_expiry_date is not None:
-
-            now = arrow.utcnow()
-
-            # check for expiration 2 days before expiration
-            now_minus_2days = now.shift(days=-2)
-
-            if now_minus_2days < password_expiry_date:
-                return False
-
-        return True
-
-    def check_and_reset_admin_password(self):
-        """
-        check and reset password for AD admin user
-        """
-
-        if not self.is_password_expired():
-            return
-
-        try:
-
-            # sleep for a random interval to prevent race condition
-            time.sleep(random.randint(1, 30))
-
-            self.logger.info('acquiring lock to reset ds credentials ...')
-            self.context.distributed_lock().acquire(key=AD_RESET_PASSWORD_LOCK_KEY)
-
-            self.logger.info('reset ds credentials lock acquired.')
-
-            # check again, where other node may have acquired the lock and already performed the update.
-            if not self.is_password_expired():
-                self.logger.info('ds credentials already reset. re-sync ds credentials from secrets manager ...')
-                self.ldap_client.refresh_root_username_password()
-                return
-
-            username = self.ldap_client.ldap_root_username
-            new_password = Utils.generate_password(16, 2, 2, 2, 2)
-
-            # change password in Managed AD (calls ds.reset_password)
-            success = False
-            current_retry = 0
-            max_retries = 4
-            backoff_in_seconds = 5
-            while not success and current_retry < max_retries:
-                try:
-                    self.ldap_client.change_password(username, new_password)
-
-                    # wait for password change to sync across domain controllers
-                    time.sleep(30)
-
-                    success = True
-                except exceptions.SocaException as e:
-                    if e.error_code == errorcodes.AUTH_USER_NOT_FOUND:
-                        self.logger.info(f'reset password for {username}: waiting for user to be synced with AD domain controllers ...')
-                        interval = Utils.get_retry_backoff_interval(current_retry, max_retries, backoff_in_seconds)
-                        current_retry += 1
-                        time.sleep(interval)
-                    else:
-                        raise e
-
-            # update root password secret
-            self.ldap_client.update_root_password(new_password)
-            self.logger.info('ds credentials updated.')
-
-        finally:
-
-            self.context.distributed_lock().release(key=AD_RESET_PASSWORD_LOCK_KEY)
-            self.logger.info('reset ds credentials lock released.')
-
     def automation_loop(self):
 
         while not self._stop_event.is_set():
@@ -152,10 +59,6 @@ class ADAutomationAgent(SocaService):
             admin_user_ok = False
 
             try:
-
-                enable_root_password_reset = self.context.config().get_bool('directoryservice.ad_automation.enable_root_password_reset', default=False)
-                if enable_root_password_reset:
-                    self.check_and_reset_admin_password()
                 admin_user_ok = True
 
                 visibility_timeout = self.context.config().get_int('directoryservice.ad_automation.sqs_visibility_timeout_seconds', default=30)
@@ -203,7 +106,6 @@ class ADAutomationAgent(SocaService):
                             if namespace == 'ADAutomation.PresetComputer':
                                 PresetComputeHelper(
                                     context=self.context,
-                                    ldap_client=self.ldap_client,
                                     ad_automation_dao=self.ad_automation_dao,
                                     sender_id=sender_id,
                                     request=request

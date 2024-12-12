@@ -32,25 +32,6 @@ class EmailTemplatesDAO:
         return f'{self.context.cluster_name()}.email-templates'
 
     def initialize(self):
-        self.context.aws_util().dynamodb_create_table(
-            create_table_request={
-                'TableName': self.get_table_name(),
-                'AttributeDefinitions': [
-                    {
-                        'AttributeName': 'name',
-                        'AttributeType': 'S'
-                    }
-                ],
-                'KeySchema': [
-                    {
-                        'AttributeName': 'name',
-                        'KeyType': 'HASH'
-                    }
-                ],
-                'BillingMode': 'PAY_PER_REQUEST'
-            },
-            wait=True
-        )
         self.table = self.context.aws().dynamodb_table().Table(self.get_table_name())
 
     @staticmethod

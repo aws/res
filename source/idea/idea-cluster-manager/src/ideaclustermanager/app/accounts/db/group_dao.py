@@ -10,11 +10,10 @@
 #  and limitations under the License.
 
 from ideasdk.utils import Utils
-from ideadatamodel import exceptions, ListGroupsRequest, ListGroupsResult, Group, SocaPaginator
+from ideadatamodel import ListGroupsRequest, ListGroupsResult, Group, SocaPaginator
 from ideasdk.context import SocaContext
 
-from typing import Optional, Dict
-from boto3.dynamodb.conditions import Attr
+from typing import Dict
 
 
 class GroupDAO:
@@ -31,25 +30,6 @@ class GroupDAO:
         return f'{self.context.cluster_name()}.accounts.groups'
 
     def initialize(self):
-        self.context.aws_util().dynamodb_create_table(
-            create_table_request={
-                'TableName': self.get_table_name(),
-                'AttributeDefinitions': [
-                    {
-                        'AttributeName': 'group_name',
-                        'AttributeType': 'S'
-                    }
-                ],
-                'KeySchema': [
-                    {
-                        'AttributeName': 'group_name',
-                        'KeyType': 'HASH'
-                    }
-                ],
-                'BillingMode': 'PAY_PER_REQUEST'
-            },
-            wait=True
-        )
         self.table = self.context.aws().dynamodb_table().Table(self.get_table_name())
 
     @staticmethod
@@ -62,12 +42,11 @@ class GroupDAO:
                 'title': Utils.get_value_as_string('title', group),
                 'description': Utils.get_value_as_string('description', group),
                 'enabled': Utils.get_value_as_bool('enabled', group),
-                'group_type': Utils.get_value_as_string('group_type', group),
-                'type': Utils.get_value_as_string('type', group),
                 'role': Utils.get_value_as_string('role', group),
                 'created_on': Utils.get_value_as_int('created_on', group),
                 'updated_on': Utils.get_value_as_int('updated_on', group),
-                'synced_on': Utils.get_value_as_int('synced_on', group)
+                'synced_on': Utils.get_value_as_int('synced_on', group),
+                'identity_source': Utils.get_value_as_string('identity_source', group),
             }
         )
 
@@ -88,8 +67,8 @@ class GroupDAO:
             db_group['enabled'] = group.enabled
         if group.group_type is not None:
             db_group['group_type'] = group.group_type
-        if group.type is not None:
-            db_group['type'] = group.type
+        if group.identity_source is not None:
+            db_group['identity_source'] = group.identity_source
         if group.role is not None:
             db_group['role'] = group.role
         if group.ref is not None:
@@ -97,74 +76,6 @@ class GroupDAO:
         if group.ds_name is not None:
             db_group['ds_name'] = group.ds_name
         return db_group
-
-    def create_group(self, group: Dict) -> Dict:
-
-        group_name = Utils.get_value_as_string('group_name', group)
-        if Utils.is_empty(group_name):
-            raise exceptions.invalid_params('group_name is required')
-
-        created_group = {
-            **group,
-            'created_on': Utils.current_time_ms(),
-            'updated_on': Utils.current_time_ms()
-        }
-        self.table.put_item(
-            Item=created_group,
-            ConditionExpression=Attr('group_name').not_exists()
-        )
-        return created_group
-
-    def get_group(self, group_name: str) -> Optional[Dict]:
-        if Utils.is_empty(group_name):
-            raise exceptions.invalid_params('group_name is required')
-        result = self.table.get_item(
-            Key={
-                'group_name': group_name
-            }
-        )
-        return Utils.get_value_as_dict('Item', result)
-
-    def update_group(self, group: Dict) -> Optional[Dict]:
-        group_name = Utils.get_value_as_string('group_name', group)
-        if Utils.is_empty(group_name):
-            raise exceptions.invalid_params('group_name is required')
-
-        group['updated_on'] = Utils.current_time_ms()
-
-        update_expression_tokens = []
-        expression_attr_names = {}
-        expression_attr_values = {}
-
-        for key, value in group.items():
-            if key in ('group_name', 'created_on'):
-                continue
-            update_expression_tokens.append(f'#{key} = :{key}')
-            expression_attr_names[f'#{key}'] = key
-            expression_attr_values[f':{key}'] = value
-
-        result = self.table.update_item(
-            Key={
-                'group_name': group_name
-            },
-            ConditionExpression=Attr('group_name').eq(group_name),
-            UpdateExpression='SET ' + ', '.join(update_expression_tokens),
-            ExpressionAttributeNames=expression_attr_names,
-            ExpressionAttributeValues=expression_attr_values,
-            ReturnValues='ALL_NEW'
-        )
-
-        updated_user = result['Attributes']
-        return updated_user
-
-    def delete_group(self, group_name: str):
-        if Utils.is_empty(group_name):
-            raise exceptions.invalid_params('group_name is required')
-        self.table.delete_item(
-            Key={
-                'group_name': group_name
-            }
-        )
 
     def list_groups(self, request: ListGroupsRequest) -> ListGroupsResult:
 

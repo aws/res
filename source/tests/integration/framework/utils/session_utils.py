@@ -41,6 +41,7 @@ SESSION_COMPLETE_STATES = [
 # Make sure to leave enough time for the test setup and cleanup when running in the code pipeline.
 MAX_WAITING_TIME_FOR_LAUNCHING_SESSION_IN_SEC = 2700
 MAX_WAITING_TIME_FOR_DELETING_SESSION_IN_SEC = 300
+MAX_WAITING_TIME_FOR_STOPPING_IDLE_SESSION_IN_SEC = 1200
 MAX_WAITING_TIME_FOR_SESSION_CONNECTION_COUNT_IN_SEC = 300
 
 
@@ -89,6 +90,73 @@ def wait_for_deleting_session(
     assert (
         False
     ), f"Failed to delete session {session.dcv_session_id} within {MAX_WAITING_TIME_FOR_DELETING_SESSION_IN_SEC} seconds"
+
+
+def wait_for_stopped_idle_session(
+    client: ResClient, session: VirtualDesktopSession
+) -> None:
+    start_time = time.time()
+    while time.time() - start_time < MAX_WAITING_TIME_FOR_STOPPING_IDLE_SESSION_IN_SEC:
+        get_session_info_request = GetSessionInfoRequest(session=session)
+        get_session_info_response = client.get_session_info(get_session_info_request)
+        session = get_session_info_response.session
+        session_state = session.state
+
+        if session_state == VirtualDesktopSessionState.STOPPED_IDLE:
+            return
+
+        logger.debug(f"session state: {session_state}")
+        time.sleep(30)
+
+    assert (
+        False
+    ), f"Failed to stop idle session {session.name} within {MAX_WAITING_TIME_FOR_STOPPING_IDLE_SESSION_IN_SEC} seconds"
+
+
+"""
+Force the auto stop script to run on a session by setting the idle config to an idle timeout threshold of 0
+LINUX: Overwrites the existing idle config file
+WINDOWS: Writes a new idle config file due to a race condition where the Idle_Config file is typically not created before the integ test runs
+"""
+
+
+def force_idle_session(
+    region: str, session: VirtualDesktopSession, env_name: str
+) -> None:
+    logger.info(f"Setting {session.name} session config to idle...")
+    forced_idle_cpu_threshold = 100
+    forced_idle_timeout = 0
+    platform = (
+        EC2InstancePlatform.WINDOWS
+        if session.software_stack.base_os == VirtualDesktopBaseOS.WINDOWS
+        else EC2InstancePlatform.LINUX
+    )
+    remote_command_runner = RemoteCommandRunner(region, platform)
+    if platform == EC2InstancePlatform.LINUX:
+        linux_idle_config_path = "/opt/idea/.idle_config.json"
+        commands = [
+            "sudo su -",
+            f"cat <<< $(jq '.idle_cpu_threshold = {forced_idle_cpu_threshold} | .idle_timeout = {forced_idle_timeout}' {linux_idle_config_path}) > {linux_idle_config_path}",
+        ]
+    else:
+        windows_idle_config_path = "C:\IDEA\Idle_Config.json"
+        vdi_helper_api_gateway_url_lookup_key = (
+            r"{\"key\": {\"S\": \"vdc.vdi_helper_api_gateway_url\"}}"
+        )
+        cluster_settings_table_name = f"{env_name}.cluster-settings"
+        transition_state = "Stop"
+        commands = [
+            f"$vdi_helper_api_gateway_url_item = aws dynamodb get-item --table-name {cluster_settings_table_name} --key '{vdi_helper_api_gateway_url_lookup_key}' --region {region} | ConvertFrom-Json",
+            "$vdi_helper_api_gateway_url = $vdi_helper_api_gateway_url_item.Item.value.S",
+            "$idle_config = New-Object PSObject",
+            f"$idle_config | Add-Member -MemberType NoteProperty -Name 'idle_cpu_threshold' -Value '{forced_idle_cpu_threshold}'",
+            f"$idle_config | Add-Member -MemberType NoteProperty -Name 'idle_timeout' -Value '{forced_idle_timeout}'",
+            f"$idle_config | Add-Member -MemberType NoteProperty -Name 'vdi_helper_api_url' -Value $vdi_helper_api_gateway_url",
+            f"$idle_config | Add-Member -MemberType NoteProperty -Name 'transition_state' -Value '{transition_state}'",
+            f"$idle_config | ConvertTo-Json | Set-Content -Path '{windows_idle_config_path}' -Encoding UTF8",
+        ]
+
+    remote_command_runner.run(session.server.instance_id, commands)
 
 
 def wait_for_session_connection_count(

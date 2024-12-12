@@ -11,6 +11,12 @@
 __all__ = (
     'CreateUserRequest',
     'CreateUserResult',
+    'SignUpUserRequest',
+    'SignUpUserResult',
+    'ConfirmSignUpRequest',
+    'ConfirmSignUpResult',
+    'ResendConfirmationCodeRequest',
+    'ResendConfirmationCodeResult',
     'GetUserRequest',
     'GetUserResult',
     'GetUserByEmailRequest',
@@ -79,17 +85,38 @@ from ideadatamodel.auth.auth_model import User, Group, AuthResult
 
 from typing import Optional, List, Dict
 
-
 # CreateUser
 
 class CreateUserRequest(SocaPayload):
     user: Optional[User]
     email_verified: Optional[bool]
 
-
 class CreateUserResult(SocaPayload):
     user: Optional[User]
 
+# SignUpUser
+class SignUpUserRequest(SocaPayload):
+    email: str
+    password: str
+
+
+class SignUpUserResult(SocaPayload):
+    pass
+
+# ConfirmSignUp
+class ConfirmSignUpRequest(SocaPayload):
+    email: str
+    confirmation_code: str
+
+class ConfirmSignUpResult(SocaPayload):
+    pass
+
+# ResendConfirmationCode
+class ResendConfirmationCodeRequest(SocaPayload):
+    username: str
+
+class ResendConfirmationCodeResult(SocaPayload):
+    pass
 
 # GetUser
 
@@ -433,6 +460,27 @@ class ConfigureSSOResult(SocaPayload):
 
 OPEN_API_SPEC_ENTRIES_AUTH = [
     IdeaOpenAPISpecEntry(
+        namespace='Accounts.SignUpUser',
+        request=SignUpUserRequest,
+        result=SignUpUserResult,
+        is_listing=False,
+        is_public=False
+    ),
+    IdeaOpenAPISpecEntry(
+        namespace='Accounts.ConfirmSignUp',
+        request=ConfirmSignUpRequest,
+        result=ConfirmSignUpResult,
+        is_listing=False,
+        is_public=False
+    ),
+    IdeaOpenAPISpecEntry(
+        namespace='Accounts.ResendConfirmationCode',
+        request=ResendConfirmationCodeRequest,
+        result=ResendConfirmationCodeResult,
+        is_listing=False,
+        is_public=False
+    ),
+    IdeaOpenAPISpecEntry(
         namespace='Accounts.GetUser',
         request=GetUserRequest,
         result=GetUserResult,
@@ -621,7 +669,7 @@ OPEN_API_SPEC_ENTRIES_AUTH = [
         is_listing=False,
         is_public=False
     ),
-       IdeaOpenAPISpecEntry(
+    IdeaOpenAPISpecEntry(
         namespace='Auth.ConfigureSSO',
         request=ConfigureSSORequest,
         result=ConfigureSSOResult,

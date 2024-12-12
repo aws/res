@@ -139,6 +139,10 @@ class SocaDevelopmentProps:
         return os.path.join(self.project_source_dir, 'idea-bootstrap')
 
     @property
+    def backend_dir(self) -> str:
+        return os.path.join(self.project_source_dir, 'backend')
+
+    @property
     def global_settings_dir(self) -> str:
         return os.path.join(self.project_source_dir, 'idea-administrator','resources', 'config', 'templates', 'global-settings')
 
@@ -161,6 +165,10 @@ class SocaDevelopmentProps:
     @property
     def deployment_administrator_dir(self) -> str:
         return os.path.join(self.deployment_ecr_dir, 'idea-administrator')
+
+    @property
+    def deployment_ad_sync_dir(self) -> str:
+        return os.path.join(self.deployment_ecr_dir, 'ad-sync')
 
     @property
     def administrator_webapp_dir(self) -> str:
@@ -259,6 +267,10 @@ class SocaDevelopmentProps:
         return os.path.join(self.project_source_dir, 'idea-sdk')
 
     @property
+    def ad_sync_project_dir(self) -> str:
+        return os.path.join(self.project_source_dir, 'ad-sync')
+
+    @property
     def test_utils_project_dir(self) -> str:
         return os.path.join(self.project_source_dir, 'idea-test-utils')
 
@@ -269,6 +281,14 @@ class SocaDevelopmentProps:
     @property
     def data_model_src(self) -> str:
         return os.path.join(self.data_model_project_dir, 'src')
+
+    @property
+    def ad_sync_src(self) -> str:
+        return os.path.join(self.ad_sync_project_dir, 'src')
+
+    @property
+    def ad_sync_integ_tests_src(self) -> str:
+        return os.path.join(self.ad_sync_project_dir, 'tests', 'integration')
 
     @property
     def sdk_src(self) -> str:

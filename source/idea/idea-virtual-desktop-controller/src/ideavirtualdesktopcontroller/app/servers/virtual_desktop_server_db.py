@@ -40,29 +40,6 @@ class VirtualDesktopServerDB(VirtualDesktopNotifiableDB):
     def table_name(self) -> str:
         return f'{self.context.cluster_name()}.{self.context.module_id()}.controller.servers'
 
-    def initialize(self):
-        exists = self.context.aws_util().dynamodb_check_table_exists(self.table_name, True)
-        if not exists:
-            self.context.aws_util().dynamodb_create_table(
-                create_table_request={
-                    'TableName': self.table_name,
-                    'AttributeDefinitions': [
-                        {
-                            'AttributeName': servers_constants.DCV_HOST_DB_HASH_KEY,
-                            'AttributeType': 'S'
-                        }
-                    ],
-                    'KeySchema': [
-                        {
-                            'AttributeName': servers_constants.DCV_HOST_DB_HASH_KEY,
-                            'KeyType': 'HASH'
-                        }
-                    ],
-                    'BillingMode': 'PAY_PER_REQUEST'
-                },
-                wait=True
-            )
-
     @staticmethod
     def convert_server_object_to_db_dict(server: VirtualDesktopServer) -> Dict:
         if Utils.is_empty(server):

@@ -31,6 +31,7 @@ import IdeaBaseClient, { IdeaBaseClientProps } from "./base-client";
 import FileSystemClient from "./filesystem-client";
 import AuthzClient from "./authz-client";
 import ProxyClient from "./proxy-client";
+import BackendClient from "./backend-client";
 
 export interface IdeaClientsProps {
     appId: string;
@@ -56,6 +57,7 @@ class IdeaClients {
     private readonly filesystemClient: FileSystemClient;
     private readonly emailTemplatesClient: EmailTemplatesClient;
     private readonly proxyClient: ProxyClient;
+    private readonly backendClient: BackendClient;
 
     private readonly clients: IdeaBaseClient<IdeaBaseClientProps>[];
 
@@ -97,6 +99,15 @@ class IdeaClients {
             serviceWorkerRegistration: props.serviceWorkerRegistration,
         });
         this.clients.push(this.proxyClient);
+
+        this.backendClient = new BackendClient({
+            name: "backend-client",
+            baseUrl: `${props.baseUrl}/res`,
+            authContext: props.authContext,
+            apiContextPath: "",
+            serviceWorkerRegistration: props.serviceWorkerRegistration,
+        });
+        this.clients.push(this.backendClient);
 
         this.snapshotsClient = new SnapshotsClient({
             name: "snapshots-client",
@@ -273,6 +284,10 @@ class IdeaClients {
 
     proxy(): ProxyClient {
         return this.proxyClient;
+    }
+
+    backend(): BackendClient {
+        return this.backendClient;
     }
 }
 

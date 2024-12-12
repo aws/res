@@ -38,6 +38,22 @@ class Utils {
         return Math.floor(Math.random() * (max - min) + min);
     }
 
+    static convertToQueryString(params: Record<string, string | string[]>): string {
+        const parts: string[] = [];
+    
+        for (const [key, value] of Object.entries(params)) {
+            if (Array.isArray(value)) {
+                value.forEach((v, index) => {
+                    parts.push(`${encodeURIComponent(key)}.${index + 1}=${encodeURIComponent(v)}`);
+                });
+            } else {
+                parts.push(`${encodeURIComponent(key)}=${encodeURIComponent(value)}`);
+            }
+        }
+    
+        return parts.join('&');
+    }
+
     static asString(val?: any, def: string = ""): string {
         if (val == null) {
             return def;
@@ -954,6 +970,14 @@ class Utils {
         return typeof window.idea.app.sso !== "undefined" && window.idea.app.sso;
     }
 
+    static isSelfSignUpEnabled(): boolean {
+        return typeof window.idea.app.enable_self_sign_up !== "undefined" && window.idea.app.enable_self_sign_up;
+    }
+
+    static isNativeUserLoginEnabled(): boolean {
+        return typeof window.idea.app.enable_native_user_login !== "undefined" && window.idea.app.enable_native_user_login;
+    }
+
     static getPermissionAsUIString(permission: keyof ProjectPermissions | keyof VDIPermissions): string {
       switch (permission) {
         case "update_personnel":
@@ -990,11 +1014,11 @@ class Utils {
     }> {
       const affectedProjects = new Map<string, number>();
       const roleProjectSetMap = new Map<string, Set<string>>();
-  
+
       const projects = (await projectsClient.listProjects({ })).listing ?? [];
-  
+
       const requests = [];
-  
+
       for (const project of projects) {
         requests.push(
           authzClient.listRoleAssignments({
@@ -1005,7 +1029,7 @@ class Utils {
               if (!roleProjectSetMap.has(assignment.role_id)) {
                 roleProjectSetMap.set(assignment.role_id, new Set<string>());
               }
-        
+
               const tempSet = roleProjectSetMap.get(assignment.role_id)!;
               tempSet.add(assignment.resource_id);
               affectedProjects.set(assignment.role_id, tempSet.size);
@@ -1014,9 +1038,9 @@ class Utils {
           })
         );
       }
-  
+
       await Promise.all(requests);
-      
+
       return {
         affectedProjects,
         roleProjectSetMap,
@@ -1028,11 +1052,11 @@ class Utils {
     ): string {
       const timeMs = typeof date === "number" ? date : date.getTime();
       const deltaSeconds = Math.round((timeMs - Date.now()) / 1000);
-    
+
       // one minute, hour, day, week, month, etc in seconds
       const cutoffs = [60, 3600, 86400, 86400 * 7, 86400 * 30, 86400 * 365, Infinity];
       const units: Intl.RelativeTimeFormatUnit[] = ["second", "minute", "hour", "day", "week", "month", "year"];
-    
+
       // Find the appropriate cutoff to divide the ms by for relative time representation
       const unitIndex = cutoffs.findIndex(cutoff => cutoff > Math.abs(deltaSeconds));
       const divisor = unitIndex ? cutoffs[unitIndex - 1] : 1;
@@ -1091,7 +1115,7 @@ class Utils {
 
                       if (currentUserIsInRole) {
                           const rolePermission = roles.items.find(perm => perm.role_id === roleAssignment.role_id);
-                    
+
                           if (rolePermission?.vdis && (rolePermission.vdis![vdiPerm])) {
                               validProjectIds.add(project.project_id!);
                           }

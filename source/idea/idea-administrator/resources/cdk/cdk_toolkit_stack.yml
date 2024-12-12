@@ -172,170 +172,6 @@ Resources:
         Fn::Sub: alias/cdk-${Qualifier}-assets-key
       TargetKeyId:
         Ref: FileAssetsBucketEncryptionKey
-  LogBucket:
-    Type: AWS::S3::Bucket
-    Properties:
-      BucketName:
-        Fn::If:
-          - HasCustomFileAssetsBucketName
-          - Fn::Join:
-            - "-"
-            - - Fn::Sub: log-${FileAssetsBucketName}
-              - Fn::Select:
-                - 0
-                - Fn::Split:
-                  - "-"
-                  - Fn::Select:
-                    - 2
-                    - Fn::Split:
-                      - "/"
-                      - !Ref "AWS::StackId"
-          - Fn::Sub: log-cdk-${Qualifier}-assets-${AWS::AccountId}-${AWS::Region}
-      AccessControl: Private
-      BucketEncryption:
-        ServerSideEncryptionConfiguration:
-          - ServerSideEncryptionByDefault:
-              SSEAlgorithm: AES256
-      PublicAccessBlockConfiguration:
-        Fn::If:
-          - UsePublicAccessBlockConfiguration
-          - BlockPublicAcls: true
-            BlockPublicPolicy: true
-            IgnorePublicAcls: true
-            RestrictPublicBuckets: true
-          - Ref: AWS::NoValue
-    DeletionPolicy: Retain
-  LogBucketPolicy:
-    Type: AWS::S3::BucketPolicy
-    Properties:
-      Bucket:
-        Ref: LogBucket
-      PolicyDocument:
-        Id: S3ServerAccessLogsPolicy
-        Version: "2012-10-17"
-        Statement:
-          - Sid: AllowS3LogRequests
-            Action: s3:PutObject
-            Effect: Allow
-            Resource:
-              - Fn::Sub: ${LogBucket.Arn}/*
-            Principal:
-              Service: logging.s3.amazonaws.com
-
-  StagingBucket:
-    Type: AWS::S3::Bucket
-    Properties:
-      BucketName:
-        Fn::If:
-          - HasCustomFileAssetsBucketName
-          - Fn::Sub: ${FileAssetsBucketName}
-          - Fn::Sub: cdk-${Qualifier}-assets-${AWS::AccountId}-${AWS::Region}
-      AccessControl: Private
-      BucketEncryption:
-        ServerSideEncryptionConfiguration:
-          # [3] IDEA customization for bucket encryption to use SSE-S3 instead of SSE-KMS.
-          # * AWS ALB Access logs do not support SSE-KMS
-          # * NLB Access Logs needs additional policy configuration to CMK in AWS KMS so that NLB service can use the key to encrypt logs
-          # * the lowest common denominator is to enable SSE-S3 so that ALB + NLB access logs can work in default configuration
-          # * due to this change, the cdk bootstrap parameters: --bootstrap-kms-key-id and --bootstrap-customer-key are not supported in default configuration.
-          # * SIs and ISVs are expected to customize this template based on their requirements to deploy using Customer Managed KMS Keys.
-          # https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/aws-properties-s3-bucket-serversideencryptionrule.html
-          - ServerSideEncryptionByDefault:
-              SSEAlgorithm: AES256
-            # SSEAlgorithm: aws:kms
-            # KMSMasterKeyID:
-            #   Fn::If:
-            #     - CreateNewKey
-            #     - Fn::Sub: ${FileAssetsBucketEncryptionKey.Arn}
-            #     - Fn::If:
-            #         - UseAwsManagedKey
-            #         - Ref: AWS::NoValue
-            #         - Fn::Sub: ${FileAssetsBucketKmsKeyId}
-      PublicAccessBlockConfiguration:
-        Fn::If:
-          - UsePublicAccessBlockConfiguration
-          - BlockPublicAcls: true
-            BlockPublicPolicy: true
-            IgnorePublicAcls: true
-            RestrictPublicBuckets: true
-          - Ref: AWS::NoValue
-
-      VersioningConfiguration:
-        Status: Enabled
-
-      # [5] Tags to enable AWS Backup for Cluster S3 Bucket
-      Tags:
-        - Key: "res:EnvironmentName"
-          Value: "{{ cluster_name }}"
-        - Key: "res:BackupPlan"
-          Value: "cluster"
-      # Enable S3 bucket logging
-      LoggingConfiguration:
-        DestinationBucketName: !Ref LogBucket
-        LogFilePrefix: "cluster-s3-bucket-logs/"
-    UpdateReplacePolicy: Retain
-    DeletionPolicy: Retain
-  StagingBucketPolicy:
-    Type: AWS::S3::BucketPolicy
-    Properties:
-      Bucket:
-        Ref: StagingBucket
-      PolicyDocument:
-        Id: AccessControl
-        Version: "2012-10-17"
-        Statement:
-          - Sid: AllowSSLRequestsOnly
-            Action: s3:*
-            Effect: Deny
-            Resource:
-              - Fn::Sub: ${StagingBucket.Arn}
-              - Fn::Sub: ${StagingBucket.Arn}/*
-            Condition:
-              Bool:
-                aws:SecureTransport: "false"
-            Principal: "*"
-
-          ### Begin: IDEA Cluster S3 Bucket Policy Customizations
-
-          # [1] ALB Access Logs - AwsSolutions-ELB2
-          # refer: https://docs.aws.amazon.com/elasticloadbalancing/latest/application/enable-access-logging.html
-          - Sid: IdeaAlbAccessLogs
-            Effect: Allow
-            Principal:
-              {% if aws_elb_account_id %}
-              AWS:
-                - Fn::Sub: arn:${AWS::Partition}:iam::{{ aws_elb_account_id }}:root
-              {% else %}
-              Service: logdelivery.elasticloadbalancing.{{ aws_dns_suffix }}
-              {% endif %}
-            Action:
-              - s3:PutObject
-            Resource:
-              - Fn::Sub: ${StagingBucket.Arn}/logs/*
-
-          # [2] NLB Access Logs
-          # refer: https://docs.aws.amazon.com/elasticloadbalancing/latest/network/load-balancer-access-logs.html
-          - Sid: IdeaNlbAccessLogs-AWSLogDeliveryWrite
-            Effect: Allow
-            Principal:
-              Service: delivery.logs.{{ aws_dns_suffix }}
-            Action:
-              - s3:PutObject
-            Resource:
-              - Fn::Sub: ${StagingBucket.Arn}/logs/*
-            Condition:
-              StringEquals:
-                s3:x-amz-acl: bucket-owner-full-control
-          - Sid: IdeaNlbAccessLogs-AWSLogDeliveryAclCheck
-            Effect: Allow
-            Principal:
-              Service: delivery.logs.{{ aws_dns_suffix }}
-            Action:
-              - s3:GetBucketAcl
-            Resource:
-              - Fn::Sub: ${StagingBucket.Arn}
-
-          ### End: IDEA Cluster S3 Bucket Policy Customizations
   ContainerAssetsRepository:
     Type: AWS::ECR::Repository
     Properties:
@@ -477,8 +313,8 @@ Resources:
               - s3:PutObject*
               - s3:Abort*
             Resource:
-              - Fn::Sub: ${StagingBucket.Arn}
-              - Fn::Sub: ${StagingBucket.Arn}/*
+              - Fn::Sub: arn:${AWS::Partition}:s3:::{{ cluster_s3_bucket }}
+              - Fn::Sub: arn:${AWS::Partition}:s3:::{{ cluster_s3_bucket }}/*
             Effect: Allow
           - Action:
               - kms:Decrypt
@@ -609,8 +445,8 @@ Resources:
                   - s3:GetBucket*
                   - s3:List*
                 Resource:
-                  - Fn::Sub: ${StagingBucket.Arn}
-                  - Fn::Sub: ${StagingBucket.Arn}/*
+                  - Fn::Sub: arn:${AWS::Partition}:s3:::{{ cluster_s3_bucket }}
+                  - Fn::Sub: arn:${AWS::Partition}:s3:::{{ cluster_s3_bucket }}/*
               - Sid: ReadVersion
                 Effect: Allow
                 Action:
@@ -657,14 +493,6 @@ Resources:
         Fn::Sub: /cdk-bootstrap/${Qualifier}/version
       Value: "14"
 Outputs:
-  BucketName:
-    Description: The name of the S3 bucket owned by the CDK toolkit stack
-    Value:
-      Fn::Sub: ${StagingBucket}
-  BucketDomainName:
-    Description: The domain name of the S3 bucket owned by the CDK toolkit stack
-    Value:
-      Fn::Sub: ${StagingBucket.RegionalDomainName}
   FileAssetKeyArn:
     Description: The ARN of the KMS key used to encrypt the asset bucket (deprecated)
     Value:

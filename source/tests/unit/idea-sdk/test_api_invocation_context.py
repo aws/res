@@ -101,7 +101,7 @@ def test_api_invocation_context_get_authorization_in_test_mode_valid(context):
     """
     test_username = "username"
     mock_token_service = MockTokenService()
-    mock_api_authorization_service = MockApiAuthorizationService()
+    mock_api_authorization_service = MockApiAuthorizationService(config=context.config)
     api_context = build_invocation_context(
         context=context,
         payload={

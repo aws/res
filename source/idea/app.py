@@ -1,8 +1,10 @@
 #  Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 #  SPDX-License-Identifier: Apache-2.0
+import os
+
 import aws_cdk as cdk
 from cdk_bootstrapless_synthesizer import BootstraplessStackSynthesizer
-from res.host_modules_pipeline.stack import HostModulePipelineStack
+from infra.host_modules_pipeline.stack import HostModulePipelineStack
 
 from idea.batteries_included.parameters.parameters import BIParameters
 from idea.batteries_included.stack import BiStack
@@ -14,6 +16,7 @@ from idea.constants import (
     PIPELINE_STACK_NAME,
 )
 from idea.infrastructure.install.parameters.parameters import RESParameters
+from idea.infrastructure.install.proxy import ProxyStack
 from idea.infrastructure.install.stacks.install_stack import InstallStack
 from idea.pipeline.stack import PipelineStack
 
@@ -26,7 +29,8 @@ def main() -> None:
     is_publish_templates = (
         True if publish_templates and publish_templates.lower() == "true" else False
     )
-    registry_name = app.node.try_get_context("registry_name")
+    installer_registry_name = app.node.try_get_context("installer_registry_name")
+    ad_sync_registry_name = app.node.try_get_context("ad_sync_registry_name")
 
     given_bucket_prefix = app.node.try_get_context("file_asset_prefix")
     bucket_prefix = (
@@ -60,7 +64,8 @@ def main() -> None:
         app,
         INSTALL_STACK_NAME,
         parameters=parameters,
-        registry_name=registry_name,
+        installer_registry_name=installer_registry_name,
+        ad_sync_registry_name=ad_sync_registry_name,
         synthesizer=install_synthesizer,
     )
 

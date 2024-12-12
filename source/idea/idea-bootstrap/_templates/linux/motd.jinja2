@@ -1,6 +1,6 @@
 # Begin: motd update
-{%- if context.base_os in ('amazonlinux2', 'rhel8', 'rhel9') %}
-echo -e "
+if [[ $RES_BASE_OS =~ ^(amzn2|rhel8|rhel9)$ ]]; then
+  echo -e "
   ____  _____ ____
  |  _ \| ____/ ___|
  | |_| |  _| \___ \
@@ -11,5 +11,5 @@ echo -e "
 {% endfor %}
 > source /etc/environment to load RES paths
 " > /etc/motd
-{%- endif %}
+fi
 # End: motd update

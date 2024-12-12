@@ -36,43 +36,6 @@ class ProjectsDAO:
         return f'{self.context.cluster_name()}.projects'
 
     def initialize(self):
-        self.context.aws_util().dynamodb_create_table(
-            create_table_request={
-                'TableName': self.get_table_name(),
-                'AttributeDefinitions': [
-                    {
-                        'AttributeName': 'project_id',
-                        'AttributeType': 'S'
-                    },
-                    {
-                        'AttributeName': 'name',
-                        'AttributeType': 'S'
-                    }
-                ],
-                'KeySchema': [
-                    {
-                        'AttributeName': 'project_id',
-                        'KeyType': 'HASH'
-                    }
-                ],
-                'GlobalSecondaryIndexes': [
-                    {
-                        'IndexName': GSI_PROJECT_NAME,
-                        'KeySchema': [
-                            {
-                                'AttributeName': 'name',
-                                'KeyType': 'HASH'
-                            }
-                        ],
-                        'Projection': {
-                            'ProjectionType': 'ALL'
-                        }
-                    }
-                ],
-                'BillingMode': 'PAY_PER_REQUEST'
-            },
-            wait=True
-        )
         self.table = self.context.aws().dynamodb_table().Table(self.get_table_name())
 
     @staticmethod

@@ -51,37 +51,6 @@ class VirtualDesktopSessionPermissionDB(VirtualDesktopNotifiableDB):
     def table_name(self) -> str:
         return f'{self.context.cluster_name()}.{self.context.module_id()}.controller.session-permissions'
 
-    def initialize(self):
-        exists = self.context.aws_util().dynamodb_check_table_exists(self.table_name, True)
-        if not exists:
-            self.context.aws_util().dynamodb_create_table(
-                create_table_request={
-                    'TableName': self.table_name,
-                    'AttributeDefinitions': [
-                        {
-                            'AttributeName': session_permissions_constants.SESSION_PERMISSIONS_DB_HASH_KEY,
-                            'AttributeType': 'S'
-                        },
-                        {
-                            'AttributeName': session_permissions_constants.SESSION_PERMISSIONS_DB_RANGE_KEY,
-                            'AttributeType': 'S'
-                        }
-                    ],
-                    'KeySchema': [
-                        {
-                            'AttributeName': session_permissions_constants.SESSION_PERMISSIONS_DB_HASH_KEY,
-                            'KeyType': 'HASH'
-                        },
-                        {
-                            'AttributeName': session_permissions_constants.SESSION_PERMISSIONS_DB_RANGE_KEY,
-                            'KeyType': 'RANGE'
-                        }
-                    ],
-                    'BillingMode': 'PAY_PER_REQUEST'
-                },
-                wait=True
-            )
-
     @staticmethod
     def convert_db_dict_to_session_permission_object(db_entry: Dict) -> Optional[VirtualDesktopSessionPermission]:
         return VirtualDesktopSessionPermission(

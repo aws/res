@@ -16,6 +16,8 @@ from ideadatamodel import (
 from ideasdk.utils import Utils
 from ideavirtualdesktopcontroller.app.clients.events_client.events_client import VirtualDesktopEvent
 from ideavirtualdesktopcontroller.app.events.handlers.base_event_handler import BaseVirtualDesktopControllerEventHandler
+from res.exceptions import SoftwareStackNotFound
+from res.resources import software_stacks
 
 
 class ValidateSoftwareStackEventHandler(BaseVirtualDesktopControllerEventHandler):
@@ -38,8 +40,10 @@ class ValidateSoftwareStackEventHandler(BaseVirtualDesktopControllerEventHandler
             self.log_error(message_id=message_id, message=f'Invalid {software_stack_id}: {software_stack_base_os}')
             return
 
-        software_stack_db_entry = self.software_stack_db.get(base_os=software_stack_base_os, stack_id=software_stack_id)
-        if Utils.is_empty(software_stack_db_entry):
+        try:
+            software_stack_db_entry_dict = software_stacks.get_software_stack(base_os=software_stack_base_os, stack_id=software_stack_id)
+            software_stack_db_entry = self.software_stack_db.convert_db_dict_to_software_stack_object(software_stack_db_entry_dict)
+        except SoftwareStackNotFound:
             self.log_error(message_id=message_id, message='Invalid Software Stack.')
             return
 

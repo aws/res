@@ -11,11 +11,29 @@
  * and limitations under the License.
  */
 
-import { AddFileSystemToProjectRequest, AddFileSystemToProjectResult, CreateEFSFileSystemRequest, CreateEFSFileSystemResult, 
-    CreateONTAPFileSystemRequest, CreateONTAPFileSystemResult, RemoveFileSystemFromProjectRequest, RemoveFileSystemFromProjectResult, 
-    ListOnboardedFileSystemsRequest, ListOnboardedFileSystemsResult, ListFileSystemsInVPCRequest, ListFileSystemsInVPCResult,
-    OnboardEFSFileSystemRequest, OnboardFileSystemResult, OnboardLUSTREFileSystemRequest, OnboardS3BucketRequest, OnboardS3BucketResult, 
-    UpdateFileSystemRequest, UpdateFileSystemResult, RemoveFileSystemRequest, RemoveFileSystemResult} from "./data-model";
+import {
+    AddFileSystemToProjectRequest,
+    AddFileSystemToProjectResult,
+    CreateEFSFileSystemRequest,
+    CreateEFSFileSystemResult,
+    CreateONTAPFileSystemRequest,
+    CreateONTAPFileSystemResult,
+    RemoveFileSystemFromProjectRequest,
+    RemoveFileSystemFromProjectResult,
+    ListOnboardedFileSystemsRequest,
+    ListOnboardedFileSystemsResult,
+    ListFileSystemsInVPCRequest,
+    ListFileSystemsInVPCResult,
+    OnboardEFSFileSystemRequest,
+    OnboardFileSystemResult,
+    OnboardLUSTREFileSystemRequest,
+    OnboardS3BucketRequest,
+    OnboardS3BucketResult,
+    UpdateFileSystemRequest,
+    UpdateFileSystemResult,
+    RemoveFileSystemRequest,
+    RemoveFileSystemResult,
+} from "./data-model";
 import IdeaBaseClient, { IdeaBaseClientProps } from "./base-client";
 
 export interface FileSystemClientProps extends IdeaBaseClientProps {}
@@ -23,10 +41,6 @@ export interface FileSystemClientProps extends IdeaBaseClientProps {}
 class FileSystemClient extends IdeaBaseClient<FileSystemClientProps> {
     listOnboardedFileSystems(req: ListOnboardedFileSystemsRequest): Promise<ListOnboardedFileSystemsResult> {
         return this.apiInvoker.invoke_alt<ListOnboardedFileSystemsRequest, ListOnboardedFileSystemsResult>("FileSystem.ListOnboardedFileSystems", req);
-    }
-
-    listFileSystemsInVPC(req: ListFileSystemsInVPCRequest): Promise<ListFileSystemsInVPCResult> {
-        return this.apiInvoker.invoke_alt<ListFileSystemsInVPCRequest, ListFileSystemsInVPCResult>("FileSystem.ListFSinVPC", req);
     }
 
     addFileSystemToProject(req: AddFileSystemToProjectRequest) {
@@ -52,7 +66,7 @@ class FileSystemClient extends IdeaBaseClient<FileSystemClientProps> {
     removeFileSystem(req: RemoveFileSystemRequest) {
         return this.apiInvoker.invoke_alt<RemoveFileSystemRequest, RemoveFileSystemResult>("FileSystem.RemoveFileSystem", req);
     }
-    
+
     onboardEFSFileSystem(req: OnboardEFSFileSystemRequest) {
         return this.apiInvoker.invoke_alt<OnboardEFSFileSystemRequest, OnboardFileSystemResult>("FileSystem.OnboardEFSFileSystem", req);
     }

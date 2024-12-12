@@ -25,15 +25,37 @@ Statement:
     Effect: Allow
 
   - Action:
-      - dynamodb:GetItem
+      - kinesis:ListShards
+      - kinesis:GetRecords
+      - kinesis:GetShardIterator
     Resource:
-      {{ context.utils.to_yaml(context.arns.cluster_config_ddb_arn) | indent(6) }}
+      - '{{ context.arns.get_ddb_table_stream_arn("cluster-settings") }}'
     Effect: Allow
-    Condition:
-      ForAllValues:StringLike:
-        dynamodb:LeadingKeys:
-          - global-settings.package_config.*
-          - global-settings.gpu_settings.*
+
+  - Action:
+      - dynamodb:GetItem
+      - dynamodb:Scan
+      - dynamodb:DescribeTable
+    Resource:
+      - '{{ context.arns.get_ddb_table_arn("cluster-settings") }}'
+      - '{{ context.arns.get_ddb_table_arn("cluster-settings/stream/*") }}'
+      - '{{ context.arns.get_ddb_table_arn("modules") }}'
+    Effect: Allow
+
+  - Action:
+      - cognito-idp:AdminInitiateAuth
+      - cognito-idp:AdminGetUser
+      - cognito-idp:ListGroups
+      - cognito-idp:AdminListGroupsForUser
+      - cognito-idp:ListUsers
+    Resource: '{{ context.arns.user_pool_arn }}'
+    Effect: Allow
+
+  - Action:
+      - s3:GetObject
+    Resource:
+      {{ context.utils.to_yaml(context.arns.s3_public_host_modules) | indent(6) }}
+    Effect: Allow
 
 {% include '_templates/aws-managed-ad.yml' %}
 

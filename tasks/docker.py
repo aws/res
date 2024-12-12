@@ -26,25 +26,45 @@ def prepare_artifacts(c):
     all_package_archive = os.path.join(idea.props.project_dist_dir, f'all-{release_version}.tar.gz')
     if not os.path.isfile(all_package_archive):
         raise Exception(f'${all_package_archive} not found')
+
     shutil.copy(all_package_archive, idea.props.deployment_administrator_dir)
+    shutil.copy(all_package_archive, idea.props.deployment_ad_sync_dir)
 
 
 @task
-def build(c, no_cache=False):
-    # type: (Context, bool) -> None
+def build_installer_image(c, no_cache=False, platform="linux/amd64"):
+    # type: (Context, bool, str) -> None
     """
     build administrator docker image
     """
 
     prepare_artifacts(c)
 
+    build(c, "idea-administrator", idea.props.deployment_administrator_dir, no_cache, platform)
+
+
+@task
+def build_ad_sync_image(c, no_cache=False, platform="linux/amd64"):
+    # type: (Context, bool, str) -> None
+    """
+    build ad sync docker image
+    """
+
+    prepare_artifacts(c)
+
+    build(c, "ad-sync", idea.props.deployment_ad_sync_dir, no_cache, platform)
+
+
+def build(c, app_name: str, deployment_dir: str, no_cache=False, platform="linux/amd64"):
     release_version = idea.props.idea_release_version
     build_cmd = str(f'docker build '
                     f'--build-arg PUBLIC_ECR_TAG=v{release_version} '
-                    f'-t idea-administrator:v{release_version} '
-                    f'"{idea.props.deployment_administrator_dir}"')
+                    f'-t {app_name}:v{release_version} '
+                    f'"{deployment_dir}"')
     if no_cache:
         build_cmd = f'{build_cmd} --no-cache'
+    if platform:
+        build_cmd = f'{build_cmd} --platform {platform}'
     c.run(build_cmd)
 
 

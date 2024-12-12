@@ -173,7 +173,7 @@ function install_nice_dcv_server () {
 }
 
 function install_gpu_driver_prerequisites() {
-  echo "No GPU driver prerequisites"
+  sudo yum install -y gcc make kernel-devel-$(uname -r)
 }
 
 function install_microphone_redirect() {
@@ -199,4 +199,40 @@ function install_usb_support() {
 Section "Extensions"
     Option      "DPMS" "Disable"
 EndSection' > /etc/X11/xorg.conf.d/99-disable-dpms.conf
+}
+
+function install_modified_x_server() {
+  local BASE_OS=$1
+  if [[ "$BASE_OS" == "rhel9" ]]; then
+    echo "OS is rhel9, configuring x windows server"
+    echo 'Section "Device"
+    Identifier "DummyDevice"
+    Driver "dummy"
+    Option "UseEDID" "false"
+    VideoRam 512000
+EndSection
+
+Section "Monitor"
+    Identifier "DummyMonitor"
+    HorizSync   5.0 - 1000.0
+    VertRefresh 5.0 - 200.0
+    Option "ReducedBlanking"
+EndSection
+
+Section "Screen"
+    Identifier "DummyScreen"
+    Device "DummyDevice"
+    Monitor "DummyMonitor"
+    DefaultDepth 24
+    SubSection "Display"
+        Viewport 0 0
+        Depth 24
+        Virtual 4096 2160
+    EndSubSection
+EndSection
+  ' > /etc/X11/xorg.conf
+  dnf install -y xorg-x11-drv-dummy
+  else
+    echo "OS is not rhel9, no need for modified x configuration"
+  fi
 }

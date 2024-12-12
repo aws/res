@@ -17,6 +17,7 @@ from ideavirtualdesktopcontroller.app.events.events_utils import EventsUtils
 from ideavirtualdesktopcontroller.app.permission_profiles.virtual_desktop_permission_profile_db import VirtualDesktopPermissionProfileDB
 from ideavirtualdesktopcontroller.app.session_permissions.virtual_desktop_session_permission_db import VirtualDesktopSessionPermissionDB
 from ideavirtualdesktopcontroller.app.virtual_desktop_controller_utils import VirtualDesktopControllerUtils
+from res.resources import permission_profiles
 
 
 class VirtualDesktopSessionPermissionUtils:
@@ -39,7 +40,8 @@ class VirtualDesktopSessionPermissionUtils:
         allow_permissions: List[str] = []
         deny_permissions: List[str] = []
 
-        permission_profile = self._permission_profile_db.get(profile_id=profile_id)
+        permission_profile_dict = permission_profiles.get_permission_profile(profile_id=profile_id)
+        permission_profile = self._permission_profile_db.convert_db_dict_to_permission_profile_object(permission_profile_dict)
 
         builtin_permission = permission_profile.get_permission('builtin')
         if Utils.is_not_empty(builtin_permission) and builtin_permission.enabled:

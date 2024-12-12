@@ -31,27 +31,6 @@ class SingleSignOnStateDAO:
         return f'{self.context.cluster_name()}.accounts.sso-state'
 
     def initialize(self):
-        self.context.aws_util().dynamodb_create_table(
-            create_table_request={
-                'TableName': self.get_table_name(),
-                'AttributeDefinitions': [
-                    {
-                        'AttributeName': 'state',
-                        'AttributeType': 'S'
-                    }
-                ],
-                'KeySchema': [
-                    {
-                        'AttributeName': 'state',
-                        'KeyType': 'HASH'
-                    }
-                ],
-                'BillingMode': 'PAY_PER_REQUEST'
-            },
-            wait=True,
-            ttl=True,
-            ttl_attribute_name='ttl'
-        )
         self.table = self.context.aws().dynamodb_table().Table(self.get_table_name())
 
     def create_sso_state(self, sso_state: Dict) -> Dict:

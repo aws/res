@@ -50,6 +50,15 @@ def administrator(c):
 
 
 @task
+def ad_sync(c):
+    # type: (Context) -> None
+    """
+    build ad sync
+    """
+    BuildTool(c, 'ad-sync').build()
+
+
+@task
 def cluster_manager(c):
     # type: (Context) -> None
     """
@@ -82,7 +91,8 @@ def virtual_desktop_controller(c):
     tool.build()
     apispec_virtual_desktop_controller(c, output_file=os.path.join(tool.output_dir, 'resources', 'api', 'openapi.yml'))
     dcv_connection_gateway(c)
-    
+
+
 @task
 def library(c):
     # type: (Context) -> None
@@ -90,6 +100,15 @@ def library(c):
     build library
     """
     BuildTool(c, 'library').build()
+
+
+@task
+def bastion_host(c):
+    # type: (Context) -> None
+    """
+    build bastion host
+    """
+    BuildTool(c, 'idea-bastion-host').build()
 
 
 @task(name='all', default=True)
@@ -115,10 +134,14 @@ def build_all(c):
 
     administrator(c)
 
+    ad_sync(c)
+
     cluster_manager(c)
 
     virtual_desktop_controller(c)
-    
+
     library(c)
+
+    bastion_host(c)
 
     idea.console.print_header_block('end: build all', style='main')

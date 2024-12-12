@@ -21,28 +21,19 @@ import ideaclustermanager
 from ideaclustermanager.app.api.api_invoker import ClusterManagerApiInvoker
 from ideaclustermanager.app.projects.projects_service import ProjectsService
 from ideaclustermanager.app.accounts.accounts_service import AccountsService
-from ideaclustermanager.app.adsync.adsync_service import ADSyncService
 from ideaclustermanager.app.accounts.cognito_user_pool import CognitoUserPool, CognitoUserPoolOptions
 
-from ideaclustermanager.app.accounts.ldapclient.ldap_client_factory import build_ldap_client
 from ideaclustermanager.app.auth.api_authorization_service import ClusterManagerApiAuthorizationService
 from ideaclustermanager.app.authz.roles_service import RolesService
 from ideaclustermanager.app.authz.role_assignments_service import RoleAssignmentsService
 from ideaclustermanager.app.accounts.ad_automation_agent import ADAutomationAgent
-from ideaclustermanager.app.accounts.account_tasks import (
-    SyncGroupInDirectoryServiceTask
-)
-from ideaclustermanager.app.adsync.adsync_tasks import (
-    SyncAllGroupsTask,
-    SyncAllUsersTask,
-    SyncFromAD
-)
-from ideaclustermanager.app.tasks.task_manager import TaskManager
 from ideaclustermanager.app.web_portal import WebPortal
-from ideaclustermanager.app.email_templates.email_templates_service import EmailTemplatesService
 from ideaclustermanager.app.notifications.notifications_service import NotificationsService
 from ideaclustermanager.app.snapshots.snapshots_service import SnapshotsService
 from ideaclustermanager.app.shared_filesystem.shared_filesystem_service import SharedFilesystemService
+
+from res.clients.ad_sync import ad_sync_client
+import res.exceptions as exceptions
 
 from typing import Optional
 
@@ -122,32 +113,17 @@ class ClusterManagerApp(ideasdk.app.SocaApp):
 
         # accounts service
         ds_provider = self.context.config().get_string('directoryservice.provider', required=True)
-        self.context.ldap_client = build_ldap_client(self.context)
 
         if ds_provider in {constants.DIRECTORYSERVICE_AWS_MANAGED_ACTIVE_DIRECTORY, constants.DIRECTORYSERVICE_ACTIVE_DIRECTORY}:
             self.context.ad_automation_agent = ADAutomationAgent(
                 context=self.context,
-                ldap_client=self.context.ldap_client
             )
-
-        # task manager
-        self.context.task_manager = TaskManager(
-            context=self.context,
-            tasks=[
-                SyncGroupInDirectoryServiceTask(self.context),
-                SyncAllGroupsTask(self.context),
-                SyncAllUsersTask(self.context),
-                SyncFromAD(self.context)
-            ]
-        )
 
         # account service
         evdi_client = EvdiClient(self.context)
         self.context.accounts = AccountsService(
             context=self.context,
-            ldap_client=self.context.ldap_client,
             user_pool=self.context.user_pool,
-            task_manager=self.context.task_manager,
             evdi_client=evdi_client,
             token_service=self.context.token_service
         )
@@ -163,12 +139,11 @@ class ClusterManagerApp(ideasdk.app.SocaApp):
         )
 
         #api authorization service
-        self.context.api_authorization_service = ClusterManagerApiAuthorizationService(accounts=self.context.accounts, roles=self.context.roles, role_assignments=self.context.role_assignments)
-
-        # adsync service
-        self.context.ad_sync = ADSyncService(
-            context=self.context,
-            task_manager=self.context.task_manager,
+        self.context.api_authorization_service = ClusterManagerApiAuthorizationService(
+            accounts=self.context.accounts,
+            config=self.context.config(),
+            roles=self.context.roles,
+            role_assignments=self.context.role_assignments
         )
 
         internal_endpoint = self.context.config().get_cluster_internal_endpoint()
@@ -189,20 +164,13 @@ class ClusterManagerApp(ideasdk.app.SocaApp):
         self.context.projects = ProjectsService(
             context=self.context,
             accounts_service=self.context.accounts,
-            task_manager=self.context.task_manager,
             vdc_client=self.context.vdc_client
-        )
-
-        # email templates
-        self.context.email_templates = EmailTemplatesService(
-            context=self.context
         )
 
         # notifications
         self.context.notifications = NotificationsService(
             context=self.context,
-            accounts=self.context.accounts,
-            email_templates=self.context.email_templates
+            accounts=self.context.accounts
         )
 
         self.context.shared_filesystem = SharedFilesystemService(
@@ -216,19 +184,24 @@ class ClusterManagerApp(ideasdk.app.SocaApp):
         )
         self.web_portal.initialize()
 
+        # Start SSSD service
+        self.context.config().restart_sssd()
+
     def app_start(self):
         if self.context.ad_automation_agent is not None:
             self.context.ad_automation_agent.start()
 
-        self.context.task_manager.start()
         self.context.notifications.start()
 
         try:
             self.context.distributed_lock().acquire(key='initialize-defaults')
-            self.context.accounts.create_defaults()
             self.context.roles.create_defaults()
-            self.context.email_templates.create_defaults()
-            self.context.ad_sync.sync_from_ad()  # submit ad_sync task after creation of defaults
+
+            ad_sync_client.start_ad_sync()
+        except (exceptions.ADSyncConfigurationNotFound, exceptions.ADSyncInProcess):
+            # AD configuration may not be provided yet when the Cluster Manager starts
+            # AD Sync may have been triggered by the scheduler Lambda and is still in progress
+            pass
         finally:
             self.context.distributed_lock().release(key='initialize-defaults')
 
@@ -236,9 +209,6 @@ class ClusterManagerApp(ideasdk.app.SocaApp):
 
         if self.context.ad_automation_agent is not None:
             self.context.ad_automation_agent.stop()
-
-        if self.context.task_manager is not None:
-            self.context.task_manager.stop()
 
         if self.context.notifications is not None:
             self.context.notifications.stop()

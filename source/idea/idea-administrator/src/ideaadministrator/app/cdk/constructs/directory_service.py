@@ -281,7 +281,11 @@ class UserPool(SocaBaseConstruct):
                 'cluster_name': cognito.StringAttribute(mutable=True),
                 'aws_region': cognito.StringAttribute(mutable=True),
                 'password_last_set': cognito.NumberAttribute(mutable=True),
-                'password_max_age': cognito.NumberAttribute(mutable=True)
+                'password_max_age': cognito.NumberAttribute(mutable=True),
+                f"{constants.COGNITO_UID_ATTRIBUTE}": cognito.NumberAttribute(
+                    min=constants.COGNITO_MIN_ID_INCLUSIVE,
+                    max=constants.COGNITO_MAX_ID_INCLUSIVE
+                )
             }
         mfa = props.mfa
         if mfa is None:

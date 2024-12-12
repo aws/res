@@ -16,6 +16,7 @@ import React, { Component, RefObject } from "react";
 
 import { TopNavigation } from "@cloudscape-design/components";
 import { AppContext } from "../../common";
+import { Constants } from "../../common/constants";
 import Utils from "../../common/utils";
 import IdeaForm from "../form";
 
@@ -79,16 +80,20 @@ class IdeaNavbar extends Component<IdeaNavbarProps, IdeaNavbarState> {
         );
     }
 
-    invokeLogout() {
-        if(AppContext.get().getSSOEnabled()){     
-            AppContext.get().getClusterSettingsService().getIdentityProviderSettings().then( idp => {
-                const cognitoDomain = idp.cognito.domain_url;
-                const logoutURI = encodeURIComponent(AppContext.get().getHttpEndpoint());
-                AppContext.get().client().auth().getClientId().then((clientId) => {
-                    AppContext.get().auth().logout();
-                    window.location.replace(`${cognitoDomain}/logout?client_id=${clientId}&logout_uri=${logoutURI}`);
-                });
-            })
+    async invokeLogout() {
+        const authClient = AppContext.get().client().auth();
+        const user = await authClient.getUser();
+        const isSSOEnabled = AppContext.get().getSSOEnabled();
+        const isSSOUser = user?.user?.identity_source === Constants.SSO_USER_IDP_TYPE;
+
+        if (isSSOEnabled && isSSOUser) {
+            const idp = await AppContext.get().getClusterSettingsService().getIdentityProviderSettings();
+            const cognitoDomain = idp.cognito.domain_url;
+            const logoutURI = encodeURIComponent(AppContext.get().getHttpEndpoint());
+            const clientId = await authClient.getClientId();
+
+            AppContext.get().auth().logout();
+            window.location.replace(`${cognitoDomain}/logout?client_id=${clientId}&logout_uri=${logoutURI}`);
         } else {
             AppContext.get().auth().logout();
             AppContext.get().routeTo("/auth/login");

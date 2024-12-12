@@ -12,7 +12,7 @@
  */
 
 import React, { Component } from "react";
-import { Button, ButtonDropdown, DateRangePicker, DateRangePickerProps, Flashbar, FlashbarProps, Header, PropertyFilterProps, SpaceBetween } from "@cloudscape-design/components";
+import { Button, ButtonDropdown, DateRangePicker, DateRangePickerProps, Flashbar, FlashbarProps, Header, HeaderProps, PropertyFilterProps, SpaceBetween } from "@cloudscape-design/components";
 import { ButtonDropdownProps } from "@cloudscape-design/components/button-dropdown/interfaces";
 import IdeaTable from "../table";
 import { TableProps } from "@cloudscape-design/components/table/interfaces";
@@ -32,6 +32,8 @@ export interface IdeaListViewAction {
 
 export interface IdeaListViewProps<T = any> {
     title?: string;
+    titleVariant?: HeaderProps.Variant;
+    counter?: string;
     description?: string;
     primaryActionDisabled?: boolean;
     primaryAction?: IdeaListViewAction;
@@ -506,7 +508,7 @@ class IdeaListView extends Component<IdeaListViewProps, IdeaListViewState> {
             <IdeaTable
                 ref={this.table}
                 header={
-                    <Header variant="awsui-h1-sticky" counter={this.getCounter()} description={this.props.description} actions={this.buildActions()}>
+                    <Header variant={this.props.titleVariant || "awsui-h1-sticky"} counter={this.getCounter() || this.props.counter} description={this.props.description} actions={this.buildActions()}>
                         {this.props.title}
                     </Header>
                 }

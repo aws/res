@@ -1,6 +1,6 @@
 #  Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 #  SPDX-License-Identifier: Apache-2.0
-import http
+import base64
 import json
 import os
 import re
@@ -8,8 +8,8 @@ import sys
 import typing
 import urllib.parse
 from datetime import datetime
-from http.client import HTTPResponse
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Union
+from urllib.parse import unquote
 
 import boto3
 import botocore
@@ -23,12 +23,17 @@ sys.path.insert(0, "/opt")
 
 # Now you can import the modules from the Lambda layer
 import jwt
+import requests
+import xmltodict
 from jwt import PyJWKClient
+from requests import Response
 
 DEFAULT_JWK_CACHE_KEYS = True
 DEFAULT_JWK_MAX_CACHED_KEYS = 16
 DEFAULT_KEY_ALGORITHM = "RS256"
 ADMIN_ROLE = "admin"
+CONTENT_TYPE_JSON = "application/json"
+CONTENT_TYPE_XML = "text/xml"
 
 
 def get_signing_key(jwt_token: str) -> Any:
@@ -251,7 +256,9 @@ def sigv4_auth(aws_request_info: AWSRequestInfo, user_name: str) -> None:
     for k, value in prepared_request.headers.items():
         aws_request_info.headers[k] = value
     aws_request_info.headers.pop("content-length", None)
-    aws_request_info.headers["content-type"] = "application/x-amz-json-1.1"
+    content_type = aws_request_info.headers.get("content-type", "")
+    if not content_type or CONTENT_TYPE_JSON in content_type:
+        aws_request_info.headers["content-type"] = "application/x-amz-json-1.1"
     # Uncomment for local development
     # aws_request_info.headers["access-control-allow-origin"] = "http://localhost:3000"
 
@@ -267,6 +274,13 @@ def get_aws_request_info_from_event(
         )
         headers = event["headers"]
         headers.pop("authorization", None)
+
+        # pre-process the body before sending it through
+        if event.get("isBase64Encoded", False):
+            event["body"] = base64.b64decode(event["body"])
+        if service_name == "ec2":
+            event["body"] = unquote(event["body"]).replace('"', "")
+
         aws_request_info = AWSRequestInfo(
             event["httpMethod"],
             host,
@@ -289,26 +303,34 @@ def send_aws_request(
     aws_request_info: AWSRequestInfo,
     user_name: str,
     attach_credentials_to_event: bool = True,
-) -> HTTPResponse:
+) -> Response:
     if attach_credentials_to_event:
         sigv4_auth(aws_request_info, user_name)
-    conn = http.client.HTTPSConnection(aws_request_info.host)
 
-    conn.request(
-        aws_request_info.http_method,
-        aws_request_info.path,
-        body=aws_request_info.body,
+    if aws_request_info.queries and aws_request_info.queries != {}:
+        request_parameters = urllib.parse.urlencode(aws_request_info.queries)
+        url = f"{aws_request_info.path}?{request_parameters}"
+    else:
+        url = aws_request_info.path
+
+    response = requests.request(
+        method=aws_request_info.http_method,
+        url=f"https://{aws_request_info.host}{url}",
+        data=aws_request_info.body,
         headers=aws_request_info.headers,
     )
-    response = conn.getresponse()
 
     return response
 
 
-def get_sanitized_response(response: HTTPResponse) -> Any:
-    content = response.read()
-    status = response.status
+def get_sanitized_response(response: Response) -> Any:
+    decoded_content = response.text
+    status = response.status_code
     reason = response.reason
+    response_headers = dict(response.headers)
+    content_encoding = response_headers.get("Content-Encoding", "")
+    if content_encoding == "gzip":
+        response_headers.pop("Content-Encoding")
     # For 401 and 403 error, return generic error message.
     # For other errors, return error message from response.
     if status in [401, 403] or reason in [
@@ -317,10 +339,15 @@ def get_sanitized_response(response: HTTPResponse) -> Any:
     ]:
         response_body = json.dumps({"error": reason})
         # Print Service response for debug purposes
-        print(content.decode("utf-8"))
+        print(decoded_content)
     else:
-        response_body = content.decode("utf-8")
-    return get_response(status, reason, response_body, dict(response.getheaders()))
+        response_body = decoded_content
+        if CONTENT_TYPE_XML in response_headers.get("Content-Type", ""):
+            response_body = json.dumps(
+                xmltodict.parse(response_body), skipkeys=True, separators=(",", ":")
+            )
+            response_headers["Content-Type"] = CONTENT_TYPE_JSON
+    return get_response(status, reason, response_body, response_headers)
 
 
 def write_audit_log(
@@ -374,6 +401,8 @@ def handle_proxy_event(event: Dict[str, Any], context: Any) -> Any:
     else:
         write_audit_log(event, context)
         decoded_token = {"username": "RESProxy"}
+        # Uncomment for local deployment for preflight CORS check
+        # return get_response(200, "Okay", json.dumps({}))
 
     default_region = context.invoked_function_arn.split(":")[3]
     try:
@@ -382,9 +411,7 @@ def handle_proxy_event(event: Dict[str, Any], context: Any) -> Any:
         response = send_aws_request(
             aws_request_info, decoded_token["username"], attach_credentials_to_event
         )
-        print(
-            "Received service response", response.status, response.reason, response.msg
-        )
+        print("Received service response", response.status_code, response.reason)
         return get_sanitized_response(response)
     except InvalidRequestException as exception:
         return get_bad_request_response(exception)
@@ -419,8 +446,12 @@ def get_response(
     is_base64_encoded: bool = False,
 ) -> Dict[str, Any]:
     if headers is None:
-        headers = {"Content-Type": "application/json"}
-    headers["Content-Type"] = "application/json"
+        headers = {"Content-Type": CONTENT_TYPE_JSON}
+    headers["Content-Type"] = CONTENT_TYPE_JSON
+    # Uncomment for local deployment for preflight CORS check
+    # headers["Access-Control-Allow-Origin"] = "http://localhost:3000"
+    # headers["Access-Control-Allow-Credentials"] = "true"
+    # headers["Access-Control-Allow-Headers"] = "authorization,content-type,x-amz-target"
     return {
         "isBase64Encoded": is_base64_encoded,
         "statusCode": status_code,

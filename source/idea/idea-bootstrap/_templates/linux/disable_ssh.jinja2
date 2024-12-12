@@ -1,0 +1,10 @@
+# Begin: Disable SSH access
+function disable_ssh () {
+  sudo systemctl disable sshd.socket
+  sudo systemctl disable sshd.service
+
+  sudo systemctl stop sshd.socket
+  sudo systemctl stop sshd.service
+}
+disable_ssh
+# End: Disable SSH access

@@ -1,0 +1,19 @@
+# ldapadd -x -D "cn=Admin,dc=corp,dc=res,dc=com" -w secret -f /opt/res-adsync/resources/org.ldif
+dn: dc=corp,dc=res,dc=com
+objectclass: dcObject
+objectclass: organization
+o: My Corp
+dc: corp
+
+dn: ou=corp,dc=corp,dc=res,dc=com
+objectClass: top
+objectClass: organizationalUnit
+ou: corp
+description: Corp container
+
+dn: OU=Users,OU=corp,DC=corp,DC=res,DC=com
+changetype: add
+objectClass: top
+objectClass: organizationalUnit
+ou: Users
+description: Top level users

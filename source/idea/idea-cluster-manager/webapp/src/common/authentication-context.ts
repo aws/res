@@ -17,6 +17,7 @@ import { LocalStorageService } from "../service";
 import IdeaException from "./exceptions";
 import Utils from "./utils";
 import AppLogger from "./app-logger";
+import { HTTPMethod } from "./constants";
 
 export interface IdeaAuthenticationContextProps {
     authEndpoint?: string;
@@ -188,10 +189,7 @@ export class IdeaAuthenticationContext {
         this.idToken = initiateAuthResult.auth.id_token;
         this.dbUsername = initiateAuthResult.db_username;
         this.role = initiateAuthResult.role;
-        this.claimsProvider = new JwtTokenClaimsProvider(this.accessToken!,
-            this.idToken!,
-            this.dbUsername!,
-            this.role!);
+        this.claimsProvider = new JwtTokenClaimsProvider(this.accessToken!, this.idToken!, this.dbUsername!, this.role!);
         this.ssoAuth = ssoAuth;
 
         if (this.localStorage != null) {
@@ -218,7 +216,7 @@ export class IdeaAuthenticationContext {
         return claims;
     }
 
-    getClientId(): string  {
+    getClientId(): string {
         return this.claimsProvider!.getClientId();
     }
 
@@ -227,8 +225,7 @@ export class IdeaAuthenticationContext {
             // this is primarily to allow force token renewal in local storage mode for testing, by deleting the access token from local storage
             return this.renewAccessToken().then(() => {
                 if (this.accessToken != null && this.idToken != null && this.dbUsername != null && this.role != null) {
-                    this.claimsProvider = new JwtTokenClaimsProvider(this.accessToken,
-                        this.idToken, this.dbUsername, this.role);
+                    this.claimsProvider = new JwtTokenClaimsProvider(this.accessToken, this.idToken, this.dbUsername, this.role);
                     return true;
                 } else {
                     return false;
@@ -452,17 +449,20 @@ export class IdeaAuthenticationContext {
         return this.renewalInProgress;
     }
 
-    invoke(url: string, request: any, isPublic: boolean = false, additionalHeader = {}): Promise<any> {
+    invoke(url: string, request: any, isPublic: boolean = false, additionalHeader = {}, httpMethod: HTTPMethod = "POST"): Promise<any> {
         const invokeApi = () => {
             let headers: any = {
                 "Content-Type": HEADER_CONTENT_TYPE_JSON,
                 ...additionalHeader,
             };
-            let fetchOptions = {
-                method: "POST",
+            let fetchOptions: any = {
+                method: httpMethod,
                 headers: headers,
                 body: JSON.stringify(request),
             };
+            if (httpMethod === "GET") {
+                fetchOptions.body = undefined;
+            }
             if (!isPublic) {
                 headers["Authorization"] = `Bearer ${this.accessToken}`;
             }

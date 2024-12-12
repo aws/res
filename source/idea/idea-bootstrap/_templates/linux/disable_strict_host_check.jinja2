@@ -1,6 +1,6 @@
 # Begin: Disable Strict Host Check
-{%- if context.base_os in ('amazonlinux2', 'rhel8', 'rhel9') %}
-echo "StrictHostKeyChecking no" >> /etc/ssh/ssh_config
-echo "UserKnownHostsFile /dev/null" >> /etc/ssh/ssh_config
-{%- endif %}
+if [[ $RES_BASE_OS =~ ^(amzn2|rhel8|rhel9)$ ]]; then
+  echo "StrictHostKeyChecking no" >> /etc/ssh/ssh_config
+  echo "UserKnownHostsFile /dev/null" >> /etc/ssh/ssh_config
+fi
 # End: Disable Strict Host Check

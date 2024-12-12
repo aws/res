@@ -16,8 +16,6 @@ from ideaclustermanager.app.accounts.helpers.quic_update_helper import UpdateQui
 from ideasdk.api import ApiInvocationContext, BaseAPI
 from ideadatamodel.cluster_settings import (
     ListClusterModulesResult,
-    ListClusterHostsRequest,
-    ListClusterHostsResult,
     GetModuleSettingsRequest,
     GetModuleSettingsResult,
     UpdateModuleSettingsRequest,
@@ -29,6 +27,9 @@ from ideadatamodel.cluster_settings import (
 from ideadatamodel import exceptions, constants, UpdateQuicConfigResult
 from ideasdk.config.cluster_config import ClusterConfig
 from ideasdk.utils import Utils
+
+from res.utils import aws_utils
+import res.constants as res_constants
 
 from threading import RLock
 
@@ -53,10 +54,6 @@ class ClusterSettingsAPI(BaseAPI):
             'ClusterSettings.UpdateModuleSettings': {
                 'scope': self.SCOPE_WRITE,
                 'method': self.update_module_settings
-            },
-            'ClusterSettings.ListClusterHosts': {
-                'scope': self.SCOPE_READ,
-                'method': self.list_cluster_hosts
             },
             'ClusterSettings.DescribeInstanceTypes': {
                 'scope': self.SCOPE_READ,
@@ -88,9 +85,21 @@ class ClusterSettingsAPI(BaseAPI):
         module_id = request.module_id
         if Utils.is_empty(module_id):
             raise exceptions.invalid_params('module_id is required')
+        
+        if not self.context.config().get_bool('bastion-host.public') and module_id == constants.MODULE_BASTION_HOST:
+            context.success(GetModuleSettingsResult(
+                settings={
+                    "public": False
+                }
+            ))
+            return
 
         module_config = self.context.config().get_config(module_id, module_id=module_id).as_plain_ordered_dict()
-        
+
+        if module_id == constants.MODULE_DIRECTORYSERVICE:
+            if res_constants.SERVICE_ACCOUNT_USER_DN_SECRET_ARN_KEY in module_config:
+                module_config[res_constants.SERVICE_ACCOUNT_USER_DN_KEY] = aws_utils.get_secret_string(module_config[res_constants.SERVICE_ACCOUNT_USER_DN_SECRET_ARN_KEY])
+
         if not context.is_administrator() and module_id in constants.RESTRICTED_MODULES_FOR_NON_ADMINS:
             filtered_config = {}
             for key, value in module_config.items():
@@ -115,39 +124,20 @@ class ClusterSettingsAPI(BaseAPI):
         if len(settings) > 100:
             raise exceptions.invalid_params('only 100 settings can be updated at once')
 
+        if res_constants.SERVICE_ACCOUNT_USER_DN_KEY in settings:
+            # Create a secret ARN for service account user DN to avoid storing sensitive data in DDB
+            settings[f"{res_constants.SERVICE_ACCOUNT_USER_DN_KEY}_secret_arn"] = aws_utils.create_or_update_secret(
+                self.config.cluster_name, module_id,
+                res_constants.SERVICE_ACCOUNT_USER_DN_INPUT_PARAMETER_NAME,
+                settings[res_constants.SERVICE_ACCOUNT_USER_DN_KEY]
+            )
+            settings.pop(res_constants.SERVICE_ACCOUNT_USER_DN_KEY)
+
         self.config.db.transact_set_cluster_settings(module_id, settings)
         for setting in settings:
             self.config.put(f'{module_id}.{setting}', settings[setting])
 
         context.success(UpdateModuleSettingsResult())
-
-    def list_cluster_hosts(self, context: ApiInvocationContext):
-        # returns all infrastructure instances
-        request = context.get_request_payload_as(ListClusterHostsRequest)
-        ec2_instances = self.context.aws_util().ec2_describe_instances(
-            filters=[
-                {
-                    'Name': 'instance-state-name',
-                    'Values': ['pending', 'stopped', 'running']
-                },
-                {
-                    'Name': f'tag:{constants.IDEA_TAG_ENVIRONMENT_NAME}',
-                    'Values': [self.context.cluster_name()]
-                },
-                {
-                    'Name': f'tag:{constants.IDEA_TAG_NODE_TYPE}',
-                    'Values': [constants.NODE_TYPE_INFRA, constants.NODE_TYPE_APP, constants.NODE_TYPE_AMI_BUILDER]
-                }
-            ],
-            page_size=request.page_size
-        )
-        result = []
-        for instance in ec2_instances:
-            result.append(instance.instance_data())
-
-        context.success(ListClusterHostsResult(
-            listing=result
-        ))
 
     def describe_instance_types(self, context: ApiInvocationContext):
 
@@ -232,7 +222,6 @@ class ClusterSettingsAPI(BaseAPI):
         if is_authenticated_user and namespace in (
             'ClusterSettings.ListClusterModules',
             'ClusterSettings.GetModuleSettings',
-            'ClusterSettings.ListClusterHosts',
             'ClusterSettings.DescribeInstanceTypes'
         ):
             acl_entry['method'](context)

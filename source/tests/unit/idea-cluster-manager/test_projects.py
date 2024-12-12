@@ -20,8 +20,11 @@ import botocore.exceptions
 import pytest
 from _pytest.monkeypatch import MonkeyPatch
 from ideaclustermanager import AppContext
+from ideaclustermanager.app.accounts.db.group_dao import GroupDAO
+from ideaclustermanager.app.accounts.db.user_dao import UserDAO
 from ideasdk.aws import AwsClientProvider
 from ideasdk.utils import Utils
+from res.resources import accounts
 
 from ideadatamodel import (
     CreateProjectRequest,
@@ -153,9 +156,9 @@ def monkey_session(request):
 @pytest.fixture(scope="module")
 def membership(context: AppContext, monkey_session):
     monkey_session.setattr(
-        context.accounts.sssd, "get_uid_and_gid_for_user", lambda x: (1000, 1000)
+        accounts, "_get_uid_and_gid_for_username", lambda x: (1000, 1000)
     )
-    monkey_session.setattr(context.accounts.sssd, "get_gid_for_group", lambda x: 1000)
+    monkey_session.setattr(accounts, "_get_gid_for_group", lambda x: 1000)
     monkey_session.setattr(
         context.role_assignments,
         "verify_actor_exists",
@@ -168,17 +171,19 @@ def membership(context: AppContext, monkey_session):
     )
 
     def create_group(group_name: str) -> Group:
-        group = context.accounts.create_group(
-            Group(
-                title=f"{group_name} Project Group",
-                name=f"{group_name}-project-group"[
+        group = accounts.create_group(
+            {
+                "title": f"{group_name} Project Group",
+                "group_name": f"{group_name}-project-group"[
                     : constants.AD_SAM_ACCOUNT_NAME_MAX_LENGTH
                 ],
-                group_type=constants.GROUP_TYPE_PROJECT,
-            )
+                "ds_name": f"{group_name}-project-group"[
+                    : constants.AD_SAM_ACCOUNT_NAME_MAX_LENGTH
+                ],
+            }
         )
         assert group is not None
-        return group
+        return GroupDAO.convert_from_db(group)
 
     def create_project(project_name: str, project_title: str) -> Project:
         # create project
@@ -210,18 +215,19 @@ def membership(context: AppContext, monkey_session):
     def create_user(
         username: str, gid: int, uid: int, additional_groups: List[str]
     ) -> User:
-        return context.accounts.create_user(
-            user=User(
-                username=username,
-                password="MockPassword_123",
-                email=f"{username}@example.com",
-                uid=uid,
-                gid=gid,
-                home_dir=f"/home/{username}",
-                login_shell="/bin/bash",
-                additional_groups=additional_groups,
-            ),
-            email_verified=True,
+        return UserDAO.convert_from_db(
+            accounts.create_user(
+                {
+                    "username": username,
+                    "password": "MockPassword_123",
+                    "email": f"{username}@example.com",
+                    "uid": uid,
+                    "gid": gid,
+                    "home_dir": f"/home/{username}",
+                    "login_shell": "/bin/bash",
+                    "additional_groups": additional_groups,
+                },
+            )
         )
 
     group_a1 = create_group("group_a1")
@@ -730,16 +736,17 @@ def test_projects_crud_update_project_with_new_policy_arns_succeeds(
     assert result.project.policy_arns[0] == "valid_policy_arn"
 
 
-def test_projects_crud_create_project_url_error(context):
+def test_projects_crud_create_project_url_error(context, monkey_session):
     """
     create project
     """
-    group = context.accounts.create_group(
-        Group(
-            title=f"Sample Project Group URL",
-            name=f"sample-project-group-url",
-            group_type=constants.GROUP_TYPE_PROJECT,
-        )
+    monkey_session.setattr(accounts, "_get_gid_for_group", lambda x: 1000)
+    group = accounts.create_group(
+        {
+            "title": f"Sample Project Group URL",
+            "group_name": "sample-project-group-url",
+            "ds_name": "sample-project-group-url",
+        }
     )
 
     assert group is not None
@@ -1221,7 +1228,9 @@ def test_projects_get_user_projects(context, membership):
     check_user_projects(username=membership.user_3.username, project_ids=[])
     assert is_assigned(context, membership.user_3, membership.project_a) is False
 
-    context.accounts.enable_user(membership.user_3.username)
+    accounts.update_user(
+        user={"username": membership.user_3.username, "enabled": True}, force=True
+    )
     check_user_projects(
         username=membership.user_3.username,
         project_ids=[membership.project_a.project_id, membership.project_b.project_id],
@@ -1267,7 +1276,7 @@ def test_projects_delete_group(context, membership):
     )
     assert is_assigned(context, membership.user_1, membership.project_a) is True
 
-    context.accounts.delete_group(group_name=membership.group_a1.name, force=True)
+    accounts.delete_group({"group_name": membership.group_a1.name}, force=True)
     # Ensure user has access to project_a through group_a2 after deletion of group_a1
     assert is_assigned(context, membership.user_1, membership.project_a) is True
 

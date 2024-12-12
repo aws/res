@@ -37,6 +37,7 @@ export interface DCVSessionTypeChoice {
 
 export interface VirtualDesktopCreateSessionFormState {
     showModal: boolean;
+    isCognitoNativeUser: boolean;
     softwareStacks: { [k: string]: VirtualDesktopSoftwareStack };
     supportedOsChoices: SocaUserInputChoice[];
     dcvSessionTypeChoice: DCVSessionTypeChoice;
@@ -53,6 +54,7 @@ class VirtualDesktopCreateSessionForm extends Component<VirtualDesktopCreateSess
         this.form = React.createRef();
         this.state = {
             showModal: false,
+            isCognitoNativeUser: false,
             softwareStacks: {},
             supportedOsChoices: [],
             eVDIUsers: [],
@@ -117,6 +119,15 @@ class VirtualDesktopCreateSessionForm extends Component<VirtualDesktopCreateSess
     }
 
     componentDidMount() {
+        this.getAuthClient()
+            .getUser()
+            .then((result)=> {
+                if (result && result.user && result.user.identity_source === Constants.COGNITO_USER_IDP_TYPE) {
+                    this.setState({
+                       isCognitoNativeUser: true
+                    })
+                }
+            });
         this.getVirtualDesktopUtilsClient()
             .listAllowedInstanceTypes({})
             .then((result) => {
@@ -644,7 +655,11 @@ class VirtualDesktopCreateSessionForm extends Component<VirtualDesktopCreateSess
                             if (event.value === "windows") {
                                 // Hibernation is conditionally supported for Windows
                                 hibernation?.disable(false);
+                                if (this.state.isCognitoNativeUser) {
+                                    this.getForm()?.disablePrimaryActionButton();
+                                }
                             } else {
+                                this.getForm()?.enablePrimaryActionButton();
                                 if (event.value === "amazonlinux2") {
                                     // Hibernation is supported for Amazon Linux 2 .
                                     //hibernation?.disable(false);

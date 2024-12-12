@@ -111,11 +111,11 @@ ldap_auth_disable_tls_never_use_in_production = true
 " >> /etc/sssd/sssd.conf
 fi
 
-{%- if context.base_os in ('amazonlinux2', 'rhel8', 'rhel9') %}
-authconfig --enablemkhomedir --enablesssdauth --enablesssd --updateall
-{%- elif context.base_os == 'ubuntu2204' %}
-pam-auth-update --enable sss
-{%- endif %}
+if [[ $RES_BASE_OS =~ ^(amzn2|rhel8|rhel9)$ ]]; then
+  authconfig --enablemkhomedir --enablesssdauth --enablesssd --updateall
+elif [[ $RES_BASE_OS == "ubuntu2204" ]]; then
+  pam-auth-update --enable sss
+fi
 
 systemctl enable sssd
 systemctl restart sssd

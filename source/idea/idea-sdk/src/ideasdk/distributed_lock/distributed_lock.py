@@ -62,8 +62,6 @@ class DistributedLock(SocaService, DistributedLockProtocol):
         self.context = context
         self.logger = context.logger('distributed-lock')
 
-        self._initialize_distributed_lock_table()
-
         self._lock_client = DynamoDBLockClient(
             dynamodb_resource=context.aws().dynamodb_table(),
             table_name=self._get_table_name(),
@@ -85,42 +83,6 @@ class DistributedLock(SocaService, DistributedLockProtocol):
 
     def _get_table_name(self) -> str:
         return f'{self.context.cluster_name()}.{self.context.module_id()}.distributed-lock'
-
-    def _initialize_distributed_lock_table(self):
-        exists = self.context.aws_util().dynamodb_check_table_exists(self._get_table_name())
-        if not exists:
-            # wait for random duration to avoid race condition for table creation with other nodes
-            time.sleep(random.randint(0, 5))
-
-        self.context.aws_util().dynamodb_create_table(
-            create_table_request={
-                'TableName': self._get_table_name(),
-                'AttributeDefinitions': [
-                    {
-                        'AttributeName': 'lock_key',
-                        'AttributeType': 'S'
-                    },
-                    {
-                        'AttributeName': 'sort_key',
-                        'AttributeType': 'S'
-                    }
-                ],
-                'KeySchema': [
-                    {
-                        'AttributeName': 'lock_key',
-                        'KeyType': 'HASH'
-                    },
-                    {
-                        'AttributeName': 'sort_key',
-                        'KeyType': 'RANGE'
-                    }
-                ],
-                'BillingMode': 'PAY_PER_REQUEST'
-            },
-            wait=True,
-            ttl=True,
-            ttl_attribute_name='expiry_time'
-        )
 
     def acquire(self, key: str):
         acquired_lock = self._lock_client.acquire_lock(partition_key=key)

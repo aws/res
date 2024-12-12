@@ -84,6 +84,7 @@ def update(c, name=None, upgrade=False, package_name=None):
                  'build',
                  'tests',
                  'idea-administrator',
+                 'ad-sync',
                  'idea-cluster-manager',
                  'idea-virtual-desktop-controller',
                  'library'):

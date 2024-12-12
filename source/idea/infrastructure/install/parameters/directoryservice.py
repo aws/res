@@ -6,6 +6,7 @@
 from dataclasses import dataclass
 from typing import Any, Optional
 
+from idea.infrastructure.install.constants import OPTIONAL_INPUT_PARAMETER_LABEL_SUFFIX
 from idea.infrastructure.install.parameters.base import Attributes, Base, Key
 
 
@@ -34,7 +35,7 @@ class DirectoryServiceParameters(Base):
                 "Please provide the Fully Qualified Domain Name (FQDN) for your Active Directory. "
                 "For example, developer.res.hpc.aws.dev"
             ),
-            allowed_pattern=r"(?=^.{4,253}$)(^((?!-)[a-zA-Z0-9-]{1,63}(?<!-)\.)+[a-zA-Z]{2,63}$)",
+            allowed_pattern=r"^$|(?=^.{4,253}$)(^((?!-)[a-zA-Z0-9-]{1,63}(?<!-)\.)+[a-zA-Z]{2,63}$)",
         )
     )
     ldap_base: str = Base.parameter(
@@ -44,21 +45,18 @@ class DirectoryServiceParameters(Base):
                 "Please provide the Active Directory base string Distinguished Name (DN) "
                 "For example, dc=developer,dc=res,dc=hpc,dc=aws,dc=dev"
             ),
-            allowed_pattern=".+",
         )
     )
     ad_short_name: str = Base.parameter(
         Attributes(
             id=DirectoryServiceKey.AD_SHORT_NAME,
             description="Please provide the short name in Active directory",
-            allowed_pattern=".+",
         )
     )
     ldap_connection_uri: str = Base.parameter(
         Attributes(
             id=DirectoryServiceKey.LDAP_CONNECTION_URI,
             description="Please provide the active directory connection URI (e.g. ldap://www.example.com)",
-            allowed_pattern=".+",
         )
     )
     users_ou: str = Base.parameter(
@@ -68,21 +66,18 @@ class DirectoryServiceParameters(Base):
                 "Please provide Users Organization Unit in your active directory "
                 "for example, OU=Users,DC=RES,DC=example,DC=internal"
             ),
-            allowed_pattern=".+",
         )
     )
     groups_ou: str = Base.parameter(
         Attributes(
             id=DirectoryServiceKey.GROUPS_OU,
             description="Please provide user groups Oganization Unit in your active directory",
-            allowed_pattern=".+",
         )
     )
     computers_ou: str = Base.parameter(
         Attributes(
             id=DirectoryServiceKey.COMPUTERS_OU,
             description="Please provide Organization Unit for compute and storage servers in your active directory",
-            allowed_pattern=".+",
         )
     )
     sudoers_group_name: str = Base.parameter(
@@ -90,7 +85,6 @@ class DirectoryServiceParameters(Base):
             id=DirectoryServiceKey.SUDOERS_GROUP_NAME,
             type="String",
             description="Please provide group name of users who will be able to sudo in your active directory",
-            allowed_pattern=".+",
         )
     )
     service_account_credentials_secret_arn: str = Base.parameter(
@@ -98,7 +92,7 @@ class DirectoryServiceParameters(Base):
             id=DirectoryServiceKey.SERVICE_ACCOUNT_CREDENTIALS_SECRET_ARN,
             type="String",
             description="Directory Service Root (Service Account) Credentials Secret ARN. The username and password for the Active Directory ServiceAccount user formatted as a username:password key/value pair.",
-            allowed_pattern="^(?:arn:(?:aws|aws-us-gov|aws-cn):secretsmanager:[a-z0-9-]+:[0-9]{12}:secret:[A-Za-z0-9\-\_\+\=\/\.\@]{1,519})?$",
+            allowed_pattern="^$|^(?:arn:(?:aws|aws-us-gov|aws-cn):secretsmanager:[a-z0-9-]+:[0-9]{12}:secret:[A-Za-z0-9\-\_\+\=\/\.\@]{1,519})?$",
             # Secret name can be 512 characters long and may include letters, numbers, and the following characters: /_+=.@-.
             # Secrets Manager automatically adds a hyphen and six random characters after the secret name at the end of the ARN.
             # https://docs.aws.amazon.com/secretsmanager/latest/apireference/API_CreateSecret.html#SecretsManager-CreateSecret-request-Name
@@ -108,7 +102,7 @@ class DirectoryServiceParameters(Base):
         Attributes(
             id=DirectoryServiceKey.DOMAIN_TLS_CERTIFICATE_SECRET_ARN,
             type="String",
-            description="(Optional) AD Domain TLS Certificate Secret ARN",
+            description="AD Domain TLS Certificate Secret ARN",
         )
     )
     enable_ldap_id_mapping: str = Base.parameter(
@@ -116,7 +110,7 @@ class DirectoryServiceParameters(Base):
             id=DirectoryServiceKey.ENABLE_LDAP_ID_MAPPING,
             type="String",
             description="Set to False to use the uidNumbers and gidNumbers for users and group from the provided AD. Otherwise set to True.",
-            allowed_values=["True", "False"],
+            allowed_values=["True", "False", ""],
         )
     )
     disable_ad_join: str = Base.parameter(
@@ -124,7 +118,7 @@ class DirectoryServiceParameters(Base):
             id=DirectoryServiceKey.DISABLE_AD_JOIN,
             type="String",
             description="Set to True to prevent linux hosts from joining the Directory Domain. Otherwise set to False",
-            allowed_values=["True", "False"],
+            allowed_values=["True", "False", ""],
         )
     )
     root_user_dn: str = Base.parameter(
@@ -132,7 +126,6 @@ class DirectoryServiceParameters(Base):
             id=DirectoryServiceKey.ROOT_USER_DN,
             type="String",
             description="Provide the Distinguished name (DN) of the service account user in the Active Directory",
-            allowed_pattern=".+",
             no_echo=True,
         )
     )
@@ -143,7 +136,9 @@ class DirectoryServiceParameters(Base):
 
 class DirectoryServiceParameterGroups:
     parameter_group_for_directory_service: dict[str, Any] = {
-        "Label": {"default": "Active Directory details"},
+        "Label": {
+            "default": f"Active Directory details{OPTIONAL_INPUT_PARAMETER_LABEL_SUFFIX}"
+        },
         "Parameters": [
             DirectoryServiceKey.NAME,
             DirectoryServiceKey.AD_SHORT_NAME,
@@ -159,4 +154,48 @@ class DirectoryServiceParameterGroups:
             DirectoryServiceKey.DISABLE_AD_JOIN,
             DirectoryServiceKey.ROOT_USER_DN,
         ],
+    }
+
+
+class DirectoryServiceParameterLabels:
+    parameter_labels_for_directory_service: dict[str, Any] = {
+        DirectoryServiceKey.NAME: {
+            "default": f"{DirectoryServiceKey.NAME}{OPTIONAL_INPUT_PARAMETER_LABEL_SUFFIX}"
+        },
+        DirectoryServiceKey.AD_SHORT_NAME: {
+            "default": f"{DirectoryServiceKey.AD_SHORT_NAME}{OPTIONAL_INPUT_PARAMETER_LABEL_SUFFIX}"
+        },
+        DirectoryServiceKey.LDAP_BASE: {
+            "default": f"{DirectoryServiceKey.LDAP_BASE}{OPTIONAL_INPUT_PARAMETER_LABEL_SUFFIX}"
+        },
+        DirectoryServiceKey.LDAP_CONNECTION_URI: {
+            "default": f"{DirectoryServiceKey.LDAP_CONNECTION_URI}{OPTIONAL_INPUT_PARAMETER_LABEL_SUFFIX}"
+        },
+        DirectoryServiceKey.SERVICE_ACCOUNT_CREDENTIALS_SECRET_ARN: {
+            "default": f"{DirectoryServiceKey.SERVICE_ACCOUNT_CREDENTIALS_SECRET_ARN}{OPTIONAL_INPUT_PARAMETER_LABEL_SUFFIX}"
+        },
+        DirectoryServiceKey.USERS_OU: {
+            "default": f"{DirectoryServiceKey.USERS_OU}{OPTIONAL_INPUT_PARAMETER_LABEL_SUFFIX}"
+        },
+        DirectoryServiceKey.GROUPS_OU: {
+            "default": f"{DirectoryServiceKey.GROUPS_OU}{OPTIONAL_INPUT_PARAMETER_LABEL_SUFFIX}"
+        },
+        DirectoryServiceKey.SUDOERS_GROUP_NAME: {
+            "default": f"{DirectoryServiceKey.SUDOERS_GROUP_NAME}{OPTIONAL_INPUT_PARAMETER_LABEL_SUFFIX}"
+        },
+        DirectoryServiceKey.COMPUTERS_OU: {
+            "default": f"{DirectoryServiceKey.COMPUTERS_OU}{OPTIONAL_INPUT_PARAMETER_LABEL_SUFFIX}"
+        },
+        DirectoryServiceKey.DOMAIN_TLS_CERTIFICATE_SECRET_ARN: {
+            "default": f"{DirectoryServiceKey.DOMAIN_TLS_CERTIFICATE_SECRET_ARN}{OPTIONAL_INPUT_PARAMETER_LABEL_SUFFIX}"
+        },
+        DirectoryServiceKey.ENABLE_LDAP_ID_MAPPING: {
+            "default": f"{DirectoryServiceKey.ENABLE_LDAP_ID_MAPPING}{OPTIONAL_INPUT_PARAMETER_LABEL_SUFFIX}"
+        },
+        DirectoryServiceKey.DISABLE_AD_JOIN: {
+            "default": f"{DirectoryServiceKey.DISABLE_AD_JOIN}{OPTIONAL_INPUT_PARAMETER_LABEL_SUFFIX}"
+        },
+        DirectoryServiceKey.ROOT_USER_DN: {
+            "default": f"{DirectoryServiceKey.ROOT_USER_DN}{OPTIONAL_INPUT_PARAMETER_LABEL_SUFFIX}"
+        },
     }

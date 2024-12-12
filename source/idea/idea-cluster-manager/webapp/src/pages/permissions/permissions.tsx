@@ -92,33 +92,34 @@ class Permissions extends Component<PermissionsProps, PermissionsState> {
                     },
                 ]}
                 header={
-                    <Header
-                        variant={"h1"}
-                        description={"Manage user permissions throughout the environment."}
-                    >
-                        Permission policy
-                    </Header>
+                    <SpaceBetween size="xs">
+                        <Header
+                            variant={"h1"}
+                            description={"Manage user permissions throughout the environment."}
+                        >
+                            Permission policy
+                        </Header>
+                        {this.state.alertVisible ? <Alert
+                            statusIconAriaLabel="info"
+                            type="info"
+                            dismissible={true}
+                            onDismiss={() => {
+                                this.setState({ alertVisible: false })
+                            }}
+                        >
+                            Properly managing a comprehensive permissions policy requires understanding the cascading effects permissions can have across the environment. Before making any changes, <Link
+                                onFollow={() => {
+                                    this.props.onToolsChange({open: true, pageId: 'permissions'});
+                                }}
+                                variant="primary"
+                            >read Info</Link>
+                        </Alert> : true}
+                    </SpaceBetween>
                 }
                 contentType={"default"}
                 content={
                     <React.Fragment>
                         <SpaceBetween size="xxl">
-                            {this.state.alertVisible ? <Alert
-                                statusIconAriaLabel="info"
-                                type="info"
-                                dismissible={true}
-                                onDismiss={() => {
-                                    this.setState({ alertVisible: false })
-                                }}
-                                header="Permission policy key concepts"
-                            >
-                                Properly managing a comprehensive permissions policy requires understanding the cascading effects permissions can have across the environment. Before making any changes, <Link
-                                    onFollow={() => {
-                                        this.props.onToolsChange({open: true, pageId: 'permissions'});
-                                    }}
-                                    variant="primary"
-                                >read the Info</Link>.
-                            </Alert> : true}
                             <GlobalPermissions
                                 ideaPageId="global-permissions"
                                 toolsOpen={this.props.toolsOpen}

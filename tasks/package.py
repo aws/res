@@ -58,6 +58,17 @@ def administrator(c):
 
 
 @task
+def ad_sync(c):
+    # type: (Context) -> None
+    """
+    package ad sync
+    """
+    package_tool = PackageTool(c, 'ad-sync')
+    package_tool.package()
+    idea.console.success(f'distribution created: {package_tool.output_archive_name}')
+
+
+@task
 def cluster_manager(c):
     # type: (Context) -> None
     """
@@ -82,6 +93,7 @@ def virtual_desktop_controller(c):
     package_tool.package()
     idea.console.success(f'distribution created: {package_tool.output_archive_name}')
 
+
 @task(name='infra_ami_deps')
 def package_infra_ami_dependencies(c):
     """
@@ -99,7 +111,18 @@ def library(c):
     """
     package_tool = PackageTool(c, 'library')
     package_tool.package()
-    idea.console.success(f'distribution created: {package_tool.output_archive_name}')    
+    idea.console.success(f'distribution created: {package_tool.output_archive_name}')
+
+
+@task
+def bastion_host(c):
+    # type: (Context) -> None
+    """
+    package bastion_host
+    """
+    package_tool = PackageTool(c, 'idea-bastion-host')
+    package_tool.package()
+    idea.console.success(f'distribution created: {package_tool.output_archive_name}')
 
 
 @task
@@ -147,11 +170,15 @@ def package_all(c):
 
     administrator(c)
 
+    ad_sync(c)
+
     cluster_manager(c)
 
     virtual_desktop_controller(c)
-    
+
     library(c)
+
+    bastion_host(c)
 
     # all archive
     make_all_archive(c)

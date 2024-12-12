@@ -18,7 +18,9 @@ import IdeaAuthConfirmForgotPassword from "./auth-confirm-forgot-password";
 import IdeaAuthChallenge from "./auth-challenge";
 import IdeaAuthContext from "./auth-context";
 import IdeaAuthenticatedRoute from "./auth-route";
+import RESAuthSignUp from "./auth-signup";
+import RESAuthVerifyAccount from "./auth-verify-account";
 
-export { IdeaAuthLogin, IdeaAuthForgotPassword, IdeaAuthConfirmForgotPassword, IdeaAuthChallenge, IdeaAuthContext, IdeaAuthenticatedRoute, IdeaAuthLoginRedirect};
+export { IdeaAuthLogin, IdeaAuthForgotPassword, IdeaAuthConfirmForgotPassword, IdeaAuthChallenge, IdeaAuthContext, IdeaAuthenticatedRoute, IdeaAuthLoginRedirect, RESAuthSignUp, RESAuthVerifyAccount };
 
 export type { IdeaAuthProps } from "./auth-interfaces";

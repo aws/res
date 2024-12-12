@@ -207,9 +207,6 @@ class AdministratorProps:
     def region_timezone_config_file(self) -> str:
         return os.path.join(self.resources_dir, 'config', 'region_timezone_config.yml')
 
-    def region_elb_account_id_file(self) -> str:
-        return os.path.join(self.resources_dir, 'config', 'region_elb_account_id.yml')
-
     def cluster_cdk_dir(self, cluster_name: str, aws_region: str) -> str:
         cluster_home = self.cluster_dir(cluster_name)
         region_dir = self.cluster_region_dir(cluster_home, aws_region)

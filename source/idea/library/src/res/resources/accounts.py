@@ -1,14 +1,15 @@
 #  Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 #  SPDX-License-Identifier: Apache-2.0
 
+import grp
 import logging
 import os
 import pwd
 import re
 from typing import Any, Dict, List, Optional
 
-import res.constants as constants
-import res.exceptions as exceptions
+import res.constants as constants  # type: ignore
+import res.exceptions as exceptions  # type: ignore
 from res.resources import role_assignments  # type: ignore
 from res.utils import auth_utils, table_utils, time_utils  # type: ignore
 
@@ -17,8 +18,24 @@ logger.addHandler(logging.StreamHandler())
 logger.setLevel(logging.INFO)
 
 GROUPS_TABLE_NAME = "accounts.groups"
+GROUPS_DB_HASH_KEY = "group_name"
+
 USERS_TABLE_NAME = "accounts.users"
+GSI_ROLE = "role-index"
+GSI_EMAIL = "email-index"
+GSI_ROLE_HASH_KEY = "role"
+GSI_EMAIL_HASH_KEY = "email"
+USERS_DB_HASH_KEY = "username"
+
 GROUP_MEMBERS_TABLE_NAME = "accounts.group-members"
+GROUPS_MEMBERS_DB_HASH_KEY = "group_name"
+GROUPS_MEMBERS_DB_RANGE_KEY = "username"
+
+SSO_STATE_TABLE_NAME = "accounts.sso-state"
+SSO_STATE_DB_HASH_KEY = "state"
+
+GROUP_NAME_CHARACTER_LIMIT = 64
+GROUP_NAME_INVALID_CHARACTERS = set('[]:;|=+*?<>@"/\\')
 
 
 def list_groups() -> List[Dict[str, Any]]:
@@ -26,7 +43,7 @@ def list_groups() -> List[Dict[str, Any]]:
     Retrieve the groups from DDB
     :return: List of groups
     """
-    groups: List[Dict[str, Any]] = table_utils.list_table(GROUPS_TABLE_NAME)
+    groups: List[Dict[str, Any]] = table_utils.list_items(GROUPS_TABLE_NAME)
     return groups
 
 
@@ -49,11 +66,18 @@ def create_group(group: Dict[str, Any]) -> Dict[str, Any]:
     if not group.get("ds_name"):
         raise Exception("group ds_name is required")
 
+    group_gid = _get_gid_for_group(group_name)
+    if not group_gid:
+        logger.warning(
+            f"Unable to retrieve GID for group {group_name}",
+        )
+
     logger.info(f"Creating group {group_name}")
 
     current_time_ms = time_utils.current_time_ms()
     group_to_create = {
         **group,
+        "gid": group_gid,
         "enabled": True,
         "created_on": current_time_ms,
         "updated_on": current_time_ms,
@@ -65,6 +89,18 @@ def create_group(group: Dict[str, Any]) -> Dict[str, Any]:
     logger.info(f"Created group {group_name} successfully")
 
     return created_group
+
+
+def _get_gid_for_group(group_name: str) -> Optional[int]:
+    try:
+        group_info = grp.getgrnam(group_name)
+
+        gid = group_info.gr_gid
+
+        return gid
+    except KeyError:
+        logger.warning(f"Group: {group_name} not yet available")
+        return None
 
 
 def delete_group(group: Dict[str, Any], force: bool = False) -> None:
@@ -133,6 +169,12 @@ def get_group(group_name: str) -> Dict[str, Any]:
     """
     if not group_name:
         raise Exception("group name is required")
+    if not isinstance(group_name, str):
+        raise Exception("group name must be type string")
+    if not re.match(constants.GROUP_NAME_REGEX, group_name):
+        raise Exception(
+            "group name is invalid, must be 65 characters and cannot contain invalid characters"
+        )
 
     group: Optional[Dict[str, Any]] = table_utils.get_item(
         GROUPS_TABLE_NAME,
@@ -147,19 +189,44 @@ def get_group(group_name: str) -> Dict[str, Any]:
     return group
 
 
+def update_group(group: Dict[str, Any], force: bool = False) -> Dict[str, Any]:
+    """
+    Update the RES group
+    :param group: group to update
+    :param force: force update the group
+    :return: updated group
+    """
+    group_name = group.get("group_name")
+    if not group_name:
+        raise Exception("group_name is required")
+
+    if not force and not group.get("enabled"):
+        raise Exception("Cannot modify a disabled group")
+
+    # Check whether the group exists
+    _group = get_group(group_name)
+
+    updated_group: Dict[str, Any] = table_utils.update_item(
+        GROUPS_TABLE_NAME, {"group_name": group_name}, group
+    )
+
+    return updated_group
+
+
 def list_users() -> List[Dict[str, Any]]:
     """
     Retrieve the users from DDB
     :return: list of users
     """
-    users: List[Dict[str, Any]] = table_utils.list_table(USERS_TABLE_NAME)
+    users: List[Dict[str, Any]] = table_utils.list_items(USERS_TABLE_NAME)
     return users
 
 
-def create_user(user: Dict[str, Any]) -> Dict[str, Any]:
+def create_user(user: Dict[str, Any], overwrite: bool = False) -> Dict[str, Any]:
     """
     Create an RES user
     :param user: user to create
+    :param overwrite: overwrite existing user
     :return: created user
     """
     username = user.get("username")
@@ -173,7 +240,7 @@ def create_user(user: Dict[str, Any]) -> Dict[str, Any]:
 
     username = auth_utils.sanitize_username(username)
     try:
-        if get_user(username):
+        if get_user(username) and not overwrite:
             raise Exception(
                 f"username: {username} already exists.",
             )
@@ -190,11 +257,12 @@ def create_user(user: Dict[str, Any]) -> Dict[str, Any]:
     if not home_dir or len(home_dir.strip()) == 0:
         user["home_dir"] = os.path.join(auth_utils.USER_HOME_DIR_BASE, username)
 
-    user["uid"], user["gid"] = _get_uid_and_gid_for_username(username)
-    if not user.get("uid") or not user.get("gid"):
-        raise Exception(
-            f"Unable to retrieve UID and GID for user {username}",
-        )
+    if user.get("identity_source") == constants.SSO_USER_IDP_TYPE:
+        user["uid"], user["gid"] = _get_uid_and_gid_for_username(username)
+        if not user.get("uid") or not user.get("gid"):
+            logger.warning(
+                f"Unable to retrieve UID and GID for user {username}",
+            )
 
     user["sudo"] = user.get("sudo", False)
     user["is_active"] = user.get("is_active", False)
@@ -209,11 +277,19 @@ def create_user(user: Dict[str, Any]) -> Dict[str, Any]:
         "synced_on": current_time_ms,
     }
 
-    created_user: Dict[str, Any] = table_utils.create_item(
-        USERS_TABLE_NAME,
-        user_to_create,
-        ["username"],
-    )
+    if overwrite:
+        created_user: Dict[str, Any] = table_utils.update_item(
+            USERS_TABLE_NAME,
+            {"username": username},
+            user_to_create,
+        )
+    else:
+        created_user: Dict[str, Any] = table_utils.create_item(
+            USERS_TABLE_NAME,
+            user_to_create,
+            ["username"],
+        )
+
     if user["additional_groups"]:
         add_user_to_groups_by_names(created_user, user["additional_groups"])
 
@@ -236,21 +312,22 @@ def _get_uid_and_gid_for_username(username: str) -> tuple[Optional[int], Optiona
 
         return uid, gid
     except KeyError:
-        logger.warning(f"User: {username} not yet available")
+        logger.warning(f"UID an GID for user {username} are not yet available")
         return None, None
 
 
-def update_user(user: Dict[str, Any]) -> Dict[str, Any]:
+def update_user(user: Dict[str, Any], force: bool = False) -> Dict[str, Any]:
     """
     Update the user in DDB
     :param user: the user to update
+    :param force: whether to enable the user
     :return: the updated user
     """
     username = auth_utils.sanitize_username(user["username"])
     existing_user = get_user(username)
     user["username"] = username
 
-    if not existing_user.get("enabled"):
+    if not force and not existing_user.get("enabled"):
         raise Exception(
             "User is disabled and cannot be modified.",
         )
@@ -270,6 +347,33 @@ def update_user(user: Dict[str, Any]) -> Dict[str, Any]:
     return updated_user
 
 
+def activate_user(user: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Activate a user
+    :param user: the user to activate
+    :return: the activated user
+    """
+    username = auth_utils.sanitize_username(user["username"])
+    existing_user = get_user(username)
+
+    if not existing_user.get("is_active"):
+        for additional_group in existing_user.get("additional_groups", []):
+            try:
+                logger.info(
+                    f"Adding username {username} to additional group: {additional_group}"
+                )
+                add_user_to_groups_by_names(
+                    existing_user, [additional_group], bypass_active_user_check=True
+                )
+            except Exception as e:
+                logger.warning(
+                    f"Could not add user {username} to group {additional_group}: {e}"
+                )
+        existing_user = update_user({"username": username, "is_active": True})
+
+    return existing_user
+
+
 def delete_user(user: Dict[str, Any], force: bool = False) -> None:
     """
     Delete the given user
@@ -280,6 +384,9 @@ def delete_user(user: Dict[str, Any], force: bool = False) -> None:
         raise Exception("Username is empty")
 
     username = auth_utils.sanitize_username(user["username"])
+    if username == constants.CLUSTER_ADMIN_USERNAME:
+        raise Exception("Cluster Administrator cannot be deleted.")
+
     user = get_user(username=username)
 
     logger.info(f"Deleting user {username}")
@@ -409,7 +516,13 @@ def add_user_to_groups_by_names(
             user["role"] = constants.ADMIN_ROLE
 
         if bypass_active_user_check or user.get("is_active"):
-            create_membership({"group_name": group_name, "username": username})
+            create_membership(
+                {
+                    "group_name": group_name,
+                    "username": username,
+                    "identity_source": group.get("identity_source"),
+                }
+            )
 
     user["synced_on"] = time_utils.current_time_ms()
     user["additional_groups"] = list(additional_groups)
@@ -422,6 +535,9 @@ def get_user(username: str) -> Dict[str, Any]:
     :param username: name of the user
     :return: the user
     """
+    if not username:
+        raise Exception("username is required")
+
     user: Dict[str, Any] = table_utils.get_item(
         USERS_TABLE_NAME, key={"username": username}
     )
@@ -430,6 +546,23 @@ def get_user(username: str) -> Dict[str, Any]:
             f"User not found: {username}",
         )
     return user
+
+
+def is_active_admin(username: str) -> bool:
+    """
+    Check if the user is active and an admin
+    :param username: username to check
+    :return: True if the user is an admin, False otherwise
+    """
+    user = get_user(username)
+    if not user.get("enabled", False) or not user.get("is_active", False):
+        return False
+    if user.get("role") == constants.ADMIN_ROLE:
+        return True
+    return any(
+        get_group(group).get("role", "") == constants.ADMIN_ROLE
+        for group in user.get("additional_groups", [])
+    )
 
 
 def create_membership(membership: Dict[str, str]) -> None:

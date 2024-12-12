@@ -36,6 +36,10 @@ export const Constants = {
     SHARED_STORAGE_FILE_BROWSER_FEATURE_TITLE: "File browser",
     SHARED_STORAGE_FILE_BROWSER_KEY: "enable_file_browser",
 
+    SSH_CONFIG_FEATURE_TITLE: "SSH Config",
+    BASTION_HOST_INSTANCE_ID_KEY_NAME: "instance_id",
+    BASTION_HOST_IS_PUBLIC_KEY_NAME: "public",
+
     SHARED_STORAGE_PROVIDER_EFS: "efs",
     SHARED_STORAGE_PROVIDER_FSX_CACHE: "fsx_cache",
     SHARED_STORAGE_PROVIDER_FSX_LUSTRE: "fsx_lustre",
@@ -62,6 +66,12 @@ export const Constants = {
     FSX_VOLUME_ONTAP_SECURITY_STYLE_UNIX: "UNIX",
     FSX_VOLUME_ONTAP_SECURITY_STYLE_NTFS: "NTFS",
     FSX_VOLUME_ONTAP_SECURITY_STYLE_MIXED: "MIXED",
+
+    FSX_CREATED_STATUS: "CREATED",
+
+    EFS_NUMBER_OF_FS_QUOTA: 1000,
+
+    NEWLY_ONBOARDED_FILE_SYSTEM_STORAGE_NAME: "idea.cache.newlyOnboardedFileSystems",
 
     SPLIT_PANEL_I18N_STRINGS: {
         preferencesTitle: "Split panel preferences",
@@ -92,7 +102,7 @@ export const Constants = {
     },
 
     ROLE_NAME_REGEX: "^[a-zA-Z0-9-_ ]{3,36}$",
-    ROLE_NAME_ERROR_MESSAGE: "Only use alphabets, numbers, spaces, dashes (-), or underscores (_) for role name. Must be between 3 and 36 characters long.",
+    ROLE_NAME_ERROR_MESSAGE: "Role name is required. Only use alphabets, numbers, spaces, dashes (-), or underscores (_) for role name. Must be between 3 and 36 characters long.",
     ROLE_DESC_REGEX: "^[a-zA-Z0-9-_ ]{0,50}$",
     ROLE_DESC_ERROR_MESSAGE: "Only use alphabets, numbers, spaces, dashes (-), or underscores (_) for role description. Can be up to 50 characters long.",
     DCV_SETTINGS_DEFAULT_OWNER_PROFILE_ID: "admin_profile",
@@ -114,7 +124,10 @@ export const Constants = {
     },
     BUDGET_NOT_FOUND: "BUDGET_NOT_FOUND",
     DIVIDER_COLOR: "#d1d5db",
-  };
+    USERNAME_FROM_EMAIL_REGEX: "(.*)(?=@)",
+    COGNITO_USER_IDP_TYPE: "Native user",
+    SSO_USER_IDP_TYPE: 'SSO',
+};
 
 export const ErrorCodes = {
     MODULE_NOT_FOUND: "MODULE_NOT_FOUND",
@@ -128,3 +141,6 @@ export const ErrorMessages = {
     DISABLED_FILE_BROWSER_BY_ADMIN: "The File browser has been disabled. Contact your administrator to request data access via the web portal.",
     DISABLED_FILE_BROWSER_NEW_USER: "Your personal home directory has not yet been created. File browsing is limited to the global home file system. Launch at least one Linux virtual desktop session with a project using the global home file system to have a personal home directory created for you.",
 };
+
+
+export type HTTPMethod = 'GET' | 'POST' | 'PUT' | 'DELETE' | 'PATCH' | 'HEAD' | 'OPTIONS' | 'CONNECT' | 'TRACE';

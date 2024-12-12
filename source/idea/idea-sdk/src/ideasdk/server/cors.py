@@ -11,10 +11,31 @@
 
 from sanic_ext import Config
 
+from res.constants import CUSTOM_DOMAIN_NAME_FOR_VDI_KEY, CUSTOM_DOMAIN_NAME_FOR_WEBAPP_KEY
+from res.resources.cluster_settings import CLUSTER_SETTINGS_TABLE_NAME
+from res.utils import table_utils
+
 
 def get_cors_config() -> Config:
+    allowed_origins = [
+        "https://*.amazonaws.com"
+    ]
+    custom_webapp_domain_name = table_utils.get_item(
+        table_name=CLUSTER_SETTINGS_TABLE_NAME,
+        key={"key": CUSTOM_DOMAIN_NAME_FOR_WEBAPP_KEY}
+    )["value"]
+    if custom_webapp_domain_name:
+        allowed_origins.append(f"https://*.{custom_webapp_domain_name}")
+
+    custom_vdi_domain_name = table_utils.get_item(
+        table_name=CLUSTER_SETTINGS_TABLE_NAME,
+        key={"key": CUSTOM_DOMAIN_NAME_FOR_VDI_KEY}
+    )["value"]
+    if custom_vdi_domain_name:
+        allowed_origins.append(f"https://*.{custom_vdi_domain_name}")
+
     return Config(
-        cors_origins="*",
-        cors_allow_headers=["origin", "content-type", "accept",
+        cors_origins=allowed_origins,
+        cors_allow_headers=["content-type", "accept",
                             "authorization", "x-xsrf-token", "x-request-id"]
     )
