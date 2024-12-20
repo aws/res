@@ -1,6 +1,13 @@
 # Change Log
 This file is used to list changes made in each release of Research and Engineering Studio (RES).
 
+2024.12.01
+------
+
+**BUG FIXES**
+
+- Resolved an issue where Cognito users were unable to provision VDIs when the RES environment is not setup with Active Directory.
+
 2024.12
 ------
 

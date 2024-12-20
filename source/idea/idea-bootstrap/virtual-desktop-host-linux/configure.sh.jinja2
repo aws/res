@@ -135,7 +135,9 @@ if [[ ! -f ${CONFIG_FINISHED_LOCK} ]]; then
     {% include '_templates/linux/motd.jinja2' %}
   {%- endwith %}
 
-  {% include '_templates/linux/join_directoryservice.jinja2' %}
+  {% if context.config.get_string('directoryservice.name', default='') != '' %}
+    {% include '_templates/linux/join_directoryservice.jinja2' %}
+  {% endif %}
 
   {% if context.config.get_string('scheduler.provider') == 'openpbs' %}
     {% include '_templates/linux/openpbs_client.jinja2' %}
@@ -144,6 +146,8 @@ if [[ ! -f ${CONFIG_FINISHED_LOCK} ]]; then
   {% if context.config.get_bool('identity-provider.cognito.enable_native_user_login') %}
     /bin/bash "${SCRIPT_DIR}/../common/configure_cognito_modules.sh" -o "${RES_BASE_OS}" -s "${SCRIPT_DIR}" -u "${IDEA_SESSION_OWNER}" -r "${AWS_REGION}" -i "${COGNITO_MIN_ID}" -a "${COGNITO_MAX_ID}" -d "${COGNITO_UID_ATTRIBUTE}" -p "${USER_POOL_ID}" -c "${VDI_CLIENT_ID}" -g "${COGNITO_DEFAULT_USER_GROUP}" -x "${https_proxy}"
   {% endif %}
+
+  {% include '_templates/linux/set_sudoers.jinja2' %}
 
   #Begin: Configure SSH Key Gen
   /bin/bash "${SCRIPT_DIR}/../common/configure_ssh_keygen.sh" -o "${RES_BASE_OS}" -s "${SCRIPT_DIR}" -u "${IDEA_SESSION_OWNER}"

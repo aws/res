@@ -1,4 +1,5 @@
 RES_USER_TABLE="${IDEA_CLUSTER_NAME}.accounts.users"
+{% if context.config.get_string('directoryservice.name', default='') != '' %}
 AD_SUDOERS_GROUP_NAME="{{ context.config.get_string('directoryservice.sudoers.group_name', required=True) }}"
 AD_SUDOERS_GROUP_NAME_ESCAPED="{{ context.config.get_string('directoryservice.sudoers.group_name', required=True).replace(' ', '\ ') }}"
 
@@ -9,6 +10,7 @@ if [[ "$?" != "0" ]]; then
 %${AD_SUDOERS_GROUP_NAME_ESCAPED} ALL=(ALL:ALL) ALL
 ">> /etc/sudoers
 fi
+{% endif %}
 
 function add_admins_to_sudoers () {
   if [[ ! -f "/root/.convert_from_dynamodb_object.jq" ]]; then
@@ -24,12 +26,17 @@ function add_admins_to_sudoers () {
        --region "${AWS_REGION}" | jq -f /root/.convert_from_dynamodb_object.jq)
 
   for row in $(echo "${admins}" | jq -r '.Items[] | @base64'); do
-    is_part_of_sudoer_group=$(echo $row | base64 --decode | jq --arg sudoers_group "$AD_SUDOERS_GROUP_NAME" \
-    -r '.additional_groups | any(. == $sudoers_group)')
-    if [ "$is_part_of_sudoer_group" = false ] ; then
-        admin=$(echo $row | base64 --decode | jq -r '.username')
-        echo "${admin} ALL=(ALL:ALL) ALL">> /etc/sudoers
-    fi
+    {% if context.config.get_string('directoryservice.name', default='') != '' %}
+      is_part_of_sudoer_group=$(echo $row | base64 --decode | jq --arg sudoers_group "$AD_SUDOERS_GROUP_NAME" \
+      -r '.additional_groups | any(. == $sudoers_group)')
+      if [ "$is_part_of_sudoer_group" = false ] ; then
+          admin=$(echo $row | base64 --decode | jq -r '.username')
+          echo "${admin} ALL=(ALL:ALL) ALL">> /etc/sudoers
+      fi
+    {% else %}
+      admin=$(echo $row | base64 --decode | jq -r '.username')
+      echo "${admin} ALL=(ALL:ALL) ALL">> /etc/sudoers
+    {% endif %}
   done
 }
 
@@ -44,4 +51,3 @@ grep -q "sudoers: files" /etc/nsswitch.conf
 if [[ "$?" != "0" ]]; then
   echo "sudoers: files" >> /etc/nsswitch.conf
 fi
-

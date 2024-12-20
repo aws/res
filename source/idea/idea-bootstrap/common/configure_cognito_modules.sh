@@ -104,8 +104,8 @@ setup_nss() {
   # Example of what the updated lines will look like is shown below
   #passwd:     files sss cognito
   #group:      files sss cognito
-  grep -q "^passwd.*cognito" /etc/nsswitch.conf || sed -i 's/\(^passwd:.*sss\)/\1 cognito/' /etc/nsswitch.conf;
-  grep -q "^group.*cognito" /etc/nsswitch.conf || sed -i 's/\(^group:.*sss\)/\1 cognito/' /etc/nsswitch.conf;
+  grep -q "^passwd.*cognito" /etc/nsswitch.conf || sed -i 's/\(^passwd:.*\)/\1 cognito/' /etc/nsswitch.conf;
+  grep -q "^group.*cognito" /etc/nsswitch.conf || sed -i 's/\(^group:.*\)/\1 cognito/' /etc/nsswitch.conf;
 
   # Create cache directory
   mkdir -p /opt/cognito_auth/

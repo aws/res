@@ -24,6 +24,7 @@ import { IdeaSideNavigationProps } from "../../components/side-navigation";
 import IdeaAppLayout, { IdeaAppLayoutProps } from "../../components/app-layout";
 import { StatusIndicator } from "@cloudscape-design/components";
 import { withRouter } from "../../navigation/navigation-utils";
+import {Constants} from "../../common/constants";
 
 export interface GroupsProps extends IdeaAppLayoutProps, IdeaSideNavigationProps {}
 
@@ -263,7 +264,7 @@ class Groups extends Component<GroupsProps, GroupsState> {
                     {
                         id: "identity_source",
                         header: "Identity Source",
-                        cell: (e) => e.identity_source,
+                        cell: (e) => e.identity_source === Constants.COGNITO_USER_IDP_TYPE ? "Cognito" : e.identity_source,
                     },
                     {
                         id: "group_role",
