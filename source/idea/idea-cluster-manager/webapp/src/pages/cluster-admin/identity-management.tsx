@@ -50,14 +50,25 @@ class IdentityManagement extends Component<IdentityManagementProps, IdentityMana
     async componentDidMount() {
         try {
             const clusterSettingsService = AppContext.get().getClusterSettingsService();
-            const [directoryservice, identityProvider] = await Promise.all([
+            const [directoryservice, identityProvider] = await Promise.allSettled([
                 clusterSettingsService.getDirectoryServiceSettings(),
                 clusterSettingsService.getIdentityProviderSettings(),
             ]);
-            this.setState({
-                directoryservice,
-                identityProvider,
-            });
+            // The status field is provided by the `allSettled` API. API definition is provided here: https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Promise/allSettled#status
+            if (directoryservice.status === "fulfilled") {
+                this.setState(
+                    {
+                        directoryservice: directoryservice.value
+                    }
+                )
+            }
+            if (identityProvider.status === "fulfilled") {
+                this.setState(
+                    {
+                        identityProvider: identityProvider.value
+                    }
+                )
+            }
         } catch (error) {
             console.error('Error loading settings:', error);
         }

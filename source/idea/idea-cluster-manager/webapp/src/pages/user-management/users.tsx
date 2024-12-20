@@ -24,6 +24,7 @@ import { StatusIndicator } from "@cloudscape-design/components";
 import { IdeaSideNavigationProps } from "../../components/side-navigation";
 import IdeaAppLayout, { IdeaAppLayoutProps } from "../../components/app-layout";
 import { withRouter } from "../../navigation/navigation-utils";
+import { Constants } from "../../common/constants";
 
 export interface UsersProps extends IdeaAppLayoutProps, IdeaSideNavigationProps {}
 
@@ -57,7 +58,7 @@ export const USER_TABLE_COLUMN_DEFINITIONS: TableProps.ColumnDefinition<User>[] 
     {
         id: "identity_source",
         header: "Identity Source",
-        cell: (e) => e.identity_source,
+        cell: (e) => e.identity_source === Constants.COGNITO_USER_IDP_TYPE ? "Cognito" : e.identity_source,
     },
     {
         id: "sudo",

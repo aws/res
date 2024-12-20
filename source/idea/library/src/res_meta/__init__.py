@@ -2,4 +2,4 @@
 #  SPDX-License-Identifier: Apache-2.0
 
 __name__ = 'library'
-__version__ = '2024.12'
+__version__ = '2024.12.01'
