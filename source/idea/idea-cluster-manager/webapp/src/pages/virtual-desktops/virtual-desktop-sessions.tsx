@@ -63,11 +63,13 @@ const VIRTUAL_DESKTOP_SESSIONS_TABLE_COLUMN_DEFINITIONS: TableProps.ColumnDefini
         id: "os",
         header: "Base OS",
         cell: (e) => Utils.getOsTitle(e.software_stack?.base_os),
+        sortingComparator: (a, b) => (a.software_stack?.base_os || '').localeCompare(b.software_stack?.base_os || '')
     },
     {
         id: "instance_type",
         header: "Instance Type",
         cell: (e) => e.server?.instance_type,
+        sortingComparator: (a, b) => (a.server?.instance_type || '').localeCompare(b.server?.instance_type || '')
     },
     {
         id: "state",
@@ -75,45 +77,25 @@ const VIRTUAL_DESKTOP_SESSIONS_TABLE_COLUMN_DEFINITIONS: TableProps.ColumnDefini
         cell: (e) => {
             return <VirtualDesktopSessionStatusIndicator state={e.state!} hibernation_enabled={e.hibernation_enabled!} />;
         },
+        sortingField: "state",
     },
     {
         id: "project_title",
         header: "Project",
         cell: (e) => e.project?.title,
+        sortingComparator: (a, b) => (a.project?.title || '').localeCompare(b.project?.title || '')
     },
     {
         id: "created_on",
         header: "Created On",
         cell: (e) => new Date(e.created_on!).toLocaleString(),
-    },
-    {
-        id: "connect-session",
-        header: "Join Session",
-        cell: (e) => {
-            if (e.state === "READY") {
-                let username: string | undefined = undefined;
-                if (e.software_stack?.base_os === "windows") {
-                    username = "administrator";
-                }
-
-                return (
-                    <Link external>
-                        <span
-                            onClick={() => {
-                                AppContext.get().client().virtualDesktopAdmin().joinSession(e.idea_session_id!, e.owner!, username).finally();
-                            }}
-                        >
-                            Connect
-                        </span>
-                    </Link>
-                );
-            }
-        },
+        sortingField: "created_on",
     },
     {
         id: "updated_on",
         header: "Updated On",
         cell: (e) => new Date(e.updated_on!).toLocaleString(),
+        sortingField: "updated_on",
     },
 ];
 
@@ -151,9 +133,6 @@ class VirtualDesktopSessions extends Component<VirtualDesktopSessionsProps, Virt
             showCreateSessionForm: false,
             projects: [],
         };
-
-        // Hide the Join Session button since it does not work consistently
-        this.setHiddenColumns();
     }
 
     componentDidMount() {
@@ -181,10 +160,6 @@ class VirtualDesktopSessions extends Component<VirtualDesktopSessionsProps, Virt
             .then((settings) => {
                 this.virtualDesktopSettings = settings;
             });
-    }
-
-    setHiddenColumns(): void {
-        AppContext.get().localStorage().setItem(`${PREFERENCES_KEY}-table-columns`, '{"connect-session": false}');
     }
 
     getProjectsClient(): ProjectsClient {
@@ -262,12 +237,16 @@ class VirtualDesktopSessions extends Component<VirtualDesktopSessionsProps, Virt
     };
 
     buildCreateSoftwareStackFromSessionForm() {
+        function get_min_storage(session?: VirtualDesktopSession): number {
+            return session?.software_stack?.min_storage?.value ?? 50
+        }
         return (
             <IdeaForm
                 ref={this.createSoftwareStackForm}
                 name={"create-software-stack"}
                 modal={true}
                 title={"Create Software Stack for " + this.state.sessionForSoftwareStack?.name}
+                alert={"The session will be rebooted when creating a software stack."}
                 modalSize={"medium"}
                 onCancel={() => {
                     this.hideCreateSoftwareStackForm();
@@ -299,6 +278,7 @@ class VirtualDesktopSessions extends Component<VirtualDesktopSessionsProps, Virt
                             },
                         })
                         .then(() => {
+                            this.setFlashMessage("New software stack is provisioning and that it may take several minutes before it can be used", "success");
                             this.hideCreateSoftwareStackForm();
                         })
                         .catch((error) => {
@@ -314,6 +294,8 @@ class VirtualDesktopSessions extends Component<VirtualDesktopSessionsProps, Virt
                         param_type: "text",
                         validate: {
                             required: true,
+                            regex: "^[\\(\\)\\.\\/\\-\\'\\@\\w \\\[\\\]]{3,128}$",
+                            message: "Use 3-128 alphanumeric characters, parentheses (()), square brackets ([]), spaces ( ), periods (.), slashes (/), dashes (-), single quotes (‘), at-signs (@), or underscores(_).",
                         },
                     },
                     {
@@ -332,9 +314,10 @@ class VirtualDesktopSessions extends Component<VirtualDesktopSessionsProps, Virt
                         description: "Enter the storage size for your virtual desktop in GBs",
                         data_type: "int",
                         param_type: "text",
-                        default: 10,
+                        default: get_min_storage(this.state.sessionForSoftwareStack),
                         validate: {
                             required: true,
+                            min: get_min_storage(this.state.sessionForSoftwareStack),
                         },
                     },
                     {
@@ -776,6 +759,18 @@ class VirtualDesktopSessions extends Component<VirtualDesktopSessionsProps, Virt
                                         }
                                     );
                                 });
+                        },
+                    },
+                    {
+                        id: "create-software-stack",
+                        text: "Create Software Stack From Session",
+                        disabled: !this.canCreateSoftwareStack() || !this.isAdmin(),
+                        disabledReason: "Select exactly 1 session to enable this Action",
+                        onClick: () => {
+                            // we know that there is exactly 1 session
+                            this.getSelectedSessions().forEach((session) => {
+                                this.showCreateSoftwareStackForm(session);
+                            });
                         },
                     },
                 ]}

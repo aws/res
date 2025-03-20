@@ -245,7 +245,7 @@ class ClusterStatus extends Component<ClusterStatusProps, ClusterStatusState> {
             },
             () => {
                 let modules: any = [];
-                const hideModules = new Set<string>(['Directory Service', 'Identity Provider']);
+                const hideModules = new Set<string>(['Directory Service', 'Identity Provider', 'eVDI Application']);
                 this.getClusterSettingsClient()
                     .listClusterModules({})
                     .then((result) => {

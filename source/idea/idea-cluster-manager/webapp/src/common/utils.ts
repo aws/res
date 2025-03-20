@@ -11,15 +11,33 @@
  * and limitations under the License.
  */
 
-import { SocaListingPayload, SocaUserInputParamCondition, SocaUserInputParamMetadata, SocaMemory, SocaAmount, SocaDateRange, SocaUserInputChoice, VirtualDesktopGPU, VirtualDesktopSchedule, VirtualDesktopScheduleType, User, ProjectPermissions, VDIPermissions, Project } from "../client/data-model";
-import { IdeaFormFieldRegistry } from "../components/form-field";
-import { v4 as uuid } from "uuid";
-import { DateRangePickerProps } from "@cloudscape-design/components";
-import dot from "dot-object";
+import {
+    Project,
+    ProjectPermissions,
+    SocaAmount,
+    SocaDateRange,
+    SocaListingPayload,
+    SocaMemory,
+    SocaUserInputChoice,
+    SocaUserInputParamCondition,
+    SocaUserInputParamMetadata,
+    User,
+    VDIPermissions,
+    VirtualDesktopGPU,
+    VirtualDesktopPlacement,
+    VirtualDesktopSchedule,
+    VirtualDesktopScheduleType,
+    VirtualDesktopSessionType,
+    VirtualDesktopSoftwareStack,
+} from "../client/data-model";
+import {IdeaFormFieldRegistry} from "../components/form-field";
+import {v4 as uuid} from "uuid";
+import {DateRangePickerProps} from "@cloudscape-design/components";
+import dot, {str} from "dot-object";
 import moment from "moment";
 import IdeaException from "./exceptions";
-import { Constants } from "./constants";
-import { ProjectsClient } from "../client";
+import {Constants} from "./constants";
+import {ProjectsClient} from "../client";
 import AuthzClient from "../client/authz-client";
 import AppContext from "./app-context";
 
@@ -40,7 +58,7 @@ class Utils {
 
     static convertToQueryString(params: Record<string, string | string[]>): string {
         const parts: string[] = [];
-    
+
         for (const [key, value] of Object.entries(params)) {
             if (Array.isArray(value)) {
                 value.forEach((v, index) => {
@@ -50,7 +68,7 @@ class Utils {
                 parts.push(`${encodeURIComponent(key)}=${encodeURIComponent(value)}`);
             }
         }
-    
+
         return parts.join('&');
     }
 
@@ -384,6 +402,20 @@ class Utils {
         return gpu;
     }
 
+    static getFormattedTenancy(placement?: VirtualDesktopPlacement): string {
+        let tenancy: String = placement?.tenancy ?? "default"
+        switch (tenancy) {
+            case "default":
+                return "Shared";
+            case "dedicated":
+                return "Dedicated Instance";
+            case "host":
+                return "Dedicated Host";
+            default:
+                return "";
+        }
+    }
+
     static getFormattedMemory(memory?: SocaMemory): string {
         if (memory == null) {
             return "-";
@@ -463,6 +495,13 @@ class Utils {
         return options;
     }
 
+    static async getDefaultDCVSessionType(): Promise<VirtualDesktopSessionType> {
+        const settings = await AppContext.get()
+            .getClusterSettingsService()
+            .getVirtualDesktopSettings();
+        return dot.pick("dcv_session.default_dcv_session_type", settings) as VirtualDesktopSessionType;
+    }
+
     static getSupportedGPUChoices(gpuList: string[]): SocaUserInputChoice[] {
         const options: SocaUserInputChoice[] = [];
         gpuList.forEach((gpu) => {
@@ -487,6 +526,49 @@ class Utils {
             }
         });
         return options;
+    }
+
+    static getAffinityChoices(): SocaUserInputChoice[] {
+        return [
+            {
+                title: "Off",
+                value: "default",
+            },
+            {
+                title: "Host",
+                value: "host",
+            }
+        ];
+    }
+
+    static getTenancyChoices(): SocaUserInputChoice[] {
+        return [
+            {
+                title: "Shared",
+                value: "default",
+            },
+            {
+                title: "Dedicated Instance",
+                value: "dedicated",
+            },
+            {
+                title: "Dedicated Host",
+                value: "host",
+            }
+        ];
+    }
+
+        static getTargetHostChoices(): SocaUserInputChoice[] {
+        return [
+            {
+                title: "Host ID",
+                value: "host_id",
+            },
+            {
+                title: "Host Resource Group",
+                value: "host_resource_group",
+            }
+        ];
     }
 
     static generateUserSelectionChoices(users: User[], project?: Project, isAdmin: boolean = true): SocaUserInputChoice[] {
@@ -523,7 +605,7 @@ class Utils {
     };
 
     static generateInstanceTypeListing(instanceTypes: any[] | undefined): SocaUserInputChoice[] {
-        if (instanceTypes === undefined)
+        if (instanceTypes === undefined || instanceTypes.length === 0)
             return [
                 {
                     title: "No instance types available.",
@@ -1128,6 +1210,48 @@ class Utils {
       await Promise.all(vdiRoleAssignments);
       return projects.projects?.filter(proj => validProjectIds.has(proj.project_id!)) ?? [];
   }
+
+    // Build drop-down options of all possible allowed instance types for a software stack based on global allowed list
+    static async getAllowedInstanceTypesOptionsForSelectedSoftwareStack(
+        selectedSoftwareStack: VirtualDesktopSoftwareStack | undefined): Promise<string[]> {
+        if (!selectedSoftwareStack) return [];
+
+        const settings = await AppContext.get()
+            .getClusterSettingsService()
+            .getVirtualDesktopSettings();
+
+        const globalAllowedInstanceTypes = dot.pick("dcv_session.instance_types.allow", settings);
+
+        const allAllowedInstanceTypes = await AppContext.get()
+            .client()
+            .virtualDesktopUtils()
+            .listAllowedInstanceTypes({
+                software_stack: selectedSoftwareStack,
+            });
+
+        const instanceTypes = new Set<string>();
+        allAllowedInstanceTypes.listing?.forEach((item: any) => {
+            if (item && item.InstanceType) {
+                const fullType = item.InstanceType;
+                const familyType = item.InstanceType.split('.')[0];
+                if (globalAllowedInstanceTypes.includes(familyType)) {
+                    instanceTypes.add(familyType);
+                } else if (globalAllowedInstanceTypes.includes(fullType)) {
+                    instanceTypes.add(fullType);
+                }
+            }
+        });
+        return Array.from(instanceTypes);
+    }
+
+    static mibToGB(mib: number): number {
+        return (mib * (1024 ** 2) / (1000 ** 3))
+    }
+
+    static roundToPrecision(num: number, precision: number): number {
+        const factor = 10 ** precision;
+        return Math.round(num * factor) / factor;
+    }
 }
 
 export default Utils;

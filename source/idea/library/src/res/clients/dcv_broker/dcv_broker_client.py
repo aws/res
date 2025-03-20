@@ -34,9 +34,13 @@ def delete_sessions(sessions: List[Dict[str, Any]]) -> Tuple[List, List]:
     """
     can_delete_sessions = []
     sessions_to_check = []
+    skipped_sessions = []
     for session in sessions:
         if session.get("force", False):
-            can_delete_sessions.append(session)
+            if session.get("hibernation_enabled"):
+                skipped_sessions.append(session)
+            else:
+                can_delete_sessions.append(session)
         else:
             sessions_to_check.append(session)
 
@@ -55,7 +59,10 @@ def delete_sessions(sessions: List[Dict[str, Any]]) -> Tuple[List, List]:
             delete_fail_session_ids.append(session["dcv_session_id"])
             unsuccessful_list.append(session)
         else:
-            can_delete_sessions.append(session)
+            if session.get("hibernation_enabled"):
+                skipped_sessions.append(session)
+            else:
+                can_delete_sessions.append(session)
 
     session_id_names = [
         f"{session.get('idea_session_id')}:{session.get('name')}"
@@ -68,6 +75,9 @@ def delete_sessions(sessions: List[Dict[str, Any]]) -> Tuple[List, List]:
         {"dcv_session_id": e.get("session_id")}
         for e in response.get("successful_list", [])
     ]
+
+    for session in skipped_sessions:
+        successful_list.append({"dcv_session_id": session.get("dcv_session_id")})
 
     for entry in response.get("unsuccessful_list", []):
         dcv_session_id = entry.get("session_id")

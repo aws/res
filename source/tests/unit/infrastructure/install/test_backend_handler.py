@@ -1,10 +1,16 @@
+#  Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+#  SPDX-License-Identifier: Apache-2.0
+
 import json
+from typing import Any, Optional
 from unittest.mock import MagicMock
 
 import pytest
+import res.exceptions as exceptions  # type: ignore
 from botocore.exceptions import ClientError
+from res.clients.ad_sync import ad_sync_client  # type: ignore
 
-from idea.backend import bastion_host_service
+from idea.backend.resources import ad_sync, bastion_host_service
 
 bastion_host_details = {
     "instance_id": "i-1234567890abcdef",
@@ -24,6 +30,14 @@ bastion_host_config = {
     "instance_type": "t2.micro",
     "key_pair": "my-key-pair",
     "security_group_id": "sg-0123456789abcdef",
+}
+
+ad_sync_status = {
+    "id": "test",
+    "submission_time": 0,
+    "update_time": 0,
+    "status": "STOPPED",
+    "ttl": 0,
 }
 
 
@@ -68,6 +82,15 @@ def mock_cleanup_bastion_host(monkeypatch: pytest.MonkeyPatch) -> MagicMock:
 
 def mock_get_bastion_host_details_error() -> None:
     raise ClientError({}, "Error")
+
+
+@pytest.fixture
+def mock_ad_sync_status(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        ad_sync_client,
+        "get_ad_sync_status",
+        MagicMock(return_value=ad_sync_status),
+    )
 
 
 def test_modify_bastion_host_create_success(
@@ -223,3 +246,156 @@ def test_get_bastion_host_error(
 
     # Check that the raised error matches the original error
     assert str(excinfo.value) == str(error)
+
+
+def test_get_ad_sync_without_task_id_success(
+    monkeypatch: pytest.MonkeyPatch,
+    mock_ad_sync_status: None,
+) -> None:
+    event = {
+        "httpMethod": "GET",
+    }
+    monkeypatch.setattr(ad_sync, "check_admin_authorized", lambda x: None)
+
+    result = ad_sync.handle_ad_sync_event(event)
+
+    assert result["statusCode"] == 200
+    assert result["body"] == json.dumps(ad_sync_status)
+
+
+def test_get_ad_sync_with_task_id_success(
+    monkeypatch: pytest.MonkeyPatch,
+    mock_ad_sync_status: None,
+) -> None:
+    event = {
+        "httpMethod": "GET",
+        "queryStringParameters": {"id": "test"},
+    }
+    monkeypatch.setattr(ad_sync, "check_admin_authorized", lambda x: None)
+
+    result = ad_sync.handle_ad_sync_event(event)
+
+    assert result["statusCode"] == 200
+    assert result["body"] == json.dumps(ad_sync_status)
+
+
+def test_get_ad_sync_error(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    event = {
+        "httpMethod": "GET",
+    }
+
+    monkeypatch.setattr(ad_sync, "check_admin_authorized", lambda x: None)
+
+    error_message = "Test error message"
+    error = ClientError({"Error": {"Message": error_message}}, "TestOperation")
+
+    def mock_get_ad_sync_status_error(_task_id: Optional[str]) -> None:
+        raise error
+
+    monkeypatch.setattr(
+        ad_sync,
+        "_get_ad_sync_status_from_ddb",
+        mock_get_ad_sync_status_error,
+    )
+
+    with pytest.raises(ClientError) as excinfo:
+        ad_sync.handle_ad_sync_event(event)
+
+    assert str(excinfo.value) == str(error)
+
+
+def test_start_ad_sync_success(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    event = {
+        "httpMethod": "PUT",
+    }
+
+    monkeypatch.setattr(ad_sync, "check_admin_authorized", lambda x: None)
+
+    monkeypatch.setattr(ad_sync_client, "start_ad_sync", lambda: "test")
+
+    result = ad_sync.handle_ad_sync_event(event)
+
+    assert result["statusCode"] == 200
+    assert result["body"] == json.dumps({"id": "test"})
+
+
+def test_start_ad_sync_ad_sync_in_progress(
+    monkeypatch: pytest.MonkeyPatch, mock_os_env_var: None
+) -> None:
+    event = {
+        "httpMethod": "PUT",
+    }
+
+    def mock_ad_sync_in_progress_error() -> None:
+        raise exceptions.ADSyncInProcess()
+
+    monkeypatch.setattr(ad_sync_client, "start_ad_sync", mock_ad_sync_in_progress_error)
+    monkeypatch.setattr(ad_sync, "check_admin_authorized", lambda x: None)
+
+    result = ad_sync.handle_ad_sync_event(event)
+
+    assert result["statusCode"] == 400
+    assert result["statusDescription"] == "Client Error"
+
+
+def test_start_ad_sync_configuration_not_found(
+    monkeypatch: pytest.MonkeyPatch, mock_os_env_var: None
+) -> None:
+    event = {
+        "httpMethod": "PUT",
+    }
+
+    def mock_configuration_not_found_error() -> None:
+        raise exceptions.ADSyncConfigurationNotFound()
+
+    monkeypatch.setattr(
+        ad_sync_client, "start_ad_sync", mock_configuration_not_found_error
+    )
+    monkeypatch.setattr(ad_sync, "check_admin_authorized", lambda x: None)
+
+    result = ad_sync.handle_ad_sync_event(event)
+
+    assert result["statusCode"] == 400
+    assert result["statusDescription"] == "Client Error"
+
+
+def test_stop_ad_sync_success(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    event = {
+        "httpMethod": "DELETE",
+        "body": r'{"id": "test"}',
+    }
+
+    monkeypatch.setattr(ad_sync, "check_admin_authorized", lambda x: None)
+
+    monkeypatch.setattr(ad_sync_client, "stop_ad_sync", lambda x: "test")
+
+    result = ad_sync.handle_ad_sync_event(event)
+
+    assert result["statusCode"] == 200
+
+
+def test_handle_ad_sync_event_non_admin_unauthorized(
+    monkeypatch: pytest.MonkeyPatch, mock_os_env_var: None
+) -> None:
+    error_message = "Test error message"
+    error = exceptions.UnauthorizedAccess({"Error": {"Message": error_message}})
+
+    def mock_check_admin_authorized_error(_event: dict[str, Any]) -> None:
+        raise error
+
+    monkeypatch.setattr(
+        ad_sync,
+        "check_admin_authorized",
+        mock_check_admin_authorized_error,
+    )
+
+    result = ad_sync.handle_ad_sync_event({})
+
+    assert result["statusCode"] == 401
+    assert result["statusDescription"] == "401 Unauthorized"

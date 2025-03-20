@@ -876,7 +876,7 @@ class IdeaFileBrowser extends Component<IdeaFileBrowserProps, IdeaFileBrowserSta
                                 this.setState({
                                     isFileBrowserEnabled: false,
                                 });
-                            } 
+                            }
                             else {
                                 this.setFlashbarMessage("error", error.message);
                             }
@@ -914,6 +914,9 @@ class IdeaFileBrowser extends Component<IdeaFileBrowserProps, IdeaFileBrowserSta
             AppContext.get()
                 .auth()
                 .downloadPrivateKey(keyFormat)
+                .catch((error) => {
+                     this.setFlashbarMessage("error", error.message);
+                })
                 .finally(() => {
                     const state: any = {};
                     if (keyFormat === "pem") {

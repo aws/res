@@ -20,22 +20,27 @@ from ideadatamodel import (  # type: ignore
     Project,
     PutRoleAssignmentRequest,
 )
+from ideadatamodel.constants import (  # type: ignore
+    PROJECT_MEMBER_ROLE_ID,
+    PROJECT_ROLE_ASSIGNMENT_TYPE,
+    ROLE_ASSIGNMENT_ACTOR_GROUP_TYPE,
+    ROLE_ASSIGNMENT_ACTOR_USER_TYPE,
+)
 from tests.integration.framework.client.res_client import ResClient
 from tests.integration.framework.fixtures.fixture_request import FixtureRequest
 from tests.integration.framework.fixtures.res_environment import ResEnvironment
-from tests.integration.framework.model.client_auth import ClientAuth
 
 
 @pytest.fixture
-def project(
-    request: FixtureRequest, res_environment: ResEnvironment, admin: ClientAuth
-) -> Project:
+def project(request: FixtureRequest, res_environment: ResEnvironment) -> Project:
     """
     Fixture for setting up/tearing down the test project
     """
     project = request.param[0]
     filesystem_names = request.param[1]
     groups = request.param[2]
+    users = request.param[3]
+    admin = request.getfixturevalue(request.param[4])
     create_project_request = CreateProjectRequest(
         project=project, filesystem_names=filesystem_names
     )
@@ -47,27 +52,49 @@ def project(
     items = [
         PutRoleAssignmentRequest(
             resource_id=project.project_id,
-            resource_type="project",
+            resource_type=PROJECT_ROLE_ASSIGNMENT_TYPE,
             actor_id=group,
-            actor_type="group",
-            role_id="project_member",
+            actor_type=ROLE_ASSIGNMENT_ACTOR_GROUP_TYPE,
+            role_id=PROJECT_MEMBER_ROLE_ID,
             request_id="test",
         )
         for group in groups
     ]
+    for user in users:
+        items.append(
+            PutRoleAssignmentRequest(
+                resource_id=project.project_id,
+                resource_type=PROJECT_ROLE_ASSIGNMENT_TYPE,
+                actor_id=user,
+                actor_type=ROLE_ASSIGNMENT_ACTOR_USER_TYPE,
+                role_id=PROJECT_MEMBER_ROLE_ID,
+                request_id="test",
+            )
+        )
     client.batch_put_role_assignment(BatchPutRoleAssignmentRequest(items=items))
 
     def tear_down() -> None:
         items = [
             DeleteRoleAssignmentRequest(
                 resource_id=project.project_id,
-                resource_type="project",
+                resource_type=PROJECT_ROLE_ASSIGNMENT_TYPE,
                 actor_id=group,
-                actor_type="group",
+                actor_type=ROLE_ASSIGNMENT_ACTOR_GROUP_TYPE,
                 request_id="test",
             )
             for group in groups
         ]
+        for user in users:
+            items.append(
+                DeleteRoleAssignmentRequest(
+                    resource_id=project.project_id,
+                    resource_type=PROJECT_ROLE_ASSIGNMENT_TYPE,
+                    actor_id=user,
+                    actor_type=ROLE_ASSIGNMENT_ACTOR_USER_TYPE,
+                    request_id="test",
+                )
+            )
+
         client.batch_delete_role_assignment(
             BatchDeleteRoleAssignmentRequest(items=items)
         )

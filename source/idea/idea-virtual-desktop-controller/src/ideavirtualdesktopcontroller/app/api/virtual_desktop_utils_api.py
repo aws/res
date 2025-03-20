@@ -9,7 +9,7 @@
 #  OR CONDITIONS OF ANY KIND, express or implied. See the License for the specific language governing permissions
 #  and limitations under the License.
 import ideavirtualdesktopcontroller
-from ideadatamodel import exceptions, errorcodes
+from ideadatamodel import VirtualDesktopArchitecture, exceptions, errorcodes
 from ideadatamodel.virtual_desktop import (
     ListSupportedOSResponse,
     ListScheduleTypesResponse,
@@ -129,16 +129,6 @@ class VirtualDesktopUtilsAPI(VirtualDesktopAPI):
             self._logger.error(session.failure_reason)
             return session, False
 
-        if Utils.is_empty(session.server):
-            session.failure_reason = 'Missing session.server'
-            self._logger.error(session.failure_reason)
-            return session, False
-
-        if Utils.is_empty(session.server.instance_type):
-            session.failure_reason = 'Missing session.server.instance_type'
-            self._logger.error(session.failure_reason)
-            return session, False
-
         return session, True
 
     def list_allowed_instance_types_for_session(self, context: ApiInvocationContext):
@@ -153,16 +143,56 @@ class VirtualDesktopUtilsAPI(VirtualDesktopAPI):
             )
             return
 
-        allowed_instance_types = self.controller_utils.get_valid_instance_types(session.hibernation_enabled, session.software_stack, self.controller_utils.get_gpu_manufacturer(session.server.instance_type))
-        context.success(ListAllowedInstanceTypesResponse(
+        allowed_instance_types_dict = self.controller_utils.get_valid_instance_types_by_allowed_list(session.hibernation_enabled, session.software_stack.allowed_instance_types)
+        allowed_instance_types = []
+        for instance_type_name, instance_info in allowed_instance_types_dict.items():
+            if self.controller_utils.validate_min_ram(instance_type_name, session.software_stack):
+                allowed_instance_types.append(instance_info)
+
+        context.success(ListAllowedInstanceTypesForSessionResponse(
             listing=allowed_instance_types
         ))
 
     def list_allowed_instance_types(self, context: ApiInvocationContext):
         request = context.get_request_payload_as(ListAllowedInstanceTypesRequest)
-
         hibernation_enabled = False if Utils.is_empty(request.hibernation_support) else request.hibernation_support
-        allowed_instance_types = self.controller_utils.get_valid_instance_types(hibernation_enabled, request.software_stack)
+
+        if request.software_stack is None:
+            allowed_instance_types = self.controller_utils.get_valid_instance_types_by_software_stack(hibernation_enabled)
+            context.success(ListAllowedInstanceTypesResponse(
+                listing=allowed_instance_types
+            ))
+            return
+
+        if request.software_stack.ami_id is None:
+            context.fail(
+                message=f'Missing software_stack.ami_id',
+                payload=ListAllowedInstanceTypesResponse(listing=[]),
+                error_code=errorcodes.GENERAL_ERROR
+            )
+            return
+
+        image_description = self.controller_utils.describe_image_id(request.software_stack.ami_id)
+        if image_description is None or image_description.get('ImageId') != request.software_stack.ami_id:
+            context.fail(
+                message=f'Invalid software_stack.ami_id: {request.software_stack.ami_id}',
+                payload=ListAllowedInstanceTypesResponse(listing=[]),
+                error_code=errorcodes.GENERAL_ERROR
+            )
+            return
+
+        if (request.software_stack.architecture is not None and image_description.get('Architecture') != request.software_stack.architecture.value):
+            context.fail(
+                message=f'Invalid software_stack.ami_id: {request.software_stack.ami_id} with architecture: {request.software_stack.architecture.value}',
+                payload=ListAllowedInstanceTypesResponse(listing=[]),
+                error_code=errorcodes.GENERAL_ERROR
+            )
+            return
+
+        if request.software_stack.architecture is None:
+            request.software_stack.architecture = VirtualDesktopArchitecture(image_description.get('Architecture'))
+
+        allowed_instance_types = self.controller_utils.get_valid_instance_types_by_software_stack(hibernation_enabled, software_stack=request.software_stack)
         context.success(ListAllowedInstanceTypesResponse(
             listing=allowed_instance_types
         ))
@@ -202,7 +232,11 @@ class VirtualDesktopUtilsAPI(VirtualDesktopAPI):
             raise exceptions.unauthorized_access()
 
         acl_entry_scope = acl_entry.get('scope')
-        is_authorized = context.is_authorized(elevated_access=False, scopes=[acl_entry_scope])
+        is_authorized = context.is_authorized(elevated_access=True, scopes=[acl_entry_scope]) if namespace in (
+            'VirtualDesktopUtils.ListSupportedOS',
+            'VirtualDesktopUtils.ListSupportedGPU',
+            'VirtualDesktopUtils.GetPermissionProfile',
+        ) else context.is_authorized(elevated_access=False, scopes=[acl_entry_scope])
 
         if is_authorized:
             acl_entry['method'](context)

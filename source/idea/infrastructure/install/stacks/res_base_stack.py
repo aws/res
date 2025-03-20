@@ -1,6 +1,6 @@
 #  Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 #  SPDX-License-Identifier: Apache-2.0
-from typing import Any, Dict, Union
+from typing import Any, Dict, List, Union
 
 import aws_cdk as cdk
 import constructs
@@ -77,6 +77,16 @@ class ResBaseStack(ResBaseConstruct):
                 table.id,
                 self.cluster_name,
                 table,
+                shared_library_lambda_layer=(
+                    self.shared_library_lambda_layer
+                    if table.id == cluster_settings.CLUSTER_SETTINGS_TABLE_NAME
+                    else None
+                ),
+                stream_event_handler_role=(
+                    self.get_cluster_settings_table_event_handler_role()
+                    if table.id == cluster_settings.CLUSTER_SETTINGS_TABLE_NAME
+                    else None
+                ),
             )
 
         dcvBrokerTableDeltionPolicy = iam.PolicyDocument(
@@ -459,3 +469,86 @@ class ResBaseStack(ResBaseConstruct):
         cdk.Tags.of(staging_bucket).add(RES_TAG_BACKUP_PLAN, "cluster")
         cdk.Tags.of(staging_bucket).add(RES_TAG_ENVIRONMENT_NAME, self.cluster_name)
         cdk.Tags.of(logging_bucket).add(RES_TAG_ENVIRONMENT_NAME, self.cluster_name)
+
+    def get_cluster_settings_table_event_handler_role(
+        self,
+    ) -> iam.Role:
+        cluster_settings_table_event_handler_role = iam.Role(
+            self.nested_stack,
+            id="ClusterSettingsTableEventHandlerRole",
+            role_name=f"{self.cluster_name}-cluster-settings-table-event-handler-role",
+            assumed_by=iam.ServicePrincipal("lambda.amazonaws.com"),
+        )
+        cluster_settings_table_event_handler_role.attach_inline_policy(
+            iam.Policy(
+                self.nested_stack,
+                id="ClusterSettingsTableEventHandlerRolePolicy",
+                policy_name=f"{self.cluster_name}-cluster-settings-table-event-handler-role-policy",
+                statements=[
+                    iam.PolicyStatement(
+                        actions=["logs:CreateLogGroup"],
+                        sid="CloudWatchLogsPermissions",
+                        resources=["*"],
+                    ),
+                    iam.PolicyStatement(
+                        actions=[
+                            "logs:CreateLogStream",
+                            "logs:PutLogEvents",
+                            "logs:DeleteLogStream",
+                        ],
+                        sid="CloudWatchLogStreamPermissions",
+                        resources=["*"],
+                    ),
+                    iam.PolicyStatement(
+                        actions=[
+                            "dynamodb:GetItem",
+                            "dynamodb:PutItem",
+                            "dynamodb:DeleteItem",
+                        ],
+                        sid="ADSyncLockTablePermissions",
+                        resources=[
+                            f"arn:{cdk.Aws.PARTITION}:dynamodb:{cdk.Aws.REGION}:{cdk.Aws.ACCOUNT_ID}:table/{self.cluster_name}.ad-sync.distributed-lock",
+                        ],
+                    ),
+                    iam.PolicyStatement(
+                        actions=[
+                            "dynamodb:Query",
+                            "dynamodb:Scan",
+                            "dynamodb:UpdateItem",
+                            "dynamodb:PutItem",
+                        ],
+                        sid="ADSyncStatusTablePermissions",
+                        resources=[
+                            f"arn:{cdk.Aws.PARTITION}:dynamodb:{cdk.Aws.REGION}:{cdk.Aws.ACCOUNT_ID}:table/{self.cluster_name}.ad-sync.status",
+                        ],
+                    ),
+                    iam.PolicyStatement(
+                        actions=[
+                            "ecs:RunTask",
+                            "ecs:StopTask",
+                            "ecs:ListTasks",
+                        ],
+                        resources=["*"],
+                        conditions={
+                            "ArnEquals": {
+                                "ecs:cluster": f"arn:{cdk.Aws.PARTITION}:ecs:{cdk.Aws.REGION}:{cdk.Aws.ACCOUNT_ID}:cluster/{self.cluster_name}-ad-sync-cluster"
+                            }
+                        },
+                    ),
+                    iam.PolicyStatement(
+                        actions=["iam:PassRole"],
+                        resources=[
+                            f"arn:{cdk.Aws.PARTITION}:iam::{cdk.Aws.ACCOUNT_ID}:role/{self.cluster_name}-ad-sync-task-role",
+                        ],
+                    ),
+                    iam.PolicyStatement(
+                        actions=["ec2:DescribeSecurityGroups"],
+                        resources=["*"],
+                    ),
+                ],
+            )
+        )
+
+        self.add_common_tags(cluster_settings_table_event_handler_role)
+
+        return cluster_settings_table_event_handler_role

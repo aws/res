@@ -72,7 +72,9 @@ class UserHomeDirectory:
 
         id_rsa_file = os.path.join(self.ssh_dir, 'id_rsa')
         if not Path(id_rsa_file).exists():
-            raise exceptions.general_exception(f'private key not found in home directory for user: {self.user.username}')
+            raise exceptions.general_exception(f'Private key not found in home directory for user: {self.user.username}. '
+                                               f'Launch at least one Linux virtual desktop session with a project using '
+                                               f'the global home file system to have the key created for you.')
 
         key_format = self.validate_and_sanitize_key_format(key_format)
 

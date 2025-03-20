@@ -258,9 +258,16 @@ class VirtualDesktopUserAPI(VirtualDesktopAPI):
             self._logger.error(session.failure_reason)
             return session, False
 
-        session_count_for_user = self.session_db.get_session_count_for_user(session.owner)
-        if session_count_for_user >= self.context.config().get_int('virtual-desktop-controller.dcv_session.allowed_sessions_per_user', required=True):
-            session.failure_reason = f'User {session.owner} has exceeded the allowed number of sessions: {session_count_for_user}. Please contact the System Administrators if you need to create more sessions.'
+        session_count_for_user = self.session_db.get_current_project_session_count_for_user(session.owner, session.project.project_id)
+        allowed_sessions_per_user = self.context.projects_client.get_project_by_id(
+            session.project.project_id).allowed_sessions_per_user
+        if allowed_sessions_per_user is None:
+            allowed_sessions_per_user = self.context.config().get_int(
+                "vdc.dcv_session.default_allowed_sessions_per_user_per_project",
+                required=True,
+            )
+        if session_count_for_user >= allowed_sessions_per_user:
+            session.failure_reason = f'User {session.owner} has exceeded the allowed number of sessions: {session_count_for_user}. Please contact the Project Administrators if you need to create more sessions.'
             return session, False
 
         return self.validate_create_session_request(session)

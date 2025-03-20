@@ -35,10 +35,15 @@ __all__ = (
     'OPEN_API_SPEC_ENTRIES_PROJECTS'
 )
 
-from ideadatamodel import SocaPayload, SocaListingPayload, IdeaOpenAPISpecEntry
-from ideadatamodel.projects.projects_model import Project, SecurityGroup, Policy
-from typing import Optional, List
+from typing import List, Optional
 
+from ideadatamodel import (
+    IdeaOpenAPISpecEntry,
+    SocaListingPayload,
+    SocaPayload,
+    SocaSortBy,
+)
+from ideadatamodel.projects.projects_model import Policy, Project, SecurityGroup
 from ideadatamodel.shared_filesystem import FileSystem
 
 
@@ -86,8 +91,7 @@ class DeleteProjectResult(SocaPayload):
 
 # Projects.ListProjects, Projects.ListProjects
 class ListProjectsRequest(SocaListingPayload):
-    pass
-
+    sort_by: Optional[SocaSortBy]
 
 class ListProjectsResult(SocaListingPayload):
     listing: Optional[List[Project]]

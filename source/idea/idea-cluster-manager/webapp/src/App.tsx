@@ -27,7 +27,7 @@ import VirtualDesktopSettings from "./pages/virtual-desktops/virtual-desktop-set
 import VirtualDesktopSessionDetail from "./pages/virtual-desktops/virtual-desktop-session-detail";
 import VirtualDesktopDebug from "./pages/virtual-desktops/virtual-desktop-debug";
 import { DashboardMain } from "./pages/dashboard";
-import AccountSettings from "./pages/account/account-settings";
+import CostDashboard from "./pages/cost-dashboard/cost-dashboard";
 import SSHAccess from "./pages/home/ssh-access";
 import ClusterSettings from "./pages/cluster-admin/cluster-settings";
 import ClusterStatus from "./pages/cluster-admin/cluster-status";
@@ -74,6 +74,7 @@ export interface IdeaWebPortalAppState {
     isFileBrowserEnabled: boolean;
     projectPermissions?: { isInProject: boolean; canCreateOthersSession: boolean; }
     isSshEnabled: boolean;
+    isGovCloudPartition: boolean;
     projectOwnerRoles?: string[];
 }
 
@@ -108,6 +109,7 @@ class IdeaWebPortalApp extends Component<IdeaWebPortalAppProps, IdeaWebPortalApp
             isFileBrowserEnabled: false,
             projectPermissions: { isInProject: false, canCreateOthersSession: false },
             isSshEnabled: false,
+            isGovCloudPartition: false,
             projectOwnerRoles: [],
         };
     }
@@ -210,6 +212,7 @@ class IdeaWebPortalApp extends Component<IdeaWebPortalAppProps, IdeaWebPortalApp
                         isLoggedIn: loginStatus,
                         isFileBrowserEnabled: context.getClusterSettingsService().getIsFileBrowserEnabled(),
                         isSshEnabled: context.getClusterSettingsService().getIsSshEnabled(),
+                        isGovCloudPartition: context.getClusterSettingsService().getIsGovCloudPartition(),
                         sideNavHeader: IdeaSideNavHeader(context),
                         sideNavItems: IdeaSideNavItems(context),
                     });
@@ -493,26 +496,29 @@ class IdeaWebPortalApp extends Component<IdeaWebPortalAppProps, IdeaWebPortalApp
                         }
                     />
 
-                    {/*account settings*/}
-                    <Route
-                        path="/home/account-settings"
-                        element={
-                            <IdeaAuthenticatedRoute isLoggedIn={this.state.isLoggedIn}>
-                                <AccountSettings
-                                    ideaPageId="account-settings"
-                                    toolsOpen={this.state.toolsOpen}
-                                    tools={this.state.tools}
-                                    onToolsChange={this.onToolsChange}
-                                    onPageChange={this.onPageChange}
-                                    sideNavItems={this.state.sideNavItems}
-                                    sideNavHeader={this.state.sideNavHeader}
-                                    onSideNavChange={this.onSideNavChange}
-                                    onFlashbarChange={this.onFlashbarChange}
-                                    flashbarItems={this.state.flashbarItems}
-                                />
-                            </IdeaAuthenticatedRoute>
-                        }
-                    />
+                    {/*cost dashboard*/}
+                    {
+                        !this.state.isGovCloudPartition &&
+                        <Route
+                            path="/home/cost-dashboard"
+                            element={
+                                <IdeaAuthenticatedRoute isLoggedIn={this.state.isLoggedIn}>
+                                    <CostDashboard
+                                        ideaPageId="cost-dashboard"
+                                        toolsOpen={this.state.toolsOpen}
+                                        tools={this.state.tools}
+                                        onToolsChange={this.onToolsChange}
+                                        onPageChange={this.onPageChange}
+                                        sideNavItems={this.state.sideNavItems}
+                                        sideNavHeader={this.state.sideNavHeader}
+                                        onSideNavChange={this.onSideNavChange}
+                                        onFlashbarChange={this.onFlashbarChange}
+                                        flashbarItems={this.state.flashbarItems}
+                                    />
+                                </IdeaAuthenticatedRoute>
+                            }
+                        />
+                    }
 
                     {/*user home*/}
                     <Route

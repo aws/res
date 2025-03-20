@@ -2,16 +2,25 @@
 #  SPDX-License-Identifier: Apache-2.0
 
 import logging
+import signal
+import sys
 import time
 from typing import Any, Dict, List, Optional, Set
 
 import res.constants as constants  # type: ignore
 import res.exceptions as exceptions  # type: ignore
+from res.clients.ad_sync import ad_sync_client  # type: ignore
 from res.clients.ldap_client.active_directory_client import (  # type: ignore
     ActiveDirectoryClient,
 )
 from res.resources import accounts  # type: ignore
-from res.utils import aws_utils, ldap_utils, sssd_utils  # type: ignore
+from res.utils import (  # type: ignore
+    aws_utils,
+    ldap_utils,
+    sssd_utils,
+    table_utils,
+    time_utils,
+)
 
 logger = logging.getLogger("ad-sync")
 logger.addHandler(logging.StreamHandler())
@@ -389,6 +398,7 @@ def _start_sssd(active_directory_client: ActiveDirectoryClient) -> None:
         "ldap_connection_uri": active_directory_client.options.uri,
         "ldap_base": active_directory_client.options.ldap_base,
         "sssd_ldap_id_mapping": active_directory_client.options.sssd_ldap_id_mapping,
+        "additional_sssd_configs": active_directory_client.options.additional_sssd_configs,
         "service_account_dn": aws_utils.get_secret_string(
             active_directory_client.options.service_account_dn_secret_arn
         ),
@@ -408,19 +418,36 @@ def main() -> None:
     """
     start AD sync
     """
-    active_directory_client = ActiveDirectoryClient(logger)
 
-    logger.info("Starting SSSD service")
-    _start_sssd(active_directory_client)
+    def terminate_ad_sync_handler(_sig, _frame):
+        # Handle the situation where users force to stop AD sync by invoking the StopADSync API or stopping the ECS task manually
+        logger.info("AD Sync is terminated")
+        ad_sync_client.set_ad_sync_status(ad_sync_client.ADSyncStatus.TERMINATED)
+        sys.exit(0)  # Exit the main application
 
-    logger.info("Starting sync from AD")
-    start_time = time.time()
+    signal.signal(signal.SIGTERM, terminate_ad_sync_handler)
 
-    ldap_groups = _fetch_ldap_groups(active_directory_client)
-    groups_failed_to_sync = _sync_groups(active_directory_client, ldap_groups)
-    _sync_users(active_directory_client, ldap_groups, groups_failed_to_sync)
+    try:
+        ad_sync_client.set_ad_sync_status(ad_sync_client.ADSyncStatus.RUNNING)
 
-    logger.info(f"-------------TIME: {time.time() - start_time}------------")
+        active_directory_client = ActiveDirectoryClient(logger)
+
+        logger.info("Starting SSSD service")
+        _start_sssd(active_directory_client)
+
+        logger.info("Starting sync from AD")
+        start_time = time.time()
+
+        ldap_groups = _fetch_ldap_groups(active_directory_client)
+        groups_failed_to_sync = _sync_groups(active_directory_client, ldap_groups)
+        _sync_users(active_directory_client, ldap_groups, groups_failed_to_sync)
+
+        logger.info(f"-------------TIME: {time.time() - start_time}------------")
+
+        ad_sync_client.set_ad_sync_status(ad_sync_client.ADSyncStatus.STOPPED)
+    except Exception as e:
+        logger.error(f"Failed to sync from AD: {e}")
+        ad_sync_client.set_ad_sync_status(ad_sync_client.ADSyncStatus.ERROR)
 
 
 if __name__ == "__main__":

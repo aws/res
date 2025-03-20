@@ -7,7 +7,7 @@
   {%- include '_templates/linux/join_openldap.jinja2' %}
 {% endif -%}
 {%- if context.config.get_string('directoryservice.provider') in ['activedirectory', 'aws_managed_activedirectory'] %}
-  {%- if (context.config.get_string('directoryservice.disable_ad_join') == 'True') or (context.module_name == "cluster-manager") or (context.module_name == "bastion-host")%}
+  {%- if (context.config.get_string('directoryservice.disable_ad_join') == 'true') or (context.module_name == "cluster-manager") or (context.module_name == "bastion-host")%}
     {%- include '_templates/linux/connect_activedirectory.jinja2' %}
   {%- else %}
     {%- include '_templates/linux/join_activedirectory.jinja2' %}

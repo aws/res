@@ -20,6 +20,7 @@ from ideadatamodel import (  # type: ignore
     DeleteProjectRequest,
     DeleteSessionRequest,
     ListAllowedInstanceTypesRequest,
+    Project,
     SocaMemory,
     SocaMemoryUnit,
     UpdateSessionRequest,
@@ -27,6 +28,7 @@ from ideadatamodel import (  # type: ignore
     VirtualDesktopScheduleType,
     VirtualDesktopServer,
     VirtualDesktopSession,
+    VirtualDesktopSoftwareStack,
     VirtualDesktopWeekSchedule,
 )
 from tests.integration.framework.client.res_client import ResClient
@@ -63,23 +65,11 @@ def delete_session(client: ResClient, session: VirtualDesktopSession) -> None:
     wait_for_deleting_session(client, session)
 
 
-@pytest.fixture
-def session(
-    request: FixtureRequest, res_environment: ResEnvironment, non_admin: ClientAuth
+def create_session(
+    session: VirtualDesktopSession,
+    software_stack: VirtualDesktopSoftwareStack,
+    client: ResClient,
 ) -> Optional[VirtualDesktopSession]:
-    """
-    Fixture for setting up/tearing down the test project
-    """
-    session = request.param[0]
-    project = request.getfixturevalue(request.param[1])
-    software_stack = request.getfixturevalue(request.param[2])
-
-    session.project = project
-    session.software_stack = software_stack
-    session.base_os = software_stack.base_os
-
-    api_invoker_type = request.config.getoption("--api-invoker-type")
-    client = ResClient(res_environment, non_admin, api_invoker_type)
 
     allowed_instance_types = client.list_allowed_instance_types(
         ListAllowedInstanceTypesRequest(
@@ -87,6 +77,7 @@ def session(
             software_stack=software_stack,
         )
     ).listing
+
     if not allowed_instance_types:
         pytest.skip(
             f"No allowed instance types are available for software stack {software_stack.name}"
@@ -137,6 +128,29 @@ def session(
     )
     update_session_request = UpdateSessionRequest(session=session)
     client.update_session(update_session_request)
+    return session
+
+
+@pytest.fixture
+def session(
+    request: FixtureRequest, res_environment: ResEnvironment
+) -> Optional[VirtualDesktopSession]:
+    """
+    Fixture for setting up/tearing down the test project
+    """
+    session = request.param[0]
+    project = request.getfixturevalue(request.param[1])
+    software_stack = request.getfixturevalue(request.param[2])
+    clientAuth = request.getfixturevalue(request.param[3])
+
+    session.project = project
+    session.software_stack = software_stack
+    session.base_os = software_stack.base_os
+
+    api_invoker_type = request.config.getoption("--api-invoker-type")
+    client = ResClient(res_environment, clientAuth, api_invoker_type)
+
+    session = create_session(session, software_stack, client)
 
     def tear_down() -> None:
         delete_session(client, session)

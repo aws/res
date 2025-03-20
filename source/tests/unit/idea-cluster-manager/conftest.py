@@ -40,7 +40,7 @@ from ideasdk.utils import GroupNameHelper, Utils
 from ideatestutils import IdeaTestProps, MockConfig, MockInstanceTypes
 from ideatestutils.dynamodb.dynamodb_local import DynamoDBLocal
 from mock_vdc_client import MockVirtualDesktopControllerClient
-from res.resources import accounts
+from res.resources import accounts, cluster_settings
 
 from ideadatamodel import SocaAnyPayload
 
@@ -390,6 +390,14 @@ def context(ddb_local):
             {"AttributeName": "snapshot_path", "AttributeType": "S"},
         ],
         BillingMode="PAY_PER_REQUEST",
+    )
+
+    cluster_settings.get_setting = MagicMock(
+        side_effect=lambda x: (
+            5
+            if x == "vdc.dcv_session.default_allowed_sessions_per_user_per_project"
+            else None
+        )
     )
 
     context = AppContext(

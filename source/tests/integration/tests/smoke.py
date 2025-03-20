@@ -10,8 +10,10 @@
 #  and limitations under the License.
 
 import base64
+import json
 import logging
 import os
+import time
 import uuid
 from typing import Optional
 
@@ -23,8 +25,10 @@ from res.utils import auth_utils  # type: ignore
 from ideadatamodel import (  # type: ignore
     CreateFileRequest,
     CreateSessionRequest,
+    CreateSoftwareStackFromSessionRequest,
     DeleteFilesRequest,
     DeleteSessionRequest,
+    DeleteSoftwareStackRequest,
     DownloadFilesRequest,
     GetModuleSettingsRequest,
     GetPermissionProfileRequest,
@@ -58,15 +62,31 @@ from tests.integration.framework.fixtures.res_environment import (
     ResEnvironment,
     res_environment,
 )
-from tests.integration.framework.fixtures.session import session
+from tests.integration.framework.fixtures.session import (
+    create_session,
+    delete_session,
+    session,
+)
 from tests.integration.framework.fixtures.software_stack import software_stack
 from tests.integration.framework.fixtures.users.admin import admin
+from tests.integration.framework.fixtures.users.cognito_admin import cognito_admin
 from tests.integration.framework.fixtures.users.non_admin import non_admin
 from tests.integration.framework.model.client_auth import ClientAuth
+from tests.integration.framework.utils.ec2_utils import (
+    cluster_manager_instances,
+    deregister_ami,
+)
+from tests.integration.framework.utils.remote_command_runner import EC2InstancePlatform
 from tests.integration.framework.utils.session_utils import (
     wait_for_session_connection_count,
+    wait_for_software_stack_to_be_active,
 )
-from tests.integration.tests.config import TEST_SOFTWARE_STACKS
+from tests.integration.framework.utils.sssd_utils import check_sssd_config_field
+from tests.integration.tests.config import (
+    AL2_SOFTWARE_STACK,
+    LINUX_SOFTWARE_STACKS,
+    TEST_SOFTWARE_STACKS,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -100,6 +120,8 @@ class TestsSmoke(object):
                 ),
                 ["home"],
                 ["RESAdministrators", "group_1", "group_2"],
+                [],
+                "admin",
             )
         ],
         indirect=True,
@@ -107,10 +129,7 @@ class TestsSmoke(object):
     @pytest.mark.parametrize(
         "software_stack",
         [
-            (
-                software_stack,
-                "project",
-            )
+            (software_stack, "project", "admin")
             for software_stack in TEST_SOFTWARE_STACKS
         ],
         indirect=True,
@@ -120,12 +139,13 @@ class TestsSmoke(object):
         [
             (
                 VirtualDesktopSession(
-                    name="VirtualDesktop" + os.environ.get("PYTEST_XDIST_WORKER", ""),
+                    name="ADVirtualDesktop" + os.environ.get("PYTEST_XDIST_WORKER", ""),
                     description="RES integ test VDI session",
                     hibernation_enabled=False,
                 ),
                 "project",
                 "software_stack",
+                "non_admin",
             )
         ],
         indirect=True,
@@ -155,6 +175,82 @@ class TestsSmoke(object):
 
         api_invoker_type = request.config.getoption("--api-invoker-type")
         client = ResClient(res_environment, non_admin, api_invoker_type)
+        web_driver = client.join_session(session)
+        wait_for_session_connection_count(region, session, 1)
+
+        logger.info(f"leaving session {session.dcv_session_id}...")
+        web_driver.quit()
+        wait_for_session_connection_count(region, session, 0)
+
+    @pytest.mark.usefixtures("cognito_admin")
+    @pytest.mark.parametrize(
+        "project",
+        [
+            (
+                Project(
+                    title="res-cognito-integ-test"
+                    + os.environ.get("PYTEST_XDIST_WORKER", ""),
+                    name="res-cognito-integ-test"
+                    + os.environ.get("PYTEST_XDIST_WORKER", ""),
+                    description="RES cognito integ test project",
+                    enable_budgets=False,
+                ),
+                ["home"],
+                [],
+                ["clusteradmin"],
+                "cognito_admin",
+            )
+        ],
+        indirect=True,
+    )
+    @pytest.mark.parametrize(
+        "software_stack",
+        [
+            (software_stack, "project", "cognito_admin")
+            for software_stack in LINUX_SOFTWARE_STACKS
+            # for software_stack in [AL2_SOFTWARE_STACK]
+        ],
+        indirect=True,
+    )
+    @pytest.mark.parametrize(
+        "session",
+        [
+            (
+                VirtualDesktopSession(
+                    name="CognitoVirtualDesktop"
+                    + os.environ.get("PYTEST_XDIST_WORKER", ""),
+                    description="RES integ test VDI session",
+                    hibernation_enabled=False,
+                ),
+                "project",
+                "software_stack",
+                "cognito_admin",
+            )
+        ],
+        indirect=True,
+    )
+    def test_cognito_end_to_end_succeed(
+        self,
+        request: FixtureRequest,
+        region: str,
+        cognito_admin: ClientAuth,
+        res_environment: ResEnvironment,
+        project: Project,
+        software_stack: VirtualDesktopSoftwareStack,
+        session: Optional[VirtualDesktopSession],
+    ) -> None:
+        """
+        Test the end to end workflow:
+        1. Create a project, software stack and virtual desktop session.
+        2. Join the virtual desktop session from a headless web browser and close it.
+        3. Clean up the test project, software stack and virtual desktop session.
+        """
+        if not session:
+            # VDI is not supported with the current configuration
+            return
+
+        api_invoker_type = request.config.getoption("--api-invoker-type")
+        client = ResClient(res_environment, cognito_admin, api_invoker_type)
         web_driver = client.join_session(session)
         wait_for_session_connection_count(region, session, 1)
 
@@ -433,3 +529,261 @@ class TestsSmoke(object):
         for name in default_template_names:
             assert name in returned_template_names
         assert len(returned_template_names) == 13
+
+    @pytest.mark.usefixtures("admin")
+    @pytest.mark.parametrize(
+        "admin_username",
+        [
+            "admin1",
+        ],
+    )
+    @pytest.mark.parametrize(
+        "project",
+        [
+            (
+                Project(
+                    title="res-integ-test-soft-stack",
+                    name="res-integ-test-soft-stack",
+                    description="RES integ test project software stack",
+                    enable_budgets=False,
+                ),
+                ["home"],
+                ["RESAdministrators", "group_1", "group_2"],
+                [],
+                "admin",
+            )
+        ],
+        indirect=True,
+    )
+    @pytest.mark.parametrize(
+        "software_stack",
+        [(AL2_SOFTWARE_STACK, "project", "admin")],
+        indirect=True,
+    )
+    @pytest.mark.parametrize(
+        "session",
+        [
+            (
+                VirtualDesktopSession(
+                    name="VirtualDesktop-soft-stack",
+                    description="RES integ test VDI session",
+                    hibernation_enabled=False,
+                ),
+                "project",
+                "software_stack",
+                "admin",
+            )
+        ],
+        indirect=True,
+    )
+    def test_software_stack_creation(
+        self,
+        request: FixtureRequest,
+        region: str,
+        admin: ClientAuth,
+        res_environment: ResEnvironment,
+        project: Project,
+        software_stack: VirtualDesktopSoftwareStack,
+        session: Optional[VirtualDesktopSession],
+    ) -> None:
+        """
+        Test the AL2 software stack creation from a session workflow:
+            Launch VDI -> connect to VDI -> create software stack ->
+            -> launch new VDI with that software stack -> connect to VDI
+        """
+        if not session:
+            # VDI is not supported with the current configuration
+            return
+
+        api_invoker_type = request.config.getoption("--api-invoker-type")
+        client = ResClient(res_environment, admin, api_invoker_type)
+        web_driver = client.join_session(session)
+        wait_for_session_connection_count(region, session, 1)
+        logger.info(f"leaving session {session.dcv_session_id}...")
+        web_driver.quit()
+
+        new_software_stack = VirtualDesktopSoftwareStack(
+            name="integ-test-created-software-stack-from-session",
+            projects=[project],
+            base_os=session.base_os,
+            min_storage=session.software_stack.min_storage,
+        )
+        logger.info(f"New software stack {new_software_stack}")
+        software_stack_create_request = CreateSoftwareStackFromSessionRequest(
+            session=session,
+            new_software_stack=new_software_stack,
+        )
+
+        software_stack_create_response = client.create_software_stack_from_session(
+            request=software_stack_create_request
+        )
+        logger.info(f"Software stack create response {software_stack_create_response}")
+        new_software_stack = software_stack_create_response.software_stack
+        wait_for_software_stack_to_be_active(
+            client=client, software_stack=software_stack_create_response.software_stack
+        )
+        created_stack = client.get_software_stack(
+            request=GetSoftwareStackInfoRequest(
+                stack_id=new_software_stack.stack_id, base_os=software_stack.base_os
+            )
+        ).software_stack
+        logger.info(f"Created stack {created_stack}")
+        try:
+            logger.info(f"Creating session from software stack {created_stack.name}...")
+            new_session = create_session(
+                session=VirtualDesktopSession(
+                    name="integ-test-created-session-from-created-software-stack",
+                    description="RES integ test VDI session new software stack",
+                    hibernation_enabled=False,
+                    software_stack=created_stack,
+                    project=project,
+                ),
+                software_stack=created_stack,
+                client=client,
+            )
+            logger.info(f"Joining session {session.name}...")
+            web_driver = client.join_session(new_session)
+
+            logger.info(f"Connecting to dcv session {session.name}...")
+            wait_for_session_connection_count(region, new_session, 1)
+
+            logger.info(
+                f"Leaving session {new_session.name} {new_session.dcv_session_id}..."  # type: ignore
+            )
+            web_driver.quit()
+            wait_for_session_connection_count(region, new_session, 0)
+        finally:
+            delete_session(
+                client=client,
+                session=new_session,
+            )
+            client.delete_software_stack(
+                request=DeleteSoftwareStackRequest(software_stack=created_stack)
+            )
+            deregistered = deregister_ami(created_stack.ami_id)
+            if not deregistered:
+                logger.error(f"AMI {created_stack.ami_id} could not be deregistered")
+
+    @pytest.mark.usefixtures("admin")
+    @pytest.mark.parametrize(
+        "admin_username",
+        [
+            "admin1",
+        ],
+    )
+    @pytest.mark.parametrize(
+        "project",
+        [
+            (
+                Project(
+                    title="res-integ-test-sssd-config-update",
+                    name="res-integ-test-sssd-config-update",
+                    description="RES integ test SSSD config update",
+                    enable_budgets=False,
+                ),
+                ["home"],
+                ["RESAdministrators", "group_1", "group_2"],
+                [],
+                "admin",
+            )
+        ],
+        indirect=True,
+    )
+    @pytest.mark.parametrize(
+        "software_stack",
+        [(AL2_SOFTWARE_STACK, "project", "admin")],
+        indirect=True,
+    )
+    @pytest.mark.parametrize(
+        "session",
+        [
+            (
+                VirtualDesktopSession(
+                    name="VirtualDesktop-sssd-config-update",
+                    description="RES integ test VDI session",
+                    hibernation_enabled=False,
+                ),
+                "project",
+                "software_stack",
+                "admin",
+            )
+        ],
+        indirect=True,
+    )
+    def test_additional_configs_update(
+        self,
+        request: FixtureRequest,
+        region: str,
+        admin: ClientAuth,
+        res_environment: ResEnvironment,
+        project: Project,
+        software_stack: VirtualDesktopSoftwareStack,
+        session: Optional[VirtualDesktopSession],
+    ) -> None:
+        """
+        Test the end to end workflow for updating additional sssd configs:
+        """
+
+        if not session:
+            # VDI is not supported with the current configuration
+            return
+
+        api_invoker_type = request.config.getoption("--api-invoker-type")
+        admin_client = ResClient(res_environment, admin, api_invoker_type)
+        debug_level_key = "debug_level"
+        debug_level_value = "0xfff0"
+
+        cluster_manager_instance_id = cluster_manager_instances(request.session)[0].get(
+            "InstanceId", ""
+        )
+        vdi_instance_id = session.server.instance_id
+
+        # Update additional_sssd_configs with debug_level = 0xfff0
+        admin_client.update_module_settings(
+            request=UpdateModuleSettingsRequest(
+                module_id="directoryservice",
+                settings={
+                    "sssd": {
+                        "additional_sssd_configs": json.dumps(
+                            {debug_level_key: debug_level_value}
+                        )
+                    }
+                },
+            )
+        )
+        time.sleep(20)
+
+        check_sssd_config_field(
+            region,
+            cluster_manager_instance_id,
+            EC2InstancePlatform.LINUX,
+            debug_level_key,
+            debug_level_value,
+        )
+        check_sssd_config_field(
+            region,
+            vdi_instance_id,
+            EC2InstancePlatform.LINUX,
+            debug_level_key,
+            debug_level_value,
+        )
+
+        # Update additional_sssd_configs back to empty
+        admin_client.update_module_settings(
+            request=UpdateModuleSettingsRequest(
+                module_id="directoryservice",
+                settings={"sssd": {"additional_sssd_configs": json.dumps({})}},
+            )
+        )
+        time.sleep(20)
+
+        check_sssd_config_field(
+            region,
+            cluster_manager_instance_id,
+            EC2InstancePlatform.LINUX,
+            "debug_level",
+            "",
+        )
+        check_sssd_config_field(
+            region, vdi_instance_id, EC2InstancePlatform.LINUX, "debug_level", ""
+        )

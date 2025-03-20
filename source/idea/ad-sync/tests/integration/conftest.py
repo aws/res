@@ -9,8 +9,11 @@ import adsync.main as main
 import boto3
 import ldap  # noqa
 import pytest
+import requests
+import res.constants as constants
 from _pytest.monkeypatch import MonkeyPatch
 from ideatestutils.dynamodb.dynamodb_local import DynamoDBLocal
+from requests.models import Response
 from res.clients.ldap_client.active_directory_client import ActiveDirectoryClient
 from res.resources import accounts, cluster_settings
 from res.utils import table_utils
@@ -53,6 +56,7 @@ def ddb_local():
 def context(ddb_local):
     os.environ["environment_name"] = "res-test"
     os.environ["AWS_DEFAULT_REGION"] = "us-east-1"
+    os.environ["ECS_CONTAINER_METADATA_URI_V4"] = "test"
 
     # Override the endpoint for boto3.resource("dynamodb") to use DynamoDB local
     dynamodb = boto3.resource("dynamodb", endpoint_url="http://localhost:9000")
@@ -62,6 +66,15 @@ def context(ddb_local):
             return dynamodb
 
     monkeypatch.setattr(boto3, "resource", _resource)
+
+    def _response(_url: str):
+        response = Response()
+        response.status_code = 200
+        response._content = b'{ "TaskARN" : "test" }'
+
+        return response
+
+    monkeypatch.setattr(requests, "get", _response)
 
     # Create the required tables in DynamoDB local
     dynamodb_client = boto3.client("dynamodb", endpoint_url="http://localhost:9000")
@@ -155,9 +168,37 @@ def context(ddb_local):
         BillingMode="PAY_PER_REQUEST",
     )
 
+    dynamodb_client.create_table(
+        TableName=f"{os.environ['environment_name']}.{constants.AD_SYNC_STATUS_TABLE}",
+        AttributeDefinitions=[
+            {
+                "AttributeName": constants.AD_SYNC_STATUS_TASK_ID_KEY,
+                "AttributeType": "S",
+            },
+            {
+                "AttributeName": constants.AD_SYNC_STATUS_SUBMISSION_TIME_KEY,
+                "AttributeType": "N",
+            },
+        ],
+        KeySchema=[
+            {"AttributeName": constants.AD_SYNC_STATUS_TASK_ID_KEY, "KeyType": "HASH"},
+            {
+                "AttributeName": constants.AD_SYNC_STATUS_SUBMISSION_TIME_KEY,
+                "KeyType": "RANGE",
+            },
+        ],
+        BillingMode="PAY_PER_REQUEST",
+    )
+
     yield context
 
     # Clean up the required tables related to the AD Sync process after running tests
+    dynamodb_client.delete_table(
+        TableName=f"{os.environ['environment_name']}.{constants.AD_SYNC_STATUS_TABLE}"
+    )
+    dynamodb_client.delete_table(
+        TableName=f"{os.environ['environment_name']}.authz.role-assignments"
+    )
     dynamodb_client.delete_table(
         TableName=f"{os.environ['environment_name']}.accounts.group-members"
     )
@@ -169,9 +210,6 @@ def context(ddb_local):
     )
     dynamodb_client.delete_table(
         TableName=f"{os.environ['environment_name']}.{cluster_settings.CLUSTER_SETTINGS_TABLE_NAME}"
-    )
-    dynamodb_client.delete_table(
-        TableName=f"{os.environ['environment_name']}.authz.role-assignments"
     )
 
 

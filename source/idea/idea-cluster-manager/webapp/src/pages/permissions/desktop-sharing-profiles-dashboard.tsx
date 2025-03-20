@@ -40,11 +40,13 @@ const VIRTUAL_DESKTOP_PERMISSION_PROFILE_TABLE_COLUMN_DEFINITIONS: TableProps.Co
         id: "profile_id",
         header: "Profile ID",
         cell: (e) => <Link href={`/#/cluster/permissions/sharing-profiles/${e.profile_id}`}>{e.profile_id}</Link>,
+        sortingField: "profile_id",
     },
     {
         id: "title",
         header: "Profile name",
         cell: (e) => e.title,
+        sortingField: "title",
     },
     {
         id: "description",
@@ -56,11 +58,13 @@ const VIRTUAL_DESKTOP_PERMISSION_PROFILE_TABLE_COLUMN_DEFINITIONS: TableProps.Co
             : e.description
             : "-"
         }`,
+        sortingField: "description",
     },
     {
         id: "updated_on",
         header: "Latest update",
         cell: (e) => `${e.updated_on ? Utils.convertToRelativeTime(new Date(e.updated_on)) : "-"}`,
+        sortingField: "updated_on",
     },
 ];
 

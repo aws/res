@@ -13,6 +13,8 @@ from ideadatamodel import exceptions, constants, errorcodes
 from ideasdk.utils import Utils
 from ideasdk.config.cluster_config_db import ClusterConfigDB
 from ideasdk.config.soca_config import SocaConfig
+from res.constants import GLOBAL_ALLOWED_INSTANCE_TYPES_KEY, MODULE_NAME_VDC
+from res.resources.software_stacks import update_software_stack_allowed_instance_types
 from res.utils import sssd_utils
 from ideasdk.dynamodb.dynamodb_stream_subscriber import DynamoDBStreamSubscriber
 
@@ -150,7 +152,7 @@ class ClusterConfig(SocaConfig, DynamoDBStreamSubscriber):
         value = entry.get('value')
         super().put(key, value)
 
-        if sssd_utils.is_sssd_setting(key):
+        if sssd_utils.is_sssd_setting(key) and self.module_id != self.get_module_id(MODULE_NAME_VDC):
             self.restart_sssd()
 
     def on_update(self, old_entry: Dict, new_entry: Dict):
@@ -163,8 +165,11 @@ class ClusterConfig(SocaConfig, DynamoDBStreamSubscriber):
         value = new_entry.get('value')
         super().put(key, value)
 
-        if sssd_utils.is_sssd_setting(key):
+        if sssd_utils.is_sssd_setting(key) and value != old_entry.get('value') and self.module_id != self.get_module_id(MODULE_NAME_VDC):
             self.restart_sssd()
+
+        if key == GLOBAL_ALLOWED_INSTANCE_TYPES_KEY and self.module_id == self.get_module_id(MODULE_NAME_VDC):
+            update_software_stack_allowed_instance_types(value)
 
     def on_delete(self, entry: Dict):
         log_message = f'config deleted: {Utils.to_json(entry)}'
@@ -205,7 +210,12 @@ class ClusterConfig(SocaConfig, DynamoDBStreamSubscriber):
             return
 
         self.sssd_settings = copy.deepcopy(sssd_settings)
-        sssd_utils.restart_sssd(sssd_settings, self.logger)
+        try:
+            sssd_utils.restart_sssd(sssd_settings, self.logger, self.module_id)
+        except Exception as e:
+            # Avoid throwing exceptions in the long-running application.
+            # The application should continue monitoring and trying to restart SSSD upon SSSD config updates.
+            self.logger.error(f"Failed to restart SSSD: {e}")
 
     def _get_sssd_settings(self) -> Optional[Dict[str, str]]:
         sssd_settings = {}

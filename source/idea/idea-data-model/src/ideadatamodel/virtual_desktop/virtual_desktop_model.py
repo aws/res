@@ -29,7 +29,10 @@ __all__ = (
     'VirtualDesktopPermissionProfile',
     'VirtualDesktopSessionPermission',
     'VirtualDesktopSessionPermissionActorType',
-    'VirtualDesktopSessionBatchResponsePayload'
+    'VirtualDesktopSessionBatchResponsePayload',
+    'VirtualDesktopTenancy',
+    'VirtualDesktopAffinity',
+    'VirtualDesktopPlacement',
 )
 
 from ideadatamodel import SocaBaseModel, SocaMemory, SocaBatchResponsePayload, Project, constants
@@ -100,6 +103,24 @@ class VirtualDesktopSessionPermissionActorType(str, Enum):
     GROUP = 'GROUP'
 
 
+class VirtualDesktopTenancy(str, Enum):
+    DEFAULT = 'default'
+    DEDICATED = 'dedicated'
+    HOST = 'host'
+
+
+class VirtualDesktopAffinity(str, Enum):
+    DEFAULT = 'default'
+    HOST = 'host'
+
+
+class VirtualDesktopPlacement(SocaBaseModel):
+    affinity: Optional[VirtualDesktopAffinity]
+    tenancy: VirtualDesktopTenancy
+    host_id: Optional[str]
+    host_resource_group_arn: Optional[str]
+
+
 class VirtualDesktopSessionScreenshot(SocaBaseModel):
     image_type: Optional[str]
     image_data: Optional[str]
@@ -135,7 +156,10 @@ class VirtualDesktopSoftwareStack(SocaBaseModel):
     min_ram: Optional[SocaMemory]
     architecture: Optional[VirtualDesktopArchitecture]
     gpu: Optional[VirtualDesktopGPU]
+    placement: Optional[VirtualDesktopPlacement]
+    version: Optional[int]
     projects: Optional[List[Project]] = []
+    allowed_instance_types: Optional[List[str]] = []
 
     def __eq__(self, other):
         eq = True
@@ -146,11 +170,17 @@ class VirtualDesktopSoftwareStack(SocaBaseModel):
         eq = eq and self.min_storage == other.min_storage
         eq = eq and self.min_ram == other.min_ram
         eq = eq and self.gpu == other.gpu
+        eq = eq and self.placement == other.placement
 
         self_project_ids = [project.project_id for project in self.projects] if self.projects else []
         other_project_ids = [project.project_id for project in other.projects] if other.projects else []
         eq = eq and len(self_project_ids) == len(other_project_ids)
         eq = eq and all(project_id in self_project_ids for project_id in other_project_ids)
+        
+        self_allowed_instance_types = self.allowed_instance_types if self.allowed_instance_types else []
+        other_allowed_instance_types = other.allowed_instance_types if other.allowed_instance_types else []
+        eq = eq and len(self_allowed_instance_types) == len(other_allowed_instance_types)
+        eq = eq and all(instance_type in self_allowed_instance_types for instance_type in other_allowed_instance_types)
 
         return eq
 

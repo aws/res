@@ -47,11 +47,12 @@ COGNITO_SSO_IDP_PROVIDER_NAME = "identity-provider.cognito.sso_idp_provider_name
 # Constants for AD Sync
 #
 AD_SYNC_LOCK_KEY = "ad-sync-lock"
-AD_SYNC_TASK_DEFINITION = "ad-sync.task_definition"
-AD_SYNC_TASK_CLUSTER = "ad-sync.task_cluster"
-AD_SYNC_SECURITY_GROUP_ID = "ad-sync.security_group_id"
+AD_SYNC_TASK_DEFINITION_KEY = "ad-sync.task_definition"
+AD_SYNC_TASK_CLUSTER_KEY = "ad-sync.task_cluster"
+AD_SYNC_SECURITY_GROUP_ID_KEY = "ad-sync.security_group_id"
 VPC_ID_KEY = "cluster.network.vpc_id"
 
+MODULE_DIRECTORY_SERVICE = "directoryservice"
 AD_CONFIGURATION_REQUIRED_KEYS = [
     "directoryservice.ad_short_name",
     "directoryservice.computers.ou",
@@ -63,6 +64,14 @@ AD_CONFIGURATION_REQUIRED_KEYS = [
     "directoryservice.service_account_credentials_secret_arn",
     "directoryservice.users.ou",
     "directoryservice.sudoers.group_name",
+]
+AD_CONFIGURATION_OPTIONAL_KEYS = [
+    "directoryservice.tls_certificate_secret_arn",
+    "directoryservice.sssd.additional_sssd_configs",
+    "directoryservice.sssd.ldap_id_mapping",
+    "directoryservice.groups_filter",
+    "directoryservice.users_filter",
+    "directoryservice.disable_ad_join",
 ]
 SERVICE_ACCOUNT_USER_DN_KEY = "root_user_dn"
 SERVICE_ACCOUNT_USER_DN_SECRET_ARN_KEY = "root_user_dn_secret_arn"
@@ -112,6 +121,14 @@ SSO_USER_IDP_TYPE = "SSO"
 COGNITO_USER_IDP_TYPE = "Native user"
 
 AD_SYNC_LOCK_TABLE = "ad-sync.distributed-lock"
+AD_SYNC_STATUS_TABLE = "ad-sync.status"
+AD_SYNC_STATUS_TASK_ID_KEY = "id"
+AD_SYNC_STATUS_SUBMISSION_TIME_KEY = "submission_time"
+AD_SYNC_STATUS_UPDATE_TIME_KEY = "update_time"
+AD_SYNC_STATUS_TTL_KEY = "ttl"
+AD_SYNC_STATUS_STATUS_KEY = "status"
+AD_SYNC_STATUS_RECORD_EXPIRE_TIME_IN_SEC = 90 * 24 * 60 * 60
+
 AD_AUTOMATION_TABLE_NAME = "ad-automation"
 AD_AUTOMATION_DB_HASH_KEY = "instance_id"
 AD_AUTOMATION_DB_RANGE_KEY = "nonce"
@@ -132,6 +149,7 @@ SOFTWARE_STACK_DB_RANGE_KEY = "stack_id"
 VDC_LOCK_TABLE_NAME = "vdc.distributed-lock"
 LOCK_DB_HASH_KEY = "lock_key"
 LOCK_DB_RANGE_KEY = "sort_key"
+GLOBAL_ALLOWED_INSTANCE_TYPES_KEY = "vdc.dcv_session.instance_types.allow"
 
 NODE_TYPE_APP = "app"
 
@@ -139,17 +157,20 @@ NODE_TYPE_APP = "app"
 MODULE_ID_VDC = "vdc"
 MODULE_ID_CLUSTER_MANAGER = "cluster-manager"
 MODULE_ID_DIRECTORY_SERVICE = "directoryservice"
+MODULE_ID_VIRTUAL_DESKTOP_APP = "vdi-app"
 
 # Module Names
 MODULE_NAME_VDC = "virtual-desktop-controller"
 MODULE_NAME_CLUSTER_MANAGER = "cluster-manager"
 MODULE_NAME_DIRECTORY_SERVICE = "directoryservice"
+MODULE_NAME_VIRTUAL_DESKTOP_APP = "virtual-desktop-app"
 
 # Module Mapping
 MODULE_ID_NAME_MAPPING = {
     MODULE_ID_VDC: MODULE_NAME_VDC,
     MODULE_ID_CLUSTER_MANAGER: MODULE_NAME_CLUSTER_MANAGER,
     MODULE_ID_DIRECTORY_SERVICE: MODULE_NAME_DIRECTORY_SERVICE,
+    MODULE_NAME_VIRTUAL_DESKTOP_APP: MODULE_ID_VIRTUAL_DESKTOP_APP,
 }
 
 # Constants for Custom Domain

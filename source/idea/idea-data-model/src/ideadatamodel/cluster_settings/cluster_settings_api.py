@@ -20,8 +20,8 @@ __all__ = (
     'UpdateQuicConfigResult',
     'DescribeInstanceTypesRequest',
     'DescribeInstanceTypesResult',
-    'GetAllowedSessionsPerUserRequest',
-    'GetAllowedSessionsPerUserResult',
+    'GetDefaultAllowedSessionsPerUserPerProjectRequest',
+    'GetDefaultAllowedSessionsPerUserPerProjectResult',
     'OPEN_API_SPEC_ENTRIES_CLUSTER_SETTINGS'
 )
 
@@ -69,12 +69,12 @@ class DescribeInstanceTypesResult(SocaPayload):
     instance_types: List[Any]
 
 
-class GetAllowedSessionsPerUserRequest(SocaPayload):
+class GetDefaultAllowedSessionsPerUserPerProjectRequest(SocaPayload):
     pass
 
 
-class GetAllowedSessionsPerUserResult(SocaPayload):
-    allowed_sessions_per_user: Optional[int]
+class GetDefaultAllowedSessionsPerUserPerProjectResult(SocaPayload):
+    default_allowed_sessions_per_user_per_project: Optional[int]
 
 
 # ClusterSettings.UpdateQuic
@@ -116,9 +116,9 @@ OPEN_API_SPEC_ENTRIES_CLUSTER_SETTINGS = [
         is_public=False
     ),
     IdeaOpenAPISpecEntry(
-        namespace='ClusterSettings.GetAllowedSessionsPerUser',
-        request=GetAllowedSessionsPerUserRequest,
-        result=GetAllowedSessionsPerUserResult,
+        namespace='ClusterSettings.GetDefaultAllowedSessionsPerUserPerProject',
+        request=GetDefaultAllowedSessionsPerUserPerProjectRequest,
+        result=GetDefaultAllowedSessionsPerUserPerProjectResult,
         is_listing=False,
         is_public=False
     ),

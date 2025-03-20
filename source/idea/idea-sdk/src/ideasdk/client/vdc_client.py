@@ -17,6 +17,10 @@ from ideadatamodel import exceptions
 from ideadatamodel import (
     ListSessionsRequest,
     ListSessionsResponse,
+    StopSessionRequest,
+    StopSessionResponse,
+    DeleteSessionRequest,
+    DeleteSessionResponse,
     ListSoftwareStackRequest,
     ListSoftwareStackResponse,
     GetBasePermissionsRequest,
@@ -31,6 +35,8 @@ from ideadatamodel import (
     CreateSoftwareStackResponse,
     DeleteSoftwareStackRequest,
     DeleteSoftwareStackResponse,
+    UpdateSoftwareStackRequest,
+    UpdateSoftwareStackResponse,
     GetSoftwareStackInfoResponse,
     VirtualDesktopSoftwareStack,
     VirtualDesktopSession,
@@ -78,6 +84,18 @@ class AbstractVirtualDesktopControllerClient:
 
     @abstractmethod
     def delete_software_stack(self, software_stack: VirtualDesktopSoftwareStack) -> None:
+        ...
+    
+    @abstractmethod
+    def update_software_stack(self, software_stack: VirtualDesktopSoftwareStack) -> VirtualDesktopSoftwareStack:
+        ...
+
+    @abstractmethod
+    def delete_sessions(self, sessions: list[VirtualDesktopSession], force_delete: bool = False) -> None:
+        ...
+        
+    @abstractmethod
+    def stop_sessions(self, sessions: list[VirtualDesktopSession]) -> None:
         ...
 
 
@@ -194,6 +212,40 @@ class VirtualDesktopControllerClient(AbstractVirtualDesktopControllerClient):
                 software_stack=software_stack
             ),
             result_as=DeleteSoftwareStackResponse,
+            access_token=self.get_access_token(),
+        )
+        
+    def update_software_stack(self, software_stack: VirtualDesktopSoftwareStack) -> VirtualDesktopSoftwareStack:
+        result = self.client.invoke_alt(
+            namespace='VirtualDesktopAdmin.UpdateSoftwareStack',
+            payload=UpdateSoftwareStackRequest(
+                software_stack=software_stack
+            ),
+            result_as=UpdateSoftwareStackResponse,
+            access_token=self.get_access_token(),
+        )
+        return result.software_stack
+        
+    def delete_sessions(self, sessions: list[VirtualDesktopSession], force_delete: bool = False) -> None:
+        # Update force field for each session
+        for session in sessions:
+            session.force = force_delete
+        self.client.invoke_alt(
+            namespace="VirtualDesktopAdmin.DeleteSessions",
+            payload=DeleteSessionRequest(
+                sessions=sessions
+            ),
+            result_as=DeleteSessionResponse,
+            access_token=self.get_access_token(),
+        )
+
+    def stop_sessions(self, sessions: list[VirtualDesktopSession]) -> None:
+        result = self.client.invoke_alt(
+            namespace="VirtualDesktopAdmin.StopSessions",
+            payload=StopSessionRequest(
+                sessions=sessions
+            ),
+            result_as=StopSessionResponse,
             access_token=self.get_access_token(),
         )
 

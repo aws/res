@@ -9,6 +9,7 @@
 #  OR CONDITIONS OF ANY KIND, express or implied. See the License for the specific language governing permissions
 #  and limitations under the License.
 
+import json
 import logging
 import os
 
@@ -107,15 +108,11 @@ def pytest_sessionstart(session: pytest.Session) -> None:
     )
     update_alb_invalid_header_drop_flag(session, value="false")
 
-    logger.info("update allowed sessions per user")
+    logger.info("update additional sssd configs")
     res_client(session).update_module_settings(
         UpdateModuleSettingsRequest(
-            module_id="vdc",
-            settings={
-                "dcv_session": {
-                    "allowed_sessions_per_user": str(len(TEST_SOFTWARE_STACKS))
-                }
-            },
+            module_id="directoryservice",
+            settings={"sssd": {"additional_sssd_configs": json.dumps({})}},
         )
     )
 
@@ -127,11 +124,11 @@ def pytest_sessionfinish(session: pytest.Session, exitstatus: int) -> None:
         return
     region: str = session.config.getoption("--aws-region")
 
-    logger.info("update allowed sessions per user")
+    logger.info("update additional sssd configs")
     res_client(session).update_module_settings(
         UpdateModuleSettingsRequest(
-            module_id="vdc",
-            settings={"dcv_session": {"allowed_sessions_per_user": "5"}},
+            module_id="directoryservice",
+            settings={"sssd": {"additional_sssd_configs": json.dumps({})}},
         )
     )
 

@@ -32,7 +32,9 @@ from ideadatamodel import (
     VirtualDesktopArchitecture,
     VirtualDesktopBaseOS,
     VirtualDesktopGPU,
+    VirtualDesktopPlacement,
     VirtualDesktopSoftwareStack,
+    VirtualDesktopTenancy,
     errorcodes,
     exceptions,
 )
@@ -120,10 +122,14 @@ class TestPermissionProfilesTableMerger(unittest.TestCase):
             record_deltas[0].resolved_record.get(db_utils.SOFTWARE_STACK_DB_NAME_KEY)
             == "test_software_stack"
         )
+        assert (
+            record_deltas[0].resolved_record.get(db_utils.SOFTWARE_STACK_DB_VERSION_KEY)
+            == 1
+        )
         assert record_deltas[0].action_performed == MergedRecordActionType.CREATE
         assert create_software_stack_called
 
-    def test_software_stacks_table_resolver_merge_existing_software_stack_succeed(
+    def test_software_stacks_table_resolver_merge_existing_software_stack_without_allowed_instance_types_list_succeed(
         self,
     ):
         create_software_stack_called = False
@@ -157,6 +163,7 @@ class TestPermissionProfilesTableMerger(unittest.TestCase):
                 db_utils.SOFTWARE_STACK_DB_MIN_STORAGE_UNIT_KEY: "gb",
                 db_utils.SOFTWARE_STACK_DB_ARCHITECTURE_KEY: "x86_64",
                 db_utils.SOFTWARE_STACK_DB_GPU_KEY: "NO_GPU",
+                db_utils.SOFTWARE_STACK_DB_VERSION_KEY: 3,
             },
         ]
 
@@ -181,6 +188,95 @@ class TestPermissionProfilesTableMerger(unittest.TestCase):
         assert (
             record_deltas[0].resolved_record.get(db_utils.SOFTWARE_STACK_DB_NAME_KEY)
             == "test_software_stack_dedup_id"
+        )
+        assert (
+            len(
+                record_deltas[0].resolved_record.get(
+                    db_utils.SOFTWARE_STACK_DB_ALLOWED_INSTANCE_TYPES_KEY
+                )
+            )
+            == 0
+        )
+        assert (
+            record_deltas[0].resolved_record.get(db_utils.SOFTWARE_STACK_DB_VERSION_KEY)
+            == 3
+        )
+        assert record_deltas[0].action_performed == MergedRecordActionType.CREATE
+        assert create_software_stack_called
+
+    def test_software_stacks_table_resolver_merge_existing_software_stack_with_allowed_instance_types_list_succeed(
+        self,
+    ):
+        create_software_stack_called = False
+
+        def _create_software_stack_mock(software_stack):
+            nonlocal create_software_stack_called
+            create_software_stack_called = True
+            assert software_stack.name == "test_software_stack_dedup_id"
+            return software_stack
+
+        self.monkeypatch.setattr(
+            self.context.vdc_client,
+            "create_software_stack",
+            _create_software_stack_mock,
+        )
+        self.monkeypatch.setattr(
+            self.context.vdc_client,
+            "get_software_stacks_by_name",
+            lambda _stack_name: [
+                VirtualDesktopSoftwareStack(name="test_software_stack"),
+            ],
+        )
+
+        table_data_to_merge = [
+            {
+                db_utils.SOFTWARE_STACK_DB_NAME_KEY: "test_software_stack",
+                db_utils.SOFTWARE_STACK_DB_BASE_OS_KEY: "amazonlinux2",
+                db_utils.SOFTWARE_STACK_DB_MIN_RAM_VALUE_KEY: 10.0,
+                db_utils.SOFTWARE_STACK_DB_MIN_STORAGE_VALUE_KEY: 10.0,
+                db_utils.SOFTWARE_STACK_DB_MIN_RAM_UNIT_KEY: "gb",
+                db_utils.SOFTWARE_STACK_DB_MIN_STORAGE_UNIT_KEY: "gb",
+                db_utils.SOFTWARE_STACK_DB_ARCHITECTURE_KEY: "x86_64",
+                db_utils.SOFTWARE_STACK_DB_GPU_KEY: "NO_GPU",
+                db_utils.SOFTWARE_STACK_DB_ALLOWED_INSTANCE_TYPES_KEY: ["t3"],
+            },
+        ]
+
+        resolver = SoftwareStacksTableMerger()
+        record_deltas, success = resolver.merge(
+            self.context,
+            table_data_to_merge,
+            "dedup_id",
+            {},
+            ApplySnapshotObservabilityHelper(
+                self.context.logger("software_stacks_table_resolver")
+            ),
+        )
+
+        assert success
+        assert len(record_deltas) == 1
+        assert record_deltas[0].original_record is None
+        assert (
+            record_deltas[0].snapshot_record.get(db_utils.SOFTWARE_STACK_DB_NAME_KEY)
+            == "test_software_stack"
+        )
+        assert (
+            record_deltas[0].resolved_record.get(db_utils.SOFTWARE_STACK_DB_NAME_KEY)
+            == "test_software_stack_dedup_id"
+        )
+        assert (
+            len(
+                record_deltas[0].resolved_record.get(
+                    db_utils.SOFTWARE_STACK_DB_ALLOWED_INSTANCE_TYPES_KEY
+                )
+            )
+            == 1
+        )
+        assert (
+            record_deltas[0].resolved_record[
+                db_utils.SOFTWARE_STACK_DB_ALLOWED_INSTANCE_TYPES_KEY
+            ][0]
+            == "t3"
         )
         assert record_deltas[0].action_performed == MergedRecordActionType.CREATE
         assert create_software_stack_called
@@ -315,6 +411,9 @@ class TestPermissionProfilesTableMerger(unittest.TestCase):
                     architecture=VirtualDesktopArchitecture.X86_64,
                     gpu=VirtualDesktopGPU.NO_GPU,
                     projects=[Project(project_id="project_id")],
+                    placement=VirtualDesktopPlacement(
+                        tenancy=VirtualDesktopTenancy.DEFAULT,
+                    ),
                 ),
             ],
         )

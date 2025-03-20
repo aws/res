@@ -26,6 +26,7 @@ export interface ConfigureProjectState {
     permissionProfiles: Map<string, Role>;
     permissionForProject?: ProjectPermissions;
     budgetNotFound: boolean;
+    default_allowed_sessions_per_user_per_project?: number;
 }
 
 export interface ConfigureProjectProps extends IdeaAppLayoutProps, IdeaSideNavigationProps {
@@ -49,10 +50,27 @@ class ConfigureProject extends Component<ConfigureProjectProps, ConfigureProject
             permissionProfiles: new Map(),
             permissionForProject: state ? state.projectPermission : undefined,
             budgetNotFound: state?.project?.budget == Constants.BUDGET_NOT_FOUND,
+            default_allowed_sessions_per_user_per_project: undefined,
         };
         this.getUsers();
         this.getGroups();
         this.getPermissionProfiles();
+    }
+
+    componentDidMount() {
+        AppContext.get()
+        .getClusterSettingsService()
+        .getVirtualDesktopSettings()
+        .then((settings) => {
+            this.setState({
+                default_allowed_sessions_per_user_per_project:settings?.dcv_session.default_allowed_sessions_per_user_per_project
+            });
+
+            let allowed_sessions_per_user_field = this.getForm()?.getFormField("allowed_sessions_per_user");
+            if (allowed_sessions_per_user_field && !allowed_sessions_per_user_field.getAnyValue()) {
+                allowed_sessions_per_user_field?.setValue(settings?.dcv_session.default_allowed_sessions_per_user_per_project);
+            }
+        });
     }
 
     getDefaultUsers(profileMap: Map<string, Role>): { key: string; value: OptionDefinition; error?: string }[] {
@@ -253,14 +271,14 @@ class ConfigureProject extends Component<ConfigureProjectProps, ConfigureProject
     ): Promise<void> {
       const result = await fetchMethod();
       const listing = result.listing;
-  
+
       if (listing?.length === 0) {
         return;
       }
-  
+
       const ssoItems: T[] = [];
       const cognitoItems: T[] = [];
-  
+
       listing?.forEach((item) => {
         if (item?.identity_source === Constants.SSO_USER_IDP_TYPE) {
           ssoItems.push(item as T);
@@ -268,15 +286,15 @@ class ConfigureProject extends Component<ConfigureProjectProps, ConfigureProject
           cognitoItems.push(item as T);
         }
       });
-  
-      const getLabel = (item: T) => 
-        itemType === 'user' 
+
+      const getLabel = (item: T) =>
+        itemType === 'user'
           ? `${(item as User).username} (${(item as User).uid})`
           : `${(item as Group).name} (${(item as Group).gid})`;
-  
-      const getValue = (item: T) => 
+
+      const getValue = (item: T) =>
         itemType === 'user' ? (item as User).username : (item as Group).name;
-  
+
       const choices = [];
 
       if (ssoItems.length > 0) {
@@ -308,21 +326,21 @@ class ConfigureProject extends Component<ConfigureProjectProps, ConfigureProject
         })
       }
     }
-    
+
     async getUsers(): Promise<void> {
       await this.fetchAndProcessUsersGroupsItems(
         () => this.accounts().listUsers(),
         'user'
       );
     }
-    
+
     async getGroups(): Promise<void> {
       await this.fetchAndProcessUsersGroupsItems(
         () => this.accounts().listGroups(),
         'group'
       );
     }
-    
+
     getAvailableUsersOptionsLength(): number {
       return this.state.availableUsers.reduce((total, user) => {
         return total + (user.options?.length || 0);
@@ -684,8 +702,8 @@ class ConfigureProject extends Component<ConfigureProjectProps, ConfigureProject
     buildScriptsInputParams(osType: string): SocaUserInputParamMetadata[] {
         let formParams: SocaUserInputParamMetadata[] = [];
         let script_event_title_map: { [k:string]: string} = {
-            "on_vdi_start":"Run Script When VDI Starts",
-            "on_vdi_configured": "Run Script when VDI is Configured"
+            "on_vdi_start":"Run script when VDI starts",
+            "on_vdi_configured": "Run script when VDI is configured"
         }
         let script_event_description_map: { [k:string]: string} = {
             "on_vdi_start": "Scripts that execute at the start of a VDI",
@@ -736,6 +754,34 @@ class ConfigureProject extends Component<ConfigureProjectProps, ConfigureProject
                     eq: true,
                 },
                 readonly: !this.isAdmin(),
+          })
+        }
+
+        // TODO: enable this for windows
+        if (osType === "linux") {
+          formParams.push({
+            name: `${osType}_rerun_on_reboot_toggle`,
+            title: "Rerun Script When VDI Reboots",
+            description: "Let scripts execute when a VDI reboots",
+            data_type: "bool",
+            param_type: "confirm",
+            validate: {
+                required: true,
+            },
+            when: {
+              or: [
+                  {
+                      param: `${osType}_on_vdi_start_toggle`,
+                      eq: true
+                  },
+                  {
+                      param: `${osType}_on_vdi_configured_toggle`,
+                      eq: true
+                  }
+              ]
+            },
+            default: false,
+            readonly: !this.isAdmin(),
           })
         }
         return formParams
@@ -856,7 +902,7 @@ class ConfigureProject extends Component<ConfigureProjectProps, ConfigureProject
                                 }
                             })
                         }
-                         else if (request.param === "policy_arns") {
+                        else if (request.param === "policy_arns") {
                             if (!this.isAdmin()) {
                               return Promise.resolve({ listing: [] });
                             }
@@ -886,7 +932,7 @@ class ConfigureProject extends Component<ConfigureProjectProps, ConfigureProject
                                 return {listing: result}
                             })
                         }
-                         else {
+                        else {
                                 return Promise.resolve({
                                     listing: [],
                                 });
@@ -906,7 +952,7 @@ class ConfigureProject extends Component<ConfigureProjectProps, ConfigureProject
                         {
                             name: "title",
                             title: "Title",
-                            description: "Enter a user friendly project title",
+                            description: "Enter a user friendly project title.",
                             data_type: "str",
                             param_type: "text",
                             validate: {
@@ -918,7 +964,7 @@ class ConfigureProject extends Component<ConfigureProjectProps, ConfigureProject
                         {
                             name: "name",
                             title: "Project ID",
-                            description: "Enter a project-id",
+                            description: "Enter a project-id.",
                             help_text: "Project ID can only use lowercase alphabets, numbers, hyphens (-), underscores (_), or periods (.). Must be between 3 and 40 characters long.",
                             data_type: "str",
                             param_type: "text",
@@ -933,7 +979,7 @@ class ConfigureProject extends Component<ConfigureProjectProps, ConfigureProject
                         {
                             name: "description",
                             title: "Description",
-                            description: "Enter the project description",
+                            description: "Enter the project description.",
                             data_type: "str",
                             param_type: "text",
                             multiline: true,
@@ -943,8 +989,24 @@ class ConfigureProject extends Component<ConfigureProjectProps, ConfigureProject
                         ...this.buildAddFileSystemParam(isUpdate),
                         ...this.buildAddHomeDirectoryFileSystemParam(isUpdate),
                         {
+                            name: "allowed_sessions_per_user",
+                            title: "Allowed sessions per user",
+                            description: "Maximum number of sessions a user can launch in this project",
+                            data_type: "int",
+                            param_type: "text",
+                            default: this.state.default_allowed_sessions_per_user_per_project,
+                            multiline: false,
+                            container_group_name: "project_definition",
+                            validate: {
+                                required: true,
+                                min: 1,
+                            },
+                            readonly: !this.isAdmin(),
+                        },
+                        {
                             name: "enable_budgets",
-                            title: "Do you want to enable budgets for this project?",
+                            title: "Enable budget assignment and tracking",
+                            description: "To track budget status in the cost dashboard, specify the budget created in AWS Budgets",
                             data_type: "bool",
                             param_type: "confirm",
                             default: false,
@@ -956,9 +1018,9 @@ class ConfigureProject extends Component<ConfigureProjectProps, ConfigureProject
                         },
                         {
                             name: "budget.budget_name",
-                            title: "Enter the AWS Budgets name for the project",
+                            title: "Budget name",
                             description: this.state.budgetNotFound ? <span style={{color: "red"}}> Budget associated with this project can not be found in the AWS account, please choose another one. </span> : "\n" +
-                                "Select budget name that you have created in AWS budget",
+                                "Select budget name that you have created in AWS Budget",
                             data_type: "str",
                             param_type: "select_or_text",
                             validate: {
@@ -982,10 +1044,11 @@ class ConfigureProject extends Component<ConfigureProjectProps, ConfigureProject
         )
     }
 
-    retrieveScripts(values: any): { [os: string]: { [event: string]: { script_location: string, arguments: string[] }[] } } {
-        const scripts: { [os: string]: { [event: string]: { script_location: string, arguments: string[] }[] } } = {};
+    retrieveScripts(values: any): { [os: string]: { [event: string]: { script_location: string, arguments: string[] }[] | boolean }} {
+        const scripts: { [os: string]: { [event: string]: { script_location: string, arguments: string[] }[] | boolean }} = {};
         const supportedOs = ["windows", "linux"];
         const scriptEvents = ["on_vdi_start", "on_vdi_configured"];
+        const retrunEvent = "rerun_on_reboot"
 
         for (const osType of supportedOs) {
             if (values[osType]) {
@@ -999,6 +1062,7 @@ class ConfigureProject extends Component<ConfigureProjectProps, ConfigureProject
                         }));
                     }
                 }
+                scripts[osType][retrunEvent] = values[`${osType}_${retrunEvent}_toggle`] ? true : false
             }
         }
 
@@ -1007,16 +1071,21 @@ class ConfigureProject extends Component<ConfigureProjectProps, ConfigureProject
 
     reverseScripts(scripts: Scripts): any {
         const values: any = {};
+        const retrunEvent = "rerun_on_reboot"
         if (scripts.windows) {
             values['windows'] = true;
             for (const eventType of Object.keys(scripts.windows) as Array<keyof ScriptEvents>) {
                 const toggleKey = `windows_${eventType}_toggle`;
-                values[toggleKey] = !!scripts.windows[eventType]?.length;
+                if (eventType === retrunEvent) {
+                  values[toggleKey] = scripts.windows[eventType]
+                } else {
+                  values[toggleKey] = !!scripts.windows[eventType]?.length;
+                  values[`windows_${eventType}_scripts`] =  scripts.windows[eventType]?.map(script => ({
+                      key: script.script_location,
+                      value: script.arguments?.join(',') || ''
+                  })) || [];
+                }
 
-                values[`windows_${eventType}_scripts`] =  scripts.windows[eventType]?.map(script => ({
-                    key: script.script_location,
-                    value: script.arguments?.join(',') || ''
-                })) || [];
             }
         }
 
@@ -1024,12 +1093,15 @@ class ConfigureProject extends Component<ConfigureProjectProps, ConfigureProject
             values['linux'] = true;
             for (const eventType of Object.keys(scripts.linux) as Array<keyof ScriptEvents>) {
                 const toggleKey = `linux_${eventType}_toggle`;
-                values[toggleKey] = !!scripts.linux[eventType]?.length;
-
-                values[`linux_${eventType}_scripts`] =  scripts.linux[eventType]?.map(script => ({
-                    key: script.script_location,
-                    value: script.arguments?.join(',') || ''
-                })) || [];
+                if (eventType === retrunEvent) {
+                  values[toggleKey] = scripts.linux[eventType]
+                } else {
+                  values[toggleKey] = !!scripts.linux[eventType]?.length;
+                  values[`linux_${eventType}_scripts`] =  scripts.linux[eventType]?.map(script => ({
+                      key: script.script_location,
+                      value: script.arguments?.join(',') || ''
+                  })) || [];
+                }
             }
         }
 
@@ -1040,10 +1112,6 @@ class ConfigureProject extends Component<ConfigureProjectProps, ConfigureProject
     canSubmit(): boolean {
       if(!this.configureProjectForm.current!.validate()) {
         return false;
-      }
-      if (this.state.attachedGroups.length === 0) {
-          this.getConfigureProjectForm().setError("400", "No groups attached");
-          return false;
       }
       // If we have a new form
       for (const group of this.state.attachedGroups) {
@@ -1120,6 +1188,10 @@ class ConfigureProject extends Component<ConfigureProjectProps, ConfigureProject
             .catch((error) => {
                 this.getConfigureProjectForm().setError(error.errorCode, error.message);
             });
+    }
+
+    getForm() {
+        return this.configureProjectForm.current!;
     }
 
     render() {

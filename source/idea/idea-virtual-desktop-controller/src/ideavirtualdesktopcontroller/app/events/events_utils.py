@@ -144,6 +144,23 @@ class EventsUtils:
             )
         )
 
+    def publish_delete_lock_files_linux_status_event(self, idea_session_id: str, idea_session_owner: str, instance_id: str, status: str, command_id: str, software_stack_id: str):
+        self.context.events_client.publish_event(
+            event=VirtualDesktopEvent(
+                event_group_id=idea_session_id,
+                event_type=VirtualDesktopEventType.DELETE_LOCK_FILES_LINUX_COMMAND_PROGRESS_EVENT,
+                detail={
+                    'idea_session_id': idea_session_id,
+                    'idea_session_owner': idea_session_owner,
+                    'instance_id': instance_id,
+                    'status': status,
+                    'command_id': command_id,
+                    'software_stack_id': software_stack_id,
+                    'timestamp': Utils.current_time_ms()
+                }
+            )
+        )
+
     def publish_resume_session_command_status_event(self, idea_session_id: str, idea_session_owner: str, instance_id: str, status: str, command_id: str):
         self.context.events_client.publish_event(
             event=VirtualDesktopEvent(
@@ -192,11 +209,11 @@ class EventsUtils:
             )
         )
 
-    def publish_validate_dcv_session_creation_event(self, idea_session_id: str, idea_session_owner: str):
+    def publish_validate_dcv_session_ready_event(self, idea_session_id: str, idea_session_owner: str):
         self.context.events_client.publish_event(
             event=VirtualDesktopEvent(
                 event_group_id=idea_session_id,
-                event_type=VirtualDesktopEventType.VALIDATE_DCV_SESSION_CREATION_EVENT,
+                event_type=VirtualDesktopEventType.VALIDATE_DCV_SESSION_READY_EVENT,
                 detail={
                     'idea_session_id': idea_session_id,
                     'idea_session_owner': idea_session_owner,

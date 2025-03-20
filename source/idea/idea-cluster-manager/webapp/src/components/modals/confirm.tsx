@@ -17,6 +17,7 @@ import { Box, Button, Header, Modal, SpaceBetween } from "@cloudscape-design/com
 export interface IdeaConfirmProps {
     title: string;
     confirmLabel?: string;
+    confirmButtonDisabled?: boolean;
     onConfirm?: () => void;
     cancelLabel?: string;
     onCancel?: () => void;
@@ -89,6 +90,7 @@ class IdeaConfirm extends Component<IdeaConfirmProps, IdeaConfirmState> {
                             </Button>
                             <Button
                                 variant="primary"
+                                disabled={this.props.confirmButtonDisabled}
                                 onClick={() => {
                                     this.hide();
                                     if (this.props.onConfirm) {

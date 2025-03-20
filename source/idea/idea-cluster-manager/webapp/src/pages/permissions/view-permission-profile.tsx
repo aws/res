@@ -10,7 +10,7 @@ import { AppContext } from "../../common";
 import { CopyToClipBoard } from "../../components/common";
 import IdeaTabs from "../../components/tabs";
 import Utils from "../../common/utils";
-import IdeaTable from "../../components/table";
+import { IdeaTableRef } from "../../components/table/table";
 import { Constants } from "../../common/constants";
 
 export interface PermissionProfilesViewProps extends IdeaAppLayoutProps, IdeaSideNavigationProps { }
@@ -28,7 +28,7 @@ export interface PermissionProfilesViewState {
 }
 
 class PermissionProfilesView extends Component<PermissionProfilesViewProps, PermissionProfilesViewState> {
-  listing: RefObject<IdeaTable>;
+  listing: RefObject<IdeaTableRef>;
 
   constructor(props: PermissionProfilesViewProps) {
     super(props);
@@ -74,7 +74,7 @@ class PermissionProfilesView extends Component<PermissionProfilesViewProps, Perm
     return AppContext.get().client().projects();
   }
 
-  getListing(): IdeaTable {
+  getListing(): IdeaTableRef {
     return this.listing.current!;
   }
 

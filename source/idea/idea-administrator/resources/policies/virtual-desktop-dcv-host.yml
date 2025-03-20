@@ -54,19 +54,22 @@ Statement:
     Effect: Allow
 
   - Action:
-      - dynamodb:GetItem
+      - kinesis:ListShards
+      - kinesis:GetRecords
+      - kinesis:GetShardIterator
     Resource:
-      {{ context.utils.to_yaml(context.arns.cluster_config_ddb_arn) | indent(6) }}
+      - '{{ context.arns.get_ddb_table_stream_arn("cluster-settings") }}'
     Effect: Allow
-    Condition:
-      ForAllValues:StringLike:
-        dynamodb:LeadingKeys:
-          - global-settings.package_config.*
-          - global-settings.gpu_settings.*
-          - cluster-manager.host_modules.*
-          - vdc.dcv_session.*
-          - vdc.vdi_helper_api_gateway_url
-          - identity-provider.cognito.enable_native_user_login
+  
+  - Action:
+      - dynamodb:GetItem
+      - dynamodb:Scan
+      - dynamodb:DescribeTable
+    Resource:
+      - '{{ context.arns.get_ddb_table_arn("cluster-settings") }}'
+      - '{{ context.arns.get_ddb_table_arn("cluster-settings/stream/*") }}'
+      - '{{ context.arns.get_ddb_table_arn("modules") }}'
+    Effect: Allow
 
   - Action:
       - execute-api:Invoke

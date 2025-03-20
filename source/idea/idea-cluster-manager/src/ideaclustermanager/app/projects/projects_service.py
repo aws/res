@@ -9,7 +9,7 @@
 #  OR CONDITIONS OF ANY KIND, express or implied. See the License for the specific language governing permissions
 #  and limitations under the License.
 
-from ideadatamodel import exceptions, errorcodes, constants
+from ideadatamodel import exceptions, errorcodes, constants, SocaSortOrder
 from ideadatamodel import (
     CreateProjectRequest,
     CreateProjectResult,
@@ -38,6 +38,7 @@ from ideasdk.client.vdc_client import AbstractVirtualDesktopControllerClient
 from ideaclustermanager.app.projects.db.projects_dao import ProjectsDAO
 from ideaclustermanager.app.authz.db.role_assignments_dao import RoleAssignmentsDAO
 from ideaclustermanager.app.accounts.accounts_service import AccountsService
+from ideaclustermanager.app.app_utils import ClusterManagerUtils
 
 from typing import List, Set
 
@@ -76,6 +77,9 @@ class ProjectsService:
 
         if Utils.is_empty(project.name):
             raise exceptions.invalid_params('project.name is required')
+
+        if project.allowed_sessions_per_user is not None and request.project.allowed_sessions_per_user <= 0:
+            raise exceptions.invalid_params("Allowed sessions per user must be greater than zero")
 
         existing = self.projects_dao.get_project_by_name(project.name)
         if existing is not None:
@@ -135,6 +139,7 @@ class ProjectsService:
         """
         Delete a Project
         validate required fields, remove the project from DynamoDB and Cache.
+        Also remove the virtual desktop sessions and update software stacks.
         :param request: DeleteProjectRequest
         :param access_token: access token used for this request
         :param api_authorization: authorization for this request
@@ -153,15 +158,16 @@ class ProjectsService:
             project_id = self.projects_dao.convert_from_db(project).project_id
             sessions_by_project_id = self.vdc_client.list_sessions_by_project_id(project_id)
             if sessions_by_project_id:
-                session_ids_by_project_id = [session.dcv_session_id for session in sessions_by_project_id]
-                raise exceptions.general_exception(f'project is still used by virtual desktop sessions. '
-                                                   f'Project ID: {project_id}, Session IDs: {session_ids_by_project_id}')
+                self.vdc_client.delete_sessions(sessions=sessions_by_project_id, force_delete=True)
 
             software_stacks_by_project_id = self.vdc_client.list_software_stacks_by_project_id(project_id)
             if software_stacks_by_project_id:
-                stack_ids_by_project_id = [software_stack.stack_id for software_stack in software_stacks_by_project_id]
-                raise exceptions.general_exception(f'project is still used by software stacks. '
-                                                   f'Project ID: {project_id}, Stack IDs: {stack_ids_by_project_id}')
+                    for stack in software_stacks_by_project_id:
+                        updated_projects = [p for p in stack.projects if p.project_id != project_id]
+                        stack.projects = updated_projects
+                        self.vdc_client.update_software_stack(
+                            software_stack=stack
+                        )
 
             role_assignments = self.role_assignments_dao.list_role_assignments(resource_key=f"{project_id}:project")
             for role_assignment in role_assignments:
@@ -322,6 +328,11 @@ class ProjectsService:
                 error_code=errorcodes.PROJECT_NOT_FOUND,
                 message='project not found'
             )
+
+        project_id = self.projects_dao.convert_from_db(project).project_id
+        sessions_by_project_id = self.vdc_client.list_sessions_by_project_id(project_id)
+        if sessions_by_project_id:
+            self.vdc_client.stop_sessions(sessions_by_project_id)
         self.projects_dao.update_project({
             'project_id': project['project_id'],
             'enabled': False
@@ -330,8 +341,28 @@ class ProjectsService:
         return DisableProjectResult()
 
     def list_projects(self, request: ListProjectsRequest) -> ListProjectsResult:
-        return self.projects_dao.list_projects(request)
-
+        list_projects_result = self.projects_dao.list_projects(request)
+        for project in list_projects_result.listing:
+            if project.is_budgets_enabled():
+                try:
+                    budget = self.context.aws_util().budgets_get_budget(
+                        budget_name=project.budget.budget_name
+                    )
+                    project.budget = budget
+                except exceptions.SocaException as e:
+                    if e.error_code == errorcodes.BUDGET_NOT_FOUND:
+                        project.budget = errorcodes.BUDGET_NOT_FOUND
+                    else:
+                        raise e
+        sort_by_key = request.sort_by.key if request.sort_by and request.sort_by.key else None
+        sort_by_order = request.sort_by.order if request.sort_by and request.sort_by.order else None
+        if sort_by_key == constants.PROJECT_SORT_BY_BUDGET_SPENT:
+            sort = True if sort_by_order == SocaSortOrder.DESC else (False if sort_by_order == SocaSortOrder.ASC else True)
+            list_projects_result.listing.sort(key=lambda project: ClusterManagerUtils.get_project_budget_spent_percentage(project.budget) if project.is_budgets_enabled() else 0, reverse=sort)
+        if sort_by_key == constants.PROJECT_SORT_BY_ALPHABETICAL:
+            sort = True if sort_by_order == SocaSortOrder.DESC else (False if sort_by_order == SocaSortOrder.ASC else False)
+            list_projects_result.listing.sort(key=lambda project: project.name, reverse=sort)
+        return list_projects_result
     def remove_projects_from_group(self, project_ids: List[str], group_name: str, force: bool):
         """
         remove multiple projects from a group

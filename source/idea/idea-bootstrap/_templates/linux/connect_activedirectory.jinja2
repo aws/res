@@ -10,6 +10,7 @@ AD_SUDOERS_GROUP_NAME_ESCAPED="{{ context.config.get_string('directoryservice.su
 SSSD_LDAP_ID_MAPPING="{{ context.config.get_bool('directoryservice.sssd.ldap_id_mapping', default=True) | lower }}"
 AD_TLS_CERTIFICATE_SECRET_ARN="{{context.config.get_string('directoryservice.tls_certificate_secret_arn', default='')}}"
 AD_LDAP_BASE="{{context.config.get_string('directoryservice.ldap_base', required=True)}}"
+ADDITIONAL_AD_CONFIGS="{{context.config.get_string('directoryservice.sssd.additional_sssd_configs', required=True).replace('"', '\\"')}}"
 
 ROOT_USER_DN_SECRET_ARN="{{ context.config.get_string('directoryservice.root_user_dn_secret_arn', required=True) }}"
 ROOT_USER_DN=$(get_secret "${ROOT_USER_DN_SECRET_ARN}")
@@ -27,27 +28,12 @@ else
   enumerate_value=False
 fi
 
-if [[ -f /etc/sssd/sssd.conf ]]; then
-  cp /etc/sssd/sssd.conf /etc/sssd/sssd.conf.orig
+sssd_config_file="/etc/sssd/sssd.conf"
+if [[ -f $sssd_config_file ]]; then
+  cp $sssd_config_file $sssd_config_file.orig
 fi
 
-echo -e "[sssd]
-domains = ${AD_DOMAIN_NAME}
-config_file_version = 2
-services = nss, pam
-
-[nss]
-homedir_substring = /home/
-
-[pam]
-
-[autofs]
-
-[ssh]
-
-[secrets]
-
-[domain/${AD_DOMAIN_NAME}]
+echo -e "[domain/${AD_DOMAIN_NAME}]
 id_provider = ldap
 auth_provider = ldap
 sudo_provider = none
@@ -83,11 +69,38 @@ ldap_id_mapping = ${SSSD_LDAP_ID_MAPPING}
 cache_credentials = true
 
 default_shell = /bin/bash
-fallback_homedir = ${RES_CLUSTER_HOME_DIR}/%u
+fallback_homedir = ${RES_CLUSTER_HOME_DIR}/%u" > $sssd_config_file
 
-" > /etc/sssd/sssd.conf
+echo -e $ADDITIONAL_AD_CONFIGS | jq -r 'to_entries[][]' | while read -r key ; do
+    read -r value
+    if grep -q "^$key = " "$sssd_config_file"; then
+        # If the key exists, override the value
+        sed -i "s/^$key = .*/$key = $value/" "$sssd_config_file"
+    else
+        # If the key doesn't exist, append the new key-value pair
+        echo -e "$key = $value" >> $sssd_config_file
+    fi
+done
 
-chmod 600 /etc/sssd/sssd.conf
+echo -e "[sssd]
+domains = ${AD_DOMAIN_NAME}
+config_file_version = 2
+services = nss, pam
+
+[nss]
+homedir_substring = /home/
+
+[pam]
+
+[autofs]
+
+[ssh]
+
+[secrets]
+
+$(cat $sssd_config_file)" > $sssd_config_file
+
+chmod 600 $sssd_config_file
 
 # Place obfuscated password in the sssd.conf file.
 # Executing the sss_obfuscate command removes the ldap_auth_disable_tls_never_use_in_production setting in sssd
@@ -106,9 +119,7 @@ EOD
 
 if [[ "${AD_TLS_CERTIFICATE_SECRET_ARN}" == '' ]]; then
   # Adding the ldap_auth_disable_tls_never_use_in_production setting back into the file under sssd/domain section
-  echo -e "
-ldap_auth_disable_tls_never_use_in_production = true
-" >> /etc/sssd/sssd.conf
+  echo -e "ldap_auth_disable_tls_never_use_in_production = true" >> $sssd_config_file
 fi
 
 if [[ $RES_BASE_OS =~ ^(amzn2|rhel8|rhel9)$ ]]; then

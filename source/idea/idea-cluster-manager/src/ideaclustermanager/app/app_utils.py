@@ -9,8 +9,11 @@
 #  OR CONDITIONS OF ANY KIND, express or implied. See the License for the specific language governing permissions
 #  and limitations under the License.
 
-from ideasdk.utils import EnvironmentUtils
 import os
+
+from ideasdk.utils import EnvironmentUtils
+
+from ideadatamodel import AwsProjectBudget
 
 
 class ClusterManagerUtils:
@@ -23,3 +26,8 @@ class ClusterManagerUtils:
     @staticmethod
     def get_email_template_defaults_file() -> str:
         return os.path.join(ClusterManagerUtils.get_app_deploy_dir(), 'resources', 'defaults', 'email_templates.yml')
+    
+    def get_project_budget_spent_percentage(budget: AwsProjectBudget) -> int:
+        if not budget.actual_spend or not budget.budget_limit:
+            return 0
+        return budget.actual_spend.amount/budget.budget_limit.amount

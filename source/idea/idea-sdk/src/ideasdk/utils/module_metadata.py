@@ -37,7 +37,8 @@ MODULE_METADATA = [
     ModuleMetadata(name=constants.MODULE_CLUSTER_MANAGER, title='Cluster Manager', type=constants.MODULE_TYPE_APP, deployment_priority=5),
     ModuleMetadata(name=constants.MODULE_VIRTUAL_DESKTOP_CONTROLLER, title='eVDI', type=constants.MODULE_TYPE_APP, deployment_priority=6),
     ModuleMetadata(name=constants.MODULE_SCHEDULER, title='Scale-Out Computing', type=constants.MODULE_TYPE_APP, deployment_priority=6),
-    ModuleMetadata(name=constants.MODULE_BASTION_HOST, title='Bastion Host', type=constants.MODULE_TYPE_STACK, deployment_priority=7)
+    ModuleMetadata(name=constants.MODULE_BASTION_HOST, title='Bastion Host', type=constants.MODULE_TYPE_STACK, deployment_priority=7),
+    ModuleMetadata(name=constants.MODULE_VIRTUAL_DESKTOP_APP, title='eVDI Application', type=constants.MODULE_TYPE_APP, deployment_priority=7)
 ]
 
 

@@ -189,7 +189,7 @@ class AccountsService:
         if Utils.is_empty(password):
             raise exceptions.invalid_params('password is required')
 
-        username, domain = request.email.split('@')
+        username = request.email.split('@')[0].replace('.', '')
         if not re.match(constants.COGNITO_USERNAME_REGEX, username):
             raise exceptions.invalid_params(constants.COGNITO_USERNAME_ERROR_MESSAGE)
 
@@ -223,7 +223,7 @@ class AccountsService:
         if Utils.is_empty(confirmation_code):
             raise exceptions.invalid_params('confirmation code is required')
 
-        username, domain = request.email.split('@')
+        username = request.email.split('@')[0].replace('.', '')
         if not re.match(constants.COGNITO_USERNAME_REGEX, username):
             raise exceptions.invalid_params(constants.COGNITO_USERNAME_ERROR_MESSAGE)
 

@@ -331,6 +331,14 @@ class Proxy(Construct):
                 ],
             )
         )
+        proxy_lambda.add_to_role_policy(
+            aws_cdk.aws_iam.PolicyStatement(
+                actions=["ce:GetCostAndUsage", "ce:GetTags"],
+                resources=[
+                    f"arn:{aws_cdk.Aws.PARTITION}:billing::{aws_cdk.Aws.ACCOUNT_ID}:billingview/primary",
+                ],
+            )
+        )
         proxy_lambda.apply_removal_policy(aws_cdk.RemovalPolicy.RETAIN)
         return proxy_lambda
 
@@ -360,6 +368,10 @@ class Proxy(Construct):
             aws_iam.PolicyStatement(
                 actions=[
                     "budgets:ViewBudget",
+                    "ce:GetTags",
+                    "ce:GetCostAndUsage",
+                    "ce:ListCostAllocationTags",
+                    "ce:UpdateCostAllocationTagsStatus",
                     "fsx:DescribeFileSystems",
                     "elasticfilesystem:DescribeFileSystems",
                     "ec2:DescribeInstances",

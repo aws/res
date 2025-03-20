@@ -43,6 +43,7 @@ class ActiveDirectoryClientOptions(BaseModel):
     tls_certificate_secret_arn: Optional[str]
     service_account_dn_secret_arn: Optional[str]
     sssd_ldap_id_mapping: Optional[str]
+    additional_sssd_configs: Optional[str]
 
 
 def get_active_directory_client_options() -> ActiveDirectoryClientOptions:
@@ -72,6 +73,9 @@ def get_active_directory_client_options() -> ActiveDirectoryClientOptions:
         ),
         sssd_ldap_id_mapping=(
             settings.get("directoryservice.sssd.ldap_id_mapping", "false").lower()
+        ),
+        additional_sssd_configs=(
+            settings.get("directoryservice.sssd.additional_sssd_configs", "{}")
         ),
     )
 

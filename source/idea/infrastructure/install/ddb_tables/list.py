@@ -4,6 +4,7 @@
 from typing import List, Optional
 
 import aws_cdk.aws_dynamodb as _dynamodb
+import aws_cdk.aws_lambda as lambda_
 import orjson
 import res.constants as constants  # type: ignore
 from aws_cdk.aws_dynamodb import (
@@ -34,6 +35,7 @@ class RESDDBTable(BaseModel):
     table_props: TableProps
     global_secondary_indexes_props: Optional[List[GlobalSecondaryIndexProps]]
     enable_kinesis_stream: bool = False
+    enable_table_event_handler_lambda: bool = False
 
     class Config:
         arbitrary_types_allowed = True
@@ -49,6 +51,7 @@ cluster_settings_table: RESDDBTable = RESDDBTable(
         ),
     ),
     enable_kinesis_stream=True,
+    enable_table_event_handler_lambda=True,
 )
 
 modules_table: RESDDBTable = RESDDBTable(

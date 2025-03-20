@@ -38,6 +38,7 @@ sssd:
   # Note that this can have consequences when using systems that do not understand ID mapping.
   # For further details about ID mapping and the ldap_id_mapping parameter, see the sssd-ldap(8) man page.
   ldap_id_mapping: "{{ enable_ldap_id_mapping | lower }}"
+  additional_sssd_configs: "{}"
 
 ad_automation:
   # time to live - for the ad-automation DDB table entry containing OTP and any other attributes

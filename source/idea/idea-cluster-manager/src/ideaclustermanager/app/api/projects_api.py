@@ -12,8 +12,6 @@ from typing import List
 
 import ideaclustermanager
 
-from ideadatamodel.errorcodes import BUDGET_NOT_FOUND
-from ideadatamodel.exceptions import SocaException
 from ideadatamodel.shared_filesystem import FileSystem
 
 from ideasdk.api import ApiInvocationContext, BaseAPI
@@ -125,19 +123,9 @@ class ProjectsAPI(BaseAPI):
 
     def list_projects(self, context: ApiInvocationContext):
         request = context.get_request_payload_as(ListProjectsRequest)
+        if request.sort_by and request.sort_by.key and request.sort_by.key not in constants.VALID_LIST_PROJECTS_SORT_BY_ARGUMENT:
+            raise exceptions.invalid_params('Invalid sort_by argument')
         result = self.context.projects.list_projects(request)
-        for project in result.listing:
-            if project.is_budgets_enabled():
-                try:
-                    budget = self.context.aws_util().budgets_get_budget(
-                        budget_name=project.budget.budget_name
-                    )
-                    project.budget = budget
-                except SocaException as e:
-                    if e.error_code == BUDGET_NOT_FOUND:
-                        project.budget = BUDGET_NOT_FOUND
-                    else:
-                        raise e
         context.success(result)
 
     def get_user_projects(self, context: ApiInvocationContext):

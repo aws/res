@@ -118,5 +118,6 @@ local PYTHON_TGZ=$($AWS dynamodb get-item \
 }
 ensure_dependencies
 install_python
+${ALIAS_PREFIX}_python -m pip install --upgrade pip==23.2.1
 # End Install Python
 

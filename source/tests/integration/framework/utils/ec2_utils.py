@@ -9,10 +9,13 @@
 #  OR CONDITIONS OF ANY KIND, express or implied. See the License for the specific language governing permissions
 #  and limitations under the License.
 
+import logging
 from typing import Any, Dict
 
 import boto3
 import pytest
+
+logger = logging.getLogger(__name__)
 
 
 def cluster_manager_instances(session: pytest.Session) -> list[Dict[str, Any]]:
@@ -56,3 +59,12 @@ def _all_in_service_instances_from_asgs(
         ]
 
     return instances
+
+
+def deregister_ami(image_id: str) -> bool:
+    try:
+        boto3.client("ec2").deregister_image(ImageId=image_id)
+        return True
+    except Exception as e:
+        logger.info(f"Error deregistering AMI {image_id}: {e}")
+        return False

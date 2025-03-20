@@ -687,7 +687,14 @@ class MyVirtualDesktopSessions extends Component<MyVirtualDesktopSessionsProps, 
             })
             .then((result) => {
                 if (result.failed && result.failed.length > 0) {
-                    //TODO: error. Maybe banner ??
+                    this.props.onFlashbarChange({
+                        items: [{
+                            type: "error",
+                            content: result.failed[0].failure_reason,
+                            dismissible: true,
+                        }],
+                    });
+                    return false;
                 }
                 return this.setSessions(result.success);
             });
@@ -1134,6 +1141,7 @@ class MyVirtualDesktopSessions extends Component<MyVirtualDesktopSessionsProps, 
                                         if (changeEvent.detail.checked) {
                                             intervalId = setInterval(() => this.refreshSessions(), AUTO_REFRESH_TIME_IN_MS);
                                         } else {
+                                            // @ts-ignore: Object is possibly 'null'.
                                             clearInterval(this.state.autoRefreshIntervalId);
                                         }
                                         this.setState({
@@ -1176,7 +1184,7 @@ class MyVirtualDesktopSessions extends Component<MyVirtualDesktopSessionsProps, 
                                         this.showCreateSessionForm();
                                     }}
                                 >
-                                    Launch New Virtual Desktop
+                                    Launch new virtual desktop
                                 </Button>
                             </SpaceBetween>
                         }
@@ -1279,7 +1287,7 @@ class MyVirtualDesktopSessions extends Component<MyVirtualDesktopSessionsProps, 
                         <Box padding={{ top: "xxxl", bottom: "s" }} variant="p" color="inherit">
                             Click the button below to create a new virtual desktop.
                         </Box>
-                        <Button disabled={!this.canCreateSession()} onClick={() => this.showCreateSessionForm()}>Launch New Virtual Desktop</Button>
+                        <Button disabled={!this.canCreateSession()} onClick={() => this.showCreateSessionForm()}>Launch new virtual desktop</Button>
                     </Box>
                 }
                 items={getSessions()}

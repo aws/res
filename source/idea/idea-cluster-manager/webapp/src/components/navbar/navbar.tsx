@@ -266,11 +266,6 @@ class IdeaNavbar extends Component<IdeaNavbarProps, IdeaNavbarState> {
                             iconName: "notification",
                             ariaLabel: "Notifications",
                             badge: hasNotifications,
-                            onItemClick: (event) => {
-                                if (event.detail.id === "password-expiration") {
-                                    AppContext.get().routeTo("/home/account-settings");
-                                }
-                            },
                             items: getNotifications(),
                         },
                         {
@@ -286,8 +281,6 @@ class IdeaNavbar extends Component<IdeaNavbarProps, IdeaNavbarState> {
                             onItemClick: (event) => {
                                 if (event.detail.id === "signout") {
                                     this.invokeLogout();
-                                } else if (event.detail.id === "account-settings") {
-                                    AppContext.get().routeTo("/home/account-settings");
                                 } else if (event.detail.id === "preferences") {
                                     this.setState(
                                         {
@@ -300,7 +293,6 @@ class IdeaNavbar extends Component<IdeaNavbarProps, IdeaNavbarState> {
                                 }
                             },
                             items: [
-                                { id: "account-settings", text: "Account Settings" },
                                 { id: "preferences", text: "Preferences" },
                                 {
                                     id: "support-group",

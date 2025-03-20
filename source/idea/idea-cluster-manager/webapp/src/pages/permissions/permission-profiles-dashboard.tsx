@@ -68,21 +68,25 @@ class PermissionProfilesDashboard extends Component<PermissionProfilesProps, Per
       id: "role_id",
       header: "Role ID",
       cell: (role) => <Link href={`/#/cluster/permissions/project-roles/${role.role_id}`}>{role.role_id}</Link>,
+      sortingField: "role_id",
     },
     {
       id: "name",
       header: "Role name",
       cell: (role) => role.name,
+      sortingField: "name",
     },
     {
       id: "description",
       header: "Description",
       cell: (role) => role.description || "-",
+      sortingField: "description",
     },
     {
       id: "latestUpdate",
       header: "Latest update",
       cell: (role) => `${role.updated_on ? Utils.convertToRelativeTime(Number(role.updated_on)) : "-"}`,
+      sortingField: "updated_on",
     },
     {
       id: "affectedProjects",
@@ -98,6 +102,7 @@ class PermissionProfilesDashboard extends Component<PermissionProfilesProps, Per
       >
         {this.state.affectedProjects.get(role.role_id) ?? "0"}
       </Link>,
+      sortingComparator: (a, b) => (this.state.affectedProjects.get(a.role_id) ?? 0) - (this.state.affectedProjects.get(b.role_id) ?? 0),
     },
   ];
 

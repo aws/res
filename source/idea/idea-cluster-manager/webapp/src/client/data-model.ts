@@ -48,13 +48,15 @@ export type VirtualDesktopBaseOS = "amazonlinux2" | "rhel8" | "rhel9" | "windows
 export type SocaMemoryUnit = "bytes" | "kib" | "mib" | "gib" | "tib" | "kb" | "mb" | "gb" | "tb";
 export type VirtualDesktopArchitecture = "x86_64" | "arm64";
 export type VirtualDesktopGPU = "NO_GPU" | "NVIDIA" | "AMD";
+export type VirtualDesktopAffinity = "default" | "host";
+export type VirtualDesktopTenancy = "default" | "dedicated" | "host";
 export type SocaSortOrder = "asc" | "desc";
 export type SocaQueueMode = "fifo" | "fairshare" | "license-optimized";
 export type SocaScalingMode = "single-job" | "batch";
 export type SocaSpotAllocationStrategy = "capacity-optimized" | "lowest-price" | "diversified";
 export type SocaJobState = "transition" | "queued" | "held" | "waiting" | "running" | "exit" | "subjob_expired" | "subjob_begun" | "moved" | "finished" | "suspended";
 export type SocaCapacityType = "on-demand" | "spot" | "mixed";
-export type VirtualDesktopSessionType = "CONSOLE" | "VIRTUAL";
+export type VirtualDesktopSessionType = "CONSOLE" | "VIRTUAL" | undefined;
 export type VirtualDesktopSessionState = "PROVISIONING" | "CREATING" | "INITIALIZING" | "READY" | "RESUMING" | "STOPPING" | "STOPPED" | "STOPPED_IDLE" | "ERROR" | "DELETING" | "DELETED";
 export type DayOfWeek = "monday" | "tuesday" | "wednesday" | "thursday" | "friday" | "saturday" | "sunday";
 export type VirtualDesktopScheduleType = "WORKING_HOURS" | "STOP_ALL_DAY" | "START_ALL_DAY" | "CUSTOM_SCHEDULE" | "NO_SCHEDULE";
@@ -235,6 +237,7 @@ export interface SocaUserInputParamMetadata {
     custom_error_message?: string;
     container_group_name?: string;
     attributes_editor_type?: string;
+    triggerVariant?: string;
 }
 export interface SocaUserInputValidate {
     eq?: unknown;
@@ -374,6 +377,7 @@ export interface Project {
     title?: string;
     description?: string;
     enabled?: boolean;
+    allowed_sessions_per_user?: number;
     ldap_groups?: string[];
     users?: string[];
     enable_budgets?: boolean;
@@ -394,6 +398,7 @@ export interface Scripts {
 export interface ScriptEvents {
     on_vdi_start?: Script[];
     on_vdi_configured?: Script[];
+    rerun_on_reboot?: boolean;
 }
 
 export interface Script {
@@ -510,7 +515,15 @@ export interface VirtualDesktopSoftwareStack {
     min_ram?: SocaMemory;
     architecture?: VirtualDesktopArchitecture;
     gpu?: VirtualDesktopGPU;
+    placement?: VirtualDesktopPlacement;
     projects?: Project[];
+    allowed_instance_types?: string[];
+}
+export interface VirtualDesktopPlacement {
+    affinity?: VirtualDesktopAffinity;
+    tenancy?: VirtualDesktopTenancy;
+    host_id?: string;
+    host_resource_group_arn?: string;
 }
 export interface SocaMemory {
     value: number;
@@ -696,6 +709,125 @@ export interface Budget {
 }
 export interface ListBudgetsResult {
     Budgets: Budget[];
+}
+
+export interface CostExplorerGetTagsRequest {
+    TimePeriod: {
+        Start: string;
+        End: string;
+    };
+    MaxResults?: number;
+    TagKey?: string;
+    SortBy?: {
+        Key: string;
+        SortOrder: 'ASCENDING' |'DESCENDING';
+    }[];
+    Filter?: {
+        Tags?: {
+            Key: string;
+            Values: string[];
+        };
+        Not?: any;
+    }
+}
+export interface CostExplorerGetTagsResult {
+    NextPageToken?: string;
+    Tags: string[];
+    ReturnSize?: number;
+    TotalSize?: number;
+}
+
+export interface GetCostAndUsageRequest {
+    Granularity: 'DAILY' | 'MONTHLY' | 'HOURLY';
+    GroupBy: {
+        Key: string;
+        Type: 'DIMENSION' | 'TAG';
+    }[];
+    Metrics: ['UnblendedCost'];
+    TimePeriod: {
+        Start: string;
+        End: string;
+    };
+    Filter?: {
+        And?: any;
+        Not?: any;
+        Or?: {
+            Tags?: {
+                Key: string;
+                Values: string[];
+            };
+        }[];
+        Tags?: {
+            Key: string;
+            Values: string[];
+        };
+    };
+    NextPageToken?: string;
+}
+
+export interface GetCostAndUsageResult {
+    GroupDefinitions?: {
+        Type: 'DIMENSION' | 'TAG' | 'COST_CATEGORY';
+        Key: string;
+    };
+    ResultsByTime: {
+        TimePeriod: {
+            Start: string;
+            End: string;
+        };
+        Total: {
+            [metric: string]: {
+                Amount: string;
+                Unit: string;
+            };
+        };
+        Groups: {
+            Keys: string[];
+            Metrics: {
+                [metric: string]: {
+                    Amount: string;
+                    Unit: string;
+                };
+            };
+        }[];
+    }[];
+    DimensionValueAttributes: {
+        Value: string;
+        Attributes: {
+            [key: string]: string;
+        };
+    }[];
+    NextPageToken?: string;
+}
+export interface ListCostAllocationTagsRequest {
+    MaxResults?: number;
+    NextToken?: string;
+    Status?: "Active" | "Inactive";
+    TagKeys?: string[];
+    Type?: "AWSGenerated" | "UserDefined";
+}
+export interface ListCostAllocationTagsResult {
+    CostAllocationTags: {
+        LastUpdatedDate: string;
+        LastUsedDate: string;
+        Status: string;
+        TagKey: string;
+        Type: string;
+    }[];
+    NextToken?: string;
+}
+export interface UpdateCostAllocationTagsStatusRequest {
+    CostAllocationTagsStatus: {
+        Status: "Active" | "Inactive";
+        TagKey: string;
+    }[];
+}
+export interface UpdateCostAllocationTagsStatusResult {
+    Errors: {
+        Code: string;
+        Message: string;
+        TagKey: string;
+    }[];
 }
 export interface EFS {
     FileSystemId: string;
@@ -1612,9 +1744,10 @@ export enum UpdateModuleSettingsValuesDCVSession {
     CPU_UTILIZATION_THRESHOLD = "cpu_utilization_threshold",
     ENFORCE_SCHEDULE = 'enforce_schedule',
     TRANSITION_STATE = 'transition_state',
-    ALLOWED_SESSIONS_PER_USER = "allowed_sessions_per_user",
+    DEFAULT_ALLOWED_SESSIONS_PER_USER_PER_PROJECT = "default_allowed_sessions_per_user_per_project",
     MAX_ROOT_VOLUME_MEMORY = "max_root_volume_memory",
     ALLOWED_INSTANCE_TYPES = "instance_types.allow",
+    DEFAULT_DCV_SESSION_TYPE= "default_dcv_session_type"
 }
 
 export type UpdateModuleSettingsVDC = {
@@ -1676,6 +1809,7 @@ export type UpdateModuleSettingsDirectoryService = {
     }
     sssd: {
         ldap_id_mapping: string;
+        additional_sssd_configs?: string;
     }
     groups: {
         ou: string;

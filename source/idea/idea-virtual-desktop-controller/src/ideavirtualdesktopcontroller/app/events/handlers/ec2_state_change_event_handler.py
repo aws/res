@@ -71,14 +71,12 @@ class EC2StateChangeEventHandler(BaseVirtualDesktopControllerEventHandler):
         if Utils.is_empty(session):
             self.log_error(message_id=message_id, message='Invalid RES Session. Should probably do some DB cleanup for instances.')
             return
-
-        if session.hibernation_enabled and session.state in {VirtualDesktopSessionState.RESUMING}:
-            self.events_utils.publish_dcv_host_reboot_complete_event(
-                instance_id=instance_id,
-                idea_session_id=idea_session_id,
-                idea_session_owner=idea_session_owner
+        if session.hibernation_enabled:
+            self.events_utils.publish_validate_dcv_session_ready_event(
+                idea_session_id=session.idea_session_id,
+                idea_session_owner=session.owner
             )
-        
+
         session.is_idle = False
         _ = self.session_db.update(session)
 

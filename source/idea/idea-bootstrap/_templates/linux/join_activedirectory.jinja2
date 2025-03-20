@@ -12,6 +12,7 @@ AD_SUDOERS_GROUP_NAME="{{ context.config.get_string('directoryservice.sudoers.gr
 AD_SUDOERS_GROUP_NAME_ESCAPED="{{ context.config.get_string('directoryservice.sudoers.group_name', required=True).replace(' ', '\ ') }}"
 SSSD_LDAP_ID_MAPPING="{{ context.config.get_bool('directoryservice.sssd.ldap_id_mapping', default=True) | lower }}"
 AD_LDAP_BASE="{{context.config.get_string('directoryservice.ldap_base', required=True)}}"
+ADDITIONAL_AD_CONFIGS="{{context.config.get_string('directoryservice.sssd.additional_sssd_configs', required=True).replace('"', '\\"') }}"
 
 AWS=$(command -v aws)
 JQ=$(command -v jq)
@@ -123,12 +124,8 @@ else
   enumerate_value=False
 fi
 
-echo -e "[sssd]
-domains = ${AD_DOMAIN_NAME}
-config_file_version = 2
-services = nss, pam
-
-[domain/${AD_DOMAIN_NAME}]
+sssd_config_file="/etc/sssd/sssd.conf"
+echo -e "[domain/${AD_DOMAIN_NAME}]
 ad_domain = ${AD_DOMAIN_NAME}
 # When SSSD is configured to use AD provider, back end communication occurs over a GSSAPI-encrypted channel,
 # SSL/TLS options should not be used in this case and will be superseded by Kerberos usage. Note that the latest
@@ -158,7 +155,23 @@ enumerate = "${enumerate_value}"
 sudo_provider = none
 
 # Use our AD-created IDEA hostname
-ldap_sasl_authid = ${IDEA_HOSTNAME}\$
+ldap_sasl_authid = ${IDEA_HOSTNAME}\$" > $sssd_config_file
+
+echo -e $ADDITIONAL_AD_CONFIGS | jq -r 'to_entries[][]' | while read -r key ; do
+    read -r value
+    if grep -q "^$key = " "$sssd_config_file"; then
+        # If the key exists, override the value
+        sed -i "s/^$key = .*/$key = $value/" "$sssd_config_file"
+    else
+        # If the key doesn't exist, append the new key-value pair
+        echo -e "$key = $value" >> $sssd_config_file
+    fi
+done
+
+echo -e "[sssd]
+domains = ${AD_DOMAIN_NAME}
+config_file_version = 2
+services = nss, pam
 
 [nss]
 homedir_substring = ${IDEA_CLUSTER_HOME_DIR}/
@@ -170,9 +183,11 @@ homedir_substring = ${IDEA_CLUSTER_HOME_DIR}/
 [ssh]
 
 [secrets]
-" > /etc/sssd/sssd.conf
 
-chmod 600 /etc/sssd/sssd.conf
+$(cat $sssd_config_file)" > $sssd_config_file
+
+
+chmod 600 $sssd_config_file
 
 systemctl enable sssd
 systemctl restart sssd

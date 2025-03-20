@@ -65,7 +65,7 @@ def decode_token(token: str, verify_exp: Optional[bool] = True) -> Dict:
     try:
 
         if not token:
-            raise exceptions.UnauthorizedAccess(error_code="MISSING_TOKEN")
+            raise exceptions.UnauthorizedAccess()
 
         jwk_client = PyJWKClient(
             uri=f"{cluster_settings.get_setting(COGNITO_USER_POOL_PROVIDER_URL)}/.well-known/jwks.json",
@@ -88,6 +88,4 @@ def decode_token(token: str, verify_exp: Optional[bool] = True) -> Dict:
         )
     except jwt.InvalidTokenError as e:
         # this is not normal, and log entries should be monitored to check why tokens are invalid.
-        raise exceptions.UnauthorizedAccess(
-            error_code="INVALID_TOKEN", message=f"Invalid Token - {e}"
-        )
+        raise exceptions.UnauthorizedAccess(message=f"Invalid Token - {e}")

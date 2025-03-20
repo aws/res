@@ -14,11 +14,11 @@
 import React, { Component, RefObject } from "react";
 
 import { TableProps } from "@cloudscape-design/components/table/interfaces";
-import { GetUserResult, Project, ProjectPermissions, RoleAssignment } from "../../client/data-model";
+import { Project, ProjectPermissions, RoleAssignment, SocaFilter } from "../../client/data-model";
 import IdeaListView from "../../components/list-view";
-import { AuthClient, AccountsClient, ClusterSettingsClient, ProjectsClient } from "../../client";
+import { AccountsClient, ClusterSettingsClient, ProjectsClient, VirtualDesktopAdminClient } from "../../client";
 import { AppContext } from "../../common";
-import { Box, Button, Header, Modal, ProgressBar, SpaceBetween, StatusIndicator, TagEditor } from "@cloudscape-design/components";
+import { Box, Button, FormField, Header, Input, Modal, ProgressBar, SpaceBetween, StatusIndicator, TagEditor } from "@cloudscape-design/components";
 import Utils from "../../common/utils";
 import { IdeaSideNavigationProps } from "../../components/side-navigation";
 import IdeaAppLayout, { IdeaAppLayoutProps } from "../../components/app-layout";
@@ -29,6 +29,7 @@ import { FILESYSTEM_TABLE_COLUMN_DEFINITIONS } from "./filesystem";
 import FilesystemClient from "../../client/filesystem-client";
 import { AuthService } from "../../service";
 import { Constants } from "../../common/constants"
+import IdeaConfirm from "../../components/modals";
 
 export interface ProjectsProps extends IdeaAppLayoutProps, IdeaSideNavigationProps {
   projectOwnerRoles?: string[]
@@ -44,6 +45,8 @@ export interface ProjectsState {
       [key: string]: RoleAssignment[];
     };
     projectPermissions: Map<string, ProjectPermissions>;
+    showDeleteProjectConfirmModal: boolean;
+    deleteProjectConfirmText: string;
 }
 
 const PROJECT_TABLE_COLUMN_DEFINITIONS: TableProps.ColumnDefinition<Project>[] = [
@@ -51,16 +54,25 @@ const PROJECT_TABLE_COLUMN_DEFINITIONS: TableProps.ColumnDefinition<Project>[] =
         id: "title",
         header: "Title",
         cell: (project) => project.title,
+        sortingField: "title",
     },
     {
         id: "name",
         header: "Project Code",
         cell: (project) => project.name,
+        sortingField: "name",
     },
     {
         id: "enabled",
         header: "Status",
         cell: (project) => (project.enabled ? <StatusIndicator type="success">Enabled</StatusIndicator> : <StatusIndicator type="stopped">Disabled</StatusIndicator>),
+        sortingField: "enabled",
+    },
+    {
+        id: "allowed_sessions_per_user",
+        header: "Allowed Sessions Per User",
+        cell: (project) => project.allowed_sessions_per_user,
+        sortingField: "allowed_sessions_per_user",
     },
     {
         id: "budgets",
@@ -69,7 +81,7 @@ const PROJECT_TABLE_COLUMN_DEFINITIONS: TableProps.ColumnDefinition<Project>[] =
         cell: (project) => {
             if (project.enable_budgets) {
                 if (project.budget) {
-                    if(project.budget == Constants.BUDGET_NOT_FOUND) {
+                    if(project.budget === Constants.BUDGET_NOT_FOUND) {
                         return <span style={{ color: "red" }}> Budget Not Found </span>;
                     }
                     const actualSpend = Utils.asNumber(project.budget.actual_spend?.amount, 0);
@@ -89,6 +101,14 @@ const PROJECT_TABLE_COLUMN_DEFINITIONS: TableProps.ColumnDefinition<Project>[] =
                 return <span style={{ color: "grey" }}> -- </span>;
             }
         },
+        sortingComparator(a, b) {
+            const usageA = a.budget ? Utils.asNumber(a.budget.actual_spend?.amount, 0) / Utils.asNumber(a.budget.budget_limit?.amount, 0) : 0;
+            const usageB = b.budget ? Utils.asNumber(b.budget.actual_spend?.amount, 0) / Utils.asNumber(b.budget.budget_limit?.amount, 0) : 0;
+            if (usageA !== usageB) {
+                return usageA - usageB;
+            }
+            return 0;
+        },
     },
     {
         id: "ldap-group",
@@ -106,6 +126,14 @@ const PROJECT_TABLE_COLUMN_DEFINITIONS: TableProps.ColumnDefinition<Project>[] =
                 return "-";
             }
         },
+        sortingComparator: (a, b) => {
+            const ldapGroupsA = a.ldap_groups || [];
+            const ldapGroupsB = b.ldap_groups || [];
+            if (ldapGroupsA.length !== ldapGroupsB.length) {
+                return ldapGroupsA.length - ldapGroupsB.length;
+            }
+            return ldapGroupsA.join(', ').localeCompare(ldapGroupsB.join(', '));
+        }
     },
     {
         id: "user",
@@ -123,22 +151,33 @@ const PROJECT_TABLE_COLUMN_DEFINITIONS: TableProps.ColumnDefinition<Project>[] =
                 return "-";
             }
         },
+        sortingComparator: (a, b) => {
+            const usersA = a.users || [];
+            const usersB = b.users || [];
+            if (usersA.length !== usersB.length) {
+                return usersA.length - usersB.length;
+            }
+            return usersA.join(',').localeCompare(usersB.join(','));
+        }
     },
     {
         id: "updated_on",
         header: "Updated On",
         cell: (project) => new Date(project.updated_on!).toLocaleString(),
+        sortingField: "updated_on",
     },
 ];
 
 class Projects extends Component<ProjectsProps, ProjectsState> {
     listing: RefObject<IdeaListView>;
     filesystemListing: RefObject<IdeaListView>;
+    deleteProjectConfirmModal: RefObject<IdeaConfirm>;
 
     constructor(props: ProjectsProps) {
         super(props);
         this.listing = React.createRef();
         this.filesystemListing = React.createRef();
+        this.deleteProjectConfirmModal = React.createRef();
         const { state } = this.props.location
         this.state = {
             projectSelected: false,
@@ -148,11 +187,17 @@ class Projects extends Component<ProjectsProps, ProjectsState> {
             splitPanelOpen: false,
             projectAssignments: {},
             projectPermissions: new Map(),
+            showDeleteProjectConfirmModal: false,
+            deleteProjectConfirmText: '',
         };
     }
 
     projects(): ProjectsClient {
         return AppContext.get().client().projects();
+    }
+
+    getVirtualDesktopAdminClient(): VirtualDesktopAdminClient {
+        return AppContext.get().client().virtualDesktopAdmin();
     }
 
     listSharedStorageFileSystem(project_name: string) {
@@ -476,6 +521,92 @@ class Projects extends Component<ProjectsProps, ProjectsState> {
       return this.isAdmin();
     }
 
+    convertProjectObjectToSocaFilter(): SocaFilter {
+        const project = this.getSelected();
+        // For VDI sessions: use 'project' as key with eq operator
+        const eq = project != null ? {
+            'name': project.name,
+            'project_id': project.project_id,
+            'title': project.title
+        } : {};
+        return { key: 'project', eq };
+    }
+
+    buildDeleteProjectConfirmModal() {
+        const selectedProject = this.getSelected();
+        return (
+                <IdeaConfirm
+                    ref={this.deleteProjectConfirmModal}
+                    title={`Delete Project: ${selectedProject?.name}`}
+                    confirmButtonDisabled={this.state.deleteProjectConfirmText !== selectedProject?.name}
+                    onConfirm={async () => {
+                        try {
+                            this.setState({
+                                deleteProjectConfirmText: '',
+                            });
+                            await this.projects().deleteProject({
+                                project_id: selectedProject?.project_id,
+                            });
+
+                            await this.getListing().fetchRecords();
+                            this.props.onFlashbarChange({
+                                items: [{
+                                    type: "success",
+                                    content: `Project with ID: ${selectedProject?.project_id} has been deleted successfully`,
+                                    dismissible: true,
+                                }],
+                            });
+                        } catch (error: any) {
+                            this.props.onFlashbarChange({
+                                items: [{
+                                    type: "error",
+                                    content: error.message,
+                                    dismissible: true,
+                                }],
+                            });
+                        }
+                    }}
+                    onCancel={() => {
+                        this.setState({
+                            showDeleteProjectConfirmModal: false,
+                            deleteProjectConfirmText: '',
+                        })
+                    }}
+                >
+                    <div>
+                        <p>Are you sure you want to delete this project?</p>
+                        <p>All associated sessions will be terminated. This action cannot be undone.</p>
+                    </div>
+                    <FormField
+                        label="To confirm deletion, enter the name of the project in the text input field."
+                    >
+                        <Input
+                            value={this.state.deleteProjectConfirmText}
+                            onChange={({ detail }) => 
+                                this.setState({ deleteProjectConfirmText: detail.value })
+                            }
+                            placeholder={selectedProject?.name}
+                        />
+                    </FormField>
+                </IdeaConfirm>
+        );
+    }
+
+    showDeleteProjectConfirmModal() {
+        this.setState(
+            {
+                showDeleteProjectConfirmModal: true,
+            },
+            () => {
+                this.getDeleteProjectConfirmModal().show();
+            }
+        );
+    }
+
+    getDeleteProjectConfirmModal() {
+        return this.deleteProjectConfirmModal.current!;
+    }
+
     buildListing() {
         return (
             <IdeaListView
@@ -517,30 +648,41 @@ class Projects extends Component<ProjectsProps, ProjectsState> {
                     {
                         id: "toggle-enable-project",
                         text: this.isSelectedProjectEnabled() ? "Disable Project" : "Enable Project",
-                        onClick: () => {
-                            let enableOrDisable;
-                            if (this.isSelectedProjectEnabled()) {
-                                enableOrDisable = (request: any) => this.projects().disableProject(request);
-                            } else {
-                                enableOrDisable = (request: any) => this.projects().enableProject(request);
-                            }
-                            enableOrDisable({
-                                project_id: this.getSelected()?.project_id,
-                            })
-                                .then(() => {
-                                    this.getListing().fetchRecords();
-                                })
-                                .catch((error) => {
-                                    this.props.onFlashbarChange({
-                                        items: [
-                                            {
-                                                type: "error",
-                                                content: `Operation failed: ${error.message}`,
-                                                dismissible: true,
-                                            },
-                                        ],
-                                    });
+                        onClick: async () => {
+                            const projectId = this.getSelected()?.project_id;
+                            const isProjectEnabled = this.isSelectedProjectEnabled();
+                            const operationType = isProjectEnabled ? "disable" : "enable";
+
+                            try {
+                                let enableOrDisable;
+                                let successMessage;
+                                if (isProjectEnabled) {
+                                    enableOrDisable = (request: any) => this.projects().disableProject(request);
+                                    successMessage = `Successfully ${operationType}d project with ID: ${projectId}, and all associated sessions will be stopped`
+                                } else {
+                                    enableOrDisable = (request: any) => this.projects().enableProject(request);
+                                    successMessage = `Successfully ${operationType}d project with ID: ${projectId}`
+                                }
+
+                                await enableOrDisable({ project_id: projectId });
+                                await this.getListing().fetchRecords();
+
+                                this.props.onFlashbarChange({
+                                    items: [{
+                                        type: "success",
+                                        content: successMessage,
+                                        dismissible: true,
+                                    }],
                                 });
+                            } catch (error: any) {
+                                this.props.onFlashbarChange({
+                                    items: [{
+                                        type: "error",
+                                        content: `Failed to ${operationType} project with ID: ${projectId} because ${error.message}`,
+                                        dismissible: true,
+                                    }],
+                                });
+                            }
                         },
                         disabled: !this.canUpdateProjectStatus(),
                     },
@@ -552,6 +694,13 @@ class Projects extends Component<ProjectsProps, ProjectsState> {
                         },
                         disabled: !this.canEditProjectTags(),
                     },
+                    {
+                        id: "toggle-delete-project",
+                        text: "Delete Project",
+                        onClick: () => {
+                            this.showDeleteProjectConfirmModal();
+                        }
+                    }
                 ]}
                 showPaginator={true}
                 showFilters={true}
@@ -683,6 +832,7 @@ class Projects extends Component<ProjectsProps, ProjectsState> {
                     <div>
                         {this.buildTagEditor()}
                         {this.buildListing()}
+                        {this.state.showDeleteProjectConfirmModal && this.buildDeleteProjectConfirmModal()}
                     </div>
                 }
                 splitPanelOpen={this.state.splitPanelOpen}

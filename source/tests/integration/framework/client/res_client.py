@@ -27,6 +27,8 @@ from ideadatamodel import (  # type: ignore
     CreateProjectResult,
     CreateSessionRequest,
     CreateSessionResponse,
+    CreateSoftwareStackFromSessionRequest,
+    CreateSoftwareStackFromSessionResponse,
     CreateSoftwareStackRequest,
     CreateSoftwareStackResponse,
     DeleteFilesRequest,
@@ -47,6 +49,8 @@ from ideadatamodel import (  # type: ignore
     GetSessionConnectionInfoResponse,
     GetSessionInfoRequest,
     GetSessionInfoResponse,
+    GetSoftwareStackInfoRequest,
+    GetSoftwareStackInfoResponse,
     GetUserRequest,
     GetUserResult,
     ListAllowedInstanceTypesRequest,
@@ -346,7 +350,7 @@ class ResClient:
         options.add_argument("--headless")
         options.add_argument("--ignore-certificate-errors")
         options.add_argument("--no-sandbox")
-        options.binary_location = "/usr/bin/chrome"
+        options.binary_location = "/usr/local/bin/chrome"
         driver = webdriver.Chrome(options=options)
 
         connection_url = f"{connection_info.endpoint}{connection_info.web_url_path}?authToken={connection_info.access_token}#{connection_info.dcv_session_id}"
@@ -466,6 +470,36 @@ class ResClient:
             "cluster-manager",
             request,
             DownloadFilesResult,
+            should_succeed,
+        )
+
+    def create_software_stack_from_session(
+        self,
+        request: CreateSoftwareStackFromSessionRequest,
+        should_succeed: bool = True,
+    ) -> CreateSoftwareStackFromSessionResponse:
+        logger.info(f"creating software stack from session...")
+
+        return self._invoke(
+            "VirtualDesktopAdmin.CreateSoftwareStackFromSession",
+            "vdc",
+            request,
+            CreateSoftwareStackFromSessionResponse,
+            should_succeed,
+        )
+
+    def get_software_stack(
+        self,
+        request: GetSoftwareStackInfoRequest,
+        should_succeed: bool = True,
+    ) -> GetSoftwareStackInfoResponse:
+        logger.info(f"getting software stack...")
+
+        return self._invoke(
+            "VirtualDesktopAdmin.GetSoftwareStackInfo",
+            "vdc",
+            request,
+            GetSoftwareStackInfoResponse,
             should_succeed,
         )
 

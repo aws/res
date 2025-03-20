@@ -12,12 +12,16 @@
 import time
 
 import res.exceptions as exceptions  # type: ignore
-from res.clients.ad_sync import ad_sync_client  # type: ignore
+
+import idea.backend.resources.ad_sync as ad_sync_api
 
 
 def ad_sync() -> None:
     try:
-        ad_sync_client.start_ad_sync()
+        event = {
+            "httpMethod": "PUT",
+        }
+        ad_sync_api.handle_ad_sync_event(event)
     except exceptions.ADSyncInProcess:
         # AD Sync may have been triggered by the scheduler Lambda or Cluster Manager and is still in progress
         pass

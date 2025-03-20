@@ -22,16 +22,17 @@ MIN_LINUX_STORAGE = SocaMemory(value=50, unit=SocaMemoryUnit.GB)
 MIN_WINDOWS_STORAGE = SocaMemory(value=50, unit=SocaMemoryUnit.GB)
 MIN_RAM = SocaMemory(value=4, unit=SocaMemoryUnit.GB)
 
-TEST_SOFTWARE_STACKS = [
-    VirtualDesktopSoftwareStack(
-        name=f"res-integ-test-stack-{VirtualDesktopBaseOS.AMAZON_LINUX2}-{VirtualDesktopArchitecture.X86_64}",
-        description="RES integ test software stack",
-        base_os=VirtualDesktopBaseOS.AMAZON_LINUX2,
-        architecture=VirtualDesktopArchitecture.X86_64,
-        min_storage=MIN_LINUX_STORAGE,
-        min_ram=MIN_RAM,
-        gpu=VirtualDesktopGPU.NO_GPU,
-    ),
+AL2_SOFTWARE_STACK = VirtualDesktopSoftwareStack(
+    name=f"res-integ-test-stack-{VirtualDesktopBaseOS.AMAZON_LINUX2}-{VirtualDesktopArchitecture.X86_64}",
+    description="RES integ test software stack",
+    base_os=VirtualDesktopBaseOS.AMAZON_LINUX2,
+    architecture=VirtualDesktopArchitecture.X86_64,
+    min_storage=MIN_LINUX_STORAGE,
+    min_ram=MIN_RAM,
+    gpu=VirtualDesktopGPU.NO_GPU,
+)
+LINUX_SOFTWARE_STACKS = [
+    AL2_SOFTWARE_STACK,
     VirtualDesktopSoftwareStack(
         name=f"res-integ-test-stack-{VirtualDesktopBaseOS.AMAZON_LINUX2}-{VirtualDesktopArchitecture.ARM64}",
         description="RES integ test software stack",
@@ -60,6 +61,18 @@ TEST_SOFTWARE_STACKS = [
         gpu=VirtualDesktopGPU.NO_GPU,
     ),
     VirtualDesktopSoftwareStack(
+        name=f"res-integ-test-stack-{VirtualDesktopBaseOS.UBUNTU2204}-{VirtualDesktopArchitecture.X86_64}",
+        description="RES integ test software stack",
+        base_os=VirtualDesktopBaseOS.UBUNTU2204,
+        architecture=VirtualDesktopArchitecture.X86_64,
+        min_storage=MIN_WINDOWS_STORAGE,
+        min_ram=MIN_RAM,
+        gpu=VirtualDesktopGPU.NO_GPU,
+    ),
+]
+
+TEST_SOFTWARE_STACKS = LINUX_SOFTWARE_STACKS + [
+    VirtualDesktopSoftwareStack(
         name=f"res-integ-test-stack-{VirtualDesktopBaseOS.WINDOWS}-{VirtualDesktopArchitecture.X86_64}",
         description="RES integ test software stack",
         base_os=VirtualDesktopBaseOS.WINDOWS,
@@ -85,15 +98,6 @@ TEST_SOFTWARE_STACKS = [
         min_storage=MIN_WINDOWS_STORAGE,
         min_ram=MIN_RAM,
         gpu=VirtualDesktopGPU.AMD,
-    ),
-    VirtualDesktopSoftwareStack(
-        name=f"res-integ-test-stack-{VirtualDesktopBaseOS.UBUNTU2204}-{VirtualDesktopArchitecture.X86_64}",
-        description="RES integ test software stack",
-        base_os=VirtualDesktopBaseOS.UBUNTU2204,
-        architecture=VirtualDesktopArchitecture.X86_64,
-        min_storage=MIN_WINDOWS_STORAGE,
-        min_ram=MIN_RAM,
-        gpu=VirtualDesktopGPU.NO_GPU,
     ),
 ]
 

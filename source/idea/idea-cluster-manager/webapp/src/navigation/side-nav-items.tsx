@@ -76,11 +76,6 @@ export const IdeaSideNavItems = (context: AppContext): SideNavigationProps.Item[
             items: [
                 {
                     type: "link",
-                    text: "Dashboard",
-                    href: "#/virtual-desktop/dashboard",
-                },
-                {
-                    type: "link",
                     text: "Sessions",
                     href: "#/virtual-desktop/sessions",
                 },
@@ -104,81 +99,91 @@ export const IdeaSideNavItems = (context: AppContext): SideNavigationProps.Item[
     }
 
     if (context.auth().isAdmin()) {
+        const items: SideNavigationProps.Item[] = [
+            {
+                type: "link",
+                text: "Projects",
+                href: "#/cluster/projects",
+            },
+            {
+                type: "link",
+                text: "Users",
+                href: "#/cluster/users",
+            },
+            {
+                type: "link",
+                text: "Groups",
+                href: "#/cluster/groups",
+            },
+            {
+                type: "link",
+                text: "File systems",
+                href: "#/cluster/filesystem",
+            },
+            {
+                type: "link",
+                text: "S3 buckets",
+                href: "#/cluster/s3-bucket",
+            },
+            {
+                type: "link",
+                text: "Identity management",
+                href: "#/cluster/identity-management",
+            },
+            {
+                type: "link",
+                text: "Permission policy",
+                href: "#/cluster/permissions",
+            },
+            {
+                type: "link",
+                text: "Environment status",
+                href: "#/cluster/status",
+            },
+            {
+                type: "link",
+                text: "Snapshot management",
+                href: "#/cluster/snapshot-management",
+            },
+            {
+                type: "link",
+                text: "Environment settings",
+                href: "#/cluster/settings",
+            },
+        ]
+        if (!context.getClusterSettingsService().getIsGovCloudPartition()) {
+            items.unshift(
+                {
+                    type: "link",
+                    text: "Dashboards",
+                    href: "#/home/cost-dashboard",
+                    info: (
+                        <Box color="text-status-info" display="inline">
+                            <Popover
+                                header="Introducing the cost dashboard"
+                                size="medium"
+                                triggerType="text"
+                                content={
+                                    <>
+                                        We've added the cost dashboard to make it easier to know the costs incurred at the project level.
+                                    </>
+                                }
+                                renderWithPortal={true}
+                            >
+                                <Box color="text-status-info" fontSize="body-s" fontWeight="bold">
+                                    New
+                                </Box>
+                            </Popover>
+                        </Box>
+                    )
+                }
+            );
+        }
         adminNavItems.push({
             type: "section",
-            text: "Environment Management",
+            text: "Environment management",
             defaultExpanded: true,
-            items: [
-                {
-                    type: "link",
-                    text: "Projects",
-                    href: "#/cluster/projects",
-                },
-                {
-                    type: "link",
-                    text: "Users",
-                    href: "#/cluster/users",
-                },
-                {
-                    type: "link",
-                    text: "Groups",
-                    href: "#/cluster/groups",
-                },
-                {
-                    type: "link",
-                    text: "File systems",
-                    href: "#/cluster/filesystem",
-                },
-                {
-                    type: "link",
-                    text: "S3 buckets",
-                    href: "#/cluster/s3-bucket",
-                },
-                {
-                    type: "link",
-                    text: "Identity management",
-                    href: "#/cluster/identity-management",
-                    info: (
-                    <Box color="text-status-info" display="inline">
-                        <Popover
-                            header="Introducing Identity management"
-                            size="medium"
-                            triggerType="text"
-                            content={
-                                <>
-                                    A centralized location to manage Cognito users, Active Directory settings, and Single Sign-On.
-                                </>
-                            }
-                            renderWithPortal={true}
-                        >
-                            <Box color="text-status-info" fontSize="body-s" fontWeight="bold">
-                                New
-                            </Box>
-                        </Popover>
-                    </Box>
-                    )
-                },
-                {
-                    type: "link",
-                    text: "Permission policy",
-                    href: "#/cluster/permissions",
-                },
-                {
-                    type: "link",
-                    text: "Environment status",
-                    href: "#/cluster/status",
-                },
-                {
-                    type: "link",
-                    text: "Snapshot management",
-                    href: "#/cluster/snapshot-management",
-                },
-                {
-                    type: "link",
-                    text: "Environment settings",
-                    href: "#/cluster/settings",
-                },
-            ],
+            items: items,
         });
     }
 

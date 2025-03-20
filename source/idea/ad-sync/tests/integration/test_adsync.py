@@ -1,13 +1,19 @@
 #  Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 #  SPDX-License-Identifier: Apache-2.0
 
+import os
 import random
+import signal
+import threading
 import time
 
 import adsync.main as main
 import pytest
 from assertpy import assert_that
 from res import exceptions
+from res.clients.ad_sync import ad_sync_client
+from res.clients.ldap_client import active_directory_client
+from res.constants import AD_SYNC_STATUS_STATUS_KEY
 from res.resources import accounts
 
 
@@ -75,3 +81,47 @@ def test_adsync_group(context, ldap_helper, monkeypatch):
         accounts.get_group(groupname)
 
     assert_that(group_error).is_not_none()
+
+
+def test_ad_sync_status_completed(context, ldap_helper, monkeypatch):
+    do_adsync()
+    assert_that(
+        ad_sync_client.get_ad_sync_status().get(AD_SYNC_STATUS_STATUS_KEY)
+    ).is_equal_to(ad_sync_client.ADSyncStatus.STOPPED)
+
+
+def test_ad_sync_status_failed(context, ldap_helper, monkeypatch):
+    monkeypatch.setattr(
+        active_directory_client, "get_active_directory_client_options", lambda x: None
+    )
+    do_adsync()
+    assert_that(
+        ad_sync_client.get_ad_sync_status().get(AD_SYNC_STATUS_STATUS_KEY)
+    ).is_equal_to(ad_sync_client.ADSyncStatus.ERROR)
+
+
+def test_ad_sync_status_terminated(context, ldap_helper, monkeypatch):
+    pid = os.getpid()
+
+    # Send the signal.SIGTERM to simulate the behavior when the AD sync task is forced to stop
+    def trigger_signal():
+        while not ad_sync_client.get_ad_sync_status():
+            time.sleep(0.2)
+        os.kill(pid, signal.SIGTERM)
+
+    thread = threading.Thread(target=trigger_signal)
+    thread.daemon = True
+    thread.start()
+
+    # Sleep for 60 seconds during the AD sync process
+    def _sleep(_url: str):
+        time.sleep(60)
+
+    monkeypatch.setattr(main, "_fetch_ldap_groups", _sleep)
+
+    with pytest.raises(SystemExit):
+        do_adsync()
+
+        assert_that(
+            ad_sync_client.get_ad_sync_status().get(AD_SYNC_STATUS_STATUS_KEY)
+        ).is_equal_to(ad_sync_client.ADSyncStatus.STOPPED)

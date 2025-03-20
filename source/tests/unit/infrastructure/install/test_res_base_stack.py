@@ -6,6 +6,7 @@ from typing import Any, Dict, List
 import pytest
 from aws_cdk.assertions import Match, Template
 
+from idea.infrastructure.install.constants import RES_COMMON_LAMBDA_RUNTIME
 from idea.infrastructure.install.parameters.common import CommonKey
 from idea.infrastructure.install.stacks.res_base_stack import ResBaseStack
 from tests.unit.infrastructure.install import util
@@ -65,6 +66,10 @@ def vdc_tags(res_base_stack: ResBaseStack) -> List[Dict[str, Any]]:
 
 DB_CFN_TYPE = "AWS::DynamoDB::Table"
 KINESIS_CFN_TYPE = "AWS::Kinesis::Stream"
+LAMBDA_FUNCTION_CFN_TYPE = "AWS::Lambda::Function"
+LAMBDA_EVENT_MAPPING_CFN_TYPE = "AWS::Lambda::EventSourceMapping"
+IAM_ROLE_CFN_TYPE = "AWS::IAM::Role"
+IAM_ROLE_POLICY_CFN_TYPE = "AWS::IAM::Policy"
 
 
 def test_stack_description(res_base_template: Template) -> None:
@@ -702,6 +707,320 @@ def test_settings_table_kinesis_stream_creation(
         },
     )
     assert kinesis_resource
+
+
+def test_cluster_settings_table_event_handler_creation(
+    res_base_stack: ResBaseStack, res_base_template: Template
+) -> None:
+    cluster_settings = res_base_stack.nested_stack.node.find_child("cluster-settings")
+    assert cluster_settings is not None, "Expected to find cluster-settings resource"
+    table_event_handler_node = cluster_settings.node.find_child("TableEventHandler")
+    assert (
+        table_event_handler_node is not None
+    ), "Expected to find TableEventHandler resource"
+    table_event_handler_resource = res_base_template.find_resources(
+        type=LAMBDA_FUNCTION_CFN_TYPE,
+        props={
+            "Properties": {
+                "Environment": {
+                    "Variables": {
+                        "TABLE_NAME": "cluster-settings",
+                        "environment_name": res_base_stack.nested_stack.resolve(
+                            res_base_stack.cluster_name
+                        ),
+                    }
+                },
+                "Handler": "table_stream_subscription_handler.handle",
+                "Role": {
+                    "Fn::GetAtt": [
+                        util.get_logical_id(
+                            res_base_stack.nested_stack,
+                            ["ClusterSettingsTableEventHandlerRole"],
+                        ),
+                        "Arn",
+                    ]
+                },
+                "Runtime": RES_COMMON_LAMBDA_RUNTIME.to_string(),
+                "Tags": [
+                    {
+                        "Key": "res:EnvironmentName",
+                        "Value": res_base_stack.nested_stack.resolve(
+                            res_base_stack.cluster_name
+                        ),
+                    }
+                ],
+            },
+        },
+    )
+    assert table_event_handler_resource
+
+
+def test_cluster_settings_table_event_handler_role_creation(
+    res_base_stack: ResBaseStack, res_base_template: Template
+) -> None:
+    cluster_settings_table_event_handler_role_node = (
+        res_base_stack.nested_stack.node.find_child(
+            "ClusterSettingsTableEventHandlerRole"
+        )
+    )
+    assert (
+        cluster_settings_table_event_handler_role_node is not None
+    ), "Expected to find ClusterSettingsTableEventHandlerRole resource"
+    cluster_settings_table_event_handler_role_resource = (
+        res_base_template.find_resources(
+            type=IAM_ROLE_CFN_TYPE,
+            props={
+                "Properties": {
+                    "RoleName": {
+                        "Fn::Join": [
+                            "",
+                            [
+                                res_base_stack.nested_stack.resolve(
+                                    res_base_stack.cluster_name
+                                ),
+                                "-cluster-settings-table-event-handler-role",
+                            ],
+                        ]
+                    },
+                    "Tags": [
+                        {
+                            "Key": "Name",
+                            "Value": {
+                                "Fn::Join": [
+                                    "",
+                                    [
+                                        res_base_stack.nested_stack.resolve(
+                                            res_base_stack.cluster_name
+                                        ),
+                                        "-res-base",
+                                    ],
+                                ]
+                            },
+                        },
+                        {
+                            "Key": "res:EnvironmentName",
+                            "Value": res_base_stack.nested_stack.resolve(
+                                res_base_stack.cluster_name
+                            ),
+                        },
+                    ],
+                },
+            },
+        )
+    )
+    assert cluster_settings_table_event_handler_role_resource
+
+
+def test_cluster_settings_table_event_handler_role_policy_creation(
+    res_base_stack: ResBaseStack, res_base_template: Template
+) -> None:
+    cluster_settings_table_event_handler_role_policy = (
+        res_base_stack.nested_stack.node.find_child(
+            "ClusterSettingsTableEventHandlerRolePolicy"
+        )
+    )
+    assert (
+        cluster_settings_table_event_handler_role_policy is not None
+    ), "Expected to find ClusterSettingsTableEventHandlerRolePolicy resource"
+    cluster_settings_table_event_handler_role_policy_resource = (
+        res_base_template.find_resources(
+            type=IAM_ROLE_POLICY_CFN_TYPE,
+            props={
+                "Properties": {
+                    "PolicyDocument": {
+                        "Statement": [
+                            {
+                                "Action": "logs:CreateLogGroup",
+                                "Effect": "Allow",
+                                "Resource": "*",
+                                "Sid": "CloudWatchLogsPermissions",
+                            },
+                            {
+                                "Action": [
+                                    "logs:CreateLogStream",
+                                    "logs:PutLogEvents",
+                                    "logs:DeleteLogStream",
+                                ],
+                                "Effect": "Allow",
+                                "Resource": "*",
+                                "Sid": "CloudWatchLogStreamPermissions",
+                            },
+                            {
+                                "Action": [
+                                    "dynamodb:GetItem",
+                                    "dynamodb:PutItem",
+                                    "dynamodb:DeleteItem",
+                                ],
+                                "Effect": "Allow",
+                                "Resource": {
+                                    "Fn::Join": [
+                                        "",
+                                        [
+                                            "arn:",
+                                            {"Ref": "AWS::Partition"},
+                                            ":dynamodb:",
+                                            {"Ref": "AWS::Region"},
+                                            ":",
+                                            {"Ref": "AWS::AccountId"},
+                                            ":table/",
+                                            res_base_stack.nested_stack.resolve(
+                                                res_base_stack.cluster_name
+                                            ),
+                                            ".ad-sync.distributed-lock",
+                                        ],
+                                    ]
+                                },
+                                "Sid": "ADSyncLockTablePermissions",
+                            },
+                            {
+                                "Action": [
+                                    "dynamodb:Query",
+                                    "dynamodb:Scan",
+                                    "dynamodb:UpdateItem",
+                                    "dynamodb:PutItem",
+                                ],
+                                "Effect": "Allow",
+                                "Resource": {
+                                    "Fn::Join": [
+                                        "",
+                                        [
+                                            "arn:",
+                                            {"Ref": "AWS::Partition"},
+                                            ":dynamodb:",
+                                            {"Ref": "AWS::Region"},
+                                            ":",
+                                            {"Ref": "AWS::AccountId"},
+                                            ":table/",
+                                            res_base_stack.nested_stack.resolve(
+                                                res_base_stack.cluster_name
+                                            ),
+                                            ".ad-sync.status",
+                                        ],
+                                    ]
+                                },
+                                "Sid": "ADSyncStatusTablePermissions",
+                            },
+                            {
+                                "Action": [
+                                    "ecs:RunTask",
+                                    "ecs:StopTask",
+                                    "ecs:ListTasks",
+                                ],
+                                "Condition": {
+                                    "ArnEquals": {
+                                        "ecs:cluster": {
+                                            "Fn::Join": [
+                                                "",
+                                                [
+                                                    "arn:",
+                                                    {"Ref": "AWS::Partition"},
+                                                    ":ecs:",
+                                                    {"Ref": "AWS::Region"},
+                                                    ":",
+                                                    {"Ref": "AWS::AccountId"},
+                                                    ":cluster/",
+                                                    res_base_stack.nested_stack.resolve(
+                                                        res_base_stack.cluster_name
+                                                    ),
+                                                    "-ad-sync-cluster",
+                                                ],
+                                            ]
+                                        }
+                                    }
+                                },
+                                "Effect": "Allow",
+                                "Resource": "*",
+                            },
+                            {
+                                "Action": "iam:PassRole",
+                                "Effect": "Allow",
+                                "Resource": {
+                                    "Fn::Join": [
+                                        "",
+                                        [
+                                            "arn:",
+                                            {"Ref": "AWS::Partition"},
+                                            ":iam::",
+                                            {"Ref": "AWS::AccountId"},
+                                            ":role/",
+                                            res_base_stack.nested_stack.resolve(
+                                                res_base_stack.cluster_name
+                                            ),
+                                            "-ad-sync-task-role",
+                                        ],
+                                    ]
+                                },
+                            },
+                            {
+                                "Action": "ec2:DescribeSecurityGroups",
+                                "Effect": "Allow",
+                                "Resource": "*",
+                            },
+                        ]
+                    },
+                    "PolicyName": {
+                        "Fn::Join": [
+                            "",
+                            [
+                                res_base_stack.nested_stack.resolve(
+                                    res_base_stack.cluster_name
+                                ),
+                                "-cluster-settings-table-event-handler-role-policy",
+                            ],
+                        ]
+                    },
+                    "Roles": [
+                        {
+                            "Ref": util.get_logical_id(
+                                res_base_stack.nested_stack,
+                                ["ClusterSettingsTableEventHandlerRole"],
+                            )
+                        }
+                    ],
+                },
+            },
+        )
+    )
+    assert cluster_settings_table_event_handler_role_policy_resource
+
+
+def test_cluster_settings_table_event_source_mapping_creation(
+    res_base_stack: ResBaseStack, res_base_template: Template
+) -> None:
+    cluster_settings = res_base_stack.nested_stack.node.find_child("cluster-settings")
+    assert cluster_settings is not None, "Expected to find cluster-settings resource"
+    table_event_source_mapping_node = cluster_settings.node.find_child(
+        "TableEventSourceMapping"
+    )
+    assert (
+        table_event_source_mapping_node is not None
+    ), "Expected to find TableEventSourceMapping resource"
+    table_event_source_mapping_resource = res_base_template.find_resources(
+        type=LAMBDA_EVENT_MAPPING_CFN_TYPE,
+        props={
+            "Properties": {
+                "BatchSize": 10,
+                "EventSourceArn": {
+                    "Fn::GetAtt": [
+                        util.get_logical_id(
+                            res_base_stack.nested_stack,
+                            ["cluster-settings", "KinesisStream"],
+                        ),
+                        "Arn",
+                    ]
+                },
+                "FunctionName": {
+                    "Ref": util.get_logical_id(
+                        res_base_stack.nested_stack,
+                        ["cluster-settings", "TableEventHandler"],
+                    ),
+                },
+                "MaximumBatchingWindowInSeconds": 1,
+                "StartingPosition": "LATEST",
+            },
+        },
+    )
+    assert table_event_source_mapping_resource
 
 
 def test_modules_table_creation(

@@ -447,7 +447,7 @@ class IdeaFormField extends Component<IdeaFormFieldProps, IdeaFormFieldState> {
     }
 
     updateSelectedOptions(): boolean {
-        if (this.state.options == null || this.state.options.length === 0) {
+        if (this.state.options == null) {
             return false;
         }
 
@@ -1647,10 +1647,18 @@ class IdeaFormField extends Component<IdeaFormFieldProps, IdeaFormFieldState> {
 
     buildSelect(props: FormFieldProps) {
         let secondaryControl = this.buildFormFieldSecondaryControl();
-        return this.buildFormField(<Select selectedOption={this.state.selectedOption} options={this.state.options} empty={this.getEmptyOptionsLabel()} disabled={this.isReadOnly() || this.state.disabled} onChange={(event) => this.onSelectStateChange(event.detail.selectedOption)} />, {
+        return this.buildFormField(
+            <Select selectedOption={this.state.selectedOption} 
+                    options={this.state.options} 
+                    empty={this.getEmptyOptionsLabel()} 
+                    disabled={this.isReadOnly() || this.state.disabled} 
+                    onChange={(event) => this.onSelectStateChange(event.detail.selectedOption)}
+                    triggerVariant={this.props.param.triggerVariant as SelectProps.TriggerVariant} />, 
+            {
             ...props,
             secondaryControl: secondaryControl,
-        });
+            }
+        );
     }
 
     onMultiSelectStateChange(selectedOptions: ReadonlyArray<SelectProps.Option>) {

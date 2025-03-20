@@ -68,7 +68,7 @@ class DCVHostReadyEventHandler(BaseVirtualDesktopControllerEventHandler):
             session = self.session_db.update(session)
             self.controller_utils.create_tag(session.server.instance_id, constants.IDEA_TAG_DCV_SESSION_ID, session.dcv_session_id)
 
-            self.events_utils.publish_validate_dcv_session_creation_event(
+            self.events_utils.publish_validate_dcv_session_ready_event(
                 idea_session_id=session.idea_session_id,
                 idea_session_owner=session.owner
             )
@@ -81,7 +81,7 @@ class DCVHostReadyEventHandler(BaseVirtualDesktopControllerEventHandler):
         else:
             # we have failure. Check the count. Increment by 1. Error out at 'SESSION_CREATION_THRESHOLD_COUNT'
             update_db_entry = False
-            self.log_info(message_id=message_id, message=f'session creation error: {session.failure_reason} current count is {counter_db_entry.counter}')
+            self.log_info(message_id=message_id, message=f'idea session {session.idea_session_id} creation error: {session_response.failure_reason} current count is {counter_db_entry.counter}')
             if counter_db_entry.counter < self.SESSION_CREATION_THRESHOLD_COUNT:
                 # we will try again soon
                 if session.state != VirtualDesktopSessionState.CREATING:

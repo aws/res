@@ -2,7 +2,7 @@
 
 set -x
 
-while getopts p:o:n:e:c:s: opt;
+while getopts p:o:n:e:c:s:r: opt;
 do
     case "${opt}" in
         p) PROJECT_ID=${OPTARG};;     # Export PROJECT_ID variable with the value of -p option
@@ -11,6 +11,7 @@ do
         e) ENV_NAME=${OPTARG};;       # Export ENV_NAME variable with the value of -e option
         c) ON_VDI_CONFIGURED_COMMANDS=${OPTARG};; # Export ON_VDI_CONFIGURED_COMMANDS variable with the value of -c option
         s) ON_VDI_START_COMMANDS=${OPTARG};; # Export ON_VDI_START_COMMANDS variable with the value of -s option
+        r) RERUN_ON_REBOOT=${OPTARG};; # Export RERUN_ON_REBOOT variable with the value of -r option
         ?) echo "Invalid option for export_res_env_variables.sh script: -${opt}."
            exit 1;;
     esac
@@ -27,6 +28,7 @@ if [ ! -e "/etc/launch_script_environment" ]; then
     ENV_NAME=$ENV_NAME
     ON_VDI_CONFIGURED_COMMANDS=$ON_VDI_CONFIGURED_COMMANDS
     ON_VDI_START_COMMANDS=$ON_VDI_START_COMMANDS
+    RERUN_ON_REBOOT=$RERUN_ON_REBOOT
     ## [END] RES Launch Script Execution Environment
     "
 

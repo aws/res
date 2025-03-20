@@ -219,7 +219,7 @@ class PipelineStack(Stack):
             ),
             code_build_defaults=pipelines.CodeBuildOptions(
                 build_environment=codebuild.BuildEnvironment(
-                    build_image=codebuild.LinuxBuildImage.STANDARD_5_0,
+                    build_image=codebuild.LinuxBuildImage.STANDARD_7_0,
                     compute_type=codebuild.ComputeType.LARGE,
                     privileged=True,
                 ),
@@ -415,7 +415,7 @@ class PipelineStack(Stack):
         for _env in integ_test_envs:
             _step = (
                 IntegTestStepBuilder(_env, self.params.cluster_name, self.region, True)
-                .test_specific_tox_command_argument(
+                .test_specific_invoke_command_argument(
                     f"admin-username={clusteradmin_username}",
                     f"admin-password={clusteradmin_password}",
                 )
@@ -548,10 +548,12 @@ class PipelineStack(Stack):
                             "dynamodb:Scan",
                             "dynamodb:PutItem",
                             "dynamodb:DeleteItem",
+                            "dynamodb:Query",
                         ],
                         "Resource": [
                             f"arn:{self.partition}:dynamodb:{self.region}:{self.account}:table/{self.params.cluster_name}.cluster-settings",
                             f"arn:{self.partition}:dynamodb:{self.region}:{self.account}:table/{self.params.cluster_name}.ad-sync.distributed-lock",
+                            f"arn:{self.partition}:dynamodb:{self.region}:{self.account}:table/{self.params.cluster_name}.ad-sync.status",
                         ],
                     }
                 ),
@@ -583,9 +585,7 @@ class PipelineStack(Stack):
                 iam.PolicyStatement.from_json(
                     {
                         "Effect": "Allow",
-                        "Action": [
-                            "ec2:DescribeSecurityGroups",
-                        ],
+                        "Action": ["ec2:DescribeSecurityGroups", "ec2:DeregisterImage"],
                         "Resource": "*",
                     }
                 ),
@@ -598,7 +598,10 @@ class PipelineStack(Stack):
     def get_ad_sync_integ_test_step(self) -> pipelines.CodeBuildStep:
         step = (
             IntegTestStepBuilder(
-                "integ-tests.ad-sync", self.params.cluster_name, self.region
+                "integ-tests.ad-sync",
+                self.params.cluster_name,
+                self.region,
+                requires_alb=False,
             )
             .test_specific_install_command(
                 *get_commands_for_scripts(
@@ -778,7 +781,7 @@ class PipelineStack(Stack):
         return pipelines.CodeBuildStep(
             "Destroy",
             build_environment=codebuild.BuildEnvironment(
-                build_image=codebuild.LinuxBuildImage.STANDARD_5_0,
+                build_image=codebuild.LinuxBuildImage.STANDARD_7_0,
                 compute_type=codebuild.ComputeType.SMALL,
                 privileged=True,
             ),
@@ -860,7 +863,7 @@ class PipelineStack(Stack):
         return pipelines.CodeBuildStep(
             "Publish templates and docker image",
             build_environment=codebuild.BuildEnvironment(
-                build_image=codebuild.LinuxBuildImage.STANDARD_5_0,
+                build_image=codebuild.LinuxBuildImage.STANDARD_7_0,
                 compute_type=codebuild.ComputeType.SMALL,
                 privileged=True,
             ),

@@ -1,13 +1,17 @@
 #  Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 #  SPDX-License-Identifier: Apache-2.0
 
+import configparser
 import json
 import os
 import subprocess
 from logging import Logger
 from pathlib import Path
 from string import Template
-from typing import Dict
+from typing import Any, Dict
+
+from res.constants import MODULE_ID_VIRTUAL_DESKTOP_APP
+from res.resources import cluster_settings
 
 DIRECTORY_SERVICE_KEY_PREFIX = "directoryservice."
 TLS_CERTIFICATE_SECRET_KEY = f"{DIRECTORY_SERVICE_KEY_PREFIX}tls_certificate_secret_arn"
@@ -19,6 +23,11 @@ SERVICE_ACCOUNT_DN_SECRET_KEY = f"{DIRECTORY_SERVICE_KEY_PREFIX}root_user_dn_sec
 SERVICE_ACCOUNT_CREDENTIALS_KEY = (
     f"{DIRECTORY_SERVICE_KEY_PREFIX}service_account_credentials_secret_arn"
 )
+ADDITIONAL_SSSD_CONFIGS_PARTIAL_KEY = "sssd.additional_sssd_configs"
+ADDITIONAL_SSSD_CONFIGS_KEY = (
+    f"{DIRECTORY_SERVICE_KEY_PREFIX}{ADDITIONAL_SSSD_CONFIGS_PARTIAL_KEY}"
+)
+DISABLE_AD_JOIN_KEY = f"{DIRECTORY_SERVICE_KEY_PREFIX}disable_ad_join"
 
 SSSD_SETTING_KEY_MAPPINGS = {
     "domain_name": DOMAIN_NAME_KEY,
@@ -28,7 +37,15 @@ SSSD_SETTING_KEY_MAPPINGS = {
     "service_account_dn": SERVICE_ACCOUNT_DN_SECRET_KEY,
     "service_account_credentials": SERVICE_ACCOUNT_CREDENTIALS_KEY,
     "tls_certificate": TLS_CERTIFICATE_SECRET_KEY,
+    "additional_sssd_configs": ADDITIONAL_SSSD_CONFIGS_KEY,
 }
+
+RESERVED_SSSD_KEYS = [
+    "id_provider",
+    "ldap_uri",
+    "ldap_search_base",
+    "ldap_default_bind_dn",
+]
 
 LDAP_CONFIG_TEMPLATE = Template(
     """TLS_CACERTDIR $tls_ca_cert_dir
@@ -41,6 +58,48 @@ URI $ldap_connection_uri
 BASE $ldap_base
 
 TLS_CACERT $tls_ca_cert_file_path"""
+)
+
+
+SSSD_JOIN_AD_CONFIG_TEMPLATE = Template(
+    """[sssd]
+domains = $domain_name
+config_file_version = 2
+services = nss, pam
+
+[nss]
+homedir_substring = /home/
+
+[pam]
+
+[autofs]
+
+[ssh]
+
+[secrets]
+
+[domain/$domain_name]
+ad_domain = $domain_name
+
+krb5_realm = $domain_name
+realmd_tags = manages-system joined-with-adcli
+cache_credentials = true
+id_provider = ad
+access_provider = ad
+auth_provider = ad
+chpass_provider = ad
+krb5_store_password_if_offline = true
+default_shell = /bin/bash
+
+ldap_id_mapping = $sssd_ldap_id_mapping
+
+use_fully_qualified_names = false
+fallback_homedir = /home/%u
+
+enumerate = true
+
+sudo_provider = none
+ldap_sasl_authid = $ldap_sasl_authid"""
 )
 
 SSSD_CONFIG_TEMPLATE = Template(
@@ -109,6 +168,14 @@ def is_sssd_setting(key: str) -> bool:
     )
 
 
+def validate_additional_sssd_configs(additional_sssd_configs: Dict[str, str]) -> None:
+    for key in additional_sssd_configs:
+        if key in RESERVED_SSSD_KEYS:
+            raise Exception(
+                f"Additional SSSD configs cannot include RES reserved key {key}"
+            )
+
+
 def start_sssd(sssd_settings: Dict[str, str], logger: Logger) -> None:
     if not sssd_settings:
         # Required SSSD settings are not provided yet. There's no need to start the SSSD service.
@@ -122,11 +189,13 @@ def start_sssd(sssd_settings: Dict[str, str], logger: Logger) -> None:
     logger.info("Started SSSD service successfully")
 
 
-def restart_sssd(sssd_settings: Dict[str, str], logger: Logger) -> None:
+def restart_sssd(
+    sssd_settings: Dict[str, str], logger: Logger, module_id: str = None
+) -> None:
     if not sssd_settings:
         # Required SSSD settings are not provided yet. There's no need to start the SSSD service.
         return
-    _configure_sssd(sssd_settings, logger)
+    _configure_sssd(sssd_settings, logger, module_id)
 
     logger.info("Restarting SSSD service")
 
@@ -137,37 +206,103 @@ def restart_sssd(sssd_settings: Dict[str, str], logger: Logger) -> None:
     logger.info("Restarted SSSD service successfully")
 
 
-def _configure_sssd(sssd_settings: Dict[str, str], logger: Logger) -> None:
+def _configure_sssd(
+    sssd_settings: Dict[str, str], logger: Logger, module_id: str = None
+) -> None:
     _configure_ldap(sssd_settings, logger)
 
     logger.info("Updating SSSD config")
 
-    service_account_credentials_secret = json.loads(
-        sssd_settings["service_account_credentials"]
-    )
-    service_account_password = list(service_account_credentials_secret.values())[0]
-
-    sssd_conf_content = SSSD_CONFIG_TEMPLATE.substitute(**sssd_settings)
-
-    sssd_dir = "/etc/sssd"
-    Path(sssd_dir).mkdir(parents=True, exist_ok=True)
-    with open(f"{sssd_dir}/sssd.conf", "w") as f:
-        f.write(sssd_conf_content)
-
-    os.chmod(f"{sssd_dir}/sssd.conf", 0o600)
-
-    process = subprocess.run(
-        ["sss_obfuscate", "--domain", sssd_settings["domain_name"], "-s"],
-        stdout=subprocess.PIPE,
-        input=service_account_password,
-        encoding="ascii",
-    )
-    if process.returncode != 0:
-        raise Exception(
-            f"Failed to obfuscate service account password: stderr: {process.stderr}, stdout: {process.stdout}"
-        )
+    _construct_sssd_configs(sssd_settings, logger, module_id)
 
     logger.info("Updated SSSD config successfully")
+
+
+def _construct_sssd_configs(
+    sssd_settings: Dict[str, str], logger: Logger, module_id: str = None
+) -> None:
+    sssd_dir = "/etc/sssd"
+    sssd_file_path = f"{sssd_dir}/sssd.conf"
+    disable_ad_join = cluster_settings.get_setting(DISABLE_AD_JOIN_KEY) == "true"
+
+    config_origin = configparser.ConfigParser()
+    config_origin.read(sssd_file_path)
+    config_sections = config_origin.sections()
+
+    # Cognito user launched VDI SSSD Config cannot be updated when disable_ad_join is false and AD parameters not provided
+    if (
+        module_id == MODULE_ID_VIRTUAL_DESKTOP_APP
+        and not disable_ad_join
+        and not config_sections
+    ):
+        error_msg = "SSSD Config cannot be updated for Congito user launched VDI while disable_ad_join is false and AD parameters not provided"
+        logger.error(error_msg)
+        raise Exception(error_msg)
+
+    curr_host_join_ad = False
+    # Keep the special dynamic field ldap_sasl_authid from the old SSSD config if current host is joining AD
+    # This parameter could only be retrieved from the old SSSD config if exists
+    # ldap_sasl_authid will be populated back if SSSD_JOIN_AD_CONFIG_TEMPLATE is used
+    sasl_authid = "ldap_sasl_authid"
+    for section in config_sections:
+        if (
+            section.startswith("domain/")
+            and config_origin[section]["id_provider"] == "ad"
+        ):
+            sssd_settings[sasl_authid] = config_origin[section][sasl_authid]
+            curr_host_join_ad = True
+            break
+
+    # Connect AD VDI SSSD config cannot be updated to join AD SSSD config (disable_ad_join = false)
+    if (
+        not curr_host_join_ad
+        and not disable_ad_join
+        and module_id == MODULE_ID_VIRTUAL_DESKTOP_APP
+    ):
+        error_msg = "SSSD config cannot be updated for connect AD VDI while disable_ad_join is false"
+        logger.error(error_msg)
+        raise Exception(error_msg)
+    # Use join AD template if for join-AD VDI and disable_ad_join is false
+    if curr_host_join_ad and not disable_ad_join:
+        sssd_conf_content = SSSD_JOIN_AD_CONFIG_TEMPLATE.substitute(**sssd_settings)
+    # Use connect AD template for VDI when disable_ad_join is true and other infra host
+    else:
+        sssd_conf_content = SSSD_CONFIG_TEMPLATE.substitute(**sssd_settings)
+
+    config_override = configparser.ConfigParser()
+    config_override.read_string(sssd_conf_content)
+    new_domain_section = f'domain/{sssd_settings["domain_name"]}'
+
+    additional_sssd_configs = json.loads(
+        sssd_settings.get("additional_sssd_configs", "{}")
+    )
+    # Additional SSSD configs will be merged to the AD domain specific section by default
+    for key, value in additional_sssd_configs.items():
+        config_override[new_domain_section][key] = value
+
+    Path(sssd_dir).mkdir(parents=True, exist_ok=True)
+    with open(sssd_file_path, "w") as configfile:
+
+        config_override.write(configfile)
+
+    os.chmod(sssd_file_path, 0o600)
+
+    if config_override[new_domain_section]["id_provider"] == "ldap":
+        service_account_credentials_secret = json.loads(
+            sssd_settings["service_account_credentials"]
+        )
+        service_account_password = list(service_account_credentials_secret.values())[0]
+
+        process = subprocess.run(
+            ["sss_obfuscate", "--domain", sssd_settings["domain_name"], "-s"],
+            stdout=subprocess.PIPE,
+            input=service_account_password,
+            encoding="ascii",
+        )
+        if process.returncode != 0:
+            raise Exception(
+                f"Failed to obfuscate service account password: stderr: {process.stderr}, stdout: {process.stdout}"
+            )
 
 
 def _configure_ldap(sssd_settings: Dict[str, str], logger: Logger) -> None:

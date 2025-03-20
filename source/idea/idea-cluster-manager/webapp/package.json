@@ -1,11 +1,11 @@
 {
   "name": "web-portal", 
-  "version": "2024.12.01", 
+  "version": "2025.03", 
   "private": true,
   "dependencies": {
-    "@cloudscape-design/components": "^3.0.82",
-    "@cloudscape-design/design-tokens": "^3.0.4",
-    "@cloudscape-design/global-styles": "^1.0.1",
+    "@cloudscape-design/components": "3.0.334",
+    "@cloudscape-design/design-tokens": "3.0.4",
+    "@cloudscape-design/global-styles": "1.0.1",
     "@fortawesome/fontawesome-svg-core": "^6.2.0",
     "@fortawesome/free-brands-svg-icons": "^6.2.0",
     "@fortawesome/free-solid-svg-icons": "^6.2.0",
@@ -31,6 +31,7 @@
     "nunjucks": "^3.2.3",
     "react": "^18.2.0",
     "react-beautiful-dnd": "^13.1.1",
+    "react-csv-downloader": "^3.1.1",
     "react-dom": "^18.2.0",
     "react-json-view": "^1.21.3",
     "react-markdown": "^8.0.3",
@@ -43,6 +44,7 @@
     "xterm-for-react": "^1.0.4"
   },
   "devDependencies": {
+    "@babel/plugin-proposal-private-property-in-object": "7.21.11",
     "@testing-library/jest-dom": "^5.14.1",
     "@testing-library/react": "^13.0.0",
     "@testing-library/user-event": "^13.2.1",
@@ -84,7 +86,8 @@
     "minimist": ">=1.2.6",
     "moment": ">=2.29.4",
     "@babel/traverse": ">=7.23.2",
-    "webpack": ">=5.76.0"
+    "webpack": ">=5.76.0",
+    "postcss": ">=8.4.31"
   },
   "eslintConfig": {
     "extends": [

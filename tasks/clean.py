@@ -67,6 +67,7 @@ def virtual_desktop_controller(c):
     """
     CleanTool(c, 'idea-virtual-desktop-controller').clean()
     CleanTool(c, 'idea-dcv-connection-gateway').clean()
+    CleanTool(c, 'idea-virtual-desktop').clean()
 
 
 @task
@@ -85,6 +86,15 @@ def bastion_host(c):
     clean bastion host
     """
     CleanTool(c, 'idea-bastion-host').clean()
+
+
+@task
+def virtual_desktop(c):
+    # type: (Context) -> None
+    """
+    clean bastion host
+    """
+    CleanTool(c, 'idea-virtual-desktop').clean()
 
 
 @task(name='all', default=True)
@@ -111,6 +121,8 @@ def clean_all(c):
     library(c)
 
     bastion_host(c)
+
+    virtual_desktop(c)
 
     CleanTool(c, 'all').clean_non_project_items()
 

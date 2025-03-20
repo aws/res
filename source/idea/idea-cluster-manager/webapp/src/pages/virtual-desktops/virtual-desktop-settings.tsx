@@ -13,7 +13,7 @@
 
 import React, { Component, RefObject } from "react";
 
-import { Button, ColumnLayout, Container, Header, Link, SpaceBetween, Table, Tabs, TextContent, Toggle } from '@cloudscape-design/components';
+import { Button, ColumnLayout, Container, Header, Select, SpaceBetween, Table, Tabs, TextContent, Toggle } from '@cloudscape-design/components';
 import IdeaForm from "../../components/form";
 import { IdeaSideNavigationProps } from "../../components/side-navigation";
 import IdeaAppLayout, { IdeaAppLayoutProps } from "../../components/app-layout";
@@ -61,6 +61,73 @@ class VirtualDesktopSettings extends Component<VirtualDesktopSettingsProps, Virt
         };
     }
 
+    buildGeneralSettingsForm() {
+        return (
+            <IdeaForm
+                ref={this.generalSettingsForm}
+                name="update-general-settings"
+                modal={true}
+                title="Update General Settings"
+                onSubmit={() => {
+                    if (!this.generalSettingsForm.current?.validate()) {
+                        return;
+                    }
+                    const values = this.generalSettingsForm.current?.getValues();
+                    const updateSettings: UpdateModuleSettingsRequestVDC = {
+                        module_id: VDC_MODULE_ID,
+                        settings: {
+                            dcv_session: {},
+                        },
+                    };
+                    if (values.default_allowed_sessions_per_user_per_project !== dot.pick("dcv_session.default_allowed_sessions_per_user_per_project", this.state.vdcSettings)) {
+                        updateSettings.settings.dcv_session[UpdateModuleSettingsValuesDCVSession.DEFAULT_ALLOWED_SESSIONS_PER_USER_PER_PROJECT] = values.default_allowed_sessions_per_user_per_project;
+                    }
+
+                    if (Object.keys(updateSettings.settings.dcv_session).length > 0) {
+                        AppContext.get()
+                            .client()
+                            .clusterSettings()
+                            .updateModuleSettings(updateSettings)
+                            .then(() => {
+                                this.props.onFlashbarChange({
+                                    items: [
+                                        {
+                                            type: "success",
+                                            content: "General settings updated successfully.",
+                                            dismissible: true,
+                                        },
+                                    ],
+                                });
+                                this.loadSettings();
+                                this.generalSettingsForm.current?.hideModal();
+                            })
+                            .catch((error) => {
+                                this.generalSettingsForm.current?.setError(error.errorCode, error.message);
+                            });
+                    } else {
+                        this.generalSettingsForm.current?.setError("400", "No settings updated.");
+                    }
+                }}
+                onCancel={() => {
+                    this.generalSettingsForm.current?.hideModal();
+                }}
+                params={[
+                    {
+                        name: "default_allowed_sessions_per_user_per_project",
+                        title: "Default Allowed Sessions Per User Per Project",
+                        help_text: "Default value for allowed sessions per user per project",
+                        data_type: "int",
+                        validate: {
+                            required: true,
+                            min: 1,
+                        },
+                        default: dot.pick("dcv_session.default_allowed_sessions_per_user_per_project", this.state.vdcSettings),
+                    },
+                ]}
+            />
+        );
+    }
+
     buildUpdateDCVSessionSettingsForm() {
         return (
             <IdeaForm
@@ -88,15 +155,12 @@ class VirtualDesktopSettings extends Component<VirtualDesktopSettingsProps, Virt
                     if (values.cpu_utilization_threshold !== String(dot.pick("dcv_session.cpu_utilization_threshold", this.state.vdcSettings))) {
                         updateSettings.settings.dcv_session[UpdateModuleSettingsValuesDCVSession.CPU_UTILIZATION_THRESHOLD] = values.cpu_utilization_threshold;
                     }
-                    if (values.allowed_sessions_per_user !== String(dot.pick("dcv_session.allowed_sessions_per_user", this.state.vdcSettings))) {
-                        updateSettings.settings.dcv_session[UpdateModuleSettingsValuesDCVSession.ALLOWED_SESSIONS_PER_USER] = values.allowed_sessions_per_user;
-                    }
-                    
-                    if (enforce_schedule != dot.pick("dcv_session.enforce_schedule", this.state.vdcSettings)) {
+
+                    if (enforce_schedule !== dot.pick("dcv_session.enforce_schedule", this.state.vdcSettings)) {
                         updateSettings.settings.dcv_session[UpdateModuleSettingsValuesDCVSession.ENFORCE_SCHEDULE] = values.enforce_schedule;
                     }
 
-                    if(values.transition_state !=  String(dot.pick("dcv_session.transition_state", this.state.vdcSettings))) {
+                    if(values.transition_state !==  String(dot.pick("dcv_session.transition_state", this.state.vdcSettings))) {
                         updateSettings.settings.dcv_session[UpdateModuleSettingsValuesDCVSession.TRANSITION_STATE] = values.transition_state;
                     }
 
@@ -188,20 +252,14 @@ class VirtualDesktopSettings extends Component<VirtualDesktopSettingsProps, Virt
                             eq: 'Stop'
                         },
                     },
-                    {
-                        name: "allowed_sessions_per_user",
-                        title: "Allowed Sessions Per User",
-                        help_text: "Maximum sessions allowed per user",
-                        validate: {
-                            required: true,
-                            min: 0,
-                            max: 100,
-                        },
-                        default: dot.pick("dcv_session.allowed_sessions_per_user", this.state.vdcSettings),
-                    },
                 ]}
             />
         );
+    }
+
+    areArraysEqual(arr1: string[], arr2: string[]): boolean {
+        if (!arr1 || !arr2) return false;
+        return new Set([...arr1]).size === new Set([...arr2]).size && new Set([...arr1, ...arr2]).size === new Set([...arr1]).size;
     }
 
     buildUpdateDCVHostSettingsForm() {
@@ -227,7 +285,14 @@ class VirtualDesktopSettings extends Component<VirtualDesktopSettingsProps, Virt
                         updateSettings.settings.dcv_session[UpdateModuleSettingsValuesDCVSession.MAX_ROOT_VOLUME_MEMORY] = values.max_root_volume_memory;
                     }
 
-                    updateSettings.settings.dcv_session[UpdateModuleSettingsValuesDCVSession.ALLOWED_INSTANCE_TYPES] = values.allowed_instance_types;
+                    const instanceTypesChanged = !this.areArraysEqual(
+                        values.allowed_instance_types,
+                        dot.pick("dcv_session.instance_types.allow", this.state.vdcSettings)
+                    );
+
+                    if (instanceTypesChanged) {
+                        updateSettings.settings.dcv_session[UpdateModuleSettingsValuesDCVSession.ALLOWED_INSTANCE_TYPES] = values.allowed_instance_types;
+                    }
 
                     if (Object.keys(updateSettings.settings.dcv_session).length > 0) {
                         AppContext.get()
@@ -270,7 +335,7 @@ class VirtualDesktopSettings extends Component<VirtualDesktopSettingsProps, Virt
                     },
                     {
                         name: "allowed_instance_types",
-                        title: "Allowed Instance Types",
+                        title: "Allowed Instance Families and Types",
                         data_type: "str",
                         param_type: "select",
                         multiple: true,
@@ -324,10 +389,10 @@ class VirtualDesktopSettings extends Component<VirtualDesktopSettingsProps, Virt
                     activeTabId: Utils.asString(queryParams.get("tab"), DEFAULT_ACTIVE_TAB_ID),
                 },
                 () => {
-                    this.updateDCVSessionSettingsForm.current?.registry.list().map((field) => {
+                    this.updateDCVSessionSettingsForm.current?.registry.list().forEach((field) => {
                         field.setState({ default: field.props.param.default });
                     });
-                    this.updateDCVHostSettingsForm.current?.registry.list().map((field) => {
+                    this.updateDCVHostSettingsForm.current?.registry.list().forEach((field) => {
                         field.setState({ default: field.props.param.default });
                     });
                     this.updateDCVSessionSettingsForm.current?.reset();
@@ -398,7 +463,7 @@ class VirtualDesktopSettings extends Component<VirtualDesktopSettingsProps, Virt
                 dot.set("dcv_session.quic_support", `${newToggleStatus}`, vdcSettings)
                 this.setState({vdcSettings: vdcSettings})
             }).catch((error) =>{
-                if (error.errorCode == "ROLLBACK_COMPLETE") {
+                if (error.errorCode === "ROLLBACK_COMPLETE") {
                     this.props.onFlashbarChange({
                         items: [
                             {
@@ -420,6 +485,11 @@ class VirtualDesktopSettings extends Component<VirtualDesktopSettingsProps, Virt
                     })
                 }
             });
+        }
+
+        const getDefaultDCVSessionType = (): string => {
+            const dcv_session_type = dot.pick("dcv_session.default_dcv_session_type", this.state.vdcSettings)
+            return dcv_session_type ? dcv_session_type.charAt(0) + dcv_session_type.substring(1).toLocaleLowerCase() : dcv_session_type;
         }
 
         const buildAutoScalingSettingContainer = (setting: any) => {
@@ -501,6 +571,7 @@ class VirtualDesktopSettings extends Component<VirtualDesktopSettingsProps, Virt
                                     id: "general",
                                     content: (
                                         <SpaceBetween size={"m"}>
+                                            {this.buildGeneralSettingsForm()}
                                             <Container header={<Header variant={"h2"}>General</Header>}>
                                                 <ColumnLayout variant={"text-grid"} columns={2}>
                                                     <KeyValue title="QUIC">
@@ -520,6 +591,76 @@ class VirtualDesktopSettings extends Component<VirtualDesktopSettingsProps, Virt
                                                     </KeyValue>
                                                     <KeyValue title="Randomize Subnets">
                                                         <EnabledDisabledStatusIndicator enabled={Utils.asBoolean(dot.pick("dcv_session.network.randomize_subnets", this.state.vdcSettings))} />
+                                                    </KeyValue>
+                                                    <KeyValue title="Default DCV Session Type">
+                                                        <div>
+                                                            <TextContent>
+                                                                <p><small>Default setting will only apply in cases where Instance Type and Operating System supports either Virtual or Console Session Types.</small></p>
+                                                            </TextContent>
+                                                            <div>
+                                                                <Select
+                                                                    options={
+                                                                        Utils.getDCVSessionTypes().map(x =>
+                                                                            ({ label: x.title as string, value: x.value as string })
+                                                                    )}
+                                                                    selectedOption={{value: getDefaultDCVSessionType()}}
+                                                                    onChange={(e) => {
+                                                                        AppContext.get().client().clusterSettings().updateModuleSettings({
+                                                                            module_id: VDC_MODULE_ID,
+                                                                            settings: {
+                                                                                dcv_session: {
+                                                                                    [UpdateModuleSettingsValuesDCVSession.DEFAULT_DCV_SESSION_TYPE]: e.detail.selectedOption.value
+                                                                                }
+                                                                            }
+                                                                        }).then((res)=> {
+                                                                            this.props.onFlashbarChange({
+                                                                                items: [
+                                                                                    {
+                                                                                        type: "success",
+                                                                                        content: "Successfully updated default DCV Session Type.",
+                                                                                        dismissible: true
+                                                                                    }
+                                                                                ]
+                                                                            })
+                                                                            const vdcSettings = {...this.state.vdcSettings}
+                                                                            dot.set("dcv_session.default_dcv_session_type", e.detail.selectedOption.value, vdcSettings)
+                                                                            this.setState({vdcSettings: vdcSettings})
+                                                                        }).catch((error) =>{
+                                                                                this.props.onFlashbarChange({
+                                                                                    items: [
+                                                                                        {
+                                                                                            type: "error",
+                                                                                            content: error.message,
+                                                                                            dismissible: true
+                                                                                        }
+                                                                                    ]
+                                                                                })
+                                                                        });
+                                                                    }}
+                                                                ></Select>
+                                                            </div>
+                                                        </div>
+                                                    </KeyValue>
+                                                    <KeyValue title="Default Allowed Sessions Per User Per Project">
+                                                        <div>
+                                                            <TextContent>
+                                                                <p><small>Default value for allowed sessions per user per project.</small></p>
+                                                            </TextContent>
+                                                            <div>
+                                                            {dot.pick("dcv_session.default_allowed_sessions_per_user_per_project", this.state.vdcSettings)}
+                                                            <Button
+                                                                iconName="edit"
+                                                                variant="link"
+                                                                onClick={() => {
+                                                                    this.generalSettingsForm.current?.setParamValue(
+                                                                        "default_allowed_sessions_per_user_per_project",
+                                                                        dot.pick("dcv_session.default_allowed_sessions_per_user_per_project", this.state.vdcSettings)
+                                                                    );
+                                                                    this.generalSettingsForm.current?.showModal();
+                                                                }}
+                                                            />
+                                                            </div>
+                                                        </div>
                                                     </KeyValue>
                                                 </ColumnLayout>
                                             </Container>
@@ -664,7 +805,6 @@ class VirtualDesktopSettings extends Component<VirtualDesktopSettingsProps, Virt
                                                     <KeyValue title="CPU Utilization Threshold" value={dot.pick("dcv_session.cpu_utilization_threshold", this.state.vdcSettings)} suffix={"%"} />
                                                     <KeyValue title="Enforce Schedule" value={dot.pick("dcv_session.enforce_schedule", this.state.vdcSettings)} />
                                                     <KeyValue title="Transition State" value={dot.pick("dcv_session.transition_state", this.state.vdcSettings)} />
-                                                    <KeyValue title="Allowed Sessions Per User" value={dot.pick("dcv_session.allowed_sessions_per_user", this.state.vdcSettings)} />
                                                 </ColumnLayout>
                                             </Container>
                                             <Container
@@ -687,7 +827,7 @@ class VirtualDesktopSettings extends Component<VirtualDesktopSettingsProps, Virt
                                                 <ColumnLayout variant={"text-grid"} columns={2}>
                                                     <KeyValue title="Allowed Security Groups" value={dot.pick("dcv_session.additional_security_groups", this.state.vdcSettings)} />
                                                     <KeyValue title="Max Root Volume Size" value={dot.pick("dcv_session.max_root_volume_memory", this.state.vdcSettings)} suffix={"GB"} />
-                                                    <KeyValue title="Allowed Instance Types" value={dot.pick("dcv_session.instance_types.allow", this.state.vdcSettings)} />
+                                                    <KeyValue title="Allowed Instance Families and Types" value={dot.pick("dcv_session.instance_types.allow", this.state.vdcSettings)} />
                                                     <KeyValue title="Denied Instance Types" value={dot.pick("dcv_session.instance_types.deny", this.state.vdcSettings)} />
                                                 </ColumnLayout>
                                             </Container>

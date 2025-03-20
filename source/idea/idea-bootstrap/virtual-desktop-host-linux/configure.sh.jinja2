@@ -14,6 +14,7 @@ set -x
 
 SEMAPHORE_DIR="/root/bootstrap/semaphore"
 CONFIG_FINISHED_LOCK="${SEMAPHORE_DIR}/configure_finished.lock"
+INSTANCE_READY_LOCK="${SEMAPHORE_DIR}/instance_ready.lock"
 SCRIPT_DIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
 
 if [[ ! -f ${CONFIG_FINISHED_LOCK} ]]; then
@@ -103,6 +104,7 @@ if [[ ! -f ${CONFIG_FINISHED_LOCK} ]]; then
     {'Key':'res:EnvironmentName', 'Value': context.cluster_name },
     {'Key':'res:ModuleName', 'Value': context.module_name },
     {'Key':'res:ModuleId', 'Value': context.module_id },
+    {'Key':'res:Project', 'Value': context.vars.project },
     {'Key':'Name', 'Value': context.cluster_name + '/' + context.module_id + ' Root Volume' }
   ] %}
     {% include '_templates/linux/tag_ebs_volumes.jinja2' %}
@@ -134,6 +136,11 @@ if [[ ! -f ${CONFIG_FINISHED_LOCK} ]]; then
   ] %}
     {% include '_templates/linux/motd.jinja2' %}
   {%- endwith %}
+
+  # TODO: enable virtual-desktop-app for ubuntu after resolve dependency issue
+  if [[ $RES_BASE_OS != "ubuntu2204" ]]; then
+      /bin/bash ${SCRIPT_DIR}/install_app.sh "{{context.vars.app_package_uri}}"
+  fi
 
   {% if context.config.get_string('directoryservice.name', default='') != '' %}
     {% include '_templates/linux/join_directoryservice.jinja2' %}
@@ -449,6 +456,16 @@ if [[ ! -f ${CONFIG_FINISHED_LOCK} ]]; then
 
     # Exit to avoid running the rest of script before reboot is completed.
     exit 0
+  fi
+
+else
+  # Rerun script if RERUN_ON_REBOOT is true when reboot
+  source /etc/launch_script_environment
+  if [[ "${RERUN_ON_REBOOT}" == "True" && -f ${INSTANCE_READY_LOCK} ]]; then
+    echo "Rerunning ON_VDI_CONFIGURED_COMMANDS"
+    /bin/bash ${SCRIPT_DIR}/${ON_VDI_CONFIGURED_COMMANDS}
+  else
+    echo "Skipping running ON_VDI_CONFIGURED_COMMANDS"
   fi
 fi
 

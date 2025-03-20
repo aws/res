@@ -58,7 +58,9 @@ from ideadatamodel import (
     UpdateSessionPermissionResponse,
     VirtualDesktopSession,
     VirtualDesktopArchitecture,
-    VirtualDesktopSoftwareStack
+    VirtualDesktopSoftwareStack,
+    VirtualDesktopTenancy,
+    VirtualDesktopAffinity,
 )
 from ideadatamodel import errorcodes, exceptions, constants
 from ideasdk.api import ApiInvocationContext
@@ -194,71 +196,11 @@ class VirtualDesktopAdminAPI(VirtualDesktopAPI):
 
         return self.validate_create_session_request(session)
 
-    @staticmethod
-    def _validate_update_software_stack_request(software_stack: VirtualDesktopSoftwareStack) -> (VirtualDesktopSoftwareStack, bool):
-        if Utils.is_empty(software_stack):
-            software_stack = VirtualDesktopSoftwareStack()
-            software_stack.failure_reason = 'software_stack request missing'
-            return software_stack, False
-
-        if Utils.is_any_empty(software_stack.name):
-            software_stack.failure_reason = 'software_stack.name missing'
-            return software_stack, False
-
-        if Utils.is_any_empty(software_stack.description):
-            software_stack.failure_reason = 'software_stack.description missing'
-            return software_stack, False
-
-        if Utils.is_empty(software_stack.base_os):
-            software_stack.failure_reason = 'software_stack.base_os missing'
-            return software_stack, False
-
-        for project in software_stack.projects:
-            if Utils.is_empty(project.project_id):
-                software_stack.failure_reason = 'software_stack.project.project_id missing'
-                return software_stack, False
-
-        return software_stack, True
+    def _validate_update_software_stack_request(self, software_stack: VirtualDesktopSoftwareStack) -> (VirtualDesktopSoftwareStack, bool):
+        return self.software_stack_utils.validate_software_stack_fields(software_stack)
 
     def _validate_create_software_stack_request(self, software_stack: VirtualDesktopSoftwareStack) -> (VirtualDesktopSoftwareStack, bool):
-        software_stack, is_valid = self.validate_create_software_stack_request(software_stack)
-        if not is_valid:
-            self._logger.error(software_stack.failure_reason)
-            return software_stack, False
-
-        if Utils.is_empty(software_stack.min_ram):
-            software_stack.failure_reason = 'software_stack.min_ram missing'
-            return software_stack, False
-
-        if Utils.is_empty(software_stack.min_storage):
-            software_stack.failure_reason = 'software_stack.min_storage missing'
-            return software_stack, False
-
-        if Utils.is_empty(software_stack.gpu):
-            software_stack.failure_reason = 'software_stack.gpu missing'
-            return software_stack, False
-
-        if Utils.is_empty(software_stack.base_os):
-            software_stack.failure_reason = 'software_stack.base_os'
-            return software_stack, False
-
-        if Utils.is_empty(software_stack.ami_id):
-            software_stack.failure_reason = 'software_stack.ami_id'
-            return software_stack, False
-
-        image_description = self.controller_utils.describe_image_id(software_stack.ami_id)
-        if Utils.is_empty(image_description) or Utils.get_value_as_string('ImageId', image_description, None) != software_stack.ami_id:
-            software_stack.failure_reason = f'Invalid software_stack.ami_id: {software_stack.ami_id}'
-            return software_stack, False
-
-        if Utils.is_not_empty(software_stack.architecture) and Utils.get_value_as_string('Architecture', image_description, None) != software_stack.architecture.value:
-            software_stack.failure_reason = f'Invalid software_stack.ami_id: {software_stack.ami_id} with architecture: {software_stack.architecture.value}'
-            return software_stack, False
-
-        if Utils.is_empty(software_stack.architecture):
-            software_stack.architecture = VirtualDesktopArchitecture(Utils.get_value_as_string('Architecture', image_description, None))
-
-        return software_stack, True
+        return self.software_stack_utils.validate_software_stack_fields(software_stack)
 
     def create_session(self, context: ApiInvocationContext):
         session = context.get_request_payload_as(CreateSessionRequest).session
@@ -540,7 +482,15 @@ class VirtualDesktopAdminAPI(VirtualDesktopAPI):
             old_software_stack.name = new_software_stack.name
         if Utils.is_not_empty(new_software_stack.enabled):
             old_software_stack.enabled = new_software_stack.enabled
+        if new_software_stack.placement:
+            old_software_stack.placement = new_software_stack.placement
         old_software_stack.projects = new_software_stack.projects
+        old_software_stack.allowed_instance_types = new_software_stack.allowed_instance_types
+        old_software_stack.ami_id = new_software_stack.ami_id
+        old_software_stack.architecture = new_software_stack.architecture
+        old_software_stack.gpu = new_software_stack.gpu
+        old_software_stack.min_storage = new_software_stack.min_storage
+        old_software_stack.min_ram = new_software_stack.min_ram
 
         new_software_stack = self.software_stack_db.update(old_software_stack)
         ss_projects = []
@@ -574,6 +524,20 @@ class VirtualDesktopAdminAPI(VirtualDesktopAPI):
             software_stack=software_stack
         ))
 
+    def _validate_create_software_stack_from_session_request(self, new_software_stack: VirtualDesktopSoftwareStack):
+        images_with_same_name = self.context.aws().ec2().describe_images(
+            Filters=[
+                {
+                    'Name': 'name',
+                    'Values': [f'{new_software_stack.name}']
+                }
+            ]
+        )['Images']
+        if images_with_same_name:
+            new_software_stack.failure_reason = "ami with the same name exists in this account"
+            return new_software_stack, False
+        return new_software_stack, True
+
     def create_software_stack_from_session(self, context: ApiInvocationContext):
         request = context.get_request_payload_as(CreateSoftwareStackFromSessionRequest)
         session = request.session
@@ -587,6 +551,8 @@ class VirtualDesktopAdminAPI(VirtualDesktopAPI):
 
         new_software_stack = request.new_software_stack
         new_software_stack, is_valid = self.validate_create_software_stack_request(new_software_stack)
+        if is_valid:
+            new_software_stack, is_valid = self._validate_create_software_stack_from_session_request(new_software_stack)
         if not is_valid:
             context.fail(
                 message=new_software_stack.failure_reason,
@@ -629,7 +595,7 @@ class VirtualDesktopAdminAPI(VirtualDesktopAPI):
             )
             return
         permission_profile = self.permission_profile_db.update(permission_profile)
-        admin_profile_id = self.context.config().get_string('virtual-desktop-controller.dcv_session.default_profiles.admin', required=True)     
+        admin_profile_id = self.context.config().get_string('virtual-desktop-controller.dcv_session.default_profiles.admin', required=True)
         # Check whether global admin profile has been updated
         if (admin_profile_id == permission_profile.profile_id):
             # All sharing profiles must be updated to propagate globally disabled desktop permissions
@@ -664,7 +630,7 @@ class VirtualDesktopAdminAPI(VirtualDesktopAPI):
         context.success(UpdatePermissionProfileResponse(
             profile=permission_profile
         ))
-            
+
 
     def create_permission_profile(self, context: ApiInvocationContext):
         permission_profile = context.get_request_payload_as(CreatePermissionProfileRequest).profile

@@ -34,9 +34,9 @@ fi
 source "$SCRIPT_DIR/../common/bootstrap_common.sh"
 
 if [[ $BASE_OS =~ ^(amzn2|rhel8|rhel9)$ ]]; then
-  /bin/bash "${SCRIPT_DIR}/../common/red_hat/python.sh" -r $AWS_REGION -n $RES_ENVIRONMENT_NAME -a "res" -i "/opt/idea/python"
+  /bin/bash "${SCRIPT_DIR}/../common/red_hat/python.sh" -r $AWS_REGION -n $RES_ENVIRONMENT_NAME -a "$ALIAS_PREFIX" -i "$INSTALL_DIR"
 elif [[ $BASE_OS =~ ^(ubuntu2204)$ ]]; then
-  /bin/bash "${SCRIPT_DIR}/../common/debian/python.sh" -r $AWS_REGION -n $RES_ENVIRONMENT_NAME -a "res" -i "/opt/idea/python"
+  /bin/bash "${SCRIPT_DIR}/../common/debian/python.sh" -r $AWS_REGION -n $RES_ENVIRONMENT_NAME -a "$ALIAS_PREFIX" -i "$INSTALL_DIR"
 else
   log_warning "Base OS not supported."
   exit 1

@@ -65,7 +65,7 @@ function install_nvidia_grid_drivers () {
   chmod +x NVIDIA-Linux-x86_64*.run
   /bin/sh NVIDIA-Linux-x86_64*.run --no-precompiled-interface --run-nvidia-xconfig --accept-license --silent
   log_info "X server configuration for GPU start..."
-  # If you are using NVIDIA vGPU software version 14.x or greater on the G4dn, G5, or G5g instances, disable GSP with the following commands.
+  # If you are using NVIDIA vGPU software version 14.x or greater on the G4dn, G5, G5g, G6 or Gr6 instances, disable GSP with the following commands.
   touch /etc/modprobe.d/nvidia.conf
   echo "options nvidia NVreg_EnableGpuFirmware=0" | sudo tee --append /etc/modprobe.d/nvidia.conf
 
@@ -90,6 +90,7 @@ function install_nvidia_public_drivers() {
   # G4dn      Tesla	        T-Series	      T4
   # G5        Tesla	        A-Series	      A10 - G5  (instances require driver version 470.00 or later)
   # G5g       Tesla	        T-Series	      NVIDIA T4G  (G5g instances require driver version 470.82.01 or later. The operating systems is Linux aarch64)
+  # G6/Gr6    Tesla         L-Series        L4
   # P2        Tesla	        K-Series	      K80
   # P3        Tesla	        V-Series	      V100
   # P4d       Tesla	        A-Series	      A100 (320 GB HBM2 GPU memory)
@@ -249,6 +250,15 @@ function install_gpu_drivers () {
       log_info "Intel / NVIDIA K80"
       # Tesla driver: Yes, GRID driver: No
       install_nvidia_public_drivers
+      ;;
+    g6|gr6)
+      log_info "Intel / NVIDIA L4"
+      # Tesla driver: Yes, GRID driver: Yes
+      if [[ ${NODE_TYPE} == "dcv" ]]; then
+        install_nvidia_grid_drivers
+      else
+        install_nvidia_public_drivers
+      fi
       ;;
     g5)
       log_info "AMD / NVIDIA A10G"

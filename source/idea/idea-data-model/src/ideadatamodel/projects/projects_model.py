@@ -38,6 +38,7 @@ class Script(SocaBaseModel):
 class ScriptEvents(SocaBaseModel):
     on_vdi_start: Optional[List[Script]]
     on_vdi_configured: Optional[List[Script]]
+    rerun_on_reboot: Optional[bool]
 
 
 class Scripts(SocaBaseModel):
@@ -51,6 +52,7 @@ class Project(SocaBaseModel):
     title: Optional[str]
     description: Optional[str]
     enabled: Optional[bool]
+    allowed_sessions_per_user: Optional[int]
     enable_budgets: Optional[bool]
     budget: Optional[AwsProjectBudget]
     tags: Optional[List[SocaKeyValue]]
@@ -68,6 +70,7 @@ class Project(SocaBaseModel):
         eq = eq and self.description == other.description
         eq = eq and self.enable_budgets == other.enable_budgets
         eq = eq and self.budget == other.budget
+        eq = eq and self.allowed_sessions_per_user == other.allowed_sessions_per_user
 
         self_tags = self.tags if self.tags else []
         other_tags = other.tags if other.tags else []

@@ -7,7 +7,13 @@ import boto3
 import pytest
 from _pytest.monkeypatch import MonkeyPatch
 from ideatestutils.dynamodb.dynamodb_local import DynamoDBLocal
-from res.constants import AD_SYNC_LOCK_TABLE, ENVIRONMENT_NAME_KEY
+from res.constants import (
+    AD_SYNC_LOCK_TABLE,
+    AD_SYNC_STATUS_SUBMISSION_TIME_KEY,
+    AD_SYNC_STATUS_TABLE,
+    AD_SYNC_STATUS_TASK_ID_KEY,
+    ENVIRONMENT_NAME_KEY,
+)
 from res.resources import (
     cluster_settings,
     email_templates,
@@ -240,11 +246,26 @@ def context(ddb_local):
         ],
         BillingMode="PAY_PER_REQUEST",
     )
+
     # Create ad sync lock table
     dynamodb_client.create_table(
         TableName=f"{ENVIRONMENT_NAME}.{AD_SYNC_LOCK_TABLE}",
         KeySchema=[{"AttributeName": "lock_key", "KeyType": "HASH"}],
         AttributeDefinitions=[{"AttributeName": "lock_key", "AttributeType": "S"}],
+        BillingMode="PAY_PER_REQUEST",
+    )
+
+    # Create AD sync status table
+    dynamodb_client.create_table(
+        TableName=f"{ENVIRONMENT_NAME}.{AD_SYNC_STATUS_TABLE}",
+        AttributeDefinitions=[
+            {"AttributeName": AD_SYNC_STATUS_TASK_ID_KEY, "AttributeType": "S"},
+            {"AttributeName": AD_SYNC_STATUS_SUBMISSION_TIME_KEY, "AttributeType": "N"},
+        ],
+        KeySchema=[
+            {"AttributeName": AD_SYNC_STATUS_TASK_ID_KEY, "KeyType": "HASH"},
+            {"AttributeName": AD_SYNC_STATUS_SUBMISSION_TIME_KEY, "KeyType": "RANGE"},
+        ],
         BillingMode="PAY_PER_REQUEST",
     )
 
@@ -345,6 +366,7 @@ def context(ddb_local):
         TableName=f"{ENVIRONMENT_NAME}.{cluster_settings.CLUSTER_SETTINGS_TABLE_NAME}"
     )
     dynamodb_client.delete_table(TableName=f"{ENVIRONMENT_NAME}.{AD_SYNC_LOCK_TABLE}")
+    dynamodb_client.delete_table(TableName=f"{ENVIRONMENT_NAME}.{AD_SYNC_STATUS_TABLE}")
     dynamodb_client.delete_table(
         TableName=f"{ENVIRONMENT_NAME}.{permission_profiles.PERMISSION_PROFILE_TABLE_NAME}"
     )

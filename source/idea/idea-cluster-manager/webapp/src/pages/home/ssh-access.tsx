@@ -11,9 +11,9 @@
  * and limitations under the License.
  */
 
-import { Component } from "react";
+import React, { Component } from "react";
 
-import { Badge, Box, Button, Container, Grid, Header, Link, SpaceBetween } from "@cloudscape-design/components";
+import {Badge, Box, Button, Container, FlashbarProps, Grid, Header, Link, SpaceBetween} from "@cloudscape-design/components";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import { faLinux, faApple, faWindows } from "@fortawesome/free-brands-svg-icons";
 import { faDownload } from "@fortawesome/free-solid-svg-icons";
@@ -53,6 +53,20 @@ class SSHAccess extends Component<SSHAccessProps, SSHAccessState> {
             });
     }
 
+    setFlashbarMessage(type: FlashbarProps.Type, content: string, header?: React.ReactNode, action?: React.ReactNode) {
+        this.props.onFlashbarChange({
+            items: [
+                {
+                    type,
+                    header,
+                    content,
+                    action,
+                    dismissible: true,
+                }
+            ]
+        })
+    }
+
     onDownloadPrivateKey = (keyFormat: "pem" | "ppk") => {
         const state: any = {};
         if (keyFormat === "pem") {
@@ -64,6 +78,9 @@ class SSHAccess extends Component<SSHAccessProps, SSHAccessState> {
             AppContext.get()
                 .auth()
                 .downloadPrivateKey(keyFormat)
+                .catch((error) => {
+                     this.setFlashbarMessage("error", error.message);
+                })
                 .finally(() => {
                     const state: any = {};
                     if (keyFormat === "pem") {
