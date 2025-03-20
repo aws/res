@@ -2,6 +2,23 @@
 #  Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 #  SPDX-License-Identifier: Apache-2.0
 
+function process_authorize_security_group_ingress_response {
+  local exit_code=$?
+
+  if [ $exit_code -ne 0 ]; then
+    if [[ "$response" == *"An error occurred (InvalidPermission.Duplicate)"* ]]; then
+      echo "Skip existing security group rule"
+    else
+      echo "Failed to add security group rule: $response"
+      exit $exit_code
+    fi
+  else
+    echo "$response"
+  fi
+
+  return 0
+}
+
 PUBLIC_IP=$(curl https://checkip.amazonaws.com/)
 
 if [[ -z $CLUSTERADMIN_USERNAME || -z $CLUSTERADMIN_PASSWORD ]]; then
@@ -20,26 +37,15 @@ SG_EXTERNAL_ALB_ID=$(echo $SG_EXTERNAL_ALB_INFO | jq -r '.SecurityGroups[0].Grou
 SG_BASTION_HOST_ID=$(echo $SG_BASTION_HOST_INFO | jq -r '.SecurityGroups[0].GroupId')
 SG_VDC_GATEWAY_ID=$(echo $SG_VDC_GATEWAY_INFO | jq -r '.SecurityGroups[0].GroupId')
 
-aws ec2 authorize-security-group-ingress --group-id $SG_EXTERNAL_ALB_ID --region $AWS_REGION --ip-permissions \
+response=$(aws ec2 authorize-security-group-ingress --group-id $SG_EXTERNAL_ALB_ID --region $AWS_REGION --ip-permissions \
     IpProtocol=tcp,FromPort=80,ToPort=80,IpRanges="[{CidrIp=$PUBLIC_IP/32,Description='HTTP access to integration tests environment'}]" \
-    IpProtocol=tcp,FromPort=443,ToPort=443,IpRanges="[{CidrIp=$PUBLIC_IP/32,Description='HTTPS access to integration tests environment'}]"
+    IpProtocol=tcp,FromPort=443,ToPort=443,IpRanges="[{CidrIp=$PUBLIC_IP/32,Description='HTTPS access to integration tests environment'}]" 2>&1)
+process_authorize_security_group_ingress_response
 
-aws ec2 authorize-security-group-ingress --group-id $SG_BASTION_HOST_ID --region $AWS_REGION --ip-permissions \
-    IpProtocol=tcp,FromPort=22,ToPort=22,IpRanges="[{CidrIp=$PUBLIC_IP/32,Description='SSH access to integration tests environment'}]"
+response=$(aws ec2 authorize-security-group-ingress --group-id $SG_BASTION_HOST_ID --region $AWS_REGION --ip-permissions \
+    IpProtocol=tcp,FromPort=22,ToPort=22,IpRanges="[{CidrIp=$PUBLIC_IP/32,Description='SSH access to integration tests environment'}]" 2>&1)
+process_authorize_security_group_ingress_response
 
-aws ec2 authorize-security-group-ingress --group-id $SG_VDC_GATEWAY_ID --region $AWS_REGION --ip-permissions \
-    IpProtocol=all,IpRanges="[{CidrIp=$PUBLIC_IP/32,Description='Allow all traffic to integration tests environment'}]"
-
-# Integ tests when run through tox/pytest need ~/.aws/credentials setup in order for boto to work
-CREDS=`curl 169.254.170.2$AWS_CONTAINER_CREDENTIALS_RELATIVE_URI`
-
-ACCESS_KEY_ID=`echo $CREDS | jq '.AccessKeyId' | tr -d '"'`
-SECRET_ACCESS_KEY=`echo $CREDS | jq '.SecretAccessKey' | tr -d '"'`
-SESSION_TOKEN=`echo $CREDS | jq '.Token' | tr -d '"'`
-
-aws configure set region $AWS_REGION
-aws configure set output "json"
-echo -e "[default]" >> ~/.aws/credentials
-echo -e "aws_access_key_id=$ACCESS_KEY_ID" >> ~/.aws/credentials
-echo -e "aws_secret_access_key=$SECRET_ACCESS_KEY" >> ~/.aws/credentials
-echo -e "aws_session_token=$SESSION_TOKEN" >> ~/.aws/credentials
+response=$(aws ec2 authorize-security-group-ingress --group-id $SG_VDC_GATEWAY_ID --region $AWS_REGION --ip-permissions \
+    IpProtocol=all,IpRanges="[{CidrIp=$PUBLIC_IP/32,Description='Allow all traffic to integration tests environment'}]" 2>&1)
+process_authorize_security_group_ingress_response

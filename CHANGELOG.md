@@ -1,6 +1,33 @@
 # Change Log
 This file is used to list changes made in each release of Research and Engineering Studio (RES).
 
+2025.03
+------
+
+**ENHANCEMENTS**
+
+- Added the new Cost Dashboard page
+- Enabled the hibernation option for Linux VDIs except RHEL8 and RHEL9
+- Added the ability to customize SSSD configurations
+- Added the ability to filter instance types on software stacks
+- Added the ability to select the global session type for Linux VDIs
+- Added the ability to launch Windows 10 and Windows 11 VDIs
+- Added the ability to select VDI tenancy
+- Added the ability to delete project
+- Added the ability to sort all RES tables
+- Added the ability to start / stop AD Sync on demand
+
+**CHANGES**
+
+- Removed Operating System selector from VDI session creation workflow
+- Made adding Groups/Users optional in create project workflow
+- Re-enabled the Create Stack from Session workflow
+- Made all software stack components editable
+
+**BUG FIXES**
+
+- Show instance types for Windows AMD Software Stack
+
 2024.12.01
 ------
 
@@ -27,7 +54,7 @@ This file is used to list changes made in each release of Research and Engineeri
 **BUG FIXES**
 
 - Resolved an issue where the storage root parameter is now properly defined for Ubuntu VDIs allowing access to the DCV upload/download icon in the session UI.
-- Resolved an issue with VDI auto stop feature in private VPC configuration. 
+- Resolved an issue with VDI auto stop feature in private VPC configuration.
 - Resolved an issue with failing to launch VDIs for graphic enhanced instance types.
 - Resolved an issue where infrastructure AMI building would fail due to an error in the dependencies file.
 - Resolved an issue with the PublicAccessConfig parameter in the bootstrap stack causing an error in deployments using restricted Service Control Policies (SCP).

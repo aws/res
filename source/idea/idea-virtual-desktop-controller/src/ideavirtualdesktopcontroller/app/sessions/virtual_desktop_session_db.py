@@ -227,7 +227,7 @@ class VirtualDesktopSessionDB(VirtualDesktopNotifiableDB):
                 raise e
         return self.convert_db_dict_to_session_object(session_db_entry)
 
-    def get_session_count_for_user(self, username: str) -> int:
+    def get_current_project_session_count_for_user(self, username: str, project_id: Optional[str]) -> int:
         count_request = {
             'Select': 'COUNT',
             'KeyConditions': {
@@ -237,7 +237,17 @@ class VirtualDesktopSessionDB(VirtualDesktopNotifiableDB):
                     ],
                     'ComparisonOperator': 'EQ'
                 },
-            }}
+            },
+        }
+
+        if project_id:
+            count_request['FilterExpression'] = '#project.project_id = :project_id'
+            count_request['ExpressionAttributeNames'] = {
+                '#project': 'project'
+            }
+            count_request['ExpressionAttributeValues'] = {
+                ':project_id': project_id
+            }
 
         response = self._table.query(**count_request)
         return Utils.get_value_as_int('Count', response)

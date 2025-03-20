@@ -114,6 +114,8 @@ Statement:
       - '{{ context.arns.get_ddb_table_arn("authz.role-assignments") }}'
       - '{{ context.arns.get_ddb_table_arn("authz.role-assignments/index/*") }}'
       - '{{ context.arns.get_ddb_table_arn("ad-sync.distributed-lock") }}'
+      - '{{ context.arns.get_ddb_table_arn("ad-sync.status") }}'
+      - '{{ context.arns.get_ddb_table_arn("ad-sync.status/index/*") }}'
 
     Effect: Allow
 

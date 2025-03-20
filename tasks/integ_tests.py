@@ -97,7 +97,7 @@ def _run_integ_tests(
         python_path = list(set(python_path + additional_python_path))
 
     with c.cd(tests_src):
-        cmd = f'pytest -v --disable-warnings {test_file} {" ".join(test_params)}'
+        cmd = f'pytest -v --log-cli-level=INFO --disable-warnings {test_file} {" ".join(test_params)}'
         if capture_output:
             cmd = f"{cmd} --capture=tee-sys"
         if keywords is not None:
@@ -180,7 +180,7 @@ def smoke(
         capture_output=capture_output,
         keywords=keywords,
         test_file="smoke.py",
-        num_workers=8,
+        num_workers=14,
     )
     raise SystemExit(exit_code)
 

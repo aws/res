@@ -13,8 +13,9 @@
 set -x
 
 apt install -y linux-modules-extra-$(uname -r)
+apt install -y linux-firmware
 
-wget https://repo.radeon.com/amdgpu-install/6.0.2/ubuntu/jammy/amdgpu-install_6.0.60002-1_all.deb
-DEBIAN_FRONTEND=noninteractive apt install -y ./amdgpu-install_6.0.60002-1_all.deb
+wget https://repo.radeon.com/amdgpu-install/6.2.1/ubuntu/jammy/amdgpu-install_6.2.60201-1_all.deb
+DEBIAN_FRONTEND=noninteractive apt install -y ./amdgpu-install_6.2.60201-1_all.deb
 
 amdgpu-install --usecase=workstation --vulkan=pro --opencl=rocr --no-32 -y --accept-eula

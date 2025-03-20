@@ -261,6 +261,10 @@ def _load_base_software_stacks() -> Optional[List[Dict[str, Any]]]:
             default_min_storage_unit = arch_config.get("default-min-storage-unit")
             default_min_ram_value = arch_config.get("default-min-ram-value")
             default_min_ram_unit = arch_config.get("default-min-ram-unit")
+            default_tenancy = arch_config.get("default-tenancy")
+            default_allowed_instance_types = arch_config.get(
+                "default-allowed-instance-types"
+            )
 
             if (
                 not default_name
@@ -269,11 +273,14 @@ def _load_base_software_stacks() -> Optional[List[Dict[str, Any]]]:
                 or not default_min_storage_unit
                 or not default_min_ram_value
                 or not default_min_ram_unit
+                or not default_tenancy
+                or not default_allowed_instance_types
             ):
                 error_message = (
                     f"Invalid base-software-stack-config.yaml configuration for OS: {base_os} Arch Config: "
                     f"{arch}. Missing default-name and/or default-description and/or default-min-storage-value "
-                    f"and/or default-min-storage-unit and/or default-min-ram-value and/or default-min-ram-unit"
+                    f"and/or default-min-storage-unit and/or default-min-ram-value and/or default-min-ram-unit "
+                    f"and/or default-allowed-instance-types"
                 )
                 logger.error(error_message)
                 raise Exception(error_message)
@@ -358,7 +365,17 @@ def _load_base_software_stacks() -> Optional[List[Dict[str, Any]]]:
                     _reformat_key(software_stacks.SOFTWARE_STACK_DB_MIN_RAM_UNIT_KEY),
                     default_min_ram_unit,
                 )
+                custom_allowed_instance_types = region_config.get(
+                    _reformat_key(
+                        software_stacks.SOFTWARE_STACK_DB_ALLOWED_INSTANCE_TYPES_KEY
+                    ),
+                    default_allowed_instance_types,
+                )
                 custom_stack_gpu_manufacturer = gpu_manufacturer
+                custom_stack_tenancy = region_config.get(
+                    _reformat_key(software_stacks.SOFTWARE_STACK_DB_TENANCY_KEY),
+                    default_tenancy,
+                )
 
                 software_stack_id = f"{software_stacks.BASE_STACK_PREFIX}-{base_os}-{arch_key}-{ss_id_suffix}"
 
@@ -376,6 +393,8 @@ def _load_base_software_stacks() -> Optional[List[Dict[str, Any]]]:
                         software_stacks.SOFTWARE_STACK_DB_MIN_RAM_UNIT_KEY: custom_stack_min_ram_unit,
                         software_stacks.SOFTWARE_STACK_DB_ARCHITECTURE_KEY: arch,
                         software_stacks.SOFTWARE_STACK_DB_GPU_KEY: custom_stack_gpu_manufacturer,
+                        software_stacks.SOFTWARE_STACK_DB_TENANCY_KEY: custom_stack_tenancy,
+                        software_stacks.SOFTWARE_STACK_DB_ALLOWED_INSTANCE_TYPES_KEY: custom_allowed_instance_types,
                         software_stacks.SOFTWARE_STACK_DB_PROJECTS_KEY: [],
                     }
                 )

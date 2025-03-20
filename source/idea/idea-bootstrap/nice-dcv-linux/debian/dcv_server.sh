@@ -95,6 +95,10 @@ function install_nice_dcv_server () {
 
 function install_gpu_driver_prerequisites() {
   DEBIAN_FRONTEND=noninteractive apt install -y mesa-utils gcc make linux-headers-$(uname -r)
+  if [[ $BASE_OS =~ ^(ubuntu2204)$ ]]; then
+    apt install -y gcc-12
+    update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-12 12
+  fi
 }
 
 function install_microphone_redirect() {

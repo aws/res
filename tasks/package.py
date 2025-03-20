@@ -93,6 +93,10 @@ def virtual_desktop_controller(c):
     package_tool.package()
     idea.console.success(f'distribution created: {package_tool.output_archive_name}')
 
+    package_tool = PackageTool(c, 'idea-virtual-desktop')
+    package_tool.package()
+    idea.console.success(f'distribution created: {package_tool.output_archive_name}')
+
 
 @task(name='infra_ami_deps')
 def package_infra_ami_dependencies(c):
@@ -121,6 +125,17 @@ def bastion_host(c):
     package bastion_host
     """
     package_tool = PackageTool(c, 'idea-bastion-host')
+    package_tool.package()
+    idea.console.success(f'distribution created: {package_tool.output_archive_name}')
+
+
+@task
+def virtual_desktop(c):
+    # type: (Context) -> None
+    """
+    package virtual_desktop
+    """
+    package_tool = PackageTool(c, 'idea-virtual-desktop')
     package_tool.package()
     idea.console.success(f'distribution created: {package_tool.output_archive_name}')
 
@@ -179,6 +194,8 @@ def package_all(c):
     library(c)
 
     bastion_host(c)
+
+    virtual_desktop(c)
 
     # all archive
     make_all_archive(c)

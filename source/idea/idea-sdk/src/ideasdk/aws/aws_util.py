@@ -151,7 +151,7 @@ class AWSUtil(AWSUtilProtocol):
             return 'Inf', False
         elif family.startswith(('trn1', 'trn')):
             return 'Trn', False
-        elif family.startswith(('g4dn', 'g4ad', 'g5', 'g5g', 'g3s', 'g3', 'g2', 'g')):
+        elif family.startswith(('g6', 'gr6', 'g4dn', 'g4ad', 'g5', 'g5g', 'g3s', 'g3', 'g2', 'g')):
             return 'G', False
         elif family.startswith(('f1', 'f')):
             return 'F', False

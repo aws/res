@@ -13,7 +13,7 @@
 
 import React, { Component, RefObject } from "react";
 import IdeaForm from "../../../components/form";
-import { Project, SocaMemory, SocaUserInputChoice, SocaUserInputParamMetadata, User, VDIPermissions, VirtualDesktopArchitecture, VirtualDesktopBaseOS, VirtualDesktopGPU, VirtualDesktopSessionType, VirtualDesktopSoftwareStack } from "../../../client/data-model";
+import { Project, SocaMemory, SocaUserInputChoice, SocaUserInputParamMetadata, User, VirtualDesktopArchitecture, VirtualDesktopBaseOS, VirtualDesktopGPU, VirtualDesktopSessionType, VirtualDesktopSoftwareStack } from "../../../client/data-model";
 import Utils from "../../../common/utils";
 import { AccountsClient, AuthClient, ProjectsClient, VirtualDesktopClient } from "../../../client";
 import { AppContext } from "../../../common";
@@ -31,7 +31,7 @@ export interface VirtualDesktopCreateSessionFormProps {
 
 export interface DCVSessionTypeChoice {
     choices: SocaUserInputChoice[];
-    defaultChoice: "CONSOLE" | "VIRTUAL";
+    defaultChoice: VirtualDesktopSessionType;
     disabled: boolean;
 }
 
@@ -39,7 +39,6 @@ export interface VirtualDesktopCreateSessionFormState {
     showModal: boolean;
     isCognitoNativeUser: boolean;
     softwareStacks: { [k: string]: VirtualDesktopSoftwareStack };
-    supportedOsChoices: SocaUserInputChoice[];
     dcvSessionTypeChoice: DCVSessionTypeChoice;
     eVDIUsers: User[];
 }
@@ -56,11 +55,10 @@ class VirtualDesktopCreateSessionForm extends Component<VirtualDesktopCreateSess
             showModal: false,
             isCognitoNativeUser: false,
             softwareStacks: {},
-            supportedOsChoices: [],
             eVDIUsers: [],
             dcvSessionTypeChoice: {
                 choices: Utils.getDCVSessionTypes(),
-                defaultChoice: "VIRTUAL",
+                defaultChoice: undefined,
                 disabled: false,
             },
         };
@@ -124,7 +122,7 @@ class VirtualDesktopCreateSessionForm extends Component<VirtualDesktopCreateSess
             .then((result)=> {
                 if (result && result.user && result.user.identity_source === Constants.COGNITO_USER_IDP_TYPE) {
                     this.setState({
-                       isCognitoNativeUser: true
+                        isCognitoNativeUser: true
                     })
                 }
             });
@@ -134,22 +132,6 @@ class VirtualDesktopCreateSessionForm extends Component<VirtualDesktopCreateSess
                 this.instanceTypesInfo = this.generateInstanceTypeReverseIndex(result.listing);
                 this.defaultInstanceTypeChoices = Utils.generateInstanceTypeListing(result.listing);
             });
-
-        this.getVirtualDesktopUtilsClient()
-            .listSupportedOS({})
-            .then((result) => {
-                this.setState(
-                    {
-                        supportedOsChoices: Utils.getSupportedOSChoices(result.listing!),
-                    },
-                    () => {
-                        this.getForm()?.getFormField("base_os")?.setOptions({
-                            listing: this.state.supportedOsChoices,
-                        });
-                    }
-                );
-            });
-
         this.authAdmin()
             .listUsers({ filters: [{ key: "is_active", eq: true }] })
             .then((group_response) => {
@@ -170,6 +152,20 @@ class VirtualDesktopCreateSessionForm extends Component<VirtualDesktopCreateSess
                     }
                 );
             });
+
+        AppContext.get()
+            .getClusterSettingsService()
+            .getVirtualDesktopSettings()
+            .then((settings) => {
+                this.setState({
+                    dcvSessionTypeChoice: {
+                    choices: Utils.getDCVSessionTypes(),
+                    defaultChoice: settings?.dcv_session.default_dcv_session_type,
+                    disabled: false,
+                },
+                });
+            });
+
     }
 
     isAdmin(): boolean {
@@ -250,7 +246,7 @@ class VirtualDesktopCreateSessionForm extends Component<VirtualDesktopCreateSess
         softwareStacks?.forEach((stack) => {
             softwareStackChoices.push({
                 title: stack.description,
-                description: `Name: ${stack.name}, AMI ID: ${stack.ami_id}, OS: ${stack.base_os}, GPU: ${Utils.getFormattedGPUManufacturer(stack.gpu)}`,
+                description: `AMI ID: ${stack.ami_id}, OS: ${stack.base_os}, GPU: ${Utils.getFormattedGPUManufacturer(stack.gpu)}`,
                 value: stack.stack_id,
             });
         });
@@ -327,7 +323,7 @@ class VirtualDesktopCreateSessionForm extends Component<VirtualDesktopCreateSess
         }
         return {
             unit: "gb",
-            value: instanceTypeInfo.MemoryInfo.SizeInMiB / 1024,
+            value: Utils.roundToPrecision(Utils.mibToGB(instanceTypeInfo.MemoryInfo.SizeInMiB), 1),
         };
     }
 
@@ -362,10 +358,10 @@ class VirtualDesktopCreateSessionForm extends Component<VirtualDesktopCreateSess
 
     updateSoftwareStackOptions() {
         let project_id = this.getForm()?.getFormField("project_id")?.getValueAsString();
-        let base_os = this.getForm()?.getFormField("base_os")?.getValueAsString();
-        if (Utils.isEmpty(project_id) || Utils.isEmpty(base_os)) {
+        if (Utils.isEmpty(project_id)) {
             return;
         }
+        this.getForm()?.getFormField("software_stack")?.reset();
         this.getVirtualDesktopClient()
             .listSoftwareStacks({
                 disabled_also: true,
@@ -373,12 +369,6 @@ class VirtualDesktopCreateSessionForm extends Component<VirtualDesktopCreateSess
                 paginator: {
                     page_size: 100,
                 },
-                filters: [
-                    {
-                        key: "base_os",
-                        value: base_os,
-                    },
-                ],
             })
             .then((result) => {
                 const softwareStack = this.getForm()?.getFormField("software_stack");
@@ -410,14 +400,15 @@ class VirtualDesktopCreateSessionForm extends Component<VirtualDesktopCreateSess
         }
     }
 
-    updateSessionTypeChoicesIfRequired() {
+    async updateSessionTypeChoicesIfRequired(stateChange: string) {
         const dcvSessionType = this.getForm()?.getFormField("dcv_session_type");
         let dcvSessionTypeChoices: SocaUserInputChoice[] = [];
-        const base_os = this.getForm()?.getValue("base_os");
+        const base_os = this.state.softwareStacks[this.getForm()?.getValue("software_stack")].base_os;
         let instanceTypeName = this.getForm()?.getValue("instance_type");
         let gpu = this.getInstanceGPU(instanceTypeName);
         let arch = this.getInstanceArch(instanceTypeName);
-        let dcvSessionTypeDefaultChoice: "VIRTUAL" | "CONSOLE" = "VIRTUAL";
+        let currentDCVSessionTypeChoice = this.getForm()?.getValue("dcv_session_type")
+        let dcvSessionTypeDefaultChoice = ((currentDCVSessionTypeChoice == undefined) || stateChange == "software_stack") ? await Utils.getDefaultDCVSessionType() : currentDCVSessionTypeChoice;
         let disableSessionTypeChoice = false;
 
         const console_choice = {
@@ -497,7 +488,7 @@ class VirtualDesktopCreateSessionForm extends Component<VirtualDesktopCreateSess
                     description: "Select the user to create the session for. Sessions can only be created for active user's.",
                     data_type: "str",
                     param_type: "select_or_text",
-                    
+
                     validate: {
                         required: true,
                     },
@@ -510,19 +501,6 @@ class VirtualDesktopCreateSessionForm extends Component<VirtualDesktopCreateSess
             }
         }
 
-        
-        formParams.push({
-            name: "base_os",
-            title: "Operating System",
-            description: "Select the operating system for the virtual desktop",
-            data_type: "str",
-            param_type: "select",
-            validate: {
-                required: true,
-            },
-            default: "amazonlinux2",
-            choices: this.state.supportedOsChoices,
-        });
         formParams.push({
             name: "software_stack",
             title: "Software Stack",
@@ -532,18 +510,8 @@ class VirtualDesktopCreateSessionForm extends Component<VirtualDesktopCreateSess
             validate: {
                 required: true,
             },
-            choices: [],
-        });
-        formParams.push({
-            name: "hibernate_instance",
-            title: "Enable Instance Hibernation",
-            description: "Hibernation saves the contents from the instance memory (RAM) to your Amazon Elastic Block Store (Amazon EBS) root volume. You can not change instance type if you enable this option.",
-            data_type: "bool",
-            param_type: "confirm",
-            default: false,
-            validate: {
-                required: true,
-            },
+            choices: this.generateSoftwareStackListing(Object.values(this.state.softwareStacks)),
+            triggerVariant: "option",
         });
         formParams.push({
             name: "instance_type",
@@ -554,6 +522,7 @@ class VirtualDesktopCreateSessionForm extends Component<VirtualDesktopCreateSess
             validate: {
                 required: true,
             },
+            readonly: true,
             choices: this.defaultInstanceTypeChoices,
         });
         formParams.push({
@@ -567,6 +536,18 @@ class VirtualDesktopCreateSessionForm extends Component<VirtualDesktopCreateSess
                 required: true,
                 max: this.props.maxRootVolumeMemory,
             },
+        });
+        formParams.push({
+            name: "hibernate_instance",
+            title: "Enable Instance Hibernation",
+            description: "Hibernation saves the contents from the instance memory (RAM) to your Amazon Elastic Block Store (Amazon EBS) root volume. You can not change instance type if you enable this option.",
+            data_type: "bool",
+            param_type: "confirm",
+            default: false,
+            validate: {
+                required: true,
+            },
+            readonly: true,
         });
         formParams.push({
             name: "advanced_options",
@@ -650,33 +631,30 @@ class VirtualDesktopCreateSessionForm extends Component<VirtualDesktopCreateSess
                     title="Launch New Virtual Desktop"
                     modalSize="medium"
                     onStateChange={(event) => {
-                        if (event.param.name === "base_os") {
-                            const hibernation = this.getForm()?.getFormField("hibernate_instance");
-                            if (event.value === "windows") {
-                                // Hibernation is conditionally supported for Windows
+                        if (event.param.name === "software_stack") {
+                            if (event.value) {
+                                const stackId = event.value
+                                const hibernation = this.getForm()?.getFormField("hibernate_instance");
                                 hibernation?.disable(false);
-                                if (this.state.isCognitoNativeUser) {
+                                const base_os = this.state.softwareStacks[stackId].base_os;
+                                if (base_os === "windows" && this.state.isCognitoNativeUser) {
                                     this.getForm()?.disablePrimaryActionButton();
-                                }
-                            } else {
-                                this.getForm()?.enablePrimaryActionButton();
-                                if (event.value === "amazonlinux2") {
-                                    // Hibernation is supported for Amazon Linux 2 .
-                                    //hibernation?.disable(false);
-                                    hibernation?.setValue(false);
-                                    hibernation?.disable(true);
+                                    event.ref.setState({
+                                        errorMessage: "Windows instances for cognito users are not supported, please select one of our GNU/Linux-based stacks.",
+                                    });
                                 } else {
-                                    hibernation?.setValue(false);
-                                    hibernation?.disable(true);
+                                    this.getForm()?.enablePrimaryActionButton();
+                                    event.ref.setState({
+                                        errorMessage: "",
+                                    });
                                 }
-                            }
-                            this.updateSessionTypeChoicesIfRequired();
-                            this.updateSoftwareStackOptions();
-                        } else if (event.param.name === "software_stack") {
-                            this.getVirtualDesktopUtilsClient()
-                                .listAllowedInstanceTypes({
-                                    hibernation_support: this.getForm()?.getValue("hibernate_instance"),
-                                    software_stack: this.state.softwareStacks[event.value],
+                                this.updateSessionTypeChoicesIfRequired(event.param.name);
+                                this.getVirtualDesktopUtilsClient()
+                                .listAllowedInstanceTypesForSession({
+                                    session:{
+                                        hibernation_enabled: this.getForm()?.getValue("hibernate_instance"),
+                                        software_stack: this.state.softwareStacks[stackId],
+                                    }
                                 })
                                 .then(async (result) => {
                                     let instance_type = this.getForm()?.getFormField("instance_type");
@@ -685,12 +663,14 @@ class VirtualDesktopCreateSessionForm extends Component<VirtualDesktopCreateSess
                                         listing: Utils.generateInstanceTypeListing(result.listing),
                                     });
                                     this.updateRootVolumeSizeIfRequired();
+                                    instance_type?.disable(false);
                                 });
+                            }
                         } else if (event.param.name === "project_id") {
                             this.updateSoftwareStackOptions();
                         } else if (event.param.name === "instance_type") {
                             this.updateRootVolumeSizeIfRequired();
-                            this.updateSessionTypeChoicesIfRequired();
+                            this.updateSessionTypeChoicesIfRequired(event.param.name);
                         } else if (event.param.name === "root_storage_size") {
                             let min_storage_gb = this.getMinRootVolumeSizeInGB(this.state.softwareStacks[this.getForm()?.getValue("software_stack")], this.getForm()?.getValue("hibernate_instance"), this.getForm()?.getValue("instance_type"));
                             if (event.value < min_storage_gb.value) {
@@ -703,18 +683,23 @@ class VirtualDesktopCreateSessionForm extends Component<VirtualDesktopCreateSess
                                 });
                             }
                         } else if (event.param.name === "hibernate_instance") {
-                            this.getVirtualDesktopUtilsClient()
-                                .listAllowedInstanceTypes({
-                                    hibernation_support: event.value,
-                                    software_stack: this.state.softwareStacks[this.getForm()?.getValue("software_stack")],
-                                })
-                                .then((result) => {
-                                    let instance_type = this.getForm()?.getFormField("instance_type");
-                                    instance_type?.setOptions({
-                                        listing: Utils.generateInstanceTypeListing(result.listing),
+                            let stackId = this.getForm()?.getValue("software_stack")
+                            if (stackId) {
+                                this.getVirtualDesktopUtilsClient()
+                                    .listAllowedInstanceTypesForSession({
+                                        session: {
+                                            hibernation_enabled: event.value,
+                                            software_stack: this.state.softwareStacks[stackId],
+                                        }
+                                    })
+                                    .then((result) => {
+                                        let instance_type = this.getForm()?.getFormField("instance_type");
+                                        instance_type?.setOptions({
+                                            listing: Utils.generateInstanceTypeListing(result.listing),
+                                        });
+                                        this.updateRootVolumeSizeIfRequired();
                                     });
-                                    this.updateRootVolumeSizeIfRequired();
-                                });
+                            }
                         }
                     }}
                     onSubmit={() => {
@@ -727,7 +712,7 @@ class VirtualDesktopCreateSessionForm extends Component<VirtualDesktopCreateSess
                         const session_name = values.session_name;
                         const hibernation_enabled = Utils.asBoolean(values.hibernate_instance, false);
                         const software_stack_id = values.software_stack;
-                        const base_os = values.base_os;
+                        const base_os = this.state.softwareStacks[software_stack_id].base_os!;
                         const vpc_subnet_id = values.vpc_subnet_id;
                         const project_id = values.project_id;
                         const session_type = values.dcv_session_type;

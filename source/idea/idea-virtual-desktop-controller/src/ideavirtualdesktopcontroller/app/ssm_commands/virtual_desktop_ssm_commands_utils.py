@@ -56,6 +56,39 @@ class VirtualDesktopSSMCommandsUtils:
         self._logger.info(f'SSM command to resume session sent for {idea_session_id}:, owner: {idea_session_owner}.')
         return command_id
 
+    def submit_ssm_command_to_delete_lock_files_linux(self, instance_id: str, idea_session_id: str, idea_session_owner: str, software_stack_id: str) -> str:
+        response = self._ssm_client.send_command(
+            InstanceIds=[instance_id],
+            DocumentName='AWS-RunShellScript',
+            Comment='Delete lock files on linux',
+            Parameters={'commands': ['rm -f /root/bootstrap/semaphore/*', 'rm -f /root/bootstrap/reboot_required.txt']},
+            ServiceRoleArn=self.context.config().get_string('virtual-desktop-controller.ssm_commands_pass_role_arn', required=True),
+            NotificationConfig={
+                'NotificationArn': self.context.config().get_string('virtual-desktop-controller.ssm_commands_sns_topic_arn', required=True),
+                'NotificationEvents': ['All'],
+                'NotificationType': 'Invocation'
+            },
+            CloudWatchOutputConfig={
+                'CloudWatchOutputEnabled': True,
+                'CloudWatchLogGroupName': f'/{self.context.cluster_name()}/{self.context.module_id()}/dcv-session/{idea_session_id}/disable-userdata'
+            },
+            OutputS3BucketName=self.context.config().get_string('cluster.cluster_s3_bucket', required=True),
+            OutputS3KeyPrefix=f'/{self.context.cluster_name()}/{self.context.module_id()}/dcv-session/{idea_session_id}/disable-userdata'
+        )
+        command_id = Utils.get_value_as_string('CommandId', Utils.get_value_as_dict('Command', response, {}), '')
+        _ = self._ssm_commands_db.create(VirtualDesktopSSMCommand(
+            command_id=command_id,
+            command_type=VirtualDesktopSSMCommandType.DELETE_LOCK_FILES_LINUX_EXECUTION,
+            additional_payload={
+                'idea_session_id': idea_session_id,
+                'idea_session_owner': idea_session_owner,
+                'instance_id': instance_id,
+                'software_stack_id': software_stack_id
+            }
+        ))
+        self._logger.info(f'SSM command to delete lock files sent to {instance_id}.')
+        return command_id
+
     def submit_ssm_command_to_disable_userdata_execution_on_windows(self, instance_id: str, idea_session_id: str, idea_session_owner: str) -> str:
         response = self._ssm_client.send_command(
             InstanceIds=[instance_id],

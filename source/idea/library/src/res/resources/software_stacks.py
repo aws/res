@@ -2,7 +2,7 @@
 #  SPDX-License-Identifier: Apache-2.0
 
 import logging
-from typing import Any, Dict
+from typing import Any, Dict, List
 
 import res.exceptions as exceptions  # type: ignore
 from res.utils import table_utils, time_utils  # type: ignore
@@ -26,7 +26,10 @@ SOFTWARE_STACK_DB_MIN_RAM_VALUE_KEY = "min_ram_value"
 SOFTWARE_STACK_DB_MIN_RAM_UNIT_KEY = "min_ram_unit"
 SOFTWARE_STACK_DB_ARCHITECTURE_KEY = "architecture"
 SOFTWARE_STACK_DB_GPU_KEY = "gpu"
+SOFTWARE_STACK_DB_TENANCY_KEY = "tenancy"
 SOFTWARE_STACK_DB_PROJECTS_KEY = "projects"
+SOFTWARE_STACK_DB_ALLOWED_INSTANCE_TYPES_KEY = "allowed_instance_types"
+SOFTWARE_STACK_DB_VERSION_KEY = "version"
 BASE_STACK_PREFIX = "ss-base"
 
 BASE_OS = ["amazonlinux2", "rhel8", "rhel9", "ubuntu2204", "windows"]
@@ -63,6 +66,9 @@ def create_software_stack(software_stack: Dict[str, Any]) -> Dict[str, Any]:
     current_time_ms = time_utils.current_time_ms()
     software_stack[SOFTWARE_STACK_DB_CREATED_ON_KEY] = current_time_ms
     software_stack[SOFTWARE_STACK_DB_UPDATED_ON_KEY] = current_time_ms
+    software_stack[SOFTWARE_STACK_DB_VERSION_KEY] = (
+        software_stack.get(SOFTWARE_STACK_DB_VERSION_KEY) or 1
+    )
 
     created_software_stck = table_utils.create_item(
         table_name=SOFTWARE_STACK_TABLE_NAME, item=software_stack
@@ -111,3 +117,41 @@ def is_software_stacks_table_empty() -> bool:
     :return whether software stack DDB is empty
     """
     return table_utils.is_table_empty(SOFTWARE_STACK_TABLE_NAME)
+
+
+def update_software_stack_allowed_instance_types(
+    global_allowed_instance_types: List[str],
+) -> None:
+    """
+    Update all existing software stack's allowed insatnce types when global allowed list is changed
+    :param global_allowed_instance_types: new global_allowed_instance_types to be used for updating
+    """
+    if not global_allowed_instance_types:
+        raise Exception("Global allowed instance types list is required")
+
+    software_stacks = table_utils.list_items(SOFTWARE_STACK_TABLE_NAME)
+    for software_stack in software_stacks:
+        base_os = software_stack.get(SOFTWARE_STACK_DB_HASH_KEY, "")
+        stack_id = software_stack.get(SOFTWARE_STACK_DB_RANGE_KEY, "")
+        logger.info(
+            f"Updating software stack for {SOFTWARE_STACK_DB_HASH_KEY}: {base_os}, {SOFTWARE_STACK_DB_RANGE_KEY}: {stack_id}"
+        )
+
+        current_allowed_types = software_stack.get(
+            SOFTWARE_STACK_DB_ALLOWED_INSTANCE_TYPES_KEY, []
+        )
+        new_allowed_instance_types = list(
+            set(current_allowed_types) & set(global_allowed_instance_types)
+        )
+        software_stack[SOFTWARE_STACK_DB_ALLOWED_INSTANCE_TYPES_KEY] = (
+            new_allowed_instance_types
+        )
+
+        table_utils.update_item(
+            SOFTWARE_STACK_TABLE_NAME,
+            key={
+                SOFTWARE_STACK_DB_HASH_KEY: base_os,
+                SOFTWARE_STACK_DB_RANGE_KEY: stack_id,
+            },
+            item=software_stack,
+        )

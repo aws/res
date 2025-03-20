@@ -37,26 +37,35 @@ export const FILESYSTEM_TABLE_COLUMN_DEFINITIONS: TableProps.ColumnDefinition<Sh
         id: "title",
         header: "Title",
         cell: (filesystem) => filesystem.getTitle(),
+        sortingComparator: (a, b) => a.getTitle().localeCompare(b.getTitle())
     },
     {
         id: "name",
         header: "Name",
         cell: (filesystem) => filesystem.getName(),
+        sortingComparator: (a, b) => a.getName().localeCompare(b.getName())
     },
     {
         id: "filesystem_id",
         header: "File System ID",
         cell: (filesystem) => filesystem.getFileSystemId(),
+        sortingComparator: (a, b) => a.getFileSystemId().localeCompare(b.getFileSystemId())
     },
     {
         id: "scope",
         header: "Scope",
         cell: (filesystem) => filesystem.getScope(),
+        sortingComparator: (a, b) => {
+            const scopeA = a.getScope().join(',');
+            const scopeB = b.getScope().join(',');
+            return scopeA.localeCompare(scopeB);
+        }
     },
     {
         id: "provider",
         header: "Provider",
         cell: (filesystem) => filesystem.getProvider(),
+        sortingComparator: (a, b) => a.getProvider().localeCompare(b.getProvider())
     },
 ];
 

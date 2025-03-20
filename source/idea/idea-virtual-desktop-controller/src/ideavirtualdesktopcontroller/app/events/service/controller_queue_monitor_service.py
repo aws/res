@@ -163,6 +163,15 @@ class ControllerQueueMonitorService(SocaService):
                 instance_id=Utils.get_value_as_string('instance_id', ssm_command.additional_payload, ''),
                 status=status
             )
+        elif ssm_command.command_type == VirtualDesktopSSMCommandType.DELETE_LOCK_FILES_LINUX_EXECUTION:
+            self._events_utils.publish_delete_lock_files_linux_status_event(
+                idea_session_id=Utils.get_value_as_string('idea_session_id', ssm_command.additional_payload, ''),
+                idea_session_owner=Utils.get_value_as_string('idea_session_owner', ssm_command.additional_payload, ''),
+                command_id=command_id,
+                instance_id=Utils.get_value_as_string('instance_id', ssm_command.additional_payload, ''),
+                status=status,
+                software_stack_id=Utils.get_value_as_string('software_stack_id', ssm_command.additional_payload, ''),
+            )
         elif ssm_command.command_type == VirtualDesktopSSMCommandType.CPU_UTILIZATION_CHECK_STOP_SCHEDULED_SESSION:
             self._events_utils.publish_idea_session_cpu_utilization_command_status_event(
                 idea_session_id=Utils.get_value_as_string('idea_session_id', ssm_command.additional_payload, ''),

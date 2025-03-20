@@ -35,7 +35,8 @@ from ideadatamodel import (
     SocaMemoryUnit,
     SocaFilter,
     VirtualDesktopGPU,
-    VirtualDesktopArchitecture
+    VirtualDesktopArchitecture,
+    VirtualDesktopTenancy,
 )
 from ideadatamodel import exceptions
 from ideadatamodel import constants
@@ -255,11 +256,11 @@ class VirtualDesktopAPI(BaseAPI):
         except:
             raise exceptions.invalid_params('incorrect format for session.res_session_id')
         return True
-    
+
     # Get a list of projects where the current user is linked
     def get_user_projects(self, username: str) -> List[Project]:
         return self.context.projects_client.get_user_projects(username=username)
-    
+
     def validate_create_session_request(self, session: VirtualDesktopSession) -> (VirtualDesktopSession, bool):
         if Utils.is_empty(session.project) or Utils.is_empty(session.project.project_id):
             session.failure_reason = 'missing session.project.project_id'
@@ -345,7 +346,7 @@ class VirtualDesktopAPI(BaseAPI):
             return session, False
 
         is_instance_type_valid = False
-        allowed_instance_types = self.controller_utils.get_valid_instance_types(session.hibernation_enabled, session.software_stack)
+        allowed_instance_types = self.controller_utils.get_valid_instance_types_by_software_stack(session.hibernation_enabled, session.software_stack)
         for allowed_instance_type in allowed_instance_types:
             is_instance_type_valid = session.server.instance_type == Utils.get_value_as_string('InstanceType', allowed_instance_type, '')
             if is_instance_type_valid:
@@ -356,16 +357,12 @@ class VirtualDesktopAPI(BaseAPI):
             return session, False
 
         # Technical Validation for Hibernation.
-        if session.hibernation_enabled and session.software_stack.base_os in {VirtualDesktopBaseOS.RHEL8, VirtualDesktopBaseOS.RHEL9}:
-            session.failure_reason = f'OS {session.software_stack.base_os} does not support Instance Hibernation'
-            return session, False
-        elif session.hibernation_enabled and session.software_stack.base_os is VirtualDesktopBaseOS.WINDOWS:
+        if session.hibernation_enabled and session.software_stack.base_os is VirtualDesktopBaseOS.WINDOWS:
             ram = self.controller_utils.get_instance_ram(session.server.instance_type).as_unit(SocaMemoryUnit.GiB)
             if ram.value > 16:
                 session.failure_reason = f'OS {session.software_stack.base_os} does not support Instance Hibernation for instances with RAM greater than 16GiB.'
                 return session, False
         else:
-            # amazonlinux2 supports hibernation
             pass
 
         # Technical Validations for Session Type
@@ -377,6 +374,10 @@ class VirtualDesktopAPI(BaseAPI):
         gpu_manufacturer = self.controller_utils.get_gpu_manufacturer(session.server.instance_type)
         if session.type is VirtualDesktopSessionType.VIRTUAL and gpu_manufacturer is VirtualDesktopGPU.AMD:
             session.failure_reason = f'Instance type: {session.server.instance_type} with GPU {gpu_manufacturer} does not support Virtual Sessions'
+            return session, False
+
+        if session.software_stack.placement and session.software_stack.placement.tenancy == VirtualDesktopTenancy.HOST and not self.controller_utils.dedicated_hosts_supported(session.server.instance_type):
+            session.failure_reason = f'Instance type: {session.server.instance_type} does not support Dedicated Hosts tenancy'
             return session, False
 
         architecture = self.controller_utils.get_architecture(session.server.instance_type)
@@ -513,10 +514,13 @@ class VirtualDesktopAPI(BaseAPI):
 
         gpu_manufacturer = self.controller_utils.get_gpu_manufacturer(session.server.instance_type)
         if Utils.is_empty(session.type):
+            architecture = self.controller_utils.get_architecture(session.server.instance_type)
             if session.software_stack.base_os is VirtualDesktopBaseOS.WINDOWS or gpu_manufacturer is VirtualDesktopGPU.AMD:
                 session.type = VirtualDesktopSessionType.CONSOLE
-            else:
+            elif architecture == VirtualDesktopArchitecture.ARM64:
                 session.type = VirtualDesktopSessionType.VIRTUAL
+            else:
+                session.type = self.context.config().get_string('vdc.dcv_session.default_dcv_session_type', required=True)
 
         if Utils.is_empty(session.owner):
             session.owner = context.get_username()
@@ -667,8 +671,8 @@ class VirtualDesktopAPI(BaseAPI):
 
         for session in failure_response_list:
             failure_list.append(self.session_db.convert_db_dict_to_session_object(session))
-        return success_list, failure_list        
-        
+        return success_list, failure_list
+
     def _resume_sessions(self, sessions: List[VirtualDesktopSession]) -> (List[VirtualDesktopSession], List[VirtualDesktopSession]):
         if Utils.is_empty(sessions):
             return [], []
@@ -693,21 +697,13 @@ class VirtualDesktopAPI(BaseAPI):
             self._logger.error(new_software_stack.failure_reason)
             return new_software_stack
 
-        if session.base_os == VirtualDesktopBaseOS.WINDOWS:
-            image_id = self.TEMP_IMAGE_ID
-        else:
-            response = self.controller_utils.create_image_for_instance_id(session.server.instance_id, new_software_stack.name, new_software_stack.description)
-            image_id = Utils.get_value_as_string('ImageId', response, None)
-
-            if Utils.is_empty(image_id):
-                new_software_stack.failure_reason = f'Unable to create AMI for InstanceID: {session.server.instance_id} for some reason. Please contact Administrators.'
-                self._logger.error(new_software_stack.failure_reason)
-                return new_software_stack
+        image_id = self.TEMP_IMAGE_ID
 
         new_software_stack.base_os = VirtualDesktopBaseOS(session.base_os)
         new_software_stack.ami_id = image_id
         new_software_stack.architecture = session.software_stack.architecture
         new_software_stack.gpu = self.controller_utils.get_gpu_manufacturer(session.server.instance_type)
+        new_software_stack.placement = session.software_stack.placement
         new_software_stack.projects = [session.project]
         new_software_stack.min_ram = SocaMemory(
             value=self.controller_utils.get_instance_ram(session.server.instance_type).gb(),
@@ -723,12 +719,11 @@ class VirtualDesktopAPI(BaseAPI):
                 software_stack_id=new_software_stack.stack_id
             )
         else:
-            self.events_utils.publish_validate_software_stack_creation_event(
-                software_stack_id=new_software_stack.stack_id,
-                base_os=new_software_stack.base_os,
+            self.ssm_commands_utils.submit_ssm_command_to_delete_lock_files_linux(
                 instance_id=session.server.instance_id,
                 idea_session_id=session.idea_session_id,
-                idea_session_owner=session.owner
+                idea_session_owner=session.owner,
+                software_stack_id=new_software_stack.stack_id
             )
 
         session.locked = True

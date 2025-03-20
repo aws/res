@@ -148,7 +148,7 @@ dcv_session:
   transition_state: Stop
   max_root_volume_memory: 1000 # in GB
   additional_security_groups: []
-  allowed_sessions_per_user: 5
+  default_allowed_sessions_per_user_per_project: 5
   instance_types:
     allow: # Supports both instance families and types. E.g. specify t3 for family and t3.large for instance type
       - t3

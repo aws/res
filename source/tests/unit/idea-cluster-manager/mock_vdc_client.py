@@ -34,7 +34,11 @@ class MockVirtualDesktopControllerClient(AbstractVirtualDesktopControllerClient)
     def list_software_stacks_by_project_id(
         self, project_id: str
     ) -> list[VirtualDesktopSoftwareStack]:
-        return self.software_stacks
+        return [
+            stack
+            for stack in self.software_stacks
+            if any(p.project_id == project_id for p in stack.projects)
+        ]
 
     def get_base_permissions(self) -> list[VirtualDesktopPermission]:
         return self.base_permissions
@@ -67,3 +71,23 @@ class MockVirtualDesktopControllerClient(AbstractVirtualDesktopControllerClient)
         self, software_stack: VirtualDesktopSoftwareStack
     ) -> None:
         pass
+
+    def update_software_stack(
+        self, software_stack: VirtualDesktopSoftwareStack
+    ) -> VirtualDesktopSoftwareStack:
+        for i, stack in enumerate(self.software_stacks):
+            if stack.stack_id == software_stack.stack_id:
+                self.software_stacks[i] = software_stack
+        return software_stack
+
+    def delete_sessions(
+        self, sessions: list[VirtualDesktopSession], force_delete: bool = False
+    ) -> None:
+        session_ids = [s.idea_session_id for s in sessions]
+        self.sessions = [
+            s for s in self.sessions if s.idea_session_id not in session_ids
+        ]
+
+    def stop_sessions(self, sessions: list[VirtualDesktopSession]) -> None:
+        for session in self.sessions:
+            session.state = "STOPPING"

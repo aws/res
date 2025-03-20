@@ -20,6 +20,7 @@ SESSION_DB_UPDATED_ON_KEY = "updated_on"
 SESSION_DB_STATE_KEY = "state"
 SESSION_DB_DCV_SESSION_ID_KEY = "dcv_session_id"
 SESSION_DB_SCHEDULE_SUFFIX = "_schedule"
+SESSION_DB_SERVER_KEY = "server"
 
 
 def get_session(owner: str, session_id: str) -> Optional[Dict[str, Any]]:

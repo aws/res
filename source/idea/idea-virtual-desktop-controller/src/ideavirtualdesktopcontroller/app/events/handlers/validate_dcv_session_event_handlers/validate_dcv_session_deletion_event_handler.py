@@ -68,8 +68,8 @@ class ValidateDCVSessionDeletionEventHandler(BaseVirtualDesktopControllerEventHa
         current_session_info = Utils.get_value_as_dict(session.dcv_session_id, Utils.get_value_as_dict("sessions", response, {}), {})
         state = Utils.get_value_as_string("state", current_session_info, None)
 
-        if Utils.is_empty(state) or state == 'DELETED' or state == 'UNKNOWN':
-            # session is deleted. We can continue.
+        if Utils.is_empty(state) or state == 'DELETED' or state == 'UNKNOWN' or session.hibernation_enabled:
+            # session is deleted or skipping deletion for hibernation. We can continue.
             self.log_info(message_id=message_id, message=f'RES Session ID: {session.idea_session_id}:{session.name} is deleted with state: {state}. Validation complete.')
             if session.state is VirtualDesktopSessionState.DELETING:
                 self._continue_delete_session(message_id, session)

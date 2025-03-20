@@ -34,6 +34,7 @@ class ClusterSettingsService {
     clusterHomeDir: string;
     isFileBrowserEnabled: boolean;
     isSshEnabled: boolean;
+    isGovCloudPartition: boolean;
 
     constructor(props: ClusterSettingsServiceProps) {
         this.props = props;
@@ -46,6 +47,7 @@ class ClusterSettingsService {
         this.clusterHomeDir = "";
         this.isFileBrowserEnabled = false;
         this.isSshEnabled = false;
+        this.isGovCloudPartition = false;
     }
 
     initialize(): Promise<boolean> {
@@ -65,6 +67,7 @@ class ClusterSettingsService {
                 this.clusterLocale = clusterSettings.locale.replace("_", "-");
                 this.clusterTimezone = clusterSettings.timezone;
                 this.clusterName = clusterSettings.cluster_name;
+                this.isGovCloudPartition = clusterSettings.aws.partition === "aws-us-gov";
                 return this.getModuleSettings(Constants.MODULE_SHARED_STORAGE);
             })
             .then((sharedStorageSettings) => {
@@ -287,6 +290,10 @@ class ClusterSettingsService {
 
     getIsSshEnabled(): boolean {
         return this.isSshEnabled;
+    }
+
+    getIsGovCloudPartition(): boolean {
+        return this.isGovCloudPartition;
     }
 }
 

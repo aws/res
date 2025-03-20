@@ -13,7 +13,7 @@
 
 import { Component } from "react";
 import { IdeaFormField, IdeaFormFieldRegistry, IdeaFormFieldLifecycleEvent, IdeaFormFieldStateChangeEvent } from "../form-field";
-import {Box, Button, ColumnLayout, ColumnLayoutProps, Container, Form, Header, Modal, SpaceBetween} from "@cloudscape-design/components";
+import {Box, Button, ColumnLayout, ColumnLayoutProps, Container, Form, Header, Icon, Modal, SpaceBetween} from "@cloudscape-design/components";
 import Utils from "../../common/utils";
 import dot from "dot-object";
 import { GetParamChoicesRequest, GetParamChoicesResult, SocaUserInputGroupMetadata, SocaUserInputParamMetadata } from "../../client/data-model";
@@ -32,6 +32,7 @@ export interface IdeaFormProps {
     showActions?: boolean;
     showSecondaryCta?: boolean;
     title?: string;
+    alert?: string;
     description?: string;
     params: ReadonlyArray<SocaUserInputParamMetadata>;
     groups?: ReadonlyArray<SocaUserInputGroupMetadata>;
@@ -354,6 +355,13 @@ class IdeaForm extends Component<IdeaFormProps, IdeaFormState> {
         return (
             <form onSubmit={(e) => e.preventDefault()}>
                 <Form actions={this.showActions() && this.buildFormActions()} header={this.showHeader() && <Header variant="h2">{this.props.title}</Header>} errorText={this.state.message}>
+                    {
+                        this.props.alert && (
+                            <Box color="text-status-info" variant="p">
+                                <Icon name="status-info" /> {this.props.alert}
+                            </Box>
+                        )
+                    }
                     <SpaceBetween size="l" direction="vertical">
                         <ColumnLayout columns={numColumns()} borders={this.props.borders ?? undefined}>
                             {this.props.useContainers ? (

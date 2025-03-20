@@ -37,7 +37,7 @@ class IdeaTabs extends Component<IdeaTabsProps, IdeaTabsState> {
     }
 
     render() {
-        return <Tabs 
+        return <Tabs
           tabs={this.props.tabs}
           activeTabId={this.state.activeTabId}
           onChange={(changeEvent) => {

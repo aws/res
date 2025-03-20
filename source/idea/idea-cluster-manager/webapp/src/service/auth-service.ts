@@ -398,6 +398,9 @@ class AuthService {
                 element.click();
                 document.body.removeChild(element);
                 return true;
+            })
+            .catch((error) => {
+                throw error;
             });
     }
 }

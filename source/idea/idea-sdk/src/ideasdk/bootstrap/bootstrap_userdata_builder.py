@@ -72,6 +72,10 @@ class BootstrapUserDataBuilder:
      }}
      Tar -xf "$BootstrapDir\\$PackageArchive"
  }}
+ if (-not (Get-Module AWSPowerShell -ListAvailable)) {{
+     Install-PackageProvider NuGet -Force
+     Install-Module -Name AWSPowerShell -Force
+ }}
  Download-RES-Package {self.bootstrap_package_uri}
 '''
         for install_command in self.install_commands:

@@ -13,14 +13,21 @@ from idea.pipeline.utils import get_commands_for_scripts
 
 class IntegTestStepBuilder:
     def __init__(
-        self, tox_env: str, environment_name: str, region: str, is_legacy: bool = False
+        self,
+        invoke_command: str,
+        environment_name: str,
+        region: str,
+        is_legacy: bool = False,
+        requires_alb: bool = True,
     ):
-        self._tox_env = tox_env
-        self._tox_command_arguments = [f"aws-region={region}"]
+        self._invoke_command = invoke_command
+        self._invoke_command_arguments = [f"aws-region={region}"]
         if is_legacy:
-            self._tox_command_arguments.append(f"cluster-name={environment_name}")
+            self._invoke_command_arguments.append(f"cluster-name={environment_name}")
         else:
-            self._tox_command_arguments.append(f"environment-name={environment_name}")
+            self._invoke_command_arguments.append(
+                f"environment-name={environment_name}"
+            )
         self._env = dict(
             CLUSTER_NAME=environment_name,
             AWS_REGION=region,
@@ -46,12 +53,13 @@ class IntegTestStepBuilder:
                 }
             ),
         ]
+        self._requires_alb = requires_alb
 
-    def test_specific_tox_command_argument(
+    def test_specific_invoke_command_argument(
         self, *arguments: str
     ) -> IntegTestStepBuilder:
         for argument in arguments:
-            self._tox_command_arguments.append(argument)
+            self._invoke_command_arguments.append(argument)
 
         return self
 
@@ -76,23 +84,27 @@ class IntegTestStepBuilder:
 
     def build(self) -> pipelines.CodeBuildStep:
         # Setting up commands necessary to run integ tests
-        commands = get_commands_for_scripts(
-            ["source/idea/pipeline/scripts/integ_tests/setup_commands.sh"]
+        commands = (
+            get_commands_for_scripts(
+                ["source/idea/pipeline/scripts/integ_tests/setup_commands.sh"]
+            )
+            if self._requires_alb
+            else []
         )
+        invoke_command = f"invoke {self._invoke_command}"
+        for invoke_command_argument in self._invoke_command_arguments:
+            invoke_command = invoke_command + f" -p {invoke_command_argument}"
+        commands.append(invoke_command)
 
-        tox_command = f"tox -e {self._tox_env} --"
-        for tox_command_argument in self._tox_command_arguments:
-            tox_command = tox_command + f" -p {tox_command_argument}"
-        commands.append(tox_command)
-
-        commands += get_commands_for_scripts(
-            ["source/idea/pipeline/scripts/integ_tests/teardown_commands.sh"]
-        )
+        if self._requires_alb:
+            commands += get_commands_for_scripts(
+                ["source/idea/pipeline/scripts/integ_tests/teardown_commands.sh"]
+            )
 
         return pipelines.CodeBuildStep(
-            self._tox_env,
+            self._invoke_command,
             build_environment=codebuild.BuildEnvironment(
-                build_image=codebuild.LinuxBuildImage.STANDARD_5_0,
+                build_image=codebuild.LinuxBuildImage.STANDARD_7_0,
                 compute_type=codebuild.ComputeType.SMALL,
                 privileged=True,
             ),

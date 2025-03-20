@@ -37,7 +37,7 @@ class IDEAResumeSessionCommandProgressEventHandler(BaseVirtualDesktopControllerE
             session = self.session_db.get_from_db(idea_session_owner=idea_session_owner, idea_session_id=idea_session_id)
             if status == 'Success':
                 session.state = VirtualDesktopSessionState.INITIALIZING
-                self.events_utils.publish_validate_dcv_session_creation_event(
+                self.events_utils.publish_validate_dcv_session_ready_event(
                     idea_session_id=session.idea_session_id,
                     idea_session_owner=session.owner
                 )

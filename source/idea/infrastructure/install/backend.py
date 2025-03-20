@@ -235,7 +235,7 @@ class BackendLambda(Construct):
             "backendLambda",
             runtime=RES_BACKEND_LAMBDA_RUNTIME,
             role=execution_role,
-            timeout=aws_cdk.Duration.seconds(30),
+            timeout=aws_cdk.Duration.minutes(15),
             function_name=f'{self.params["cluster_name"]}_{backend_lambda_name}',
             description="RES Backend Lambda",
             code=lambda_.Code.from_asset("source/idea/backend"),
@@ -261,6 +261,8 @@ class BackendLambda(Construct):
                     "dynamodb:BatchGetItem",
                     "dynamodb:DeleteItem",
                     "dynamodb:Scan",
+                    "dynamodb:Query",
+                    "dynamodb:UpdateItem",
                 ],
                 resources=[
                     f"arn:{aws_cdk.Aws.PARTITION}:dynamodb:{aws_cdk.Aws.REGION}:{aws_cdk.Aws.ACCOUNT_ID}:table/{self.params['cluster_name']}.*"
@@ -323,9 +325,32 @@ class BackendLambda(Construct):
                 actions=["iam:PassRole"],
                 resources=[
                     f"arn:{aws_cdk.Aws.PARTITION}:iam::{aws_cdk.Aws.ACCOUNT_ID}:role/{self.params['cluster_name']}-bastion-host-role-{aws_cdk.Aws.REGION}",
+                    f"arn:{aws_cdk.Aws.PARTITION}:iam::{aws_cdk.Aws.ACCOUNT_ID}:role/{self.params['cluster_name']}-ad-sync-task-role",
                 ],
             )
         )
+        backend_lambda.add_to_role_policy(
+            aws_cdk.aws_iam.PolicyStatement(
+                actions=[
+                    "ecs:RunTask",
+                    "ecs:StopTask",
+                    "ecs:ListTasks",
+                ],
+                resources=["*"],
+                conditions={
+                    "ArnEquals": {
+                        "ecs:cluster": f"arn:{aws_cdk.Aws.PARTITION}:ecs:{aws_cdk.Aws.REGION}:{aws_cdk.Aws.ACCOUNT_ID}:cluster/{self.params['cluster_name']}-ad-sync-cluster",
+                    }
+                },
+            ),
+        )
+        backend_lambda.add_to_role_policy(
+            aws_cdk.aws_iam.PolicyStatement(
+                actions=["ec2:DescribeSecurityGroups"],
+                resources=["*"],
+            ),
+        )
+
         backend_lambda.apply_removal_policy(aws_cdk.RemovalPolicy.RETAIN)
         return backend_lambda
 

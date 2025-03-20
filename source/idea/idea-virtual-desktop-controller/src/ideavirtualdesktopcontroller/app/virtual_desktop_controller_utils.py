@@ -14,6 +14,7 @@ import random
 from threading import RLock
 from typing import List, Dict, Optional
 
+from ideasdk.metrics import CloudWatchAgentLogFileOptions
 import ideavirtualdesktopcontroller
 from botocore.exceptions import ClientError
 
@@ -23,11 +24,12 @@ from ideadatamodel import (
     VirtualDesktopBaseOS,
     BaseOS,
     VirtualDesktopGPU,
+    VirtualDesktopTenancy,
     SocaMemory,
     SocaMemoryUnit,
     VirtualDesktopSoftwareStack
 )
-from ideasdk.bootstrap import BootstrapPackageBuilder, BootstrapUserDataBuilder
+from ideasdk.bootstrap import BootstrapPackageBuilder, BootstrapUserDataBuilder, BootstrapUtils
 from ideasdk.context import BootstrapContext
 from ideasdk.launch_configurations import ScriptOSType, ScriptEventType
 from ideasdk.utils import Utils, GroupNameHelper
@@ -71,6 +73,23 @@ class VirtualDesktopControllerUtils:
             base_os=session.software_stack.base_os.value,
             instance_type=session.server.instance_type
         )
+
+        BootstrapUtils.check_and_attach_cloudwatch_logging_and_metrics(
+            bootstrap_context=bootstrap_context,
+            metrics_namespace=f'{self.context.cluster_name()}/vdi-app/{session.idea_session_id}',
+            node_type=constants.NODE_TYPE_APP,
+            enable_logging=self.context.config().get_bool('virtual-desktop-app.cloudwatch_logs.enabled', False),
+            log_files=[
+                CloudWatchAgentLogFileOptions(
+                    file_path='/opt/idea/app/logs/**.log',
+                    log_group_name=f'/{self.context.cluster_name()}/vdi-app/{session.idea_session_id}',
+                    log_stream_name='application_{ip_address}'
+                )
+            ]
+        )
+
+        cluster_s3_bucket = self.context.config().get_string('cluster.cluster_s3_bucket', required=True)
+
         bootstrap_context.vars.session_owner = session.owner
         bootstrap_context.vars.idea_session_id = session.idea_session_id
         bootstrap_context.vars.project = session.project.name
@@ -78,6 +97,7 @@ class VirtualDesktopControllerUtils:
         bootstrap_context.vars.cognito_max_id = constants.COGNITO_MAX_ID_INCLUSIVE
         bootstrap_context.vars.cognito_uid_attribute = constants.COGNITO_UID_ATTRIBUTE
         bootstrap_context.vars.cognito_default_user_group = constants.COGNITO_DEFAULT_USER_GROUP
+        bootstrap_context.vars.app_package_uri = f's3://{cluster_s3_bucket}/idea/releases/idea-virtual-desktop-{self.context.module_version()}.tar.gz'  
         if session.software_stack.base_os != VirtualDesktopBaseOS.WINDOWS:
             escape_chars = '\\'
         else:
@@ -101,7 +121,6 @@ class VirtualDesktopControllerUtils:
         ).build()
 
         self._logger.debug(f'{session.idea_session_id} built bootstrap package: {bootstrap_package_archive_file}')
-        cluster_s3_bucket = self.context.config().get_string('cluster.cluster_s3_bucket', required=True)
         upload_key = f'idea/{self.context.module_id()}/dcv-host-bootstrap/{Utils.to_secure_filename(session.name)}-{session.idea_session_id}/{os.path.basename(bootstrap_package_archive_file)}'
         self._logger.debug(f'{session.idea_session_id} uploading bootstrap package: {upload_key}')
         self.s3_client.upload_file(
@@ -130,6 +149,7 @@ class VirtualDesktopControllerUtils:
         # Store
 
         ## Add on vdi start commands here for linux here
+        rerun_on_reboot = self._retrieve_rerun_on_reboot(session.project, ScriptOSType.LINUX)
         on_vdi_start_script_commands = self._retrieve_scripts_as_commands(session.project, ScriptOSType.LINUX, ScriptEventType.ON_VDI_START)
         on_vdi_configured_script_commands = self._retrieve_scripts_as_commands(session.project, ScriptOSType.LINUX, ScriptEventType.ON_VDI_CONFIGURED)
 
@@ -137,15 +157,20 @@ class VirtualDesktopControllerUtils:
         on_vdi_configured_script_store = self._store_commands_as_linux_script(on_vdi_configured_script_commands, ScriptEventType.ON_VDI_CONFIGURED)
 
         lock_file = "/root/bootstrap/semaphore/custom_script.lock"
-        install_commands = [
-            f"if [[ ! -f {lock_file} ]]; then",
+        instance_ready_lock_file = "/root/bootstrap/semaphore/instance_ready.lock"
+        custom_script_check = [f"if [[ ! -f {lock_file} ]]; then"]
+        if rerun_on_reboot:
+            custom_script_check = [f"if [[ ! -f {lock_file} || -f {instance_ready_lock_file} ]]; then"]
+        custom_script_commands = custom_script_check + [
             *on_vdi_start_script_store,
             *on_vdi_configured_script_store,
-            '/bin/bash virtual-desktop-host-linux/export_launch_script_env.sh -p {0} -o {1} -n {2} -e {3} -c {4} -s {5}'.format(session.project.project_id, session.owner, session.project.name, self.context.config().cluster_name, f'{ScriptEventType.ON_VDI_CONFIGURED}.sh', f'{ScriptEventType.ON_VDI_START}.sh'),
+            '/bin/bash virtual-desktop-host-linux/export_launch_script_env.sh -p {0} -o {1} -n {2} -e {3} -c {4} -s {5} -r {6}'.format(session.project.project_id, session.owner, session.project.name, self.context.config().cluster_name, f'{ScriptEventType.ON_VDI_CONFIGURED}.sh', f'{ScriptEventType.ON_VDI_START}.sh', rerun_on_reboot),
             'source /etc/launch_script_environment',
             f'/bin/bash virtual-desktop-host-linux/{ScriptEventType.ON_VDI_START}.sh',
             f"echo $(date +%s) > {lock_file}",
-            "fi",
+            "fi"
+        ]
+        install_commands = custom_script_commands + [
             '/bin/bash virtual-desktop-host-linux/install.sh -r {0} -n {1} -g {2} -p false'.format(self.context.config().aws_region, self.context.config().cluster_name, gpu_family),
         ]
 
@@ -219,6 +244,24 @@ class VirtualDesktopControllerUtils:
             return [f"{command_prefix} {script.script_location} {' '.join(script.arguments or [])}" for script in event_scripts]
         elif os_type == ScriptOSType.WINDOWS:
             return [f"{command_prefix} {script.script_location} -arguments '{' '.join(script.arguments or [])}'" for script in event_scripts]
+        
+    def _retrieve_rerun_on_reboot(self, project:Project, os_type:ScriptOSType) -> bool:
+        scripts = project.scripts
+        if not scripts:
+            return False
+        
+        script_type = None
+
+        if os_type == ScriptOSType.LINUX:
+            script_type = scripts.linux
+        elif os_type == ScriptOSType.WINDOWS:
+            script_type = scripts.windows
+
+        if not script_type:
+            return False
+        
+        rerun_on_reboot = getattr(script_type, 'rerun_on_reboot', False)
+        return rerun_on_reboot
 
     def provision_dcv_host_for_session(self, session: VirtualDesktopSession) -> dict:
 
@@ -305,6 +348,16 @@ class VirtualDesktopControllerUtils:
         # we want to attempt in the order that we prefer
         # (ordered or pre-shuffled)
 
+        placement = {
+            "Tenancy": session.software_stack.placement.tenancy if session.software_stack.placement else VirtualDesktopTenancy.DEFAULT,
+        }
+        if placement["Tenancy"] == VirtualDesktopTenancy.HOST:
+            placement["Affinity"] = session.software_stack.placement.affinity
+            if session.software_stack.placement.host_id:
+                placement["HostId"] = session.software_stack.placement.host_id
+            else:
+                placement["HostResourceGroupArn"] = session.software_stack.placement.host_resource_group_arn
+
         self._logger.debug(f"Deployment Attempt Ready - Retry: {subnet_autoretry_method} Attempt_Subnets({len(_attempt_subnets)}): {', '.join(_attempt_subnets)}")
 
         _deployment_loop = 0
@@ -369,7 +422,8 @@ class VirtualDesktopControllerUtils:
                     MetadataOptions={
                         'HttpTokens': metadata_http_tokens,
                         'HttpEndpoint': 'enabled'
-                    }
+                    },
+                    Placement=placement,
                 )
             except Exception as err:
                 self._logger.warning(f"Encountered Deployment Exception: {err} / Response: {response}")
@@ -453,7 +507,18 @@ class VirtualDesktopControllerUtils:
 
         return VirtualDesktopGPU.NO_GPU
 
-    def get_valid_instance_types(self, hibernation_support: bool, software_stack: VirtualDesktopSoftwareStack = None, gpu: VirtualDesktopGPU = None) -> List[Dict]:
+    def dedicated_hosts_supported(self, instance_type: str) -> bool:
+        instance_info = self.get_instance_type_info(instance_type)
+        return instance_info.get('DedicatedHostsSupported', False)
+    
+    def validate_min_ram(self, instance_type_name: str, software_stack: Optional[VirtualDesktopSoftwareStack]) -> bool:
+        if software_stack and software_stack.min_ram > self.get_instance_ram(instance_type_name):
+            # this instance doesn't have the minimum ram required to support the software stack.
+            self._logger.debug(f"Software stack ({software_stack.name}) restrictions on RAM ({software_stack.min_ram}): Instance {instance_type_name} lacks enough ({self.get_instance_ram(instance_type_name)}). Skipped.")
+            return False
+        return True
+
+    def get_valid_instance_types_by_allowed_list(self, hibernation_support: bool, allowed_instance_types: List[str]) -> Dict:
         instance_types_names = self.context.cache().long_term().get(self.INSTANCE_TYPES_NAMES_LIST_CACHE_KEY)
         instance_info_data = self.context.cache().long_term().get(self.INSTANCE_INFO_CACHE_KEY)
         if instance_types_names is None or instance_info_data is None:
@@ -463,10 +528,8 @@ class VirtualDesktopControllerUtils:
             instance_info_data = self.context.cache().long_term().get(self.INSTANCE_INFO_CACHE_KEY)
 
         # We now have a list of all instance types (Cache has been updated IF it was empty).
-        valid_instance_types = []
-        valid_instance_types_names = []
+        valid_instance_types_dict = {}
 
-        allowed_instance_types = self.context.config().get_list('virtual-desktop-controller.dcv_session.instance_types.allow', default=[])
         allowed_instance_type_names = set()
         allowed_instance_type_families = set()
         for instance_type in allowed_instance_types:
@@ -495,11 +558,6 @@ class VirtualDesktopControllerUtils:
             instance_type_family = instance_type_name.split('.')[0]
             self._logger.debug(f"Processing - Instance Name: {instance_type_name}   Family: {instance_type_family}")
 
-            if Utils.is_not_empty(software_stack) and software_stack.base_os == VirtualDesktopBaseOS.RHEL8 and instance_type_family == 'g4dn':
-                # Disabling g4dn instances for RHEL8
-                self._logger.debug(f"g4dn instances are disabled for RHEL8 instances")
-                continue
-
             if instance_type_name not in allowed_instance_type_names and instance_type_family not in allowed_instance_type_families:
                 # instance type or instance family is not present in allow list
                 self._logger.debug(f"Found {instance_type_name} ({instance_type_family}) NOT in ALLOW config: ({allowed_instance_type_names} / {allowed_instance_type_families})")
@@ -511,14 +569,32 @@ class VirtualDesktopControllerUtils:
                 continue
 
             instance_info = instance_info_data[instance_type_name]
-            if Utils.is_not_empty(software_stack) and software_stack.min_ram > self.get_instance_ram(instance_type_name):
-                # this instance doesn't have the minimum ram required to support the software stack.
-                self._logger.debug(f"Software stack ({software_stack}) restrictions on RAM ({software_stack.min_ram}): Instance {instance_type_name} lacks enough ({self.get_instance_ram(instance_type_name)}). Skipped.")
-                continue
-
             hibernation_supported = Utils.get_value_as_bool('HibernationSupported', instance_info, default=False)
             if hibernation_support and not hibernation_supported:
                 self._logger.debug(f"Hibernation ({hibernation_support}) != Instance {instance_type_name} ({hibernation_supported}) Skipped.")
+                continue
+            
+            # All checks passed if we make it this far
+            self._logger.debug(f"Instance {instance_type_name} - Added as valid_instance_types")
+            valid_instance_types_dict[instance_type_name] = instance_info
+        self._logger.debug(f"Returning valid_instance_types: {valid_instance_types_dict.keys()}")
+        return valid_instance_types_dict
+    
+    def get_valid_instance_types_by_software_stack(self, hibernation_support: bool, software_stack: VirtualDesktopSoftwareStack = None, gpu: VirtualDesktopGPU = None) -> List[Dict]:
+        allowed_instance_types = self.context.config().get_list('virtual-desktop-controller.dcv_session.instance_types.allow', default=[])
+        valid_instance_types_dict = self.get_valid_instance_types_by_allowed_list(hibernation_support, allowed_instance_types)
+        valid_instance_types_names = []
+        valid_instance_types = []
+        for instance_type_name in valid_instance_types_dict.keys():
+            instance_type_family = instance_type_name.split('.')[0]
+            instance_info = valid_instance_types_dict[instance_type_name]
+            self._logger.debug(f"Processing - Instance Name: {instance_type_name}   Family: {instance_type_family}")
+            if Utils.is_not_empty(software_stack) and software_stack.base_os == VirtualDesktopBaseOS.RHEL8 and instance_type_family == 'g4dn':
+                # Disabling g4dn instances for RHEL8
+                self._logger.debug(f"g4dn instances are disabled for RHEL8 instances")
+                continue
+
+            if not self.validate_min_ram(instance_type_name, software_stack):
                 continue
 
             supported_archs = Utils.get_value_as_list('SupportedArchitectures', Utils.get_value_as_dict('ProcessorInfo', instance_info, {}), [])
@@ -527,48 +603,58 @@ class VirtualDesktopControllerUtils:
                 self._logger.debug(f"Software Stack arch ({software_stack.architecture.value}) != Instance {instance_type_name} ({supported_archs}) Skipped.")
                 continue
 
-            supported_gpus = Utils.get_value_as_list('Gpus', Utils.get_value_as_dict('GpuInfo', instance_info, {}), [])
-            self._logger.debug(f"Instance {instance_type_name} GPU ({supported_gpus})")
-            perform_gpu_check = False
-            gpu_to_check_against = None
-            if Utils.is_not_empty(gpu):
-                # We have gotten a GPU as a parameter. We need to perform a strict check
-                perform_gpu_check = True
-                gpu_to_check_against = gpu
-            elif Utils.is_not_empty(software_stack) and software_stack.base_os == VirtualDesktopBaseOS.WINDOWS:
-                # For Windows the GPU check is strict, Stacks with NO_GPU should return Instances without GPU.
-                perform_gpu_check = True
-                gpu_to_check_against = software_stack.gpu
-            elif Utils.is_not_empty(software_stack) and software_stack.base_os != VirtualDesktopBaseOS.WINDOWS:
-                # For Linux the GPU is not as strict, Stacks with NO_GPU can return Instances with GPU
-                perform_gpu_check = software_stack.gpu != VirtualDesktopGPU.NO_GPU
-                gpu_to_check_against = software_stack.gpu
-
-            if perform_gpu_check:
-                if gpu_to_check_against == VirtualDesktopGPU.NO_GPU:
-                    # we don't need GPU
-                    if len(supported_gpus) > 0:
-                        # this instance SHOULD NOT have GPU support, but it does.
-                        self._logger.debug(f"Instance {instance_type_name} Should not have GPU ({supported_gpus}) but it does.")
+            if software_stack and software_stack.base_os == VirtualDesktopBaseOS.WINDOWS:
+                image_info = self.describe_image_id(software_stack.ami_id)
+                instance_boot_modes = instance_info.get('SupportedBootModes', [])
+                image_boot_mode = image_info.get('BootMode', '')
+                if image_boot_mode:
+                    if image_boot_mode != 'uefi-preferred' and image_boot_mode not in instance_boot_modes:
+                        # image has boot mode specified and boot mode is not supported by instance
+                        self._logger.debug(f"Software stack ({software_stack}) restrictions on BootMode ({image_boot_mode}): Instance {instance_type_name} doesn't support ({image_boot_mode}). Skipped.")
                         continue
                 else:
-                    # we need GPU
-                    gpu_found = False
-                    for supported_gpu in supported_gpus:
-                        gpu_found = gpu_to_check_against.value.lower() == Utils.get_value_as_string('Manufacturer', supported_gpu, '').lower()
-                        if gpu_found:
-                            break
-
-                    if not gpu_found:
-                        # we needed a GPU, but we didn't find any
-                        self._logger.debug(f"Instance {instance_type_name} - Needed a GPU but didn't find one.")
+                    if 'legacy-bios' not in instance_boot_modes:
+                        # image has no boot mode specified and default legacy-bios is not supported by instance
+                        self._logger.debug(f"Software stack ({software_stack}) restrictions on BootMode (legacy-bios): Instance {instance_type_name} doesn't support legacy-bios. Skipped.")
                         continue
 
+            supported_gpus = Utils.get_value_as_list('Gpus', Utils.get_value_as_dict('GpuInfo', instance_info, {}), [])
+            self._logger.debug(f"Instance {instance_type_name} GPU ({supported_gpus})")
+            gpu_to_check_against = None
+            if Utils.is_not_empty(gpu):
+                gpu_to_check_against = gpu
+            elif Utils.is_not_empty(software_stack):
+                gpu_to_check_against = software_stack.gpu
+
+            if gpu_to_check_against == VirtualDesktopGPU.NO_GPU:
+                # we don't need GPU
+                if len(supported_gpus) > 0:
+                    # this instance SHOULD NOT have GPU support, but it does.
+                    self._logger.debug(f"Instance {instance_type_name} Should not have GPU ({supported_gpus}) but it does.")
+                    continue
+            elif gpu_to_check_against is not None:
+                # we need GPU
+                gpu_found = False
+                for supported_gpu in supported_gpus:
+                    gpu_found = gpu_to_check_against.value.lower() == Utils.get_value_as_string('Manufacturer', supported_gpu, '').lower()
+                    if gpu_found:
+                        break
+
+                if not gpu_found:
+                    # we needed a GPU, but we didn't find any
+                    self._logger.debug(f"Instance {instance_type_name} - Needed a GPU but didn't find one.")
+                    continue
+
+            if software_stack and software_stack.placement:
+                if software_stack.placement.tenancy == VirtualDesktopTenancy.HOST and not self.dedicated_hosts_supported(instance_type_name):
+                    self._logger.debug(f"Instance {instance_type_name} doesn't support tenancy {software_stack.placement.tenancy}. Skipped.")
+                    continue
+
             # All checks passed if we make it this far
-            self._logger.debug(f"Instance {instance_type_name} - Added as valid_instance_types")
+            self._logger.debug(f"Instance {instance_type_name} - Added as valid_instance_types for software_stack")
             valid_instance_types_names.append(instance_type_name)
             valid_instance_types.append(instance_info)
-        self._logger.debug(f"Returning valid_instance_types: {valid_instance_types_names}")
+        self._logger.debug(f"Returning valid_instance_types for software_stack: {valid_instance_types_names}")
         return valid_instance_types
 
     def describe_image_id(self, ami_id: str) -> dict:
@@ -597,7 +683,6 @@ class VirtualDesktopControllerUtils:
         response = Utils.to_dict(self.ec2_client.create_image(
             Name=image_name,
             Description=image_description,
-            NoReboot=True,
             InstanceId=instance_id
         ))
         return response

@@ -148,7 +148,7 @@ dcv_session:
   transition_state: Stop
   max_root_volume_memory: 1000 # in GB
   additional_security_groups: []
-  allowed_sessions_per_user: 5
+  default_allowed_sessions_per_user_per_project: 5
   instance_types:
     allow: # Supports both instance families and types. E.g. specify t3 for family and t3.large for instance type
       - t3
@@ -159,6 +159,7 @@ dcv_session:
       - m6g
     deny: [] # Supports both instance families and types. E.g. specify t3 for family and t3.large for instance type
   quic_support: {{ dcv_session_quic_support | lower }}
+  default_dcv_session_type: CONSOLE
 
   #
   # eVDI subnets will match the provided dcv_session_private_subnet_ids, if not provided it will default to the cluster private subnets.

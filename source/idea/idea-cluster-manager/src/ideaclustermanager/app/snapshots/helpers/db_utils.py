@@ -19,6 +19,9 @@ from ideadatamodel import (
     VirtualDesktopGPU,
     VirtualDesktopPermission,
     VirtualDesktopPermissionProfile,
+    VirtualDesktopPlacement,
+    VirtualDesktopAffinity,
+    VirtualDesktopTenancy,
     Project,
     SocaMemory,
     SocaMemoryUnit,
@@ -46,6 +49,12 @@ SOFTWARE_STACK_DB_PROJECTS_KEY = "projects"
 SOFTWARE_STACK_DB_PROJECT_ID_KEY = "project_id"
 SOFTWARE_STACK_DB_PROJECT_NAME_KEY = "name"
 SOFTWARE_STACK_DB_PROJECT_TITLE_KEY = "title"
+SOFTWARE_STACK_DB_AFFINITY_KEY = 'affinity'
+SOFTWARE_STACK_DB_TENANCY_KEY = 'tenancy'
+SOFTWARE_STACK_DB_HOST_ID_KEY = 'host_id'
+SOFTWARE_STACK_DB_HOST_RESOURCE_GROUP_ARN_KEY = 'host_resource_group_arn'
+SOFTWARE_STACK_DB_ALLOWED_INSTANCE_TYPES_KEY = "allowed_instance_types"
+SOFTWARE_STACK_DB_VERSION_KEY = "version"
 
 PERMISSION_PROFILE_DB_HASH_KEY = "profile_id"
 PERMISSION_PROFILE_DB_TITLE_KEY = "title"
@@ -99,6 +108,14 @@ def convert_db_dict_to_software_stack_object(
         ),
         gpu=VirtualDesktopGPU(db_entry.get(SOFTWARE_STACK_DB_GPU_KEY)),
         projects=[],
+        placement=VirtualDesktopPlacement(
+            affinity=VirtualDesktopAffinity(db_entry[SOFTWARE_STACK_DB_AFFINITY_KEY]) if db_entry.get(SOFTWARE_STACK_DB_AFFINITY_KEY) else None,
+            tenancy=VirtualDesktopTenancy(db_entry.get(SOFTWARE_STACK_DB_TENANCY_KEY, VirtualDesktopTenancy.DEFAULT)),
+            host_id=db_entry.get(SOFTWARE_STACK_DB_HOST_ID_KEY),
+            host_resource_group_arn=db_entry.get(SOFTWARE_STACK_DB_HOST_RESOURCE_GROUP_ARN_KEY),
+        ),
+        allowed_instance_types=db_entry.get(SOFTWARE_STACK_DB_ALLOWED_INSTANCE_TYPES_KEY, []),
+        version=db_entry.get(SOFTWARE_STACK_DB_VERSION_KEY, 1)
     )
 
     for project_id in db_entry.get(SOFTWARE_STACK_DB_PROJECTS_KEY, []):
@@ -132,6 +149,12 @@ def convert_software_stack_object_to_db_dict(
         SOFTWARE_STACK_DB_MIN_RAM_UNIT_KEY: software_stack.min_ram.unit,
         SOFTWARE_STACK_DB_ARCHITECTURE_KEY: software_stack.architecture,
         SOFTWARE_STACK_DB_GPU_KEY: software_stack.gpu,
+        SOFTWARE_STACK_DB_AFFINITY_KEY: software_stack.placement.affinity if software_stack.placement else None,
+        SOFTWARE_STACK_DB_TENANCY_KEY: software_stack.placement.tenancy if software_stack.placement else VirtualDesktopTenancy.DEFAULT,
+        SOFTWARE_STACK_DB_HOST_ID_KEY: software_stack.placement.host_id if software_stack.placement else None,
+        SOFTWARE_STACK_DB_HOST_RESOURCE_GROUP_ARN_KEY: software_stack.placement.host_resource_group_arn if software_stack.placement else None,
+        SOFTWARE_STACK_DB_ALLOWED_INSTANCE_TYPES_KEY: software_stack.allowed_instance_types,
+        SOFTWARE_STACK_DB_VERSION_KEY: software_stack.version
     }
 
     project_ids = []

@@ -15,11 +15,11 @@ distros=$(curl ${url} | jq '.channels.Stable.downloads')
 # Install chrome driver.
 #wget -qP /tmp/ $(echo $distros | jq --raw-output '.chromedriver | .[] | select(.platform=="linux64") | .url')
 wget -qP /tmp/ "https://storage.googleapis.com/chrome-for-testing-public/127.0.6533.119/linux64/chromedriver-linux64.zip"
-sudo unzip -oj /tmp/chromedriver-linux64.zip -d /usr/bin
-sudo chmod 755 /usr/bin/chromedriver
+sudo unzip -oj /tmp/chromedriver-linux64.zip -d /usr/local/bin
+sudo chmod 755 /usr/local/bin/chromedriver
 
 # Install chrome.
 #wget -qP /tmp/ $(echo "$distros" | jq --raw-output '.chrome | .[] | select(.platform=="linux64") | .url')
 wget -qP /tmp/ "https://storage.googleapis.com/chrome-for-testing-public/127.0.6533.119/linux64/chrome-linux64.zip"
-sudo unzip -oj /tmp/chrome-linux64.zip -d /usr/bin
-sudo chmod 755 /usr/bin/chrome
+sudo unzip -oj /tmp/chrome-linux64.zip -d /usr/local/bin
+sudo chmod 755 /usr/local/bin/chrome

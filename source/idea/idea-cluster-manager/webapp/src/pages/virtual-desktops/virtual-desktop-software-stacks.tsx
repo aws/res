@@ -19,7 +19,7 @@ import { AppContext } from "../../common";
 import { TableProps } from "@cloudscape-design/components/table/interfaces";
 import IdeaForm from "../../components/form";
 import IdeaConfirm from "../../components/modals";
-import { Project, SocaFilter, SocaUserInputChoice, VirtualDesktopBaseOS, VirtualDesktopSession, VirtualDesktopSoftwareStack } from "../../client/data-model";
+import {Project, SocaFilter, SocaMemory, SocaUserInputChoice, VirtualDesktopBaseOS, VirtualDesktopGPU, VirtualDesktopPlacement, VirtualDesktopSession, VirtualDesktopSoftwareStack} from "../../client/data-model";
 import Utils from "../../common/utils";
 import { IdeaSideNavigationProps } from "../../components/side-navigation";
 import IdeaAppLayout, { IdeaAppLayoutProps } from "../../components/app-layout";
@@ -31,6 +31,7 @@ import VirtualDesktopUtilsClient from "../../client/virtual-desktop-utils-client
 export interface VirtualDesktopSoftwareStacksProps extends IdeaAppLayoutProps, IdeaSideNavigationProps { }
 
 export interface VirtualDesktopSoftwareStacksState {
+    affinityChoices: SocaUserInputChoice[];
     softwareStackSelected: boolean;
     supportedOsChoices: SocaUserInputChoice[];
     supportedGPUChoices: SocaUserInputChoice[];
@@ -39,6 +40,9 @@ export interface VirtualDesktopSoftwareStacksState {
     showEditSoftwareStackForm: boolean;
     showDeleteStackConfirmModal: boolean;
     selectedSoftwareStackSessionsList: VirtualDesktopSession[];
+    tenancyChoices: SocaUserInputChoice[];
+    targetHostChoices: SocaUserInputChoice[];
+    allowedInstanceTypes: string[];
 }
 
 const VIRTUAL_DESKTOP_SOFTWARE_STACKS_TABLE_COLUMN_DEFINITIONS: TableProps.ColumnDefinition<VirtualDesktopSoftwareStack>[] = [
@@ -46,41 +50,73 @@ const VIRTUAL_DESKTOP_SOFTWARE_STACKS_TABLE_COLUMN_DEFINITIONS: TableProps.Colum
         id: "name",
         header: "Name",
         cell: (e) => <Link href={`/#/virtual-desktop/software-stacks/${e.stack_id}/${e.base_os}`}>{e.name}</Link>,
+        sortingField: "name",
     },
     {
         id: "description",
         header: "Description",
         cell: (e) => e.description,
+        sortingField: "description",
     },
     {
         id: "ami_id",
         header: "AMI ID",
         cell: (e) => e.ami_id,
+        sortingField: "ami_id",
     },
     {
         id: "os",
         header: "Base OS",
         cell: (e) => Utils.getOsTitle(e.base_os),
+        sortingComparator: (a, b) => (a.base_os || '').localeCompare(b.base_os || '')
     },
     {
         id: "root_volume_size",
         header: "Root Volume Size",
         cell: (e) => Utils.getFormattedMemory(e.min_storage),
+        sortingComparator: (a, b) => {
+            const valueA = a.min_storage?.value || 0;
+            const valueB = b.min_storage?.value || 0;
+            return valueA - valueB;
+        }
     },
     {
         id: "min_ram",
         header: "Min RAM",
         cell: (e) => Utils.getFormattedMemory(e.min_ram),
+        sortingComparator: (a, b) => {
+            const valueA = a.min_ram?.value || 0;
+            const valueB = b.min_ram?.value || 0;
+            return valueA - valueB;
+        }
     },
     {
         id: "gpu_manufacturer",
         header: "GPU Manufacturer",
         cell: (e) => Utils.getFormattedGPUManufacturer(e.gpu),
+        sortingComparator: (a, b) => (a.gpu || '').localeCompare(b.gpu || '')
+    },
+    {
+        id: "tenancy",
+        header: "Tenancy",
+        cell: (e) => Utils.getFormattedTenancy(e.placement),
+    },
+    {
+        id: "availabile",
+        header: "Availabile",
+        cell: (e) => {
+            if (!e.enabled) {
+                return "No";
+            } else {
+                return "Yes";
+            }
+        },
     },
     {
         id: "created_on",
         header: "Created On",
         cell: (e) => new Date(e.created_on!).toLocaleString(),
+        sortingField: "created_on",
     },
 ];
 
@@ -105,6 +141,10 @@ class VirtualDesktopSoftwareStacks extends Component<VirtualDesktopSoftwareStack
             showEditSoftwareStackForm: false,
             showDeleteStackConfirmModal: false,
             selectedSoftwareStackSessionsList: [],
+            tenancyChoices: Utils.getTenancyChoices(),
+            affinityChoices: Utils.getAffinityChoices(),
+            targetHostChoices: Utils.getTargetHostChoices(),
+            allowedInstanceTypes: [],
         };
     }
 
@@ -126,10 +166,10 @@ class VirtualDesktopSoftwareStacks extends Component<VirtualDesktopSoftwareStack
             });
 
         this.getProjectsClient()
-            .getUserProjects({})
+            .listProjects({})
             .then((result) => {
                 let projectChoices: SocaUserInputChoice[] = [];
-                result.projects?.forEach((project) => {
+                result.listing?.forEach((project) => {
                     projectChoices.push({
                         title: project.title,
                         value: project.project_id,
@@ -227,7 +267,14 @@ class VirtualDesktopSoftwareStacks extends Component<VirtualDesktopSoftwareStack
                                     value: values.ram_size,
                                     unit: "gb",
                                 },
+                                placement: {
+                                    affinity: values.affinity,
+                                    tenancy: values.tenancy,
+                                    host_id: (values.target_host_by === "host_id") ? values.host_id : undefined,
+                                    host_resource_group_arn: (values.target_host_by === "host_resource_group") ? values.host_resource_group_arn : undefined,
+                                },
                                 projects: projects,
+                                allowed_instance_types: []
                             },
                         })
                         .then(() => {
@@ -307,7 +354,7 @@ class VirtualDesktopSoftwareStacks extends Component<VirtualDesktopSoftwareStack
                         description: "Enter the min. storage size for your virtual desktop in GBs",
                         data_type: "int",
                         param_type: "text",
-                        default: 10,
+                        default: 50,
                         validate: {
                             required: true,
                         },
@@ -332,6 +379,96 @@ class VirtualDesktopSoftwareStacks extends Component<VirtualDesktopSoftwareStack
                         multiple: true,
                         choices: this.state.projectChoices,
                     },
+                    {
+                        name: "tenancy",
+                        title: "Tenancy",
+                        description: "The type of tenancy",
+                        data_type: "str",
+                        param_type: "select",
+                        validate: {
+                            required: true,
+                        },
+                        default: "default",
+                        choices: this.state.tenancyChoices,
+                    },
+                    {
+                        name: "affinity",
+                        title: "Tenancy Affinity",
+                        description: "The relationship between an instance and a dedicated host",
+                        data_type: "str",
+                        param_type: "select",
+                        validate: {
+                            required: true,
+                        },
+                        choices: this.state.affinityChoices,
+                        when:  {
+                            param: "tenancy",
+                            eq: "host",
+                        },
+                    },
+                    {
+                        name: "target_host_by",
+                        title: "Target Host By",
+                        description: "The type of target host",
+                        data_type: "str",
+                        param_type: "select",
+                        validate: {
+                            required: true,
+                        },
+                        choices: this.state.targetHostChoices,
+                        when:  {
+                            param: "tenancy",
+                            eq: "host",
+                        },
+                    },
+                    {
+                        name: "host_id",
+                        title: "Tenancy Host ID",
+                        description: "The ID of the dedicated host",
+                        help_text: "",
+                        data_type: "str",
+                        param_type: "text",
+                        validate: {
+                            required: true,
+                            regex: "^h-.+$",
+                        },
+                        when: {
+                            and: [
+                                {
+                                    param: "tenancy",
+                                    eq: "host",
+                                },
+                                {
+                                    param: "target_host_by",
+                                    eq: "host_id",
+                                }
+                            ]
+                        },
+                    },
+                    {
+                        name: "host_resource_group_arn",
+                        title: "Host Resource Group ARN",
+                        description: "The ARN of the dedicated resource group",
+                        help_text: "",
+                        data_type: "str",
+                        param_type: "text",
+                        validate: {
+                            required: true,
+                            regex: "^(?:arn:(?:aws(?:-cn|-us-gov)?)):resource-groups:.+:\\d{12}:group/.{1,128}$",
+                        },
+                        when: {
+                            and: [
+                                {
+                                    param: "tenancy",
+                                    eq: "host",
+                                },
+                                {
+                                    param: "target_host_by",
+                                    eq: "host_resource_group",
+                                }
+                            ]
+                        },
+                    },
                 ]}
             />
         );
@@ -355,15 +492,21 @@ class VirtualDesktopSoftwareStacks extends Component<VirtualDesktopSoftwareStack
         });
     };
 
-    showEditSoftwareStackForm() {
-        this.setState(
-            {
-                showEditSoftwareStackForm: true,
-            },
-            () => {
-                this.getEditSoftwareStackForm().showModal();
-            }
-        );
+    async showEditSoftwareStackForm() {
+        try {
+            const instanceTypes = await Utils.getAllowedInstanceTypesOptionsForSelectedSoftwareStack(this.getSelectedSoftwareStack());
+            this.setState(
+                {
+                    allowedInstanceTypes: instanceTypes,
+                    showEditSoftwareStackForm: true,
+                },
+                () => {
+                    this.getEditSoftwareStackForm().showModal();
+                }
+            );
+        } catch (error) {
+            console.error('Error showing edit form:', error);
+        }
     }
 
     getEditSoftwareStackForm() {
@@ -390,7 +533,11 @@ class VirtualDesktopSoftwareStacks extends Component<VirtualDesktopSoftwareStack
             <VirtualDesktopSoftwareStackEditForm
                 ref={this.editSoftwareStackForm}
                 softwareStack={this.getSelectedSoftwareStack()!}
-                onSubmit={(stack_id: string, base_os: VirtualDesktopBaseOS, name: string, description: string, projects: Project[]) => {
+                allowedInstanceTypes={this.state.allowedInstanceTypes}
+                supportedOsChoices={this.state.supportedOsChoices}
+                supportedGPUChoices={this.state.supportedGPUChoices}
+                onSubmit={(stack_id: string, base_os: VirtualDesktopBaseOS, name: string, description: string, ami_id: string, gpu: VirtualDesktopGPU, min_storage: SocaMemory,
+                    min_ram: SocaMemory, projects: Project[], placement: VirtualDesktopPlacement, allowed_instance_types: string[]) => {
                     return this.getVirtualDesktopAdminClient()
                         .updateSoftwareStack({
                             software_stack: {
@@ -398,11 +545,18 @@ class VirtualDesktopSoftwareStacks extends Component<VirtualDesktopSoftwareStack
                                 base_os: base_os,
                                 name: name,
                                 description: description,
+                                ami_id: ami_id,
+                                gpu: gpu,
+                                min_storage: min_storage,
+                                min_ram: min_ram,
                                 projects: projects,
+                                placement: placement,
+                                allowed_instance_types: allowed_instance_types
                             },
                         })
                         .then((_) => {
                             this.setFlashMessage(<p key={stack_id}>Software Stack: {name}, Edit request submitted</p>, "success");
+                            this.getEditSoftwareStackForm().hideForm();
                             return Promise.resolve(true);
                         })
                         .catch((error) => {
@@ -456,16 +610,16 @@ class VirtualDesktopSoftwareStacks extends Component<VirtualDesktopSoftwareStack
                 }}
             >
             {
-             this.state.selectedSoftwareStackSessionsList.length > 0 &&
-                <div>
-                    <b>Current Live Sessions Using this Software Stack:</b>
-                    {this.state.selectedSoftwareStackSessionsList.map((session, index) => (
-                        <li key={index}>
-                            {session.name} (Owner: {session.owner})
-                        </li>
-                    ))}
-                <p>{infoMsg}</p>
-                </div>
+                this.state.selectedSoftwareStackSessionsList.length > 0 &&
+                    <div>
+                        <b>Current Live Sessions Using this Software Stack:</b>
+                        {this.state.selectedSoftwareStackSessionsList.map((session, index) => (
+                            <li key={index}>
+                                {session.name} (Owner: {session.owner})
+                            </li>
+                        ))}
+                    <p>{infoMsg}</p>
+                    </div>
             }
             <p>Are you sure you want to delete this stack? This action cannot be undone.</p>
             </IdeaConfirm>
@@ -530,15 +684,8 @@ class VirtualDesktopSoftwareStacks extends Component<VirtualDesktopSoftwareStack
                         text: "Edit Stack",
                         disabled: !this.isSelected(),
                         onClick: () => {
-                            this.setState(
-                                {
-                                    showEditSoftwareStackForm: true,
-                                },
-                                () => {
-                                    this.showEditSoftwareStackForm();
-                                }
-                            );
-                        },
+                            this.showEditSoftwareStackForm();
+                        }
                     },
                     {
                         id: "delete-software-stack",

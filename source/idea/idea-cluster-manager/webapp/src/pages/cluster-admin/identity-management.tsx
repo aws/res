@@ -15,7 +15,7 @@ import React, { Component, RefObject } from "react";
 
 import { IdeaSideNavigationProps } from "../../components/side-navigation";
 import IdeaAppLayout, { IdeaAppLayoutProps } from "../../components/app-layout";
-import { Button, ColumnLayout, Container, Header, SpaceBetween, TextContent, Toggle } from "@cloudscape-design/components";
+import { Button, ColumnLayout, Container, Header, SpaceBetween, TextContent, Toggle, FlashbarProps } from "@cloudscape-design/components";
 import { withRouter } from "../../navigation/navigation-utils";
 import Utils from "../../common/utils";
 import { KeyValue } from "../../components/key-value";
@@ -27,12 +27,31 @@ import EnableSSOConfigForm from './enable-sso-form';
 import { UpdateModuleSettingsRequestIdentityProvider } from "../../client/data-model";
 import { EditADDomainForm } from "./edit-ad-domain-form";
 import { UpdateModuleSettingsDirectoryService } from '../../client/data-model';
+import BackendClient from "../../client/backend-client";
+
+enum ADSyncState {
+    IDLE = 'IDLE',
+    SYNCING = 'SYNCING',
+    STOPPING = 'STOPPING'
+}
+
+enum ADSyncStatus {
+    RUNNING = 'RUNNING',
+    STOPPED = 'STOPPED',
+    ERROR = 'ERROR',
+    PENDING = 'PENDING',
+    TERMINATED = 'TERMINATED'
+}
 
 export interface IdentityManagementProps extends IdeaAppLayoutProps, IdeaSideNavigationProps {}
 
 export interface IdentityManagementState {
     identityProvider: any;
     directoryservice: any;
+    isADSyncEnabled: boolean;
+    adSyncState: ADSyncState;
+    latestADSyncTaskId: string;
+    latestADSyncStatus: any;
 }
 
 class IdentityManagement extends Component<IdentityManagementProps, IdentityManagementState> {
@@ -44,8 +63,31 @@ class IdentityManagement extends Component<IdentityManagementProps, IdentityMana
         this.state = {
             identityProvider: {},
             directoryservice: {},
+            isADSyncEnabled: true,
+            adSyncState: ADSyncState.IDLE,
+            latestADSyncTaskId: '',
+            latestADSyncStatus: null
         };
     }
+
+    backendClient(): BackendClient {
+        return AppContext.get().client().backend();
+    }
+
+    setFlashbarMessage(type: FlashbarProps.Type, content: string, header?: React.ReactNode, action?: React.ReactNode) {
+        this.props.onFlashbarChange({
+          items: [
+            {
+              type,
+              header,
+              content,
+              action,
+              dismissible: true,
+            }
+          ]
+        })
+    }
+
 
     async componentDidMount() {
         try {
@@ -54,13 +96,24 @@ class IdentityManagement extends Component<IdentityManagementProps, IdentityMana
                 clusterSettingsService.getDirectoryServiceSettings(),
                 clusterSettingsService.getIdentityProviderSettings(),
             ]);
+            const latestADSyncStatus = await this.onGetADSyncStatus()
+            const latestADSyncTaskId = dot.pick("id", latestADSyncStatus) || ''
+            const isADSyncInProgress = [ADSyncStatus.RUNNING, ADSyncStatus.PENDING].includes(dot.pick("status", latestADSyncStatus));
             // The status field is provided by the `allSettled` API. API definition is provided here: https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Promise/allSettled#status
             if (directoryservice.status === "fulfilled") {
                 this.setState(
                     {
-                        directoryservice: directoryservice.value
-                    }
-                )
+                        directoryservice: directoryservice.value,
+                        latestADSyncTaskId,
+                        latestADSyncStatus,
+                        adSyncState: isADSyncInProgress ? ADSyncState.SYNCING : ADSyncState.IDLE
+                    },
+                    async () => {
+                        this.setState({isADSyncEnabled: this.isADDomainInfoComplete()});
+                        if (this.state.adSyncState === ADSyncState.SYNCING) {
+                            await this.pollStatus()
+                        }
+                })
             }
             if (identityProvider.status === "fulfilled") {
                 this.setState(
@@ -72,6 +125,94 @@ class IdentityManagement extends Component<IdentityManagementProps, IdentityMana
         } catch (error) {
             console.error('Error loading settings:', error);
         }
+    }
+
+    isADDomainInfoComplete() {
+        const requiredFields = [
+            "name",
+            "ad_short_name",
+            "ldap_base",
+            "ldap_connection_uri",
+            "root_user_dn",
+            "service_account_credentials_secret_arn",
+            "users.ou",
+            "groups.ou",
+            "sudoers.group_name",
+            "computers.ou",
+        ];
+    
+        return requiredFields.every(field => {
+            const value = dot.pick(field, this.state.directoryservice);
+            return value !== undefined && value !== null && value !== '';
+        });
+    }
+
+    async onStartADSync () {
+        this.setState({ adSyncState: ADSyncState.SYNCING });
+        try {
+            this.setFlashbarMessage("in-progress", "AD Synchronization is starting. Please wait a few minutes for AD synchronization to complete.");
+            const ad_sync_response = await this.backendClient().start_ad_sync();
+            const task_id = dot.pick("id", ad_sync_response);
+            if (task_id === undefined) {
+                throw new Error("Failed to start AD Synchronization.");
+            }
+            this.setState({ latestADSyncTaskId: task_id }, async () => {
+                await this.pollStatus();
+            })
+        } catch (error: any) {
+            console.error('Failed to start AD Sync:', error);
+            this.setState({ adSyncState: ADSyncState.IDLE });
+            this.setFlashbarMessage("error", error.message);
+        }
+    }
+
+    async onStopADSync() {
+        this.setState({adSyncState: ADSyncState.STOPPING});
+        try {
+            this.setFlashbarMessage("in-progress", "AD Synchronization is terminating. Please wait a few minutes for AD synchronization to terminate.");
+            await this.backendClient().stop_ad_sync();
+        } catch (error: any) {
+            console.error('Failed to stop AD Sync:', error);
+            this.setFlashbarMessage("error", error.message);
+        }
+    }
+
+
+    async pollStatus () {
+        try {
+            const response = await this.onGetADSyncStatus(this.state.latestADSyncTaskId? this.state.latestADSyncTaskId: undefined)
+            const status = dot.pick("status", response);
+            if (status === undefined) {
+                throw new Error("Failed to get AD Synchronization status.");
+            }
+            if (status === ADSyncStatus.RUNNING || status === ADSyncStatus.PENDING) {
+                setTimeout(() => this.pollStatus(), 10000);
+            } else {
+                this.setState({ adSyncState: ADSyncState.IDLE}, () => {
+                    if (status === ADSyncStatus.ERROR) {
+                        this.setFlashbarMessage("error", "AD Synchronization Failed.");
+                    } else if (status === ADSyncStatus.TERMINATED) {
+                        this.setFlashbarMessage("success","AD Synchronization terminated successfully.");
+                    } else {
+                        this.setFlashbarMessage("success","AD Synchronization completed successfully.");
+                    }
+                });      
+    
+            }
+            this.setState({
+                latestADSyncStatus: response,
+            })
+        }
+        catch (error: any) {
+            console.error('Failed to get AD Sync status:', error);
+            this.setState({ adSyncState: ADSyncState.IDLE });
+            this.setFlashbarMessage("error", error.message);
+        }
+    };
+
+    async onGetADSyncStatus (task_id?: string) {
+        const response =  await this.backendClient().check_ad_sync_status(task_id ? {id: task_id} : undefined);
+        return response;
     }
 
     getEnableSSOConfigForm(): IdeaForm {
@@ -105,7 +246,9 @@ class IdentityManagement extends Component<IdentityManagementProps, IdentityMana
                 dot.set(key, editFormData[key], directoryservice);
             }
         });
-        this.setState({directoryservice: directoryservice});
+        this.setState({directoryservice: directoryservice}, () => {
+            this.setState({isADSyncEnabled: this.isADDomainInfoComplete()});
+        });
     }
 
     buildEditADDomainForm() {
@@ -157,6 +300,53 @@ class IdentityManagement extends Component<IdentityManagementProps, IdentityMana
                     ]
                 })
             }
+        }
+
+        const renderLastSyncInfo = () => {
+            if (!this.state.latestADSyncStatus) {
+                return null;
+            }
+            if (!this.state.latestADSyncStatus.update_time || !this.state.latestADSyncStatus.status) {
+                return null;
+            }
+ 
+            const getStatusDisplay = (status: string) => {
+                switch (status) {
+                    case ADSyncStatus.RUNNING:
+                        return "started";
+                    case ADSyncStatus.STOPPED:
+                        return "completed";
+                    case ADSyncStatus.ERROR:
+                        return "failed";
+                    case ADSyncStatus.PENDING:
+                        return "initialized";
+                    case ADSyncStatus.TERMINATED:
+                        return "terminated";
+                    default:
+                        return status;
+                }
+            };
+ 
+ 
+            const timestamp = new Date(Number(this.state.latestADSyncStatus.update_time)).toLocaleString();
+            const displayStatus = getStatusDisplay(this.state.latestADSyncStatus.status);
+            return (
+                <TextContent>
+                    <small>
+                        Latest AD synchronization {displayStatus} at {timestamp}
+                    </small>
+                </TextContent>
+            );
+        };
+
+        const renderAdditionalConfig = () => {
+            const additionalConfig = dot.pick("sssd.additional_sssd_configs", this.state.directoryservice);
+            if (!additionalConfig) {
+                return null;
+            }
+            return Object.entries(JSON.parse(additionalConfig))
+                .map(([key, value]) => `${key}=${value}`)
+                .join(',');
         }
 
         return (
@@ -241,25 +431,56 @@ class IdentityManagement extends Component<IdentityManagementProps, IdentityMana
                                         <KeyValue title="AD Automation SQS Queue Url" value={dot.pick("ad_automation.sqs_queue_url", this.state.directoryservice)} clipboard={true} />
                                         <KeyValue title="AD Automation DynamoDB Table Name" value={`${AppContext.get().getClusterName()}.ad-automation`} clipboard={true} />
                                         <KeyValue title="Password Max Age" value={dot.pick("password_max_age", this.state.directoryservice)} suffix={"days"} />
+                                        <KeyValue title="AD Sync Log Group Name" value={`${AppContext.get().getClusterName()}/ad-sync`} clipboard={true} />
                                     </ColumnLayout>
-                                    <Container header={<Header variant={"h3"} description="Configuration setting for a specific AD domain">Active Directory Domain {this.buildEditADDomainForm()}</Header>}>
-                                    <ColumnLayout variant={"text-grid"} columns={3}>
-                                        <KeyValue title="Domain Name" value={dot.pick("name", this.state.directoryservice)}/>
-                                        <KeyValue title="Short Name (NETBIOS)" value={dot.pick("ad_short_name", this.state.directoryservice)}/>
-                                        <KeyValue title="LDAP Base" value={dot.pick("ldap_base", this.state.directoryservice)}/>
-                                        <KeyValue title="LDAP Connection URI" value={dot.pick("ldap_connection_uri", this.state.directoryservice)}/>
-                                        <KeyValue title="Service Account User DN" value={dot.pick("root_user_dn", this.state.directoryservice)} clipboard={true}/>
-                                        <KeyValue title="Service Account Credentials Secret ARN" value={dot.pick("service_account_credentials_secret_arn", this.state.directoryservice)} clipboard={true} />
-                                        <KeyValue title="Users OU" value={dot.pick("users.ou", this.state.directoryservice)}/>
-                                        <KeyValue title="Users Filter" value={dot.pick("users_filter", this.state.directoryservice)}/>
-                                        <KeyValue title="Groups OU" value={dot.pick("groups.ou", this.state.directoryservice)}/>
-                                        <KeyValue title="Groups Filter" value={dot.pick("groups_filter", this.state.directoryservice)}/>
-                                        <KeyValue title="Sudoers Group Name" value={dot.pick("sudoers.group_name", this.state.directoryservice)}/>
-                                        <KeyValue title="Computers OU" value={dot.pick("computers.ou", this.state.directoryservice)}/>
-                                        <KeyValue title="Enable LDAP ID Mapping" value={dot.pick("sssd.ldap_id_mapping", this.state.directoryservice)}/>
-                                        <KeyValue title="Disable AD Join" value={dot.pick("disable_ad_join", this.state.directoryservice)}/>
-                                        <KeyValue title="Domain TLS Certificate Secret ARN" value={dot.pick("tls_certificate_secret_arn", this.state.directoryservice)} clipboard={true}/>
-                                    </ColumnLayout>
+                                    <Container
+                                        header={
+                                            <Header
+                                                variant={"h3"}
+                                                description="Configuration setting for a specific AD domain"
+                                                actions={
+                                                    <SpaceBetween size="xs" direction="vertical" alignItems="end">
+                                                        <SpaceBetween size="xs" direction="horizontal" alignItems="center">
+                                                            {this.state.adSyncState === ADSyncState.SYNCING ? <TextContent>AD Synchronization in progress...</TextContent>: null}
+                                                            <Button 
+                                                                variant={"primary"}
+                                                                disabled={!this.state.isADSyncEnabled}
+                                                                onClick={() => this.state.adSyncState !== ADSyncState.SYNCING ? this.onStartADSync() : this.onStopADSync()}
+                                                                loading={this.state.adSyncState === ADSyncState.STOPPING}
+                                                            >
+                                                                {this.state.adSyncState === ADSyncState.IDLE ? "Start AD Synchronization" : "Stop AD Synchronization"}
+                                                            </Button>
+                                                        </SpaceBetween>
+                                                        {renderLastSyncInfo()}
+                                                    </SpaceBetween>
+                                                }
+                                            >
+                                                Active Directory Domain {this.buildEditADDomainForm()}
+                                            </Header>
+                                        }
+                                    >
+                                    <SpaceBetween size="l" direction="vertical">
+                                        <ColumnLayout variant={"text-grid"} columns={3}>
+                                            <KeyValue title="Domain Name" value={dot.pick("name", this.state.directoryservice)}/>
+                                            <KeyValue title="Short Name (NETBIOS)" value={dot.pick("ad_short_name", this.state.directoryservice)}/>
+                                            <KeyValue title="LDAP Base" value={dot.pick("ldap_base", this.state.directoryservice)}/>
+                                            <KeyValue title="LDAP Connection URI" value={dot.pick("ldap_connection_uri", this.state.directoryservice)}/>
+                                            <KeyValue title="Service Account User DN" value={dot.pick("root_user_dn", this.state.directoryservice)} clipboard={true}/>
+                                            <KeyValue title="Service Account Credentials Secret ARN" value={dot.pick("service_account_credentials_secret_arn", this.state.directoryservice)} clipboard={true} />
+                                            <KeyValue title="Users OU" value={dot.pick("users.ou", this.state.directoryservice)}/>
+                                            <KeyValue title="Users Filter" value={dot.pick("users_filter", this.state.directoryservice)}/>
+                                            <KeyValue title="Groups OU" value={dot.pick("groups.ou", this.state.directoryservice)}/>
+                                            <KeyValue title="Groups Filter" value={dot.pick("groups_filter", this.state.directoryservice)}/>
+                                            <KeyValue title="Sudoers Group Name" value={dot.pick("sudoers.group_name", this.state.directoryservice)}/>
+                                            <KeyValue title="Computers OU" value={dot.pick("computers.ou", this.state.directoryservice)}/>
+                                            <KeyValue title="Enable LDAP ID Mapping" value={dot.pick("sssd.ldap_id_mapping", this.state.directoryservice)}/>
+                                            <KeyValue title="Join Active Directory" value={dot.pick("disable_ad_join", this.state.directoryservice) === "false" ? "true": "false"}/>
+                                            <KeyValue title="Domain TLS Certificate Secret ARN" value={dot.pick("tls_certificate_secret_arn", this.state.directoryservice)} clipboard={true}/>
+                                        </ColumnLayout>
+                                        <ColumnLayout variant={"text-grid"} columns={1}>
+                                            <KeyValue title="Additional SSSD Configuration" value={renderAdditionalConfig()}/>
+                                        </ColumnLayout>
+                                    </SpaceBetween>
                                     </Container>
                                 </SpaceBetween>
                             </Container>

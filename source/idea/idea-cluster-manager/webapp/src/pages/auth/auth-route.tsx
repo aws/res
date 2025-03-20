@@ -37,6 +37,7 @@ class IdeaAuthenticatedRoute extends Component<IdeaAuthRouteProps> {
         const isFileBrowserPath = currentPath.startsWith("/home/file-browser");
         const isSessionsPath = currentPath.startsWith("/virtual-desktop/sessions");
         const isSshAccessPath = currentPath.startsWith("/home/ssh-access");
+        const isCostDashboardPath = currentPath.startsWith("/home/cost-dashboard");
 
         if (this.props.isLoggedIn) {
             if (isAuthRoute) {
@@ -58,6 +59,8 @@ class IdeaAuthenticatedRoute extends Component<IdeaAuthRouteProps> {
             } else if (isFileBrowserPath && !this.props.isFileBrowserEnabled){
                 return <Navigate to="/" />;
             } else if (isSshAccessPath && !this.props.isSshEnabled){
+                return <Navigate to="/" />;
+            } else if (isCostDashboardPath && !context.auth().isAdmin()) {
                 return <Navigate to="/" />;
             } else {
                 return this.props.children;

@@ -21,6 +21,19 @@ class BackendClient extends IdeaBaseClient<BackendClientProps> {
     config(body?: {ssh_enabled: boolean}): Promise<any> {
         return this.apiInvoker.invoke_alt("config", body, false, true, {}, body ? "PUT" : "GET");
     }
+    start_ad_sync(): Promise<any> {
+        return this.apiInvoker.invoke_alt("ad-sync", {}, false, true, {}, "PUT");
+    }
+    check_ad_sync_status(body?: {id: string}): Promise<any> {
+        let name_space = "ad-sync"
+        if (body && body.id) {
+            name_space = `ad-sync?id=${encodeURIComponent(body.id)}`
+        }
+        return this.apiInvoker.invoke_alt(name_space, body, false, true, {}, "GET");
+    }
+    stop_ad_sync(body?: {id: string}): Promise<any> {
+        return this.apiInvoker.invoke_alt("ad-sync", body, false, true, {}, "DELETE");
+    }
 }
 
 export default BackendClient;

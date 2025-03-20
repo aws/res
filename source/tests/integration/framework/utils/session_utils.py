@@ -15,13 +15,16 @@ import time
 from typing import Any
 
 from ideadatamodel import (  # type: ignore
+    DeleteSoftwareStackRequest,
     GetSessionConnectionInfoRequest,
     GetSessionInfoRequest,
+    GetSoftwareStackInfoRequest,
     ListSessionsRequest,
     VirtualDesktopBaseOS,
     VirtualDesktopSession,
     VirtualDesktopSessionConnectionInfo,
     VirtualDesktopSessionState,
+    VirtualDesktopSoftwareStack,
 )
 from tests.integration.framework.client.res_client import ResClient
 from tests.integration.framework.utils.remote_command_runner import (
@@ -39,10 +42,11 @@ SESSION_COMPLETE_STATES = [
 ]
 # AWS credentials on CodeBuild expires in an hour.
 # Make sure to leave enough time for the test setup and cleanup when running in the code pipeline.
-MAX_WAITING_TIME_FOR_LAUNCHING_SESSION_IN_SEC = 2700
+MAX_WAITING_TIME_FOR_LAUNCHING_SESSION_IN_SEC = 3600
 MAX_WAITING_TIME_FOR_DELETING_SESSION_IN_SEC = 300
 MAX_WAITING_TIME_FOR_STOPPING_IDLE_SESSION_IN_SEC = 1200
 MAX_WAITING_TIME_FOR_SESSION_CONNECTION_COUNT_IN_SEC = 300
+MAX_WAITING_TIME_FOR_AMI_CREATION = 900
 
 
 def wait_for_launching_session(
@@ -185,6 +189,27 @@ def wait_for_session_connection_count(
     assert (
         False
     ), f"Failed to reach session connection count {count} within {MAX_WAITING_TIME_FOR_SESSION_CONNECTION_COUNT_IN_SEC} seconds"
+
+
+def wait_for_software_stack_to_be_active(
+    client: ResClient, software_stack: VirtualDesktopSoftwareStack
+) -> None:
+    start_time = time.time()
+    while time.time() - start_time < MAX_WAITING_TIME_FOR_AMI_CREATION:
+        response = client.get_software_stack(
+            request=GetSoftwareStackInfoRequest(
+                stack_id=software_stack.stack_id, base_os=software_stack.base_os
+            )
+        )
+        if response.software_stack.enabled:
+            return
+        time.sleep(30)
+    client.delete_software_stack(
+        request=DeleteSoftwareStackRequest(software_stack=software_stack)
+    )
+    assert (
+        False
+    ), f"Failed to create software stack {software_stack.stack_id} within {MAX_WAITING_TIME_FOR_AMI_CREATION} seconds"
 
 
 def describe_dcv_session(

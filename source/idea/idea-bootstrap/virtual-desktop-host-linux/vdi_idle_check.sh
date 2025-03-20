@@ -14,7 +14,7 @@ set -x
 
 SCRIPT_DIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
 
-LOG_FOLDER="/opt/idea/app/logs/"
+LOG_FOLDER="/opt/res/logs/"
 LOG_FILE_NAME="vdi_idle_check.log"
 IDLE_CONFIG_FILE="/opt/idea/.idle_config.json"
 

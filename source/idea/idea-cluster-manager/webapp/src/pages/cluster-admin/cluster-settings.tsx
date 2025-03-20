@@ -345,22 +345,6 @@ class ClusterSettings extends Component<ClusterSettingsProps, ClusterSettingsSta
                                     ),
                                 },
                                 {
-                                    label: "Identity Provider",
-                                    id: "identity-provider",
-                                    content: (
-                                        <SpaceBetween size={"l"}>
-                                            <Container header={<Header variant={"h2"}>Identity Provider</Header>}>
-                                                <ColumnLayout variant={"text-grid"} columns={3}>
-                                                    <KeyValue title="Provider Name" value={dot.pick("provider", this.state.identityProvider)} />
-                                                    <KeyValue title="User Pool Id" value={dot.pick("cognito.user_pool_id", this.state.identityProvider)} clipboard={true} type={"cognito:user-pool-id"} />
-                                                    <KeyValue title="Domain URL" value={dot.pick("cognito.domain_url", this.state.identityProvider)} clipboard={true} />
-                                                    <KeyValue title="Provider URL" value={dot.pick("cognito.provider_url", this.state.identityProvider)} clipboard={true} />
-                                                </ColumnLayout>
-                                            </Container>
-                                        </SpaceBetween>
-                                    ),
-                                },
-                                {
                                     label: "CloudWatch Logs",
                                     id: "cloudwatch-logs",
                                     content: (

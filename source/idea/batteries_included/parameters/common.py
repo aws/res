@@ -76,9 +76,9 @@ class CommonParameters(Base):
         Attributes(
             id=CommonKey.CLUSTER_NAME,
             type="String",
-            description='Provide name of the Environment, the name of the environment must start with "res-" and should be less than or equal to 11 characters.',
-            allowed_pattern="res-[A-Za-z\-\_0-9]{0,7}",
-            constraint_description='The name of the environment must start with "res-" and should be less than or equal to 11 characters.',
+            description='Provide name of the Environment, the name of the environment must start with "res-" without capital letters and should be less than or equal to 11 characters.',
+            allowed_pattern="res-[a-z\-\_0-9]{0,7}",
+            constraint_description='The name of the environment must start with "res-" without capital letters and should be less than or equal to 11 characters.',
         )
     )
 

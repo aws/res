@@ -1,0 +1,7 @@
+logging:
+  logs_directory: /opt/idea/app/logs
+  profile: production
+  default_log_file_name: application.log
+
+cloudwatch_logs:
+  enabled: true

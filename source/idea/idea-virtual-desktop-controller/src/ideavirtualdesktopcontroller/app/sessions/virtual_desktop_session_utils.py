@@ -44,12 +44,13 @@ class VirtualDesktopSessionUtils:
     def create_session(self, session: VirtualDesktopSession) -> VirtualDesktopSession:
         # request has been validated and everything.
         try:
+            default_schedule = self._schedule_utils.get_default_schedules()
             session.server = self._server_utils.provision_host_for_session(session)
         except Exception as e:
             session.failure_reason = f'{e}'
             return session
 
-        session = self._schedule_utils.update_schedule_for_session(self._schedule_utils.get_default_schedules(), session)
+        session = self._schedule_utils.update_schedule_for_session(default_schedule, session)
         session.state = VirtualDesktopSessionState.PROVISIONING
         return self._session_db.create(session)
 
@@ -131,6 +132,11 @@ class VirtualDesktopSessionUtils:
             if Utils.is_empty(session):
                 self._logger.error(f'Invalid RES Session ID: {session.idea_session_id}:{session.name} for user: {session.owner}. Nothing to resume')
                 session.failure_reason = f'Invalid RES Session ID: {session.idea_session_id}:{session.name} for user: {session.owner}. Nothing to resume'
+                fail_response_list.append(session)
+                continue
+
+            if not self.context.projects_client.get_project_by_id(session.project.project_id).enabled:
+                session.failure_reason =  f"Cannot resume session: project with ID {session.project.project_id} is disabled"
                 fail_response_list.append(session)
                 continue
 

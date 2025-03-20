@@ -22,14 +22,14 @@ from ideadatamodel.cluster_settings import (
     UpdateModuleSettingsResult,
     UpdateQuicConfigRequest,
     DescribeInstanceTypesResult,
-    GetAllowedSessionsPerUserResult
+    GetDefaultAllowedSessionsPerUserPerProjectResult
 )
 from ideadatamodel import exceptions, constants, UpdateQuicConfigResult
 from ideasdk.config.cluster_config import ClusterConfig
 from ideasdk.utils import Utils
 
-from res.utils import aws_utils
 import res.constants as res_constants
+from res.resources import directory_service_settings
 
 from threading import RLock
 
@@ -59,9 +59,9 @@ class ClusterSettingsAPI(BaseAPI):
                 'scope': self.SCOPE_READ,
                 'method': self.describe_instance_types
             },
-            'ClusterSettings.GetAllowedSessionsPerUser': {
+            'ClusterSettings.GetDefaultAllowedSessionsPerUserPerProject': {
                 'scope': self.SCOPE_READ,
-                'method': self.get_allowed_sessions_per_user
+                'method': self.get_default_allowed_sessions_per_user_per_project
             },
             'ClusterSettings.UpdateQuicConfig': {
                 'scope': self.SCOPE_WRITE,
@@ -85,7 +85,7 @@ class ClusterSettingsAPI(BaseAPI):
         module_id = request.module_id
         if Utils.is_empty(module_id):
             raise exceptions.invalid_params('module_id is required')
-        
+
         if not self.context.config().get_bool('bastion-host.public') and module_id == constants.MODULE_BASTION_HOST:
             context.success(GetModuleSettingsResult(
                 settings={
@@ -96,9 +96,8 @@ class ClusterSettingsAPI(BaseAPI):
 
         module_config = self.context.config().get_config(module_id, module_id=module_id).as_plain_ordered_dict()
 
-        if module_id == constants.MODULE_DIRECTORYSERVICE:
-            if res_constants.SERVICE_ACCOUNT_USER_DN_SECRET_ARN_KEY in module_config:
-                module_config[res_constants.SERVICE_ACCOUNT_USER_DN_KEY] = aws_utils.get_secret_string(module_config[res_constants.SERVICE_ACCOUNT_USER_DN_SECRET_ARN_KEY])
+        if module_id == res_constants.MODULE_DIRECTORY_SERVICE:
+            module_config = directory_service_settings.transform_settings(module_config)
 
         if not context.is_administrator() and module_id in constants.RESTRICTED_MODULES_FOR_NON_ADMINS:
             filtered_config = {}
@@ -124,14 +123,8 @@ class ClusterSettingsAPI(BaseAPI):
         if len(settings) > 100:
             raise exceptions.invalid_params('only 100 settings can be updated at once')
 
-        if res_constants.SERVICE_ACCOUNT_USER_DN_KEY in settings:
-            # Create a secret ARN for service account user DN to avoid storing sensitive data in DDB
-            settings[f"{res_constants.SERVICE_ACCOUNT_USER_DN_KEY}_secret_arn"] = aws_utils.create_or_update_secret(
-                self.config.cluster_name, module_id,
-                res_constants.SERVICE_ACCOUNT_USER_DN_INPUT_PARAMETER_NAME,
-                settings[res_constants.SERVICE_ACCOUNT_USER_DN_KEY]
-            )
-            settings.pop(res_constants.SERVICE_ACCOUNT_USER_DN_KEY)
+        if module_id == res_constants.MODULE_DIRECTORY_SERVICE:
+            directory_service_settings.update_settings(settings)
 
         self.config.db.transact_set_cluster_settings(module_id, settings)
         for setting in settings:
@@ -169,10 +162,10 @@ class ClusterSettingsAPI(BaseAPI):
             instance_types=instance_types
         ))
 
-    def get_allowed_sessions_per_user(self, context: ApiInvocationContext):
-        allowed_sessions_per_user = self.config.db.get_config_entry("vdc.dcv_session.allowed_sessions_per_user")
+    def get_default_allowed_sessions_per_user_per_project(self, context: ApiInvocationContext):
+        default_allowed_sessions_per_user_per_project = self.config.db.get_config_entry("vdc.dcv_session.default_allowed_sessions_per_user_per_project")
 
-        context.success(GetAllowedSessionsPerUserResult(allowed_sessions_per_user=Utils.get_value_as_int("value", allowed_sessions_per_user, 0)))
+        context.success(GetDefaultAllowedSessionsPerUserPerProjectResult(default_allowed_sessions_per_user_per_project=Utils.get_value_as_int("value", allowed_sessions_per_user_per_project, 0)))
 
     def update_quic(self, context: ApiInvocationContext):
         request = context.get_request_payload_as(UpdateQuicConfigRequest)
@@ -222,7 +215,6 @@ class ClusterSettingsAPI(BaseAPI):
         if is_authenticated_user and namespace in (
             'ClusterSettings.ListClusterModules',
             'ClusterSettings.GetModuleSettings',
-            'ClusterSettings.DescribeInstanceTypes'
         ):
             acl_entry['method'](context)
             return

@@ -10,7 +10,7 @@
 #  and limitations under the License.
 
 import ideavirtualdesktopcontroller
-from ideadatamodel import VirtualDesktopSoftwareStack, VirtualDesktopSession
+from ideadatamodel import VirtualDesktopArchitecture, VirtualDesktopSoftwareStack, VirtualDesktopSession, VirtualDesktopTenancy, VirtualDesktopAffinity, VirtualDesktopPlacement
 from ideasdk.utils import Utils
 from ideavirtualdesktopcontroller.app.events.events_utils import EventsUtils
 from ideavirtualdesktopcontroller.app.software_stacks.virtual_desktop_software_stack_db import VirtualDesktopSoftwareStackDB
@@ -41,3 +41,66 @@ class VirtualDesktopSoftwareStackUtils:
 
     def create_software_stack_from_session_when_ready(self, session: VirtualDesktopSession, new_software_stack: VirtualDesktopSoftwareStack) -> VirtualDesktopSoftwareStack:
         pass
+
+    @staticmethod
+    def validate_placement(software_stack: VirtualDesktopSoftwareStack) -> bool:
+        placement = software_stack.placement
+        if placement:
+            if placement.tenancy == VirtualDesktopTenancy.HOST:
+                if not placement.affinity:
+                    software_stack.placement.affinity = VirtualDesktopAffinity.DEFAULT
+                if not placement.host_id and not placement.host_resource_group_arn:
+                    software_stack.failure_reason = 'Either software_stack.placement.host_id or placement.host_resource_group_arn is required'
+                    return False
+                if placement.host_id and placement.host_resource_group_arn:
+                    software_stack.failure_reason = 'Both software_stack.placement.host_id and placement.host_resource_group_arn are provided'
+                    return False
+        else:
+            software_stack.placement = VirtualDesktopPlacement(
+                tenancy=VirtualDesktopTenancy.DEFAULT,
+            )
+
+        return True
+
+    def validate_software_stack_fields(self, software_stack: VirtualDesktopSoftwareStack) -> (VirtualDesktopSoftwareStack, bool):
+        if software_stack is None:
+            software_stack = VirtualDesktopSoftwareStack()
+            software_stack.failure_reason = 'software_stack missing'
+            return software_stack, False
+        
+        fields = {
+            'name': 'software_stack.name missing',
+            'description': 'software_stack.description missing',
+            'ami_id': 'software_stack.ami_id missing',
+            'base_os': 'software_stack.base_os missing',
+            'gpu': 'software_stack.gpu missing',
+            'min_ram': 'software_stack.min_ram missing',
+            'min_storage': 'software_stack.min_storage missing'
+        }
+        
+        for field, error_message in fields.items():
+            if getattr(software_stack, field) is None:
+                software_stack.failure_reason = error_message
+                return software_stack, False
+
+        for project in software_stack.projects:
+            if project.project_id is None:
+                software_stack.failure_reason = 'software_stack.project.project_id missing'
+                return software_stack, False
+
+        image_description = self._controller_utils.describe_image_id(software_stack.ami_id)
+        if image_description is None or image_description.get('ImageId') != software_stack.ami_id:
+            software_stack.failure_reason = f'Invalid software_stack.ami_id: {software_stack.ami_id}'
+            return software_stack, False
+
+        if (software_stack.architecture is not None and image_description.get('Architecture') != software_stack.architecture.value):
+            software_stack.failure_reason = f'Invalid software_stack.ami_id: {software_stack.ami_id} with architecture: {software_stack.architecture.value}'
+            return software_stack, False
+
+        if software_stack.architecture is None:
+            software_stack.architecture = VirtualDesktopArchitecture(image_description.get('Architecture'))
+
+        if not self.validate_placement(software_stack):
+            return software_stack, False
+
+        return software_stack, True

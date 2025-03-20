@@ -138,3 +138,35 @@ class TestSoftwareStacks(unittest.TestCase):
                 }
             )
         assert error_msg in exc_info.value.args[0]
+
+    def test_update_software_stack_allowed_instance_types_should_pass(self):
+        test_instance_types = ["t3"]
+        test_stack_1 = {
+            stacks.SOFTWARE_STACK_DB_HASH_KEY: "test_os_1",
+            stacks.SOFTWARE_STACK_DB_RANGE_KEY: "stack_1",
+            stacks.SOFTWARE_STACK_DB_ALLOWED_INSTANCE_TYPES_KEY: ["t3", "m6a"],
+        }
+        test_stack_2 = {
+            stacks.SOFTWARE_STACK_DB_HASH_KEY: "test_os_2",
+            stacks.SOFTWARE_STACK_DB_RANGE_KEY: "stack_2",
+            stacks.SOFTWARE_STACK_DB_ALLOWED_INSTANCE_TYPES_KEY: ["m6a"],
+        }
+
+        table_utils.create_item(stacks.SOFTWARE_STACK_TABLE_NAME, item=test_stack_1)
+        table_utils.create_item(stacks.SOFTWARE_STACK_TABLE_NAME, item=test_stack_2)
+
+        stacks.update_software_stack_allowed_instance_types(test_instance_types)
+
+        updated_stack_1 = stacks.get_software_stack(
+            base_os="test_os_1", stack_id="stack_1"
+        )
+        updated_stack_2 = stacks.get_software_stack(
+            base_os="test_os_2", stack_id="stack_2"
+        )
+
+        assert updated_stack_1[stacks.SOFTWARE_STACK_DB_ALLOWED_INSTANCE_TYPES_KEY] == [
+            "t3"
+        ]
+        assert (
+            updated_stack_2[stacks.SOFTWARE_STACK_DB_ALLOWED_INSTANCE_TYPES_KEY] == []
+        )

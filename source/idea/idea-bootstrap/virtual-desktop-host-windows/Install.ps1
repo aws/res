@@ -18,7 +18,7 @@ function Check-Python-Installed {
       if ($PythonVersion -match "3\.11") {
           $PythonInstalled = $true
       }
-  } 
+  }
   return $PythonInstalled
 }
 
@@ -122,6 +122,11 @@ function Install-WindowsEC2Instance {
 
   Start-Transcript -Path $RESInstallVDI -NoClobber -IncludeInvocationHeader
 
+  if(-not (Get-Module AWSPowerShell -ListAvailable)){
+    Install-PackageProvider NuGet -Force
+    Install-Module -Name AWSPowerShell -Force
+  }
+
   [string]$IMDS_Token = Invoke-RestMethod -Headers @{"X-aws-ec2-metadata-token-ttl-seconds" = "600"} -Method PUT -Uri http://169.254.169.254/latest/api/token -Verbose
   $OSVersion = ((Get-ItemProperty -Path "Microsoft.PowerShell.Core\Registry::\HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows NT\CurrentVersion" -Name ProductName -Verbose).ProductName) -replace  "[^0-9]" , ''
   $InstanceType = Invoke-RestMethod -Headers @{'X-aws-ec2-metadata-token' = $IMDS_Token} -Method GET -Uri http://169.254.169.254/latest/meta-data/instance-type -Verbose
@@ -136,6 +141,6 @@ function Install-WindowsEC2Instance {
 
   if($ConfigureForRESVDI){
     Import-Module .\Configure.ps1
-    Configure-WindowsEC2Instance -AWSRegion $AWSRegion -ENVName $ENVName 
+    Configure-WindowsEC2Instance -AWSRegion $AWSRegion -ENVName $ENVName
   }
 }

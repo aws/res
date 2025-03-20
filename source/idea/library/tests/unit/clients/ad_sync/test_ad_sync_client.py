@@ -9,10 +9,14 @@ import boto3
 import pytest
 import res.exceptions as exceptions
 from moto import mock_aws
+from requests.models import Response
 from res.clients.ad_sync import ad_sync_client
 from res.constants import (
     AD_CONFIGURATION_REQUIRED_KEYS,
     AD_SYNC_LOCK_KEY,
+    AD_SYNC_SECURITY_GROUP_ID_KEY,
+    AD_SYNC_STATUS_STATUS_KEY,
+    AD_SYNC_STATUS_TASK_ID_KEY,
     CLUSTER_NETWORK_PRIVATE_SUBNETS,
     VPC_ID_KEY,
 )
@@ -85,6 +89,14 @@ class TestADSyncClient(TestCase):
             },
         )
 
+        table_utils.create_item(
+            CLUSTER_SETTINGS_TABLE_NAME,
+            item={
+                "key": AD_SYNC_SECURITY_GROUP_ID_KEY,
+                "value": self.security_group_id,
+            },
+        )
+
         for key in AD_CONFIGURATION_REQUIRED_KEYS:
             table_utils.create_item(
                 CLUSTER_SETTINGS_TABLE_NAME,
@@ -106,10 +118,14 @@ class TestADSyncClient(TestCase):
         mock_lock.__exit__ = MagicMock()
 
         task_id = ad_sync_client.start_ad_sync()
+        task_status = ad_sync_client.get_ad_sync_status()
         mock_lock.assert_called_once_with(partition_key=AD_SYNC_LOCK_KEY)
 
         self.assertIsNotNone(task_id)
-        self.assertTrue(task_id.startswith("arn:aws:ecs:"))
+        self.assertEqual(
+            task_status.get(AD_SYNC_STATUS_STATUS_KEY),
+            ad_sync_client.ADSyncStatus.PENDING,
+        )
 
     @patch("python_dynamodb_lock.python_dynamodb_lock.DynamoDBLockClient.acquire_lock")
     def test_start_ad_sync_with_running_task(self, mock_lock) -> None:
@@ -204,7 +220,7 @@ class TestADSyncClient(TestCase):
         self.assertEqual(len(tasks["taskArns"]), 0)
 
     def test_get_running_task_id_without_running_task(self) -> None:
-        task_id = ad_sync_client.get_running_task_id()
+        task_id = ad_sync_client._get_running_task_id()
         self.assertIsNone(task_id)
 
     def test_get_running_task_id_with_running_task(self) -> None:
@@ -221,6 +237,83 @@ class TestADSyncClient(TestCase):
             },
         )
 
-        task_id = ad_sync_client.get_running_task_id()
+        task_id = ad_sync_client._get_running_task_id()
         self.assertIsNotNone(task_id)
-        self.assertTrue(task_id.startswith("arn:aws:ecs:"))
+
+    def test_get_ad_sync_status_invalid_task_id_return_none(self) -> None:
+        task_status = ad_sync_client.get_ad_sync_status("test")
+        self.assertIsNone(task_status)
+
+    def test_set_get_ad_sync_status_with_task_id_success(self) -> None:
+        ad_sync_client.set_ad_sync_status(
+            task_id="test", status=ad_sync_client.ADSyncStatus.RUNNING
+        )
+        task_status = ad_sync_client.get_ad_sync_status("test")
+
+        self.assertEqual(task_status.get(AD_SYNC_STATUS_TASK_ID_KEY), "test")
+        self.assertEqual(
+            task_status.get(AD_SYNC_STATUS_STATUS_KEY),
+            ad_sync_client.ADSyncStatus.RUNNING,
+        )
+
+    @patch("requests.get")
+    def test_set_get_ad_sync_status_without_task_id_success(
+        self, mock_get_response
+    ) -> None:
+        os.environ["ECS_CONTAINER_METADATA_URI_V4"] = "test"
+        response = Response()
+        response.status_code = 200
+        response._content = b'{ "TaskARN" : "test" }'
+        mock_get_response.return_value = response
+
+        ad_sync_client.set_ad_sync_status(ad_sync_client.ADSyncStatus.RUNNING)
+        task_status = ad_sync_client.get_ad_sync_status()
+
+        self.assertEqual(task_status.get(AD_SYNC_STATUS_TASK_ID_KEY), "test")
+        self.assertEqual(
+            task_status.get(AD_SYNC_STATUS_STATUS_KEY),
+            ad_sync_client.ADSyncStatus.RUNNING,
+        )
+
+        os.environ.pop("ECS_CONTAINER_METADATA_URI_V4")
+
+    @patch("python_dynamodb_lock.python_dynamodb_lock.DynamoDBLockClient.acquire_lock")
+    def test_start_and_stop_ad_sync_status_update(self, mock_lock) -> None:
+        mock_lock.__enter__ = MagicMock()
+        mock_lock.__exit__ = MagicMock()
+
+        task_id = ad_sync_client.start_ad_sync()
+        task_status = ad_sync_client.get_ad_sync_status()
+        mock_lock.assert_called_once_with(partition_key=AD_SYNC_LOCK_KEY)
+        self.assertIsNotNone(task_id)
+        self.assertEqual(
+            task_status.get(AD_SYNC_STATUS_STATUS_KEY),
+            ad_sync_client.ADSyncStatus.PENDING,
+        )
+
+        task_id = ad_sync_client.stop_ad_sync()
+        self.assertIsNotNone(task_id)
+        task_status = ad_sync_client.get_ad_sync_status()
+        self.assertEqual(
+            task_status.get(AD_SYNC_STATUS_STATUS_KEY),
+            ad_sync_client.ADSyncStatus.TERMINATED,
+        )
+
+    @patch("python_dynamodb_lock.python_dynamodb_lock.DynamoDBLockClient.acquire_lock")
+    def test_get_ad_sync_status_return_latest_task(self, mock_lock) -> None:
+        mock_lock.__enter__ = MagicMock()
+        mock_lock.__exit__ = MagicMock()
+
+        first_start_task_id = ad_sync_client.start_ad_sync()
+        mock_lock.assert_called_once_with(partition_key=AD_SYNC_LOCK_KEY)
+        self.assertIsNotNone(first_start_task_id)
+
+        first_stop_task_id = ad_sync_client.stop_ad_sync()
+        self.assertIsNotNone(first_stop_task_id)
+        self.assertEqual(first_start_task_id, first_stop_task_id)
+
+        second_start_task_id = ad_sync_client.start_ad_sync()
+        latest_task_status = ad_sync_client.get_ad_sync_status()
+        self.assertEqual(
+            latest_task_status.get(AD_SYNC_STATUS_TASK_ID_KEY), second_start_task_id
+        )

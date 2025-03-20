@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { AppContext } from "../../common";
 import { UpdateModuleSettingsDirectoryService } from '../../client/data-model';
 import { OnFlashbarChangeEvent } from '../../App';
-import { Modal, Header, Box, SpaceBetween, Button, Form, ColumnLayout, FormField, Input, Checkbox, ExpandableSection } from '@cloudscape-design/components';
+import { Modal, Header, Box, SpaceBetween, Button, Form, ColumnLayout, FormField, Input, ExpandableSection, AttributeEditor, Select, Toggle } from '@cloudscape-design/components';
 
 interface EditADDomainFormProps {
     onFlashbarChange: (event: OnFlashbarChangeEvent) => void;
@@ -12,12 +12,14 @@ interface EditADDomainFormProps {
 const OPTIONAL_LABELS = [
     "LDAP Filters",
     "Domain TLS Certificate Secret ARN",
+    "Additional SSSD Configuration",
 ]
 
 const OPTIONAL_FIELDS = [
     "users_filter",
     "groups_filter",
     "tls_certificate_secret_arn",
+    "sssd.additional_sssd_configs",
 ]
 
 const FIELD_VALIDATION_PATTERNS = {
@@ -34,14 +36,33 @@ const FIELD_VALIDATION_PATTERNS = {
     "tls_certificate_secret_arn": "^(?:arn:(?:aws|aws-us-gov|aws-cn):secretsmanager:[a-z0-9-]+:[0-9]{12}:secret:[A-Za-z0-9\\-\\_\\+\\=\\/\\.\\@]{1,519})?$",
 }
 
+const DEFAULT_BOOLEAN_CONFIG = "ldap_id_mapping"
+
 export const EditADDomainForm = (props: EditADDomainFormProps) => {
     const [visible, setVisible] = useState(false);
+    const [additionalConfigs, setAdditionalConfigs] = useState<any[]>([])
     const [formData, setFormData] = useState<UpdateModuleSettingsDirectoryService>(initializeFormData({}));
     // When component mounts - prepopulate form with existing directoryservice module settings data
     useEffect(() => {
         const fetchExistingAdDomainData = async () => {
             const adDomain = await AppContext.get().client().clusterSettings().getModuleSettings({module_id: "directoryservice"});
-            setFormData(initializeFormData(adDomain.settings));
+            const initialFormData = initializeFormData(adDomain.settings);
+            setFormData(initialFormData);
+            const disableADJoin = initialFormData.disable_ad_join;
+            const ladpIdMapping = initialFormData.sssd.ldap_id_mapping;
+            const additionConfigsDict = initialFormData.sssd.additional_sssd_configs
+                ? JSON.parse(initialFormData.sssd.additional_sssd_configs)
+                : {};
+            initializeAdditionalConfigs(additionConfigsDict, disableADJoin, ladpIdMapping);
+        }
+        const initializeAdditionalConfigs = (additionalConfigsDict: any, disableADJoin: string, ladpIdMapping: string) => {
+            const configsKeys = Object.keys(additionalConfigsDict);
+            let additionalConfigsList = Object.entries(additionalConfigsDict).map(([key, value]) => ({ key: key, value: value }))
+            // Add ldap_id_mapping if not in additional_sssd_configs
+            if (!configsKeys.includes("ldap_id_mapping")) {
+                additionalConfigsList = [{ key: "ldap_id_mapping", value: ladpIdMapping }, ...additionalConfigsList];
+            }
+            setAdditionalConfigs(additionalConfigsList)
         }
         fetchExistingAdDomainData();
     }, []);
@@ -51,16 +72,25 @@ export const EditADDomainForm = (props: EditADDomainFormProps) => {
     }
     // record error strings in object structure matching formData to simplify validation updates
     const [formFieldValidationErrors, setFormFieldValidationErrors] = useState<UpdateModuleSettingsDirectoryService>({
-        ...formData, 
-        users: {...formData.users}, 
-        sudoers: {...formData.sudoers}, 
-        sssd: {...formData.sssd}, 
-        computers: {...formData.computers}, 
+        ...formData,
+        users: {...formData.users},
+        sudoers: {...formData.sudoers},
+        sssd: {...formData.sssd},
+        computers: {...formData.computers},
         groups: {...formData.groups}
     });
+    const [additionalConfigsValidationErrors, setAdditionalConfigsValidationErrors] = useState<any[]>([
+        ...additionalConfigs
+    ]);
     const updateFormFieldValidationError = (key: string, value: string) => {
         setKeyValueOnObj(formFieldValidationErrors, key, value);
         setFormFieldValidationErrors({...formFieldValidationErrors});
+    }
+
+    const updateAdditionalConfigsValidationError = (index: number, inputKey: string, value: string) => {
+        const currentError = {...additionalConfigsValidationErrors[index], [inputKey]: value}
+        additionalConfigsValidationErrors[index] = currentError;
+        setAdditionalConfigsValidationErrors([...additionalConfigsValidationErrors]);
     }
     const [formError, setFormError] = useState("");
     const hideForm = () => visible ? setVisible(false) : null;
@@ -68,8 +98,13 @@ export const EditADDomainForm = (props: EditADDomainFormProps) => {
     const clusterSettingsClient = AppContext.get().client().clusterSettings();
     const onFormSubmit = async () => {
         setFormFieldValidationErrors({...formFieldValidationErrors, name: "Test"});
+        setAdditionalConfigsValidationErrors([...additionalConfigsValidationErrors]);
         if (!validateFormFields(formData, updateFormFieldValidationError)) {
             setFormError("Please fill out all required fields.");
+            return;
+        }
+        if (!validateAdditionalConfigsInputs(additionalConfigs, updateAdditionalConfigsValidationError)) {
+            setFormError("Additional parameter cannot be empty and parameter key must be unique.");
             return;
         }
         try {
@@ -96,6 +131,83 @@ export const EditADDomainForm = (props: EditADDomainFormProps) => {
             console.error(e);
         }
     }
+
+    const buildAdditionalConfigSection = () => {
+        return (
+            <Box padding="l">
+                <AttributeEditor
+                    key="AdditionalConfigsAttributeEditor"
+                    onAddButtonClick={() => {
+                        const newConfigs = [...additionalConfigs, { key: "", value: "" }];
+                        handleAdditionalConfigsChange(setAdditionalConfigs, updateFormData, updateAdditionalConfigsValidationError, newConfigs, newConfigs.length-1)
+                    }}
+                    onRemoveButtonClick={({detail: { itemIndex }}) => {
+                        const newConfigs = [...additionalConfigs];
+                        newConfigs.splice(itemIndex, 1);
+                        handleAdditionalConfigsChange(setAdditionalConfigs, updateFormData, updateAdditionalConfigsValidationError, newConfigs, itemIndex)
+                    }}
+                    items={additionalConfigs}
+                    addButtonText="Add Parameter"
+                    removeButtonText="Remove"
+                    empty="No additional configuration attached. Click 'Add Parameter' below to get started."
+                    definition={[
+                        {
+                            label: "Key",
+                            control: (item, itemIndex) => (
+                                <Input
+                                    value={item.key}
+                                    disabled={item.key === DEFAULT_BOOLEAN_CONFIG}
+                                    onChange={({ detail }) => {
+                                        const newConfigs = [...additionalConfigs];
+                                        newConfigs[itemIndex].key = detail.value;
+                                        handleAdditionalConfigsChange(setAdditionalConfigs, updateFormData, updateAdditionalConfigsValidationError, newConfigs, itemIndex, "key")
+                                    }}
+                                />
+                            ),
+                            errorText: (item, itemIndex) => (
+                                additionalConfigsValidationErrors[itemIndex]?.key ?? undefined
+                            )
+                        },
+                        {
+                            label: "Value",
+                            control: (item, itemIndex) => (
+                                item.key === DEFAULT_BOOLEAN_CONFIG
+                                ? (
+                                    <Select
+                                        options={[
+                                            { value: "true"},
+                                            { value: "false"}
+                                        ]}
+                                        selectedOption={{value: item.value}}
+                                        onChange={({ detail }) => {
+                                            const newConfigs = [...additionalConfigs];
+                                            newConfigs[itemIndex].value = detail.selectedOption.value;
+                                            handleAdditionalConfigsChange(setAdditionalConfigs, updateFormData, updateAdditionalConfigsValidationError, newConfigs, itemIndex, "value")
+                                        }}
+                                    />
+                                ) :
+                                <Input
+                                    value={item.value}
+                                    onChange={({ detail }) => {
+                                        const newConfigs = [...additionalConfigs];
+                                        newConfigs[itemIndex].value = detail.value;
+                                        handleAdditionalConfigsChange(setAdditionalConfigs, updateFormData, updateAdditionalConfigsValidationError, newConfigs, itemIndex, "value")
+                                    }}
+                                />
+                            ),
+                            errorText: (item, itemIndex) => (
+                                additionalConfigsValidationErrors[itemIndex]?.value ?? undefined
+                            )
+                        }
+                    ]}
+                    isItemRemovable={item =>
+                        item.key === DEFAULT_BOOLEAN_CONFIG ? false : true
+                      }
+                    />
+            </Box>
+        )
+    }
+
     return (
         <Button iconName="edit" variant="link" onClick={showForm}>
             <Modal
@@ -184,24 +296,15 @@ export const EditADDomainForm = (props: EditADDomainFormProps) => {
                                         onChange={(e) => handleFormInputChange(updateFormData, updateFormFieldValidationError, "ldap_base", e.detail.value)}
                                     />
                                 </FormField>
-                                <Checkbox
-                                        checked={formData.disable_ad_join === "True"}
-                                        onChange={(e) => handleFormInputChange(updateFormData, updateFormFieldValidationError, "disable_ad_join", e.detail.checked ? "True" : "False")}
+                                <Toggle
+                                    checked={formData.disable_ad_join === "false"}
+                                    onChange={(e) => handleFormInputChange(updateFormData, updateFormFieldValidationError, "disable_ad_join", e.detail.checked ? "false" : "true")}
                                 >
                                     <FormField
-                                        label="Disable Active Directory Join"
-                                        description="To prevent Linux hosts from joining the directory domain, check the box. Otherwise, leave in the default setting of unchecked."
+                                        label="Join Active Directory"
+                                        description="Turn on Linux integration with your directory domain."
                                     />
-                                </Checkbox>
-                                <Checkbox
-                                    checked={formData.sssd.ldap_id_mapping === "True"}
-                                    onChange={(e) => handleFormInputChange(updateFormData, updateFormFieldValidationError, "sssd.ldap_id_mapping", e.detail.checked ? "True" : "False")}
-                                >
-                                    <FormField
-                                        label="Enable LDAP ID Mapping"
-                                        description="Determines if UID and GID numbers are generated by SSSD or if the numbers provided by the AD are used. Check to use SSSD generated UID and GID, or uncheck to use UID and GID provided by the AD. For most cases this parameter should be checked."
-                                    />
-                                </Checkbox>
+                                </Toggle>
                                 <FormField
                                     label={createFormLabel("Organizational Units (OU)")}
                                     description="Provide the Organizational Unit within AD that will sync."
@@ -233,8 +336,8 @@ export const EditADDomainForm = (props: EditADDomainFormProps) => {
                                                 errorText={formFieldValidationErrors.computers.ou}
                                             >
                                                 <Input
-                                                    value = {formData.computers.ou} 
-                                                    placeholder="OU=Computers,OU=RES,OU=CORP,DC=corp,DC=res,DC=com" 
+                                                    value = {formData.computers.ou}
+                                                    placeholder="OU=Computers,OU=RES,OU=CORP,DC=corp,DC=res,DC=com"
                                                     onChange={(e) => handleFormInputChange(updateFormData, updateFormFieldValidationError, "computers.ou", e.detail.value)}
                                                 />
                                             </FormField>
@@ -255,45 +358,54 @@ export const EditADDomainForm = (props: EditADDomainFormProps) => {
                                 <ExpandableSection
                                     headerText="Additional Settings"
                                 >
-                                    <FormField
-                                        label={createFormLabel("LDAP Filters")}
-                                        description="Provide the preferred LDAP filters."
-                                    >
-                                        <Box padding="l">
-                                            <ColumnLayout columns={1}>
-                                                <FormField
-                                                    label={createFormLabel("Users Filter")}
-                                                    errorText={formFieldValidationErrors.users_filter}
-                                                >
-                                                    <Input
-                                                        value={formData.users_filter ?? ""}
-                                                        placeholder="(objectClass=user)"
-                                                        onChange={(e) => handleFormInputChange(updateFormData, updateFormFieldValidationError, "users_filter", e.detail.value)}
-                                                    />
-                                                </FormField>
-                                                <FormField
-                                                    label={createFormLabel("Groups Filter")}
-                                                    errorText={formFieldValidationErrors.groups_filter}
-                                                >
-                                                    <Input
-                                                        value={formData.groups_filter ?? ""}
-                                                        placeholder="(objectClass=group)"
-                                                        onChange={(e) => handleFormInputChange(updateFormData, updateFormFieldValidationError, "groups_filter", e.detail.value)}
-                                                    />
-                                                </FormField>
-                                            </ColumnLayout>
-                                        </Box>
-                                    </FormField>              
-                                    <FormField
-                                        label={createFormLabel("Domain TLS Certificate Secret ARN")}
-                                        description="Provide the ARN for the domain TLS certificate secret."
-                                        errorText={formFieldValidationErrors.tls_certificate_secret_arn}
-                                    >
-                                        <Input
-                                            value={formData.tls_certificate_secret_arn ?? ""}
-                                            onChange={(e) => handleFormInputChange(updateFormData, updateFormFieldValidationError, "tls_certificate_secret_arn", e.detail.value)}
-                                        />
-                                    </FormField>
+                                    <SpaceBetween size="l" direction="vertical">
+                                        <FormField
+                                            label={createFormLabel("LDAP Filters")}
+                                            description="Provide the preferred LDAP filters."
+                                            >
+                                            <Box padding="l">
+                                                <ColumnLayout columns={1}>
+                                                    <FormField
+                                                        label={createFormLabel("Users Filter")}
+                                                        errorText={formFieldValidationErrors.users_filter}
+                                                        >
+                                                        <Input
+                                                            value={formData.users_filter ?? ""}
+                                                            placeholder="(objectClass=user)"
+                                                            onChange={(e) => handleFormInputChange(updateFormData, updateFormFieldValidationError, "users_filter", e.detail.value)}
+                                                            />
+                                                    </FormField>
+                                                    <FormField
+                                                        label={createFormLabel("Groups Filter")}
+                                                        errorText={formFieldValidationErrors.groups_filter}
+                                                        >
+                                                        <Input
+                                                            value={formData.groups_filter ?? ""}
+                                                            placeholder="(objectClass=group)"
+                                                            onChange={(e) => handleFormInputChange(updateFormData, updateFormFieldValidationError, "groups_filter", e.detail.value)}
+                                                            />
+                                                    </FormField>
+                                                </ColumnLayout>
+                                            </Box>
+                                        </FormField>
+                                        <FormField
+                                            label={createFormLabel("Domain TLS Certificate Secret ARN")}
+                                            description="Provide the ARN for the domain TLS certificate secret."
+                                            errorText={formFieldValidationErrors.tls_certificate_secret_arn}
+                                            >
+                                            <Input
+                                                value={formData.tls_certificate_secret_arn ?? ""}
+                                                onChange={(e) => handleFormInputChange(updateFormData, updateFormFieldValidationError, "tls_certificate_secret_arn", e.detail.value)}
+                                                />
+                                        </FormField>
+                                        <FormField
+                                            label={createFormLabel("Additional SSSD Configuration")}
+                                            description="Provide additional SSSD configs for your AD domain."
+                                            errorText={formFieldValidationErrors.sssd.additional_sssd_configs}
+                                            >
+                                            {buildAdditionalConfigSection()}
+                                        </FormField>
+                                    </SpaceBetween>
                                 </ExpandableSection>
                             </ColumnLayout>
                         </SpaceBetween>
@@ -330,6 +442,23 @@ const setKeyValueOnObj = (obj: any, key: string, value: string) => {
         obj[key] = value;
         return obj;
     }
+}
+
+const handleAdditionalConfigsChange = (setAdditionalConfigs: any, updateFormData: any, updateAdditionalConfigsValidationError: any, additionalConfigs: any[], index: number, inputKey?: string) => {
+    if (inputKey) {
+        updateAdditionalConfigsValidationError(index, inputKey, "");
+    }
+    setAdditionalConfigs(additionalConfigs);
+    let configObject: { [key: string]: string } = {};
+    additionalConfigs.forEach((config) => {
+        if (config.key === DEFAULT_BOOLEAN_CONFIG) {
+            updateFormData(`sssd.${config.key}`, config.value)
+        } else {
+            configObject[config.key] = config.value;
+        }
+    })
+    const configsString = JSON.stringify(configObject);
+    updateFormData("sssd.additional_sssd_configs", configsString);
 }
 
 const handleFormInputChange = (updateFormData: any, updateFormFieldValidationError: any, key: string, value: string) => {
@@ -385,13 +514,34 @@ const validateFormFields = (formData: any, updateFormFieldValidationError: any) 
     return validated;
   };
 
+  const validateAdditionalConfigsInputs = (additionalConfigs: any[], updateAdditionalConfigsValidationError: any) => {
+    const isDuplicateKey = (key: string, currentIndex: number) => {
+        return additionalConfigs.some((config, index) =>
+            index < currentIndex && config.key === key
+        );
+    };
+
+    let validated = true;
+    additionalConfigs.forEach((config, index) => {
+        if (isDuplicateKey(config.key, index) || !config.key) {
+            validated = false;
+            updateAdditionalConfigsValidationError(index, "key", "Additional Configuration key must be non-empty unique value.");
+        }
+        if (!config.value) {
+            validated = false;
+            updateAdditionalConfigsValidationError(index, "value", "Additional Configuration value must be non-empty value.");
+        }
+    });
+    return validated;
+  }
+
   const initializeFormData = (formData: any): UpdateModuleSettingsDirectoryService => {
     return {
         root_user_dn: formData.root_user_dn ?? "",
         users: {
             ou: formData.users ? formData.users.ou : "",
         },
-        disable_ad_join: formData.disable_ad_join ?? "False",
+        disable_ad_join: formData.disable_ad_join ?? "false",
         ad_short_name: formData.ad_short_name ?? "",
         ldap_base: formData.ldap_base ?? "",
         ldap_connection_uri: formData.ldap_connection_uri ?? "",
@@ -402,7 +552,8 @@ const validateFormFields = (formData: any, updateFormFieldValidationError: any) 
             group_name: formData.sudoers ? formData.sudoers.group_name : "",
         },
         sssd: {
-            ldap_id_mapping: formData.sssd ? formData.sssd.ldap_id_mapping : "True",
+            ldap_id_mapping: formData.sssd?.ldap_id_mapping ?? "true",
+            additional_sssd_configs: formData.sssd? formData.sssd.additional_sssd_configs : "",
         },
         computers: {
             ou: formData.computers ? formData.computers.ou : "",

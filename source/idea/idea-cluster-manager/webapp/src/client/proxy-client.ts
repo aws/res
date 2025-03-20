@@ -16,6 +16,10 @@ import {
     ListBudgetsRequest, ListEFSRequest, ListFSxRequest, ListFSxSVMRequest, ListFSxVolumeRequest,
     ListBudgetsResult, ListEFSResult, ListFSxResult, ListFSxSVMResult, ListFSxVolumeResult,
     ListClusterHostsResult,
+    CostExplorerGetTagsRequest, CostExplorerGetTagsResult,
+    GetCostAndUsageRequest, GetCostAndUsageResult,
+    ListCostAllocationTagsRequest, ListCostAllocationTagsResult,
+    UpdateCostAllocationTagsStatusRequest, UpdateCostAllocationTagsStatusResult
 } from "./data-model";
 import IdeaBaseClient, { IdeaBaseClientProps } from "./base-client";
 import { Constants } from "../common/constants";
@@ -24,6 +28,22 @@ export interface ProxyClientProps extends IdeaBaseClientProps {
 }
 
 class ProxyClient extends IdeaBaseClient<ProxyClientProps> {
+    costExplorerGetTags(req: CostExplorerGetTagsRequest): Promise<CostExplorerGetTagsResult> {
+        return this.apiInvoker.invoke_alt<CostExplorerGetTagsRequest, CostExplorerGetTagsResult>("us-east-1/ce", req, false, true, {"X-Amz-Target": "AWSInsightsIndexService.GetTags"});
+    }
+
+    getCostAndUsage(req: GetCostAndUsageRequest): Promise<GetCostAndUsageResult> {
+        return this.apiInvoker.invoke_alt<GetCostAndUsageRequest, GetCostAndUsageResult>("us-east-1/ce", req, false, true, {"X-Amz-Target": "AWSInsightsIndexService.GetCostAndUsage"});
+    }
+
+    listCostAllocationTags(req: ListCostAllocationTagsRequest): Promise<ListCostAllocationTagsResult> {
+        return this.apiInvoker.invoke_alt<ListCostAllocationTagsRequest, ListCostAllocationTagsResult>("us-east-1/ce", req, false, true, {"X-Amz-Target": "AWSInsightsIndexService.ListCostAllocationTags"});
+    }
+
+    updateCostAllocationTagsStatus(req: UpdateCostAllocationTagsStatusRequest): Promise<UpdateCostAllocationTagsStatusResult> {
+        return this.apiInvoker.invoke_alt<UpdateCostAllocationTagsStatusRequest, UpdateCostAllocationTagsStatusResult>("us-east-1/ce", req, false, true, {"X-Amz-Target": "AWSInsightsIndexService.UpdateCostAllocationTagsStatus"});
+    }
+
     listBudgets(req: ListBudgetsRequest): Promise<ListBudgetsResult> {
         return this.apiInvoker.invoke_alt<ListBudgetsRequest, ListBudgetsResult>("budgets", req, false, true, {"X-Amz-Target": "AWSBudgetServiceGateway.DescribeBudgets"});
     }

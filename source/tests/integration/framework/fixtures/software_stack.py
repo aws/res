@@ -30,13 +30,13 @@ from tests.integration.tests.config import TEST_SOFTWARE_STACKS_GOVCLOUD
 def software_stack(
     request: FixtureRequest,
     res_environment: ResEnvironment,
-    admin: ClientAuth,
 ) -> VirtualDesktopSoftwareStack:
     """
     Fixture for setting up/tearing down the test software stack
     """
     software_stack = request.param[0]
     project = request.getfixturevalue(request.param[1])
+    admin = request.getfixturevalue(request.param[2])
     software_stack.projects = [project]
 
     api_invoker_type = request.config.getoption("--api-invoker-type")

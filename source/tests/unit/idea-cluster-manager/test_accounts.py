@@ -735,6 +735,7 @@ def test_accounts_sign_up_user_duplicate(context: AppContext, monkeypatch):
         "valid-_email@example.com",  # - and _ allowed
         "aaaabbbbccccddddeeeeffffgggghhhh@example.com",  # 32 max length
         "a@example.com",  # 1 min length
+        "valid.email@example.com",  # . allowed
     ],
 )
 def test_accounts_sign_up_user_succeed(context: AppContext, monkeypatch, valid_email):
@@ -764,7 +765,7 @@ def test_accounts_confirm_sign_up_invalid_confirmation_code(
     with pytest.raises(exceptions.SocaException) as exc_info:
         context.accounts.confirm_sign_up(
             ConfirmSignUpRequest(
-                email="validemail@example.com", confirmation_code="1234"
+                email="valid.email@example.com", confirmation_code="1234"
             )
         )
     assert exc_info.value.error_code == errorcodes.GENERAL_ERROR
@@ -782,7 +783,7 @@ def test_accounts_confirm_sign_up_invalid_user(context: AppContext, monkeypatch)
     with pytest.raises(exceptions.SocaException) as exc_info:
         context.accounts.confirm_sign_up(
             ConfirmSignUpRequest(
-                email="validemail@example.com", confirmation_code="1234"
+                email="valid.email@example.com", confirmation_code="1234"
             )
         )
     assert exc_info.value.error_code == errorcodes.GENERAL_ERROR
@@ -798,7 +799,7 @@ def test_accounts_confirm_sign_up_succeed(context: AppContext, monkeypatch):
 
     # Expect no error to be thrown. There is nothing to assert since return value is void
     context.accounts.confirm_sign_up(
-        ConfirmSignUpRequest(email="validemail@example.com", confirmation_code="1234")
+        ConfirmSignUpRequest(email="valid.email@example.com", confirmation_code="1234")
     )
 
 

@@ -23,6 +23,7 @@ class ScriptOSType(str, Enum):
 class ScriptEventType(str, Enum):
     ON_VDI_START = 'on_vdi_start'
     ON_VDI_CONFIGURED = 'on_vdi_configured'
+    RERUN_ON_REBOOT = 'rerun_on_reboot'
 
 
 class LaunchScriptsHelper:
@@ -83,6 +84,8 @@ class LaunchScriptsHelper:
             script_event_dict[ScriptEventType.ON_VDI_START] = LaunchScriptsHelper.convert_scripts_to_list(script_events.on_vdi_start)
         if script_events.on_vdi_configured:
             script_event_dict[ScriptEventType.ON_VDI_CONFIGURED] = LaunchScriptsHelper.convert_scripts_to_list(script_events.on_vdi_configured)
+        if script_events.rerun_on_reboot is not None:
+            script_event_dict[ScriptEventType.RERUN_ON_REBOOT] = script_events.rerun_on_reboot
 
         return script_event_dict
 

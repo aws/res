@@ -11,3 +11,4 @@ shortuuid~=1.0
 supervisor~=4.0
 validators~=0.0
 python_dynamodb_lock==0.9.1
+requests~=2.0,<2.32.0

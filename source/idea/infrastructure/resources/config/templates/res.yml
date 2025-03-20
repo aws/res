@@ -42,6 +42,12 @@ modules:
     config_files:
       - settings.yml
 
+  - name: virtual-desktop-app
+    id: vdi-app
+    type: app
+    config_files:
+      - settings.yml
+
     {% if 'bastion-host' in enabled_modules %}
   - name: bastion-host
     id: bastion-host

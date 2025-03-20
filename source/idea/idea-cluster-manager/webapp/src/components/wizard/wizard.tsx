@@ -672,12 +672,19 @@ class IdeaWizard extends Component<IdeaWizardProps, IdeaWizardState> {
         return (
             <Wizard
                 i18nStrings={{
-                    stepNumberLabel: this.props.wizard.i18nStrings.stepNumberLabel,
+                    // @ts-ignore
+                    stepNumberLabel: this.props.wizard.i18nStrings.stepNumberLabel as string,
+                    // @ts-ignore
                     collapsedStepsLabel: this.props.wizard.i18nStrings.collapsedStepsLabel,
+                    // @ts-ignore
                     cancelButton: this.props.wizard.i18nStrings.cancelButton,
+                    // @ts-ignore
                     previousButton: this.props.wizard.i18nStrings.previousButton,
+                    // @ts-ignore
                     nextButton: this.props.wizard.i18nStrings.nextButton,
+                    // @ts-ignore
                     submitButton: this.props.wizard.i18nStrings.submitButton,
+                    // @ts-ignore: Object is possibly 'null'.
                     optional: this.props.wizard.i18nStrings.optional,
                 }}
                 onNavigate={({ detail }) => this.onNavigate(detail)}

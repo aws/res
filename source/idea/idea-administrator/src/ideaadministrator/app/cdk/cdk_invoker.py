@@ -852,6 +852,22 @@ class CdkInvoker:
             ]
         )
 
+        # virtual desktop app
+        # TODO: remove hard coded bootstrap config after moving virtual-desktop-app to stack
+        app_bootstrap_context = BootstrapContext(
+            config=cluster_config,
+            module_name=constants.MODULE_VIRTUAL_DESKTOP_APP,
+            module_id=constants.MODULE_ID_VIRTUAL_DESKTOP_APP,
+            module_set="default",
+            base_os=cluster_config.get_string('virtual-desktop-controller.controller.autoscaling.base_os', required=True),
+            instance_type=cluster_config.get_string('virtual-desktop-controller.controller.autoscaling.instance_type', required=True)
+        )
+        virtual_desktop_app_package_uri = self.upload_release_package(
+            bootstrap_context=app_bootstrap_context,
+            package_name=f'idea-virtual-desktop-{ideaadministrator.props.current_release_version}.tar.gz',
+            upload=upload_release_package
+        )
+
         # dcv broker
         broker_bootstrap_context = BootstrapContext(
             config=cluster_config,

@@ -2,6 +2,11 @@
 #  SPDX-License-Identifier: Apache-2.0
 
 from aws_cdk.assertions import Template
+from res.constants import (  # type: ignore
+    AD_SYNC_STATUS_SUBMISSION_TIME_KEY,
+    AD_SYNC_STATUS_TABLE,
+    AD_SYNC_STATUS_TASK_ID_KEY,
+)
 
 from idea.infrastructure.install.constants import (
     RES_COMMON_LAMBDA_RUNTIME,
@@ -69,6 +74,42 @@ def test_ad_sync_lock_table_creation(
                 "KeySchema": [
                     {"AttributeName": "lock_key", "KeyType": "HASH"},
                     {"AttributeName": "sort_key", "KeyType": "RANGE"},
+                ],
+            },
+        },
+    )
+
+
+def test_ad_sync_status_table_creation(
+    ad_sync_stack: ADSyncStack,
+    ad_sync_template: Template,
+) -> None:
+    util.assert_resource_name_has_correct_type_and_props(
+        ad_sync_stack.nested_stack,
+        ad_sync_template,
+        resources=["ad-sync-status-table"],
+        cfn_type="AWS::DynamoDB::Table",
+        props={
+            "UpdateReplacePolicy": "Delete",
+            "DeletionPolicy": "Delete",
+            "Properties": {
+                "TableName": {
+                    "Fn::Join": [
+                        "",
+                        [
+                            ad_sync_stack.nested_stack.resolve(
+                                ad_sync_stack.cluster_name
+                            ),
+                            f".{AD_SYNC_STATUS_TABLE}",
+                        ],
+                    ]
+                },
+                "KeySchema": [
+                    {"AttributeName": AD_SYNC_STATUS_TASK_ID_KEY, "KeyType": "HASH"},
+                    {
+                        "AttributeName": AD_SYNC_STATUS_SUBMISSION_TIME_KEY,
+                        "KeyType": "RANGE",
+                    },
                 ],
             },
         },
@@ -225,6 +266,34 @@ def test_scheduled_ad_sync_lambda_role_policy_creation(
                                 ]
                             },
                             "Sid": "ADSyncLockTablePermissions",
+                        },
+                        {
+                            "Action": [
+                                "dynamodb:Query",
+                                "dynamodb:Scan",
+                                "dynamodb:UpdateItem",
+                                "dynamodb:PutItem",
+                            ],
+                            "Effect": "Allow",
+                            "Resource": {
+                                "Fn::Join": [
+                                    "",
+                                    [
+                                        "arn:",
+                                        {"Ref": "AWS::Partition"},
+                                        ":dynamodb:",
+                                        {"Ref": "AWS::Region"},
+                                        ":",
+                                        {"Ref": "AWS::AccountId"},
+                                        ":table/",
+                                        ad_sync_stack.nested_stack.resolve(
+                                            ad_sync_stack.cluster_name
+                                        ),
+                                        ".ad-sync.status",
+                                    ],
+                                ]
+                            },
+                            "Sid": "ADSyncStatusTablePermissions",
                         },
                         {
                             "Action": [
@@ -670,6 +739,42 @@ def test_ad_sync_task_policy_creation(
                                         ],
                                     ]
                                 },
+                                {
+                                    "Fn::Join": [
+                                        "",
+                                        [
+                                            "arn:",
+                                            {"Ref": "AWS::Partition"},
+                                            ":dynamodb:",
+                                            {"Ref": "AWS::Region"},
+                                            ":",
+                                            {"Ref": "AWS::AccountId"},
+                                            ":table/",
+                                            ad_sync_stack.nested_stack.resolve(
+                                                ad_sync_stack.cluster_name
+                                            ),
+                                            f".{AD_SYNC_STATUS_TABLE}",
+                                        ],
+                                    ]
+                                },
+                                {
+                                    "Fn::Join": [
+                                        "",
+                                        [
+                                            "arn:",
+                                            {"Ref": "AWS::Partition"},
+                                            ":dynamodb:",
+                                            {"Ref": "AWS::Region"},
+                                            ":",
+                                            {"Ref": "AWS::AccountId"},
+                                            ":table/",
+                                            ad_sync_stack.nested_stack.resolve(
+                                                ad_sync_stack.cluster_name
+                                            ),
+                                            f".{AD_SYNC_STATUS_TABLE}/index/*",
+                                        ],
+                                    ]
+                                },
                             ],
                         },
                         {
@@ -748,8 +853,8 @@ def test_ad_sync_task_definition_creation(
                     {
                         "Command": [
                             "/bin/sh",
-                            "-c",
-                            "/bin/sh -ex <<'EOC'\nsource venv/bin/activate\nres-ad-sync\nEOC\n",
+                            "-exc",
+                            "source venv/bin/activate && exec res-ad-sync",
                         ],
                         "Environment": [
                             {
@@ -992,6 +1097,34 @@ def test_terminate_ad_sync_ecs_task_role_policy_creation(
                         },
                         {
                             "Action": [
+                                "dynamodb:Query",
+                                "dynamodb:Scan",
+                                "dynamodb:UpdateItem",
+                                "dynamodb:PutItem",
+                            ],
+                            "Effect": "Allow",
+                            "Resource": {
+                                "Fn::Join": [
+                                    "",
+                                    [
+                                        "arn:",
+                                        {"Ref": "AWS::Partition"},
+                                        ":dynamodb:",
+                                        {"Ref": "AWS::Region"},
+                                        ":",
+                                        {"Ref": "AWS::AccountId"},
+                                        ":table/",
+                                        ad_sync_stack.nested_stack.resolve(
+                                            ad_sync_stack.cluster_name
+                                        ),
+                                        ".ad-sync.status",
+                                    ],
+                                ]
+                            },
+                            "Sid": "ADSyncStatusTablePermissions",
+                        },
+                        {
+                            "Action": [
                                 "ecs:StopTask",
                                 "ecs:ListTasks",
                                 "ecs:DescribeTasks",
@@ -1127,6 +1260,237 @@ def test_terminate_ad_sync_ecs_task_custom_resource_creation(
                     "Fn::GetAtt": [
                         util.get_logical_id(
                             ad_sync_stack.nested_stack, ["terminate-ad-sync-ecs-task"]
+                        ),
+                        "Arn",
+                    ]
+                },
+            }
+        },
+    )
+
+
+def test_ad_sync_resources_populator_role_creation(
+    ad_sync_stack: ADSyncStack,
+    ad_sync_template: Template,
+) -> None:
+    util.assert_resource_name_has_correct_type_and_props(
+        ad_sync_stack.nested_stack,
+        ad_sync_template,
+        resources=["ad-sync-resources-populator-role"],
+        cfn_type="AWS::IAM::Role",
+        props={
+            "Properties": {
+                "AssumeRolePolicyDocument": {
+                    "Statement": [
+                        {
+                            "Action": "sts:AssumeRole",
+                            "Effect": "Allow",
+                            "Principal": {"Service": "lambda.amazonaws.com"},
+                        }
+                    ],
+                },
+                "PermissionsBoundary": {
+                    "Fn::If": [
+                        "PermissionBoundaryProvided",
+                        ad_sync_stack.nested_stack.resolve(
+                            ad_sync_stack.parameters.get_str(
+                                CommonKey.IAM_PERMISSION_BOUNDARY
+                            )
+                        ),
+                        {"Ref": "AWS::NoValue"},
+                    ]
+                },
+                "RoleName": {
+                    "Fn::Join": [
+                        "",
+                        [
+                            ad_sync_stack.nested_stack.resolve(
+                                ad_sync_stack.cluster_name
+                            ),
+                            "-ad-sync-resources-populator-role",
+                        ],
+                    ]
+                },
+                "Tags": [
+                    {
+                        "Key": constants.IDEA_TAG_NAME,
+                        "Value": {
+                            "Fn::Join": [
+                                "",
+                                [
+                                    ad_sync_stack.nested_stack.resolve(
+                                        ad_sync_stack.cluster_name
+                                    ),
+                                    "-ad-sync",
+                                ],
+                            ]
+                        },
+                    },
+                    {
+                        "Key": constants.IDEA_TAG_ENVIRONMENT_NAME,
+                        "Value": ad_sync_stack.nested_stack.resolve(
+                            ad_sync_stack.cluster_name
+                        ),
+                    },
+                ],
+            }
+        },
+    )
+
+
+def test_ad_sync_resources_populator_policy_creation(
+    ad_sync_stack: ADSyncStack,
+    ad_sync_template: Template,
+) -> None:
+    util.assert_resource_name_has_correct_type_and_props(
+        ad_sync_stack.nested_stack,
+        ad_sync_template,
+        resources=["ad-sync-resources-populator-policy"],
+        cfn_type="AWS::IAM::Policy",
+        props={
+            "Properties": {
+                "PolicyDocument": {
+                    "Statement": [
+                        {
+                            "Action": "logs:CreateLogGroup",
+                            "Effect": "Allow",
+                            "Resource": "*",
+                            "Sid": "CloudWatchLogsPermissions",
+                        },
+                        {
+                            "Action": [
+                                "logs:CreateLogStream",
+                                "logs:PutLogEvents",
+                                "logs:DeleteLogStream",
+                            ],
+                            "Effect": "Allow",
+                            "Resource": "*",
+                            "Sid": "CloudWatchLogStreamPermissions",
+                        },
+                        {
+                            "Action": "dynamodb:PutItem",
+                            "Effect": "Allow",
+                            "Resource": {
+                                "Fn::Join": [
+                                    "",
+                                    [
+                                        "arn:",
+                                        {"Ref": "AWS::Partition"},
+                                        ":dynamodb:",
+                                        {"Ref": "AWS::Region"},
+                                        ":",
+                                        {"Ref": "AWS::AccountId"},
+                                        ":table/",
+                                        ad_sync_stack.nested_stack.resolve(
+                                            ad_sync_stack.cluster_name
+                                        ),
+                                        ".cluster-settings",
+                                    ],
+                                ]
+                            },
+                            "Sid": "ClusterSettingsTablePermissions",
+                        },
+                    ],
+                },
+                "PolicyName": {
+                    "Fn::Join": [
+                        "",
+                        [
+                            ad_sync_stack.nested_stack.resolve(
+                                ad_sync_stack.cluster_name
+                            ),
+                            "-ad-sync-resources-populator-policy",
+                        ],
+                    ]
+                },
+                "Roles": [
+                    {
+                        "Ref": util.get_logical_id(
+                            ad_sync_stack.nested_stack,
+                            ["ad-sync-resources-populator-role"],
+                        )
+                    }
+                ],
+            }
+        },
+    )
+
+
+def test_ad_sync_resources_populator_lambda_creation(
+    ad_sync_stack: ADSyncStack,
+    ad_sync_template: Template,
+) -> None:
+    util.assert_resource_name_has_correct_type_and_props(
+        ad_sync_stack.nested_stack,
+        ad_sync_template,
+        resources=["ad-sync-resources-populator"],
+        cfn_type="AWS::Lambda::Function",
+        props={
+            "Properties": {
+                "FunctionName": {
+                    "Fn::Join": [
+                        "",
+                        [
+                            ad_sync_stack.nested_stack.resolve(
+                                ad_sync_stack.cluster_name
+                            ),
+                            "-ad-sync-resources-populator",
+                        ],
+                    ]
+                },
+                "Handler": "ad_sync_resources_populator_handler.handler",
+                "Role": {
+                    "Fn::GetAtt": [
+                        util.get_logical_id(
+                            ad_sync_stack.nested_stack,
+                            ["ad-sync-resources-populator-role"],
+                        ),
+                        "Arn",
+                    ]
+                },
+                "Runtime": RES_COMMON_LAMBDA_RUNTIME.to_string(),
+                "Tags": [
+                    {
+                        "Key": constants.IDEA_TAG_NAME,
+                        "Value": {
+                            "Fn::Join": [
+                                "",
+                                [
+                                    ad_sync_stack.nested_stack.resolve(
+                                        ad_sync_stack.cluster_name
+                                    ),
+                                    "-ad-sync",
+                                ],
+                            ]
+                        },
+                    },
+                    {
+                        "Key": constants.IDEA_TAG_ENVIRONMENT_NAME,
+                        "Value": ad_sync_stack.nested_stack.resolve(
+                            ad_sync_stack.cluster_name
+                        ),
+                    },
+                ],
+            }
+        },
+    )
+
+
+def test_ad_sync_resources_populator_custom_resource_creation(
+    ad_sync_stack: ADSyncStack,
+    ad_sync_template: Template,
+) -> None:
+    util.assert_resource_name_has_correct_type_and_props(
+        ad_sync_stack.nested_stack,
+        ad_sync_template,
+        resources=["ad-sync-resources-populator-custom-resource"],
+        cfn_type="Custom::ADSyncResourcesPopulator",
+        props={
+            "Properties": {
+                "ServiceToken": {
+                    "Fn::GetAtt": [
+                        util.get_logical_id(
+                            ad_sync_stack.nested_stack, ["ad-sync-resources-populator"]
                         ),
                         "Arn",
                     ]

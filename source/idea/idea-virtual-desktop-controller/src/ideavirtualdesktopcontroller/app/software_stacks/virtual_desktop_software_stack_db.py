@@ -15,6 +15,9 @@ from ideadatamodel import (
     exceptions,
     VirtualDesktopBaseOS,
     VirtualDesktopArchitecture,
+    VirtualDesktopAffinity,
+    VirtualDesktopTenancy,
+    VirtualDesktopPlacement,
     VirtualDesktopSoftwareStack,
     SocaMemory,
     SocaMemoryUnit,
@@ -76,7 +79,15 @@ class VirtualDesktopSoftwareStackDB(VirtualDesktopNotifiableDB):
             ),
             architecture=VirtualDesktopArchitecture(Utils.get_value_as_string(software_stacks_constants.SOFTWARE_STACK_DB_ARCHITECTURE_KEY, db_entry)),
             gpu=VirtualDesktopGPU(Utils.get_value_as_string(software_stacks_constants.SOFTWARE_STACK_DB_GPU_KEY, db_entry)),
-            projects=[]
+            placement=VirtualDesktopPlacement(
+                affinity=VirtualDesktopAffinity(db_entry[software_stacks_constants.SOFTWARE_STACK_DB_AFFINITY_KEY]) if db_entry.get(software_stacks_constants.SOFTWARE_STACK_DB_AFFINITY_KEY) else None,
+                tenancy=VirtualDesktopTenancy(db_entry.get(software_stacks_constants.SOFTWARE_STACK_DB_TENANCY_KEY, VirtualDesktopTenancy.DEFAULT)),
+                host_id=db_entry.get(software_stacks_constants.SOFTWARE_STACK_DB_HOST_ID_KEY),
+                host_resource_group_arn=db_entry.get(software_stacks_constants.SOFTWARE_STACK_DB_HOST_RESOURCE_GROUP_ARN_KEY),
+            ),
+            projects=[],
+            allowed_instance_types=Utils.get_value_as_list(software_stacks_constants.SOFTWARE_STACK_DB_ALLOWED_INSTANCE_TYPES_KEY, db_entry, []),
+            version=Utils.get_value_as_int(software_stacks_constants.SOFTWARE_STACK_DB_VERSION_KEY, db_entry, 1)
         )
 
         for project_id in Utils.get_value_as_list(software_stacks_constants.SOFTWARE_STACK_DB_PROJECTS_KEY, db_entry, []):
@@ -103,7 +114,13 @@ class VirtualDesktopSoftwareStackDB(VirtualDesktopNotifiableDB):
             software_stacks_constants.SOFTWARE_STACK_DB_MIN_RAM_VALUE_KEY: str(software_stack.min_ram.value),
             software_stacks_constants.SOFTWARE_STACK_DB_MIN_RAM_UNIT_KEY: software_stack.min_ram.unit,
             software_stacks_constants.SOFTWARE_STACK_DB_ARCHITECTURE_KEY: software_stack.architecture,
-            software_stacks_constants.SOFTWARE_STACK_DB_GPU_KEY: software_stack.gpu
+            software_stacks_constants.SOFTWARE_STACK_DB_GPU_KEY: software_stack.gpu,
+            software_stacks_constants.SOFTWARE_STACK_DB_AFFINITY_KEY: software_stack.placement.affinity if software_stack.placement else None,
+            software_stacks_constants.SOFTWARE_STACK_DB_TENANCY_KEY: software_stack.placement.tenancy if software_stack.placement else VirtualDesktopTenancy.DEFAULT,
+            software_stacks_constants.SOFTWARE_STACK_DB_HOST_ID_KEY: software_stack.placement.host_id if software_stack.placement else None,
+            software_stacks_constants.SOFTWARE_STACK_DB_HOST_RESOURCE_GROUP_ARN_KEY: software_stack.placement.host_resource_group_arn if software_stack.placement else None,
+            software_stacks_constants.SOFTWARE_STACK_DB_ALLOWED_INSTANCE_TYPES_KEY: software_stack.allowed_instance_types,
+            software_stacks_constants.SOFTWARE_STACK_DB_VERSION_KEY: software_stack.version
         }
 
         project_ids = []
@@ -156,18 +173,22 @@ class VirtualDesktopSoftwareStackDB(VirtualDesktopNotifiableDB):
         expression_attr_values = {}
 
         for key, value in db_entry.items():
-            if key in {software_stacks_constants.SOFTWARE_STACK_DB_HASH_KEY, software_stacks_constants.SOFTWARE_STACK_DB_RANGE_KEY, software_stacks_constants.SOFTWARE_STACK_DB_CREATED_ON_KEY}:
+            if key in {software_stacks_constants.SOFTWARE_STACK_DB_HASH_KEY, software_stacks_constants.SOFTWARE_STACK_DB_RANGE_KEY, software_stacks_constants.SOFTWARE_STACK_DB_CREATED_ON_KEY, software_stacks_constants.SOFTWARE_STACK_DB_VERSION_KEY}:
                 continue
             update_expression_tokens.append(f'#{key} = :{key}')
             expression_attr_names[f'#{key}'] = key
             expression_attr_values[f':{key}'] = value
+
+        update_expression = "SET " + ", ".join(update_expression_tokens) + " ADD #version :version"
+        expression_attr_values[":version"] = 1
+        expression_attr_names["#version"] = "version"
 
         result = self._table.update_item(
             Key={
                 software_stacks_constants.SOFTWARE_STACK_DB_HASH_KEY: db_entry[software_stacks_constants.SOFTWARE_STACK_DB_HASH_KEY],
                 software_stacks_constants.SOFTWARE_STACK_DB_RANGE_KEY: db_entry[software_stacks_constants.SOFTWARE_STACK_DB_RANGE_KEY]
             },
-            UpdateExpression='SET ' + ', '.join(update_expression_tokens),
+            UpdateExpression=update_expression,
             ExpressionAttributeNames=expression_attr_names,
             ExpressionAttributeValues=expression_attr_values,
             ReturnValues='ALL_OLD'

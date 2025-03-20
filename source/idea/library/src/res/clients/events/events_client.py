@@ -3,6 +3,7 @@
 
 import json
 import os
+import uuid
 from typing import Any, Dict
 
 import boto3
@@ -64,4 +65,5 @@ def publish_virtual_desktop_event(event: Dict[str, Any]):
         QueueUrl=events_sqs_queue_url,
         MessageBody=get_event_json(event),
         MessageGroupId=event["event_group_id"].replace(" ", "_"),
+        MessageDeduplicationId=str(uuid.uuid4()),
     )

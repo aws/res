@@ -91,6 +91,7 @@ def virtual_desktop_controller(c):
     tool.build()
     apispec_virtual_desktop_controller(c, output_file=os.path.join(tool.output_dir, 'resources', 'api', 'openapi.yml'))
     dcv_connection_gateway(c)
+    virtual_desktop(c)
 
 
 @task
@@ -109,6 +110,14 @@ def bastion_host(c):
     build bastion host
     """
     BuildTool(c, 'idea-bastion-host').build()
+
+@task
+def virtual_desktop(c):
+    # type: (Context) -> None
+    """
+    build bastion host
+    """
+    BuildTool(c, 'idea-virtual-desktop').build()
 
 
 @task(name='all', default=True)
@@ -143,5 +152,7 @@ def build_all(c):
     library(c)
 
     bastion_host(c)
+
+    virtual_desktop(c)
 
     idea.console.print_header_block('end: build all', style='main')

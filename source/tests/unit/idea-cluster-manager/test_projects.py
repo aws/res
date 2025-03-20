@@ -13,6 +13,7 @@
 Test Cases for ProjectsService
 """
 
+import random
 from typing import List, Optional
 from unittest.mock import MagicMock
 
@@ -27,6 +28,7 @@ from ideasdk.utils import Utils
 from res.resources import accounts
 
 from ideadatamodel import (
+    AwsProjectBudget,
     CreateProjectRequest,
     DeleteProjectRequest,
     DeleteRoleAssignmentRequest,
@@ -40,6 +42,7 @@ from ideadatamodel import (
     PutRoleAssignmentRequest,
     SocaAnyPayload,
     SocaKeyValue,
+    SocaSortBy,
     UpdateProjectRequest,
     User,
     VirtualDesktopSession,
@@ -126,7 +129,31 @@ def clear_assignments(context: AppContext, membership, actor_id: str, actor_type
         )
 
 
-def create_mock_project(context: AppContext):
+def get_describe_budget_result():
+    budgets = []
+    for i in range(100):
+        budgets.append(
+            {
+                "Budget": {
+                    "CalculatedSpend": {
+                        "ForecastedSpend": {"Amount": "1000", "Unit": None},
+                        "ActualSpend": {
+                            "Amount": str(random.randint(1, 100)),
+                            "Unit": None,
+                        },
+                    },
+                    "BudgetLimit": {
+                        "Amount": str(random.randint(1, 100)),
+                        "Unit": None,
+                    },
+                }
+            }
+        )
+
+    return budgets
+
+
+def create_mock_project(context: AppContext, budget_enabled=False):
     name = generate_random_id("sampleproject")
     create_project_request = CreateProjectRequest(
         project=Project(
@@ -137,6 +164,12 @@ def create_mock_project(context: AppContext):
                 SocaKeyValue(key="k1", value="v1"),
                 SocaKeyValue(key="k2", value="v2"),
             ],
+            enable_budgets=budget_enabled,
+            budget=(
+                AwsProjectBudget(budget_name=generate_random_id("budgetname"))
+                if budget_enabled
+                else None
+            ),
         )
     )
 
@@ -282,6 +315,7 @@ def test_projects_crud_create_project(context):
                 name=name,
                 title="Sample Project",
                 description="Sample Project Description",
+                allowed_sessions_per_user=10,
                 tags=[
                     SocaKeyValue(key="k1", value="v1"),
                     SocaKeyValue(key="k2", value="v2"),
@@ -320,6 +354,7 @@ def test_projects_crud_create_project(context):
     assert result.project.enabled is True
     assert result.project.description is not None
     assert result.project.description == "Sample Project Description"
+    assert result.project.allowed_sessions_per_user == 10
     assert result.project.tags is not None
     assert len(result.project.tags) == 2
     assert result.project.tags[0].key == "k1"
@@ -589,6 +624,25 @@ def test_projects_crud_create_project_valid_policy_arn_create_new_role_fails_sho
     mock_iam.delete_instance_profile.assert_called()
 
 
+def test_projects_crud_create_project_invalid_allowed_sessions_per_user_fails(
+    context, monkey_session
+):
+    with pytest.raises(exceptions.SocaException) as exc_info:
+        context.projects.create_project(
+            CreateProjectRequest(
+                project=Project(
+                    name="sampleproject",
+                    allowed_sessions_per_user=0,
+                )
+            )
+        )
+    assert exc_info.value.error_code == errorcodes.INVALID_PARAMS
+    assert (
+        exc_info.value.message
+        == "Invalid parameters: Allowed sessions per user must be greater than zero"
+    )
+
+
 def test_projects_crud_update_project_invalid_script_location_fails(
     context, monkey_session
 ):
@@ -850,7 +904,17 @@ def test_projects_crud_disable_project(context):
     disable project
     """
     assert ProjectsTestContext.crud_project is not None
-
+    project_id = ProjectsTestContext.crud_project.project_id
+    # When disabling a project, all associated sessions will be stopped
+    test_session = VirtualDesktopSession(
+        idea_session_id="test-session-id",
+        project={
+            "project_id": project_id,
+            "name": "test-project",
+            "title": "Test Project",
+        },
+    )
+    context.projects.vdc_client.sessions = [test_session]
     context.projects.disable_project(
         DisableProjectRequest(project_id=ProjectsTestContext.crud_project.project_id)
     )
@@ -861,15 +925,29 @@ def test_projects_crud_disable_project(context):
     assert result is not None
     assert result.project is not None
     assert result.project.enabled is False
+    remaining_sessions = context.projects.vdc_client.list_sessions_by_project_id(
+        project_id
+    )
+    assert len(remaining_sessions) == 1
+    assert remaining_sessions[0].state == "STOPPING"
 
 
-def test_projects_crud_list_projects(context):
+def test_projects_crud_list_projects(context, monkey_session):
     """
-    list projects
+    list projects budget order
     """
     assert ProjectsTestContext.crud_project is not None
 
-    result = context.projects.list_projects(ListProjectsRequest())
+    mock_budget = SocaAnyPayload()
+    mock_budget.describe_budget = MagicMock(side_effect=get_describe_budget_result())
+    monkey_session.setattr(AwsClientProvider, "budgets", lambda *_: mock_budget)
+
+    for _ in range(4):
+        create_mock_project(context, True)
+
+    result = context.projects.list_projects(
+        ListProjectsRequest(sort_by=SocaSortBy(key="budget-spent"))
+    )
 
     assert result is not None
     assert result.listing is not None
@@ -882,6 +960,34 @@ def test_projects_crud_list_projects(context):
             break
 
     assert found is not None
+
+    for i in range(len(result.listing) - 1):
+        if result.listing[i + 1].enable_budgets:
+            prev = (
+                result.listing[i].budget.actual_spend.amount
+                / result.listing[i].budget.budget_limit.amount
+            )
+            next = (
+                result.listing[i + 1].budget.actual_spend.amount
+                / result.listing[i + 1].budget.budget_limit.amount
+            )
+            assert prev >= next
+
+
+def test_projects_crud_list_projects_alphabetical_order(context):
+    """
+    list projects alphabetical order
+    """
+    result = context.projects.list_projects(
+        ListProjectsRequest(sort_by=SocaSortBy(key="alphabetical"))
+    )
+
+    assert result is not None
+    assert result.listing is not None
+    assert len(result.listing) > 0
+
+    for i in range(len(result.listing) - 1):
+        assert result.listing[i].name <= result.listing[i + 1].name
 
 
 def test_project_crud_update_project_tags(context):
@@ -908,6 +1014,7 @@ def test_project_crud_update_project_tags(context):
 
 def test_projects_crud_delete_project(context, membership):
     assert ProjectsTestContext.crud_project is not None
+    project_id = ProjectsTestContext.crud_project.project_id
     create_role_assignment(
         context,
         membership.user_1.username,
@@ -919,31 +1026,51 @@ def test_projects_crud_delete_project(context, membership):
     enable_project(context, ProjectsTestContext.crud_project)
     assert is_assigned(context, membership.user_1, ProjectsTestContext.crud_project)
 
-    # First delete a project which are still used by sessions or software stacks
-    context.projects.vdc_client.sessions = [VirtualDesktopSession()]
-    context.projects.vdc_client.software_stacks = [VirtualDesktopSoftwareStack()]
-    with pytest.raises(exceptions.SocaException) as excinfo:
-        context.projects.delete_project(
-            DeleteProjectRequest(project_id=ProjectsTestContext.crud_project.project_id)
-        )
-    assert excinfo.value.error_code == "GENERAL_ERROR"
-
-    result = context.projects.get_project(
-        GetProjectRequest(project_id=ProjectsTestContext.crud_project.project_id)
+    # When deleting a project, all associated sessions will be terminated
+    # and the project will be removed from any software stacks that contain it
+    test_session = VirtualDesktopSession(
+        idea_session_id="test-session-id",
+        project={
+            "project_id": project_id,
+            "name": "test-project",
+            "title": "Test Project",
+        },
     )
-    assert result.project is not None
+    test_stack = VirtualDesktopSoftwareStack(
+        stack_id="test-stack-id",
+        name="test-stack",
+        projects=[{"project_id": project_id}],
+    )
 
-    # Next delete a project which is not in use by any session or software stack
-    context.projects.vdc_client.sessions = []
-    context.projects.vdc_client.software_stacks = []
+    context.projects.vdc_client.sessions = [test_session]
+    context.projects.vdc_client.software_stacks = [test_stack]
     context.projects.delete_project(
-        DeleteProjectRequest(project_id=ProjectsTestContext.crud_project.project_id)
+        DeleteProjectRequest(
+            project_id=ProjectsTestContext.crud_project.project_id, force_delete=True
+        )
     )
     with pytest.raises(exceptions.SocaException) as excinfo:
         context.projects.get_project(
             GetProjectRequest(project_id=ProjectsTestContext.crud_project.project_id)
         )
     assert excinfo.value.error_code == "PROJECT_NOT_FOUND"
+
+    # Verify sessions are terminated
+    remaining_sessions = context.projects.vdc_client.list_sessions_by_project_id(
+        project_id
+    )
+    assert len(remaining_sessions) == 0
+
+    # Verify project is removed from software stacks and cannot get software stacks by this project_id
+    remaining_stacks = context.projects.vdc_client.get_software_stacks_by_name(
+        test_stack.name
+    )
+    assert len(remaining_stacks) == 1
+    assert len(remaining_stacks[0].projects) == 0
+    remaining_stacks_with_project_id = (
+        context.projects.vdc_client.list_software_stacks_by_project_id(project_id)
+    )
+    assert len(remaining_stacks_with_project_id) == 0
 
 
 def test_projects_membership_setup(context, membership):

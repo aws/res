@@ -17,6 +17,12 @@ SESSION = {
     "name": TEST_STRING,
     "dcv_session_id": TEST_SESSION_ID,
 }
+SESSION_HIBERNATE = {
+    "idea_session_id": TEST_SESSION_ID,
+    "name": TEST_STRING,
+    "dcv_session_id": TEST_SESSION_ID,
+    "hibernation_enabled": True,
+}
 
 
 @pytest.fixture(scope="class")
@@ -132,6 +138,31 @@ class TestDcvBroker(unittest.TestCase):
             dcv_broker_client, "_delete_sessions", self.delete_session_response()
         )
         success, fail = dcv_broker_client.delete_sessions([SESSION])
+        assert len(success) == 1
+        assert len(fail) == 0
+        assert success[0].get("dcv_session_id") == TEST_SESSION_ID
+        assert not success[0].get("failure_reason")
+
+    def test_delete_sessions_successful_hibernate(self):
+        """
+        delete dcv session successful
+        """
+        describe_session_response = {
+            "sessions": {
+                TEST_SESSION_ID: {
+                    "id": TEST_SESSION_ID,
+                    "num_of_connections": ZERO_NUM_CONNECTIONS,
+                }
+            }
+        }
+        mock_describe_session = MagicMock(return_value=describe_session_response)
+        self.monkeypatch.setattr(
+            dcv_broker_client, "describe_sessions", mock_describe_session
+        )
+        self.monkeypatch.setattr(
+            dcv_broker_client, "_delete_sessions", self.delete_session_response()
+        )
+        success, fail = dcv_broker_client.delete_sessions([SESSION_HIBERNATE])
         assert len(success) == 1
         assert len(fail) == 0
         assert success[0].get("dcv_session_id") == TEST_SESSION_ID

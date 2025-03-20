@@ -15,6 +15,7 @@ import React, { Component } from "react";
 import { Button, ButtonDropdown, DateRangePicker, DateRangePickerProps, Flashbar, FlashbarProps, Header, HeaderProps, PropertyFilterProps, SpaceBetween } from "@cloudscape-design/components";
 import { ButtonDropdownProps } from "@cloudscape-design/components/button-dropdown/interfaces";
 import IdeaTable from "../table";
+import { IdeaTableRef } from "../table/table";
 import { TableProps } from "@cloudscape-design/components/table/interfaces";
 import { NonCancelableEventHandler } from "@cloudscape-design/components/internal/events";
 import { SocaDateRange, SocaFilter, SocaListingPayload, SocaPaginator, SocaUserInputParamMetadata } from "../../client/data-model";
@@ -99,7 +100,7 @@ export interface IdeaListingRequestType {
 }
 
 class IdeaListView extends Component<IdeaListViewProps, IdeaListViewState> {
-    table: React.RefObject<IdeaTable>;
+    table: React.RefObject<IdeaTableRef>;
 
     constructor(props: IdeaListViewProps) {
         super(props);

@@ -121,11 +121,11 @@ New-ItemProperty -Path `"$DCVRegistryPath\session-management\automatic-console-s
 New-ItemProperty -Path `"$DCVRegistryPath\session-management\automatic-console-session`" -Name `"storage-root`" -PropertyType `"String`" -Value `"C:\session-storage\$LocalUser`" -Force
 
 # remove scheduled task after executing once
-Unregister-ScheduledTask -TaskName PostBootstrapRebootExecuteOnce -Confirm:`$false
+schtasks /delete /tn PostBootstrapRebootExecuteOnce /f
 "
 
   New-Item -Path $IdeaScriptsDirectory -Name "PostBootstrapRebootExecuteOnce.ps1" -ItemType File -Force -Value "$PostBootstrapRebootExecuteOnceContent"
-  Register-ScheduledTask -TaskName PostBootstrapRebootExecuteOnce -AtStartup -User Administrator
+  schtasks /create /sc onstart /tn PostBootstrapRebootExecuteOnce /tr "powershell -ExecutionPolicy Bypass -File $IdeaScriptsDirectory\PostBootstrapRebootExecuteOnce.ps1" /ru system /f
 {%- endif %}
 
   # Remove the existing self-signed certificate that's used to secure traffic between the NICE DCV client and NICE DCV server

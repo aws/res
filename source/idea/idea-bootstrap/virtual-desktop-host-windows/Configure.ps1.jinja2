@@ -134,7 +134,9 @@ function Configure-WindowsEC2Instance {
 
   Write-Host "Create Shortcut to RES web interface"
   $WshShell = New-Object -comObject WScript.Shell
-  $IdeaShortcutAdmin = $WshShell.CreateShortcut("C:\Users\Default\Desktop\RES_Interface.url")
+  $DefaultDesktopDir = "C:\Users\Default\Desktop"
+  New-Item -ItemType Directory -Path $DefaultDesktopDir -Force
+  $IdeaShortcutAdmin = $WshShell.CreateShortcut("$DefaultDesktopDir\RES_Interface.url")
   $IdeaShortcutAdmin.TargetPath = "$IdeaWebPortalURL"
   $IdeaShortcutAdmin.Save()
 
@@ -149,7 +151,7 @@ function Configure-WindowsEC2Instance {
   New-Item -Path "C:\RES" -ItemType "directory"
   $CurrentDirectory = Get-Location
   schtasks /create /sc minute /mo 1 /tn RunVDIIdleCheckScriptEveryMinute /tr "powershell -File $CurrentDirectory\VDIIdleCheck.ps1 -AWSRegion $AWSRegion -EnvName $EnvName" /ru system /f
-  
+
   if($env:ON_VDI_CONFIGURED_COMMANDS) {
       Import-Module .\DownloadAndExecuteScript.ps1
       & .\$env:ON_VDI_CONFIGURED_COMMANDS
@@ -163,12 +165,12 @@ Send-SQSMessage -QueueUrl $VdcRequestQueueURL -MessageBody `$RebootMessage -Mess
 "
   $IdeaScriptsDirectory = "C:\IDEA\LocalScripts"
   New-Item -Path $IdeaScriptsDirectory -Name "IdeaRebootNotification.ps1" -ItemType File -Force -Value "$RebootNotificationContent"
-  schtasks /create /sc onstart /tn IdeaRebootNotification /tr "powershell -File $IdeaScriptsDirectory\IdeaRebootNotification.ps1" /ru system /f
-  schtasks /create /sc onevent /ec system /mo "*[System[Provider[@Name='Microsoft-Windows-Power-Troubleshooter'] and (Level=4 or Level=0) and (EventID=1)]]"  /tn RESWakeupNotification /tr "powershell -File $IdeaScriptsDirectory\IdeaRebootNotification.ps1" /ru system /f
+  schtasks /create /sc onstart /tn IdeaRebootNotification /tr "powershell -ExecutionPolicy Bypass -File $IdeaScriptsDirectory\IdeaRebootNotification.ps1" /ru system /f
+  schtasks /create /sc onevent /ec system /mo "*[System[Provider[@Name='Microsoft-Windows-Power-Troubleshooter'] and (Level=4 or Level=0) and (EventID=1)]]"  /tn RESWakeupNotification /tr "powershell -ExecutionPolicy Bypass -File $IdeaScriptsDirectory\IdeaRebootNotification.ps1" /ru system /f
   $Message = "{{ context.vars.dcv_host_ready_message }}"
   # todo - support vpc endpoint
   Send-SQSMessage -QueueUrl $VdcRequestQueueURL -MessageBody $Message -MessageGroupId $IDEASessionID
-  
+
   Stop-Transcript
   Restart-Computer -Force
 }

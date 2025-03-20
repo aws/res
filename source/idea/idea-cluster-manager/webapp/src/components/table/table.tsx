@@ -11,7 +11,7 @@
  * and limitations under the License.
  */
 
-import React, { Component } from "react";
+import React, { forwardRef, useImperativeHandle, useState } from "react";
 import { NonCancelableEventHandler } from "@cloudscape-design/components/internal/events";
 import { TableProps } from "@cloudscape-design/components/table/interfaces";
 import { Box, CollectionPreferences, Pagination, PropertyFilter, PropertyFilterProps, Select, SpaceBetween, Table, TextFilter } from "@cloudscape-design/components";
@@ -19,6 +19,7 @@ import { SocaFilter, SocaUserInputParamMetadata } from "../../client/data-model"
 import Utils from "../../common/utils";
 import { CollectionPreferencesProps } from "@cloudscape-design/components/collection-preferences/interfaces";
 import { AppContext } from "../../common";
+import { useCollection } from '@cloudscape-design/collection-hooks';
 
 export interface IdeaTableProps<T = any> {
     listing: T[];
@@ -52,33 +53,22 @@ export interface IdeaTableProps<T = any> {
     stickyHeader?: boolean;
 }
 
-export interface IdeaTableState<T = any> {
-    selectedItems: T[];
-    filteringText: string;
-    selectFilterValues: {
-        [k: string]: string;
-    };
-    propertyFilterQuery: PropertyFilterProps.Query;
-    tablePreferences: CollectionPreferencesProps.Preferences<T>;
+export interface IdeaTableRef {
+    reset: () => void;
+    clearSelectedItems: () => void;
 }
 
-export interface IdeaTableSelectFiltersProps {
+interface IdeaTableSelectFiltersProps {
     onFilter: (filters: SocaFilter[]) => void;
     params: SocaUserInputParamMetadata[];
     filteringPlaceholder?: string;
 }
 
-interface IdeaTableSelectFiltersState {
-    textFilterValue: string;
-    selectFilters: any;
-}
-
-class IdeaTableSelectFilters extends Component<IdeaTableSelectFiltersProps, IdeaTableSelectFiltersState> {
-    constructor(props: IdeaTableSelectFiltersProps) {
-        super(props);
-
+const IdeaTableSelectFilters = (props: IdeaTableSelectFiltersProps) => {
+    const [textFilterValue, setTextFilterValue] = useState<string>("");
+    const [selectFilters, setSelectFilters] = useState(() => {
         let selectFilters: any = {};
-        this.props.params.forEach((param) => {
+        props.params.forEach((param) => {
             let options: any = [];
 
             if (param.name === "$all") {
@@ -98,22 +88,19 @@ class IdeaTableSelectFilters extends Component<IdeaTableSelectFiltersProps, Idea
             };
         });
 
-        this.state = {
-            textFilterValue: "",
-            selectFilters: selectFilters,
-        };
-    }
+        return selectFilters;
+    });
 
-    buildFilters(): SocaFilter[] {
+    const buildFilters = (): SocaFilter[] => {
         let result = [];
-        if (Utils.isNotEmpty(this.state.textFilterValue)) {
+        if (Utils.isNotEmpty(textFilterValue)) {
             result.push({
                 key: "$all",
-                value: this.state.textFilterValue,
+                value: textFilterValue,
             });
         }
-        for (let key in this.state.selectFilters) {
-            let filter = this.state.selectFilters[key];
+        for (let key in selectFilters) {
+            let filter = selectFilters[key];
             let selectedOption = filter.selectedOption;
             if (Utils.isEmpty(selectedOption.value)) {
                 continue;
@@ -124,111 +111,91 @@ class IdeaTableSelectFilters extends Component<IdeaTableSelectFiltersProps, Idea
             });
         }
         return result;
-    }
+    };
 
-    render() {
-        return (
-            <SpaceBetween size={"m"} direction={"horizontal"}>
-                <TextFilter
-                    key={`table-filter-all`}
-                    className="idea-list-view-text-filter"
-                    filteringText={this.state.textFilterValue}
-                    filteringPlaceholder={this.props.filteringPlaceholder ?? "Search"}
-                    onChange={(event) => {
-                        this.setState({
-                            textFilterValue: event.detail.filteringText,
-                        });
-                    }}
-                    onDelayedChange={(event) => {
-                        this.props.onFilter(this.buildFilters());
-                    }}
-                />
-                {Object.keys(this.state.selectFilters).map((key, index) => {
-                    return (
-                        <Select
-                            key={`select-filter-${index}`}
-                            options={this.state.selectFilters[key].options}
-                            selectedAriaLabel="Selected"
-                            expandToViewport
-                            selectedOption={this.state.selectFilters[key].selectedOption}
-                            onChange={(event) => {
-                                let selectFilters = this.state.selectFilters;
-                                selectFilters[key] = {
-                                    ...selectFilters[key],
+    return (
+        <SpaceBetween size={"m"} direction={"horizontal"}>
+            <TextFilter
+                key={`table-filter-all`}
+                className="idea-list-view-text-filter"
+                filteringText={textFilterValue}
+                filteringPlaceholder={props.filteringPlaceholder ?? "Search"}
+                onChange={(event) => {
+                    setTextFilterValue(event.detail.filteringText);
+                }}
+                onDelayedChange={(event) => {
+                    props.onFilter(buildFilters());
+                }}
+            />
+            {Object.keys(selectFilters).map((key, index) => {
+                return (
+                    <Select
+                        key={`select-filter-${index}`}
+                        options={selectFilters[key].options}
+                        selectedAriaLabel="Selected"
+                        expandToViewport
+                        selectedOption={selectFilters[key].selectedOption}
+                        onChange={(event) => {
+                            setSelectFilters((prevFilters: any) => ({
+                                ...prevFilters,
+                                [key]: {
+                                    ...prevFilters[key],
                                     selectedOption: event.detail.selectedOption,
-                                };
-                                this.setState(
-                                    {
-                                        selectFilters: selectFilters,
-                                    },
-                                    () => {
-                                        this.props.onFilter(this.buildFilters());
-                                    }
-                                );
-                            }}
-                        />
-                    );
-                })}
-            </SpaceBetween>
-        );
-    }
+                                }
+                            }));
+                            props.onFilter(buildFilters());
+                        }}
+                    />
+                );
+            })}
+        </SpaceBetween>
+    );
 }
 
-class IdeaTable extends Component<IdeaTableProps, IdeaTableState> {
-    constructor(props: IdeaTableProps) {
-        super(props);
-        this.state = {
-            selectedItems: this.props.selectedItems ? this.props.selectedItems : [],
-            filteringText: this.props.defaultFilteringText ? this.props.defaultFilteringText : "",
-            selectFilterValues: {},
-            propertyFilterQuery: {
-                tokens: [],
-                operation: "and",
-            },
-            tablePreferences: {
-                pageSize: this.getPageSizePreferenceFromLocalStorage(),
-                visibleContent: this.getVisibleContentPreferenceFromLocalStorage(),
-            },
-        };
-    }
+const IdeaTable = forwardRef<IdeaTableRef, IdeaTableProps>((props, ref) => {
+    const [selectedItems, setSeletedItems] = useState(props.selectedItems ? props.selectedItems : []);
+    const [filteringText, setFilteringText] = useState<string>(props.defaultFilteringText ? props.defaultFilteringText : "");
+    const [propertyFilterQuery, setPropertyFilterQuery] = useState<PropertyFilterProps.Query>({
+        tokens: [],
+        operation: "and",
+    });
 
-    componentDidMount() {}
+    useImperativeHandle(ref, () => ({
+        reset,
+        clearSelectedItems,
+    }));
 
-    reset() {
-        this.setState({
-            selectedItems: [],
-            filteringText: "",
-        });
-    }
+    const reset = () => {
+        setSeletedItems([]);
+        setFilteringText("");
+    };
+    
+    const clearSelectedItems = () => {
+        setSeletedItems([]);
+    };
 
-    clearSelectedItems() {
-        this.setState({
-            selectedItems: [],
-        });
-    }
-
-    showFilters(): boolean {
-        if (this.props.showFilters != null) {
-            return this.props.showFilters;
+    const showFilters = (): boolean => {
+        if (props.showFilters != null) {
+            return props.showFilters;
         }
         return false;
-    }
+    };
 
-    getFilterType() {
-        if (this.props.filterType) {
-            return this.props.filterType;
+    const getFilterType = () => {
+        if (props.filterType) {
+            return props.filterType;
         }
         return "text";
-    }
+    };
 
-    buildFilters() {
-        if (this.getFilterType() === "property") {
+    const buildFilters = () => {
+        if (getFilterType() === "property") {
             return (
                 <PropertyFilter
                     i18nStrings={{
                         filteringAriaLabel: "your choice",
                         dismissAriaLabel: "Dismiss",
-                        filteringPlaceholder: this.props.filteringPlaceholder ?? "Search",
+                        filteringPlaceholder: props.filteringPlaceholder ?? "Search",
                         groupValuesText: "Values",
                         groupPropertiesText: "Properties",
                         operatorsText: "Operators",
@@ -255,71 +222,61 @@ class IdeaTable extends Component<IdeaTableProps, IdeaTableState> {
                         removeTokenButtonAriaLabel: () => "Remove token",
                         enteredTextLabel: (text) => `Use: "${text}"`,
                     }}
-                    query={this.state.propertyFilterQuery}
+                    query={propertyFilterQuery}
                     onChange={(event) => {
-                        this.setState(
-                            {
-                                propertyFilterQuery: {
-                                    tokens: event.detail.tokens,
-                                    operation: event.detail.operation,
-                                },
-                            },
-                            () => {
-                                if (this.props.onPropertyFilterChange) {
-                                    this.props.onPropertyFilterChange(event.detail);
-                                }
-                            }
-                        );
-                    }}
-                    filteringOptions={this.props.filteringOptions ? this.props.filteringOptions : []}
-                    filteringProperties={this.props.filteringProperties ? this.props.filteringProperties : []}
-                />
+                        setPropertyFilterQuery({
+                            tokens: event.detail.tokens,
+                            operation: event.detail.operation,
+                        });
+                        if (props.onPropertyFilterChange) {
+                            props.onPropertyFilterChange(event.detail);
+                        }
+                    } }
+                    filteringOptions={props.filteringOptions ? props.filteringOptions : []}
+                    filteringProperties={props.filteringProperties ? props.filteringProperties : []} />
             );
-        } else if (this.getFilterType() === "select") {
-            return <IdeaTableSelectFilters onFilter={this.props.onFilter!} params={this.props.selectFilters!} filteringPlaceholder={this.props.filteringPlaceholder}/>;
+        } else if (getFilterType() === "select") {
+            return <IdeaTableSelectFilters onFilter={props.onFilter!} params={props.selectFilters!} filteringPlaceholder={props.filteringPlaceholder} />;
         } else {
             return (
                 <TextFilter
-                    filteringText={this.state.filteringText}
-                    filteringPlaceholder={this.props.filteringPlaceholder ?? "Search"}
+                    filteringText={filteringText}
+                    filteringPlaceholder={props.filteringPlaceholder ?? "Search"}
                     onChange={(event) => {
-                        this.setState({
-                            filteringText: event.detail.filteringText,
-                        });
-                    }}
+                        setFilteringText(event.detail.filteringText);
+                    } }
                     onDelayedChange={(event) => {
-                        if (this.props.onFilter && this.props.filters) {
-                            this.props.onFilter([
+                        if (props.onFilter && props.filters) {
+                            props.onFilter([
                                 {
-                                    key: this.props.filters[0].key,
+                                    key: props.filters[0].key,
                                     value: event.detail.filteringText,
                                 },
                             ]);
                         }
-                    }}
-                />
+                    } } />
             );
         }
-    }
+    };
 
-    showPaginator(): boolean {
-        if (this.props.showPaginator != null) {
-            return this.props.showPaginator;
+    const showPaginator = (): boolean => {
+        if (props.showPaginator != null) {
+            return props.showPaginator;
         }
         return false;
-    }
+    };
 
-    buildPaginator() {
+    const buildPaginator = () => {
         const getCurrentPage = (): number => {
-            if (this.props.currentPage) {
-                return this.props.currentPage;
+            if (props.currentPage) {
+                return props.currentPage;
             }
             return 1;
         };
 
         const getTotalPages = (): number => {
-            if (this.props.totalPages) {
-                return this.props.totalPages;
+            if (props.totalPages) {
+                return props.totalPages;
             }
             return 1;
         };
@@ -333,53 +290,49 @@ class IdeaTable extends Component<IdeaTableProps, IdeaTableState> {
                     previousPageLabel: "Previous Page",
                     pageLabel: (pageNumber) => `Page ${pageNumber} of all pages`,
                 }}
-                disabled={this.props.disablePaginator}
-                openEnd={this.props.openEndPaging}
+                disabled={props.disablePaginator}
+                openEnd={props.openEndPaging}
                 onChange={(event) => {
-                    if (this.props.onPage) {
-                        this.props.onPage(event.detail.currentPageIndex, "page");
+                    if (props.onPage) {
+                        props.onPage(event.detail.currentPageIndex, "page");
                     }
-                }}
+                } }
                 onNextPageClick={(event) => {
-                    if (this.props.onPage) {
-                        this.props.onPage(event.detail.requestedPageIndex, "next");
+                    if (props.onPage) {
+                        props.onPage(event.detail.requestedPageIndex, "next");
                     }
-                }}
+                } }
                 onPreviousPageClick={(event) => {
-                    if (this.props.onPage) {
-                        this.props.onPage(event.detail.requestedPageIndex, "prev");
+                    if (props.onPage) {
+                        props.onPage(event.detail.requestedPageIndex, "prev");
                     }
-                }}
-            />
+                } } />
         );
-    }
+    };
 
-    showPreferences(): boolean {
-        if (this.props.showPreferences != null) {
-            return this.props.showPreferences;
+    const showPreferences = (): boolean => {
+        if (props.showPreferences != null) {
+            return props.showPreferences;
         }
         return false;
-    }
+    };
 
-    getPageSizePreferenceFromLocalStorage(): number {
-        if (this.props.preferencesKey === undefined) return 10;
-
-        let pageSize = AppContext.get().localStorage().getItem(`${this.getPreferencesKey()}-table-pageSize`);
+    const getPageSizePreferenceFromLocalStorage = (): number => {
+        if (props.preferencesKey === undefined) return 10;
+        let pageSize = AppContext.get().localStorage().getItem(`${getPreferencesKey()}-table-pageSize`);
         if (pageSize === undefined || pageSize === null) {
             return 10;
         }
         return Utils.asNumber(pageSize);
-    }
+    };
 
-    getVisibleContentPreferenceFromLocalStorage(): string[] {
+    const getVisibleContentPreferenceFromLocalStorage = (): string[] => {
         let visibleContent: string[] = [];
-        this.props.columnDefinitions?.forEach((colDef) => {
+        props.columnDefinitions?.forEach((colDef) => {
             visibleContent.push(colDef.id as string);
         });
-
-        if (this.props.preferencesKey === undefined) return visibleContent;
-
-        let visibleContentPref = AppContext.get().localStorage().getItem(`${this.getPreferencesKey()}-table-columns`);
+        if (props.preferencesKey === undefined) return visibleContent;
+        let visibleContentPref = AppContext.get().localStorage().getItem(`${getPreferencesKey()}-table-columns`);
         if (visibleContentPref === undefined || visibleContentPref === null) {
             return visibleContent;
         }
@@ -393,14 +346,14 @@ class IdeaTable extends Component<IdeaTableProps, IdeaTableState> {
             }
         });
         return visibleContent;
-    }
+    };
 
-    savePreferenceToLocalStorage(detail: any) {
-        if (this.props.preferencesKey === undefined) return;
+    const savePreferenceToLocalStorage = (detail: any) => {
+        if (props.preferencesKey === undefined) return;
 
-        AppContext.get().localStorage().setItem(`${this.getPreferencesKey()}-table-pageSize`, detail.pageSize);
-        let visibleContent: { [k: string]: boolean } = {};
-        this.props.columnDefinitions?.forEach((colDef) => {
+        AppContext.get().localStorage().setItem(`${getPreferencesKey()}-table-pageSize`, detail.pageSize);
+        let visibleContent: { [k: string]: boolean; } = {};
+        props.columnDefinitions?.forEach((colDef) => {
             if (colDef.id === undefined) {
                 return;
             }
@@ -409,19 +362,19 @@ class IdeaTable extends Component<IdeaTableProps, IdeaTableState> {
             visibleContent[colId] = detail.visibleContent.includes(colId);
         });
 
-        AppContext.get().localStorage().setItem(`${this.getPreferencesKey()}-table-columns`, JSON.stringify(visibleContent));
-    }
+        AppContext.get().localStorage().setItem(`${getPreferencesKey()}-table-columns`, JSON.stringify(visibleContent));
+    };
 
-    getPreferencesKey() {
-        if (this.props.preferencesKey === undefined) {
+    const getPreferencesKey = () => {
+        if (props.preferencesKey === undefined) {
             return;
         }
-        return `${this.props.preferencesKey}`;
-    }
+        return `${props.preferencesKey}`;
+    };
 
-    buildPreferences() {
+    const buildPreferences = () => {
         let columnPreferences: any[] = [];
-        this.props.columnDefinitions?.forEach((colDef) => {
+        props.columnDefinitions?.forEach((colDef) => {
             columnPreferences.push({
                 id: colDef.id,
                 label: colDef.header,
@@ -432,21 +385,15 @@ class IdeaTable extends Component<IdeaTableProps, IdeaTableState> {
                 title="Preferences"
                 confirmLabel="Confirm"
                 cancelLabel="Cancel"
-                preferences={this.state.tablePreferences}
+                preferences={tablePreferences}
                 onConfirm={({ detail }) => {
-                    this.savePreferenceToLocalStorage(detail);
-                    this.setState(
-                        {
-                            tablePreferences: detail,
-                        },
-                        () => {
-                            if (this.props.onPreferenceChange) {
-                                this.props.onPreferenceChange(detail);
-                            }
-                        }
-                    );
-                }}
-                pageSizePreference={this.showPaginator() ? {
+                    savePreferenceToLocalStorage(detail);
+                    setTablePreferences(detail);
+                    if (props.onPreferenceChange) {
+                        props.onPreferenceChange(detail);
+                    }
+                } }
+                pageSizePreference={showPaginator() ? {
                     title: "Select page size",
                     options: [
                         { value: 10, label: "10 resources" },
@@ -463,47 +410,50 @@ class IdeaTable extends Component<IdeaTableProps, IdeaTableState> {
                             options: columnPreferences,
                         },
                     ],
-                }}
-            />
+                }} />
         );
-    }
+    };
 
-    render() {
-        return (
-            <Table
-                loading={this.props.loading}
-                selectionType={this.props.selectionType}
-                variant={this.props.variant ? this.props.variant : "full-page"}
-                stickyHeader={typeof this.props.stickyHeader !== "undefined" ? this.props.stickyHeader : true}
-                header={this.props.header}
-                pagination={this.showPaginator() && this.buildPaginator()}
-                filter={this.showFilters() && this.buildFilters()}
-                preferences={this.showPreferences() && this.buildPreferences()}
-                selectedItems={this.state.selectedItems}
-                visibleColumns={this.state.tablePreferences.visibleContent}
-                onSelectionChange={(event) => {
-                    this.setState(
-                        {
-                            selectedItems: event.detail.selectedItems,
-                        },
-                        () => {
-                            if (this.props.onSelectionChange) {
-                                this.props.onSelectionChange(event);
-                            }
-                        }
-                    );
-                }}
-                columnDefinitions={this.props.columnDefinitions!}
-                items={this.props.listing}
-                empty={
-                    this.props.empty ??
-                    <Box textAlign="center" color="inherit">
-                        <b>No records</b>
-                    </Box>
+    const [tablePreferences, setTablePreferences] = useState<CollectionPreferencesProps.Preferences>({
+        pageSize: getPageSizePreferenceFromLocalStorage(),
+        visibleContent: getVisibleContentPreferenceFromLocalStorage(),
+    });
+
+    const { items, collectionProps, paginationProps } = useCollection(props.listing, {
+        sorting: {},
+        pagination: {
+            pageSize: tablePreferences.pageSize,
+            }
+    });
+
+    return (
+        <Table
+            {...collectionProps}
+            loading={props.loading}
+            selectionType={props.selectionType}
+            variant={props.variant ? props.variant : "full-page"}
+            stickyHeader={typeof props.stickyHeader !== "undefined" ? props.stickyHeader : true}
+            header={props.header}
+            // pagination={showPaginator() && buildPaginator()} // server side pagination
+            pagination={showPaginator() && <Pagination {...paginationProps} />} // client side pagination
+            filter={showFilters() && buildFilters()}
+            preferences={showPreferences() && buildPreferences()}
+            selectedItems={selectedItems}
+            visibleColumns={tablePreferences.visibleContent}
+            onSelectionChange={(event) => {
+                setSeletedItems(event.detail.selectedItems);
+                if (props.onSelectionChange) {
+                    props.onSelectionChange(event);
                 }
-            />
-        );
-    }
-}
+            } }
+            columnDefinitions={props.columnDefinitions!}
+            items={items}
+            empty={
+                props.empty ??
+                <Box textAlign="center" color="inherit">
+                    <b>No records</b>
+                </Box>} />
+    );
+});
 
 export default IdeaTable;

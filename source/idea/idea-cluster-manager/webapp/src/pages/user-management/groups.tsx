@@ -252,34 +252,34 @@ class Groups extends Component<GroupsProps, GroupsState> {
                 }}
                 columnDefinitions={[
                     {
-                        id: "title",
-                        header: "Title",
-                        cell: (e) => e.title,
-                    },
-                    {
                         id: "name",
                         header: "Group Name",
                         cell: (e) => e.name,
+                        sortingField: "name",
                     },
                     {
                         id: "identity_source",
                         header: "Identity Source",
                         cell: (e) => e.identity_source === Constants.COGNITO_USER_IDP_TYPE ? "Cognito" : e.identity_source,
+                        sortingField: "identity_source",
                     },
                     {
                         id: "group_role",
                         header: "Role",
                         cell: (e) => e.role,
+                        sortingComparator: (a, b) => (a.role || '').localeCompare(b.role || '')
                     },
                     {
                         id: "enabled",
                         header: "Status",
                         cell: (e) => (e.enabled ? <StatusIndicator type="success">Enabled</StatusIndicator> : <StatusIndicator type="stopped">Disabled</StatusIndicator>),
+                        sortingField: "enabled",
                     },
                     {
                         id: "gid",
                         header: "GID",
                         cell: (e) => e.gid,
+                        sortingField: "gid",
                     },
                 ]}
             />

@@ -2,7 +2,7 @@
 #  SPDX-License-Identifier: Apache-2.0
 
 
-from typing import Optional, Union
+from typing import Any, Dict, Optional, Union
 
 import aws_cdk as cdk
 import constructs
@@ -18,10 +18,16 @@ from aws_cdk import aws_logs as logs
 from aws_cdk.aws_events import Schedule
 from res.constants import (  # type: ignore
     AD_SYNC_LOCK_TABLE,
+    AD_SYNC_STATUS_SUBMISSION_TIME_KEY,
+    AD_SYNC_STATUS_TABLE,
+    AD_SYNC_STATUS_TASK_ID_KEY,
+    AD_SYNC_STATUS_TTL_KEY,
+    ENVIRONMENT_NAME_KEY,
     LOCK_DB_HASH_KEY,
     LOCK_DB_RANGE_KEY,
     MODULE_NAME_DIRECTORY_SERVICE,
 )
+from res.resources import cluster_settings  # type: ignore
 
 from idea.batteries_included.parameters.parameters import BIParameters
 from idea.infrastructure.install.constants import (
@@ -35,6 +41,9 @@ from idea.infrastructure.install.handlers import scheduled_ad_sync_handler
 from idea.infrastructure.install.parameters.common import CommonKey
 from idea.infrastructure.install.parameters.parameters import RESParameters
 from idea.infrastructure.install.utils import InfraUtils
+from idea.infrastructure.resources.lambda_functions.custom_resource.ad_sync_resources_populator_lambda import (
+    ad_sync_resources_populator_handler,
+)
 from idea.infrastructure.resources.lambda_functions.custom_resource.ad_sync_task_terminator_lambda import (
     handler,
 )
@@ -100,9 +109,11 @@ class ADSyncStack(ResBaseConstruct):
 
         self.build_ad_sync_security_group(vpc)
         self.build_ad_sync_lock_table()
+        self.build_ad_sync_status_table()
         self.build_scheduled_event_ad_sync_infra()
         self.build_ad_sync_task_definition()
         self.terminate_ad_sync_ecs_task()
+        self.build_ad_sync_resources_populator()
 
         self.nested_stack.node.add_dependency(self.lambda_layer)
         self.apply_permission_boundary(self.nested_stack)
@@ -147,6 +158,32 @@ class ADSyncStack(ResBaseConstruct):
             ad_sync_lock_table.id,
             self.cluster_name,
             ad_sync_lock_table,
+        ).ddb_table
+
+    def build_ad_sync_status_table(self) -> None:
+        """
+        Create the DynamoDB table for tracking AD Sync ECS task status.
+        """
+        ad_sync_status_table: RESDDBTable = RESDDBTable(
+            id=AD_SYNC_STATUS_TABLE,
+            module_id=MODULE_NAME_DIRECTORY_SERVICE,
+            table_props=dynamodb.TableProps(
+                partition_key=dynamodb.Attribute(
+                    name=AD_SYNC_STATUS_TASK_ID_KEY, type=dynamodb.AttributeType.STRING
+                ),
+                sort_key=dynamodb.Attribute(
+                    name=AD_SYNC_STATUS_SUBMISSION_TIME_KEY,
+                    type=dynamodb.AttributeType.NUMBER,
+                ),
+                time_to_live_attribute=AD_SYNC_STATUS_TTL_KEY,
+            ),
+        )
+
+        self.ad_sync_status_table = RESDDBTableBase(
+            self.nested_stack,
+            ad_sync_status_table.id,
+            self.cluster_name,
+            ad_sync_status_table,
         ).ddb_table
 
     def build_scheduled_event_ad_sync_infra(self) -> None:
@@ -198,6 +235,18 @@ class ADSyncStack(ResBaseConstruct):
                         sid="ADSyncLockTablePermissions",
                         resources=[
                             f"arn:{cdk.Aws.PARTITION}:dynamodb:{cdk.Aws.REGION}:{cdk.Aws.ACCOUNT_ID}:table/{self.cluster_name}.ad-sync.distributed-lock",
+                        ],
+                    ),
+                    iam.PolicyStatement(
+                        actions=[
+                            "dynamodb:Query",
+                            "dynamodb:Scan",
+                            "dynamodb:UpdateItem",
+                            "dynamodb:PutItem",
+                        ],
+                        sid="ADSyncStatusTablePermissions",
+                        resources=[
+                            f"arn:{cdk.Aws.PARTITION}:dynamodb:{cdk.Aws.REGION}:{cdk.Aws.ACCOUNT_ID}:table/{self.cluster_name}.ad-sync.status",
                         ],
                     ),
                     iam.PolicyStatement(
@@ -263,7 +312,7 @@ class ADSyncStack(ResBaseConstruct):
 
     def build_ad_sync_task_definition(self) -> None:
         ad_sync_task_role = self.build_ad_sync_task_role()
-        task_definition = ecs.TaskDefinition(
+        self.task_definition = ecs.TaskDefinition(
             self.nested_stack,
             id="ad-sync-task-definition",
             compatibility=ecs.Compatibility.FARGATE,
@@ -274,16 +323,16 @@ class ADSyncStack(ResBaseConstruct):
             family=f"{self.cluster_name}-ad-sync-task-definition",
         )
 
-        commands = "\n".join(
+        commands = " && ".join(
             [
                 "source venv/bin/activate",
-                "res-ad-sync",
+                "exec res-ad-sync",
             ]
         )
-        task_definition.add_container(
+        self.task_definition.add_container(
             "ad-sync-task-container",
             image=ecs.ContainerImage.from_registry(self.registry_name),
-            command=["/bin/sh", "-c", f"/bin/sh -ex <<'EOC'\n{commands}\nEOC\n"],
+            command=["/bin/sh", "-exc", commands],
             environment={
                 "environment_name": self.cluster_name,
                 "AWS_DEFAULT_REGION": cdk.Aws.REGION,
@@ -298,7 +347,7 @@ class ADSyncStack(ResBaseConstruct):
                 ),
             ),
         )
-        self.add_common_tags(task_definition)
+        self.add_common_tags(self.task_definition)
 
     def build_ad_sync_task_role(self) -> iam.Role:
         ad_sync_task_role = iam.Role(
@@ -353,6 +402,8 @@ class ADSyncStack(ResBaseConstruct):
                             f"arn:{cdk.Aws.PARTITION}:dynamodb:{cdk.Aws.REGION}:{cdk.Aws.ACCOUNT_ID}:table/{self.cluster_name}.projects/index/*",
                             f"arn:{cdk.Aws.PARTITION}:dynamodb:{cdk.Aws.REGION}:{cdk.Aws.ACCOUNT_ID}:table/{self.cluster_name}.authz.role-assignments",
                             f"arn:{cdk.Aws.PARTITION}:dynamodb:{cdk.Aws.REGION}:{cdk.Aws.ACCOUNT_ID}:table/{self.cluster_name}.authz.role-assignments/index/*",
+                            f"arn:{cdk.Aws.PARTITION}:dynamodb:{cdk.Aws.REGION}:{cdk.Aws.ACCOUNT_ID}:table/{self.cluster_name}.{AD_SYNC_STATUS_TABLE}",
+                            f"arn:{cdk.Aws.PARTITION}:dynamodb:{cdk.Aws.REGION}:{cdk.Aws.ACCOUNT_ID}:table/{self.cluster_name}.{AD_SYNC_STATUS_TABLE}/index/*",
                         ],
                     ),
                     iam.PolicyStatement(
@@ -428,6 +479,18 @@ class ADSyncStack(ResBaseConstruct):
                 ),
                 iam.PolicyStatement(
                     actions=[
+                        "dynamodb:Query",
+                        "dynamodb:Scan",
+                        "dynamodb:UpdateItem",
+                        "dynamodb:PutItem",
+                    ],
+                    sid="ADSyncStatusTablePermissions",
+                    resources=[
+                        f"arn:{cdk.Aws.PARTITION}:dynamodb:{cdk.Aws.REGION}:{cdk.Aws.ACCOUNT_ID}:table/{self.cluster_name}.ad-sync.status",
+                    ],
+                ),
+                iam.PolicyStatement(
+                    actions=[
                         "ecs:StopTask",
                         "ecs:ListTasks",
                         "ecs:DescribeTasks",
@@ -481,3 +544,99 @@ class ADSyncStack(ResBaseConstruct):
         terminate_ad_sync_ecs_task_custom_resource.node.add_dependency(
             self.ad_sync_lock_table
         )
+
+    # Create a custom lambda to store AD sync resources in DDB
+    def build_ad_sync_resources_populator(self) -> None:
+        lambda_name = f"{self.cluster_name}-ad-sync-resources-populator"
+        ad_sync_resources_populator_role = iam.Role(
+            self.nested_stack,
+            id="ad-sync-resources-populator-role",
+            role_name=f"{lambda_name}-role",
+            assumed_by=iam.ServicePrincipal("lambda.amazonaws.com"),
+            description=f"{lambda_name}-role",
+        )
+
+        ad_sync_resources_populator_policy = iam.Policy(
+            self.nested_stack,
+            id="ad-sync-resources-populator-policy",
+            policy_name=f"{lambda_name}-policy",
+            statements=[
+                iam.PolicyStatement(
+                    actions=["logs:CreateLogGroup"],
+                    sid="CloudWatchLogsPermissions",
+                    resources=["*"],
+                ),
+                iam.PolicyStatement(
+                    actions=[
+                        "logs:CreateLogStream",
+                        "logs:PutLogEvents",
+                        "logs:DeleteLogStream",
+                    ],
+                    sid="CloudWatchLogStreamPermissions",
+                    resources=["*"],
+                ),
+                iam.PolicyStatement(
+                    actions=[
+                        "dynamodb:PutItem",
+                    ],
+                    sid="ClusterSettingsTablePermissions",
+                    resources=[
+                        InfraUtils.get_ddb_table_arn(
+                            self.cluster_name,
+                            cluster_settings.CLUSTER_SETTINGS_TABLE_NAME,
+                        ),
+                    ],
+                ),
+            ],
+        )
+        ad_sync_resources_populator_role.attach_inline_policy(
+            ad_sync_resources_populator_policy
+        )
+        self.add_common_tags(ad_sync_resources_populator_role)
+
+        ad_sync_resources_populator_lambda = _lambda.Function(
+            self.nested_stack,
+            id="ad-sync-resources-populator",
+            function_name=lambda_name,
+            description=f"Custom lambda to store AD sync resources in DDB",
+            environment={
+                **self.build_ad_sync_resources_populator_environment_varaibles(),
+                ENVIRONMENT_NAME_KEY: self.cluster_name,
+            },
+            timeout=Duration.seconds(300),
+            role=ad_sync_resources_populator_role,
+            runtime=RES_COMMON_LAMBDA_RUNTIME,
+            **InfraUtils.get_handler_and_code_for_function(
+                ad_sync_resources_populator_handler.handler
+            ),
+            layers=[self.lambda_layer],
+        )
+        self.add_common_tags(ad_sync_resources_populator_lambda)
+
+        ad_sync_resources_populator_custom_resource = cdk.CustomResource(
+            self.nested_stack,
+            id="ad-sync-resources-populator-custom-resource",
+            service_token=ad_sync_resources_populator_lambda.function_arn,
+            removal_policy=cdk.RemovalPolicy.DESTROY,
+            resource_type="Custom::ADSyncResourcesPopulator",
+        )
+
+        ad_sync_resources_populator_custom_resource.node.add_dependency(
+            self.ad_sync_security_group
+        )
+        ad_sync_resources_populator_custom_resource.node.add_dependency(
+            self.ecs_cluster
+        )
+        ad_sync_resources_populator_custom_resource.node.add_dependency(
+            self.task_definition
+        )
+        ad_sync_resources_populator_custom_resource.node.add_dependency(
+            ad_sync_resources_populator_policy
+        )
+
+    def build_ad_sync_resources_populator_environment_varaibles(self) -> Dict[str, Any]:
+        return {
+            "ad_sync_security_group_id": self.ad_sync_security_group.security_group_id,
+            "ad_sync_task_cluster": self.ecs_cluster.cluster_name,
+            "ad_sync_task_definition": self.task_definition.family,
+        }

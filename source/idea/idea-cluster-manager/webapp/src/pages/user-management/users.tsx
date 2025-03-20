@@ -39,46 +39,55 @@ export const USER_TABLE_COLUMN_DEFINITIONS: TableProps.ColumnDefinition<User>[] 
         id: "username",
         header: "Username",
         cell: (e) => e.username,
+        sortingField: "username",
     },
     {
         id: "uid",
         header: "UID",
         cell: (e) => e.uid,
+        sortingField: "uid",
     },
     {
         id: "gid",
         header: "GID",
         cell: (e) => e.gid,
+        sortingField: "gid",
     },
     {
         id: "email",
         header: "Email",
         cell: (e) => e.email,
+        sortingField: "email",
     },
     {
         id: "identity_source",
         header: "Identity Source",
         cell: (e) => e.identity_source === Constants.COGNITO_USER_IDP_TYPE ? "Cognito" : e.identity_source,
+        sortingField: "identity_source",
     },
     {
         id: "sudo",
         header: "Is Sudo?",
         cell: (e) => (e.sudo ? "Yes" : "No"),
+        sortingField: "sudo",
     },
     {
         id: "user_role",
         header: "Role",
         cell: (e) => e.role,
+        sortingComparator: (a, b) => (a.role || '').localeCompare(b.role || '')
     },
     {
         id: "is_active",
         header: "Is Active",
         cell: (e) => (e.is_active ? "Yes" : "No"),
+        sortingField: "is_active",
     },
     {
         id: "enabled",
         header: "Status",
         cell: (e) => (e.enabled ? <StatusIndicator type="success">Enabled</StatusIndicator> : <StatusIndicator type="stopped">Disabled</StatusIndicator>),
+        sortingField: "enabled",
     },
     {
         id: "groups",
@@ -98,11 +107,20 @@ export const USER_TABLE_COLUMN_DEFINITIONS: TableProps.ColumnDefinition<User>[] 
                 return "-";
             }
         },
+        sortingComparator: (a, b) => {
+            const GroupsA = a.additional_groups || [];
+            const GroupsB = b.additional_groups || [];
+            if (GroupsA.length !== GroupsB.length) {
+                return GroupsA.length - GroupsB.length;
+            }
+            return GroupsA.join(', ').localeCompare(GroupsB.join(', '));
+        }
     },
     {
         id: "synced_on",
         header: "Synced On",
         cell: (e) => new Date(e.synced_on!).toLocaleString(),
+        sortingField: "synced_on",
     },
 ];
 

@@ -30,34 +30,14 @@ from res.constants import (  # type: ignore
     CLUSTER_KEYPAIR_NAME,
     CLUSTER_ROUTE53_PRIVATE_HOSTED_ZONE_ID,
     CLUSTER_ROUTE53_PRIVATE_HOSTED_ZONE_NAME,
-    COGNITO_SSO_IDP_PROVIDER_NAME,
     NODE_TYPE_APP,
     PUBLIC_SUBNETS,
 )
-from res.resources import accounts, cluster_settings, token  # type: ignore
+from res.resources import cluster_settings, token  # type: ignore
 from res.resources.cluster_settings import CLUSTER_SETTINGS_TABLE_NAME  # type: ignore
-from res.utils import api_utils, auth_utils, table_utils  # type: ignore
+from res.utils import api_utils, table_utils  # type: ignore
 
-
-def check_admin_authorized(event: Dict[str, Any]) -> None:
-    # Add Auth logic for active admins to perform this action
-    auth_header = event.get("headers", {}).get("authorization", "")
-    jwt_token = auth_header.split(" ")[1] if auth_header.startswith("Bearer ") else None
-    decoded_token = token.decode_token(token=jwt_token)
-    if not decoded_token.get("username"):
-        raise exceptions.UnauthorizedAccess(message="Username missing in token")
-
-    idp_name_record = table_utils.get_item(
-        table_name=CLUSTER_SETTINGS_TABLE_NAME,
-        key={"key": COGNITO_SSO_IDP_PROVIDER_NAME},
-    )
-    idp_name = idp_name_record.get("value") if idp_name_record else None
-    username = auth_utils.get_ddb_user_name(
-        username=decoded_token["username"], idp_name=idp_name
-    )
-
-    if not accounts.is_active_admin(username):
-        raise exceptions.UnauthorizedAccess()
+from .common import check_admin_authorized
 
 
 def handle_bastion_host_lifecycle(event: Dict[str, Any]) -> Dict[str, Any]:

@@ -9,6 +9,8 @@
 #  OR CONDITIONS OF ANY KIND, express or implied. See the License for the specific language governing permissions
 #  and limitations under the License.
 
+from res.resources import cluster_settings
+
 from ideasdk.utils import Utils
 from ideadatamodel import (exceptions, Project, AwsProjectBudget, ListProjectsRequest, ListProjectsResult,
                            SocaPaginator, SocaKeyValue, Scripts, Script, ScriptEvents)
@@ -16,7 +18,7 @@ from ideasdk.context import SocaContext
 from ideasdk.launch_configurations import LaunchScriptsHelper, ScriptEventType, ScriptOSType
 
 from typing import Dict, Optional
-from boto3.dynamodb.conditions import Attr, Key
+from boto3.dynamodb.conditions import Attr, Key, Or
 import arrow
 
 GSI_PROJECT_NAME = 'project-name-index'
@@ -44,6 +46,10 @@ class ProjectsDAO:
         name = Utils.get_value_as_string('name', project)
         title = Utils.get_value_as_string('title', project)
         description = Utils.get_value_as_string('description', project)
+        allowed_sessions_per_user = project.get(
+            'allowed_sessions_per_user',
+            cluster_settings.get_setting('vdc.dcv_session.default_allowed_sessions_per_user_per_project')
+        )
         enabled = Utils.get_value_as_bool('enabled', project, False)
         enable_budgets = Utils.get_value_as_bool('enable_budgets', project, False)
         budget_name = Utils.get_value_as_string('budget_name', project)
@@ -68,13 +74,14 @@ class ProjectsDAO:
         if db_scripts is not None:
             for os_type in os_types:
                 os_scripts = db_scripts.get(os_type, {})
+                rerun_on_reboot = os_scripts.get(ScriptEventType.RERUN_ON_REBOOT, False)
                 on_vdi_start_scripts = os_scripts.get(ScriptEventType.ON_VDI_START, [])
                 on_vdi_start = [Script(script_location=script.get('script_location'), arguments=script.get('arguments', [])) for script in on_vdi_start_scripts]
 
                 on_vdi_configured_scripts = os_scripts.get(ScriptEventType.ON_VDI_CONFIGURED, [])
                 on_vdi_configured = [Script(script_location=script.get('script_location'), arguments=script.get('arguments', [])) for script in on_vdi_configured_scripts]
 
-                scripts_dict[os_type] = ScriptEvents(on_vdi_start=on_vdi_start, on_vdi_configured=on_vdi_configured)
+                scripts_dict[os_type] = ScriptEvents(on_vdi_start=on_vdi_start, on_vdi_configured=on_vdi_configured, rerun_on_reboot=rerun_on_reboot)
 
         scripts = Scripts(linux=scripts_dict.get(ScriptOSType.LINUX), windows=scripts_dict.get(ScriptOSType.WINDOWS))
 
@@ -86,6 +93,7 @@ class ProjectsDAO:
             title=title,
             name=name,
             description=description,
+            allowed_sessions_per_user=allowed_sessions_per_user,
             tags=tags,
             enabled=enabled,
             enable_budgets=enable_budgets,
@@ -117,6 +125,14 @@ class ProjectsDAO:
 
         if project.description is not None:
             db_project['description'] = project.description
+
+        db_project["allowed_sessions_per_user"] = (
+            project.allowed_sessions_per_user
+            if project.allowed_sessions_per_user is not None
+            else cluster_settings.get_setting(
+                "vdc.dcv_session.default_allowed_sessions_per_user_per_project"
+            )
+        )
 
         if project.tags is not None:
             tags = {}
@@ -237,22 +253,22 @@ class ProjectsDAO:
         if last_evaluated_key is not None:
             scan_request['ExclusiveStartKey'] = last_evaluated_key
 
-        scan_filter = None
+        filter_expression = None
         if Utils.is_not_empty(request.filters):
-            scan_filter = {}
             for filter_ in request.filters:
                 if filter_.eq is not None:
-                    scan_filter[filter_.key] = {
-                        'AttributeValueList': [filter_.eq],
-                        'ComparisonOperator': 'EQ'
-                    }
+                    if filter_expression is None:
+                        filter_expression = Attr(filter_.key).eq(filter_.eq)
+                    else:
+                        filter_expression = Or(filter_expression, Attr(filter_.key).eq(filter_.eq))
                 if filter_.like is not None:
-                    scan_filter[filter_.key] = {
-                        'AttributeValueList': [filter_.like],
-                        'ComparisonOperator': 'CONTAINS'
-                    }
-        if scan_filter is not None:
-            scan_request['ScanFilter'] = scan_filter
+                    if filter_expression is None:
+                        filter_expression = Attr(filter_.key).contains(filter_.like)
+                    else:
+                        filter_expression = Or(filter_expression, Attr(filter_.key).contains(filter_.like))
+
+        if filter_expression is not None:
+            scan_request['FilterExpression'] = filter_expression
 
         scan_result = self.table.scan(**scan_request)
 
