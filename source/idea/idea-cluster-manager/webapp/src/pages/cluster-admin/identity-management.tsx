@@ -11,22 +11,21 @@
  * and limitations under the License.
  */
 
-import React, { Component, RefObject } from "react";
+import React, {Component, RefObject} from "react";
 
-import { IdeaSideNavigationProps } from "../../components/side-navigation";
-import IdeaAppLayout, { IdeaAppLayoutProps } from "../../components/app-layout";
-import { Button, ColumnLayout, Container, Header, SpaceBetween, TextContent, Toggle, FlashbarProps } from "@cloudscape-design/components";
-import { withRouter } from "../../navigation/navigation-utils";
+import {IdeaSideNavigationProps} from "../../components/side-navigation";
+import IdeaAppLayout, {IdeaAppLayoutProps} from "../../components/app-layout";
+import {Button, ColumnLayout, Container, FlashbarProps, Header, SpaceBetween, TextContent, Toggle} from "@cloudscape-design/components";
+import {withRouter} from "../../navigation/navigation-utils";
 import Utils from "../../common/utils";
-import { KeyValue } from "../../components/key-value";
-import { AppContext } from "../../common";
+import {KeyValue} from "../../components/key-value";
+import {AppContext} from "../../common";
 import dot from "dot-object";
 import IdeaForm from "../../components/form";
-import { EnabledDisabledStatusIndicator } from "../../components/common";
+import {EnabledDisabledStatusIndicator} from "../../components/common";
 import EnableSSOConfigForm from './enable-sso-form';
-import { UpdateModuleSettingsRequestIdentityProvider } from "../../client/data-model";
-import { EditADDomainForm } from "./edit-ad-domain-form";
-import { UpdateModuleSettingsDirectoryService } from '../../client/data-model';
+import {UpdateModuleSettingsDirectoryService, UpdateModuleSettingsRequestIdentityProvider} from "../../client/data-model";
+import {EditADDomainForm} from "./edit-ad-domain-form";
 import BackendClient from "../../client/backend-client";
 
 enum ADSyncState {
@@ -96,23 +95,9 @@ class IdentityManagement extends Component<IdentityManagementProps, IdentityMana
                 clusterSettingsService.getDirectoryServiceSettings(),
                 clusterSettingsService.getIdentityProviderSettings(),
             ]);
-            const latestADSyncStatus = await this.onGetADSyncStatus()
-            const latestADSyncTaskId = dot.pick("id", latestADSyncStatus) || ''
-            const isADSyncInProgress = [ADSyncStatus.RUNNING, ADSyncStatus.PENDING].includes(dot.pick("status", latestADSyncStatus));
-            // The status field is provided by the `allSettled` API. API definition is provided here: https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Promise/allSettled#status
             if (directoryservice.status === "fulfilled") {
-                this.setState(
-                    {
-                        directoryservice: directoryservice.value,
-                        latestADSyncTaskId,
-                        latestADSyncStatus,
-                        adSyncState: isADSyncInProgress ? ADSyncState.SYNCING : ADSyncState.IDLE
-                    },
-                    async () => {
-                        this.setState({isADSyncEnabled: this.isADDomainInfoComplete()});
-                        if (this.state.adSyncState === ADSyncState.SYNCING) {
-                            await this.pollStatus()
-                        }
+                this.setState({
+                    directoryservice: directoryservice.value
                 })
             }
             if (identityProvider.status === "fulfilled") {
@@ -122,6 +107,28 @@ class IdentityManagement extends Component<IdentityManagementProps, IdentityMana
                     }
                 )
             }
+
+            this.onGetADSyncStatus()
+            .then((latestADSyncStatus) => {
+                const latestADSyncTaskId = dot.pick("id", latestADSyncStatus) || ''
+                const isADSyncInProgress = [ADSyncStatus.RUNNING, ADSyncStatus.PENDING].includes(dot.pick("status", latestADSyncStatus));
+                // The status field is provided by the `allSettled` API. API definition is provided here: https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Promise/allSettled#status
+                if (directoryservice.status === "fulfilled") {
+                    this.setState(
+                        {
+                            latestADSyncTaskId,
+                            latestADSyncStatus,
+                            adSyncState: isADSyncInProgress ? ADSyncState.SYNCING : ADSyncState.IDLE
+                        },
+                        async () => {
+                            this.setState({isADSyncEnabled: this.isADDomainInfoComplete()});
+                            if (this.state.adSyncState === ADSyncState.SYNCING) {
+                                await this.pollStatus()
+                            }
+                        }
+                    )
+                }
+            })
         } catch (error) {
             console.error('Error loading settings:', error);
         }
@@ -140,7 +147,7 @@ class IdentityManagement extends Component<IdentityManagementProps, IdentityMana
             "sudoers.group_name",
             "computers.ou",
         ];
-    
+
         return requiredFields.every(field => {
             const value = dot.pick(field, this.state.directoryservice);
             return value !== undefined && value !== null && value !== '';
@@ -179,8 +186,8 @@ class IdentityManagement extends Component<IdentityManagementProps, IdentityMana
 
 
     async pollStatus () {
-        try {
-            const response = await this.onGetADSyncStatus(this.state.latestADSyncTaskId? this.state.latestADSyncTaskId: undefined)
+        this.onGetADSyncStatus(this.state.latestADSyncTaskId ? this.state.latestADSyncTaskId : undefined)
+        .then((response) => {
             const status = dot.pick("status", response);
             if (status === undefined) {
                 throw new Error("Failed to get AD Synchronization status.");
@@ -188,31 +195,29 @@ class IdentityManagement extends Component<IdentityManagementProps, IdentityMana
             if (status === ADSyncStatus.RUNNING || status === ADSyncStatus.PENDING) {
                 setTimeout(() => this.pollStatus(), 10000);
             } else {
-                this.setState({ adSyncState: ADSyncState.IDLE}, () => {
+                this.setState({adSyncState: ADSyncState.IDLE}, () => {
                     if (status === ADSyncStatus.ERROR) {
                         this.setFlashbarMessage("error", "AD Synchronization Failed.");
                     } else if (status === ADSyncStatus.TERMINATED) {
-                        this.setFlashbarMessage("success","AD Synchronization terminated successfully.");
+                        this.setFlashbarMessage("success", "AD Synchronization terminated successfully.");
                     } else {
-                        this.setFlashbarMessage("success","AD Synchronization completed successfully.");
+                        this.setFlashbarMessage("success", "AD Synchronization completed successfully.");
                     }
-                });      
-    
+                });
             }
             this.setState({
                 latestADSyncStatus: response,
             })
-        }
-        catch (error: any) {
+        })
+        .catch ((error) => {
             console.error('Failed to get AD Sync status:', error);
-            this.setState({ adSyncState: ADSyncState.IDLE });
+            this.setState({adSyncState: ADSyncState.IDLE});
             this.setFlashbarMessage("error", error.message);
-        }
-    };
+        })
+    }
 
-    async onGetADSyncStatus (task_id?: string) {
-        const response =  await this.backendClient().check_ad_sync_status(task_id ? {id: task_id} : undefined);
-        return response;
+    onGetADSyncStatus (task_id?: string) {
+        return this.backendClient().check_ad_sync_status(task_id ? {id: task_id} : undefined);
     }
 
     getEnableSSOConfigForm(): IdeaForm {
@@ -309,7 +314,7 @@ class IdentityManagement extends Component<IdentityManagementProps, IdentityMana
             if (!this.state.latestADSyncStatus.update_time || !this.state.latestADSyncStatus.status) {
                 return null;
             }
- 
+
             const getStatusDisplay = (status: string) => {
                 switch (status) {
                     case ADSyncStatus.RUNNING:
@@ -326,8 +331,8 @@ class IdentityManagement extends Component<IdentityManagementProps, IdentityMana
                         return status;
                 }
             };
- 
- 
+
+
             const timestamp = new Date(Number(this.state.latestADSyncStatus.update_time)).toLocaleString();
             const displayStatus = getStatusDisplay(this.state.latestADSyncStatus.status);
             return (
@@ -442,7 +447,7 @@ class IdentityManagement extends Component<IdentityManagementProps, IdentityMana
                                                     <SpaceBetween size="xs" direction="vertical" alignItems="end">
                                                         <SpaceBetween size="xs" direction="horizontal" alignItems="center">
                                                             {this.state.adSyncState === ADSyncState.SYNCING ? <TextContent>AD Synchronization in progress...</TextContent>: null}
-                                                            <Button 
+                                                            <Button
                                                                 variant={"primary"}
                                                                 disabled={!this.state.isADSyncEnabled}
                                                                 onClick={() => this.state.adSyncState !== ADSyncState.SYNCING ? this.onStartADSync() : this.onStopADSync()}

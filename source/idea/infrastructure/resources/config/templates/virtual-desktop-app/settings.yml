@@ -1,5 +1,6 @@
+app_package_uri: s3://{{ staging_bucket_name }}/releases/{{ version }}/idea-virtual-desktop-{{ version }}.tar.gz
+
 logging:
-  logs_directory: /opt/idea/app/logs
   profile: production
   default_log_file_name: application.log
 

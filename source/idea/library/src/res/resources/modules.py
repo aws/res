@@ -1,14 +1,9 @@
 #  Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 #  SPDX-License-Identifier: Apache-2.0
 
-import logging
 from typing import Any, Dict
 
-from res.utils import table_utils
-
-logger = logging.getLogger(__name__)
-logger.addHandler(logging.StreamHandler())
-logger.setLevel(logging.INFO)
+from res.utils import logging_utils, table_utils
 
 MODULES_TABLE_NAME = "modules"
 MODULES_TABLE_HASH_KEY = "module_id"
@@ -17,6 +12,8 @@ MODULES_TABLE_TYPE_KEY = "type"
 MODULES_TABLE_STACK_KEY = "stack_name"
 MODULES_TABLE_STATUS_KEY = "status"
 MODULES_TABLE_VERSION_KEY = "version"
+
+logger = logging_utils.get_logger(MODULES_TABLE_NAME)
 
 
 def create_module(module: Dict[str, Any]) -> Dict[str, Any]:

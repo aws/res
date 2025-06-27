@@ -1,36 +1,57 @@
 ap-northeast-1:
-  amazonlinux2: ami-026b5ddea758521fe
+  amazonlinux2: ami-0c9fa62d0cff5c6e1
+  amzn2023: ami-0c1638aa346a43fe8
 ap-northeast-2:
-  amazonlinux2: ami-0e4f2a1b8f55a8acd
+  amazonlinux2: ami-04a658aa22859f558
+  amzn2023: ami-05377cf8cfef186c2
 ap-south-1:
-  amazonlinux2: ami-0b8e60a84f14ce5a3
+  amazonlinux2: ami-0130fdf294657c34f
+  amzn2023: ami-0af9569868786b23a
 ap-southeast-1:
-  amazonlinux2: ami-0b7a76751c38161e0
+  amazonlinux2: ami-04a9bf81ef634d801
+  amzn2023: ami-0afc7fe9be84307e4
 ap-southeast-2:
-  amazonlinux2: ami-0efef54e960e4e17f
+  amazonlinux2: ami-05f24fe224fe48978
+  amzn2023: ami-06a0b33485e9d1cf1
 ca-central-1:
-  amazonlinux2: ami-0d4b1cc4fca195315
+  amazonlinux2: ami-0e8d46319be78c676
+  amzn2023: ami-049ae37f76c31ab26
 eu-central-1:
-  amazonlinux2: ami-07cb013c9ecc583f0
+  amazonlinux2: ami-0c9f81aa89d014344
+  amzn2023: ami-02b7d5b1e55a7b5f1
 eu-north-1:
-  amazonlinux2: ami-0c66be8c9de421368
+  amazonlinux2: ami-01c23808eaea3e7df
+  amzn2023: ami-00f34bf9aeacdf007
 eu-south-1:
-  amazonlinux2: ami-079d2fd19ecbdb754
+  amazonlinux2: ami-0b51d6fc6fe833c64
+  amzn2023: ami-0fc3c59335ab60b70
 eu-west-1:
-  amazonlinux2: ami-08a28be5eae6c1d68
+  amazonlinux2: ami-02d985863bc484086
+  amzn2023: ami-03d8b47244d950bbb
 eu-west-2:
-  amazonlinux2: ami-0e5ab72a6bf9765cd
+  amazonlinux2: ami-0b092b4d48558a371
+  amzn2023: ami-0fc32db49bc3bfbb1
 eu-west-3:
-  amazonlinux2: ami-002090e223e4263bb
+  amazonlinux2: ami-0aeb39835d28d26f8
+  amzn2023: ami-074e262099d145e90
 il-central-1:
-  amazonlinux2: ami-0a3b5ae607ce0295e
+  amazonlinux2: ami-0650f0d12bdc475e4
+  amzn2023: ami-09b5106eeaaad79ec
 us-east-1:
-  amazonlinux2: ami-0c104f6f4a5d9d1d5
+  amazonlinux2: ami-0c3ce86fb8321acb9
+  amzn2023: ami-0953476d60561c955
 us-east-2:
-  amazonlinux2: ami-0a31834d359d68156
+  amazonlinux2: ami-060fc7ace3313f07f
+  amzn2023: ami-06c8f2ec674c67112
 us-gov-west-1:
-  amazonlinux2: ami-06c442589e803c7ab
+  amazonlinux2: ami-048d336f10331af0b
+  amzn2023: ami-05f787ab45276821d
+us-gov-east-1:
+  amazonlinux2: ami-0816898ecf4890644
+  amzn2023: ami-0a783b46b88d43b32
 us-west-1:
-  amazonlinux2: ami-038d74967dbfcdee5
+  amazonlinux2: ami-024203a193af5aa51
+  amzn2023: ami-07706bb32254a7fe5
 us-west-2:
-  amazonlinux2: ami-065212a60f30e3798
+  amazonlinux2: ami-089b59e2c3e89dcce
+  amzn2023: ami-04999cd8f2624f834

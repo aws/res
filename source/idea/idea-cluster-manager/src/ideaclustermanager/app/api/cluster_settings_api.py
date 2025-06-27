@@ -81,7 +81,7 @@ class ClusterSettingsAPI(BaseAPI):
 
     def get_module_settings(self, context: ApiInvocationContext):
         request = context.get_request_payload_as(GetModuleSettingsRequest)
-
+        
         module_id = request.module_id
         if Utils.is_empty(module_id):
             raise exceptions.invalid_params('module_id is required')
@@ -93,7 +93,7 @@ class ClusterSettingsAPI(BaseAPI):
                 }
             ))
             return
-
+        
         module_config = self.context.config().get_config(module_id, module_id=module_id).as_plain_ordered_dict()
 
         if module_id == res_constants.MODULE_DIRECTORY_SERVICE:
@@ -105,7 +105,7 @@ class ClusterSettingsAPI(BaseAPI):
                 if key in constants.RESTRICTED_MODULE_NON_ADMIN_PARENT_KEYS[module_id]:
                     filtered_config[key] = value
             module_config = filtered_config
-
+     
         context.success(GetModuleSettingsResult(
             settings=module_config
         ))
@@ -120,16 +120,18 @@ class ClusterSettingsAPI(BaseAPI):
             raise exceptions.invalid_params('invalid settings')
 
         settings = Utils.flatten_dict(request.settings)
+
+
         if len(settings) > 100:
             raise exceptions.invalid_params('only 100 settings can be updated at once')
 
         if module_id == res_constants.MODULE_DIRECTORY_SERVICE:
             directory_service_settings.update_settings(settings)
-
+        
         self.config.db.transact_set_cluster_settings(module_id, settings)
         for setting in settings:
             self.config.put(f'{module_id}.{setting}', settings[setting])
-
+        
         context.success(UpdateModuleSettingsResult())
 
     def describe_instance_types(self, context: ApiInvocationContext):

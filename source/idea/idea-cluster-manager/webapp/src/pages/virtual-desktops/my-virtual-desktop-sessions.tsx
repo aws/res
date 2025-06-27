@@ -15,7 +15,7 @@ import React, { Component, RefObject } from "react";
 
 import { Box, Button, Cards, Header, SegmentedControl, SpaceBetween, Toggle } from "@cloudscape-design/components";
 import { AppContext } from "../../common";
-import { Project, SocaUserInputChoice, VDIPermissions, VirtualDesktopBaseOS, VirtualDesktopSession, VirtualDesktopSessionPermission, VirtualDesktopSessionScreenshot, VirtualDesktopSoftwareStack } from "../../client/data-model";
+import { Project, ListSessionsResponse, SocaUserInputChoice, VDIPermissions, VirtualDesktopBaseOS, VirtualDesktopSession, VirtualDesktopSessionPermission, VirtualDesktopSessionScreenshot, VirtualDesktopSoftwareStack } from "../../client/data-model";
 import { ProjectsClient, VirtualDesktopClient } from "../../client";
 import IdeaForm from "../../components/form";
 import Utils from "../../common/utils";
@@ -225,24 +225,7 @@ class MyVirtualDesktopSessions extends Component<MyVirtualDesktopSessionsProps, 
     }
 
     fetchSessions(): Promise<boolean> {
-        return AppContext.get()
-            .client()
-            .virtualDesktop()
-            .listSessions({
-                filters: [
-                    {
-                        key: "base_os",
-                        value: this.state.osFilter,
-                    },
-                    {
-                        key: "owner",
-                        value: AppContext.get().auth().getUsername(),
-                    }
-                ],
-                paginator: {
-                    page_size: 100,
-                },
-            })
+        return this.fetchUserSessions()
             .then((result) => {
                 return this.setSessions(result?.listing, this.state.osFilter);
             })
@@ -258,6 +241,38 @@ class MyVirtualDesktopSessions extends Component<MyVirtualDesktopSessionsProps, 
                 });
                 return false;
             });
+    }
+
+    async fetchUserSessions(): Promise<ListSessionsResponse> {
+        const response: ListSessionsResponse = {
+            paginator: { page_size: 100 },
+            listing: [],
+        }
+
+        let cursor: string | undefined = undefined;
+        let client = AppContext.get().client().virtualDesktop()
+        do {
+            const result: ListSessionsResponse = await client.listSessions({
+                filters: [
+                    {
+                        key: "base_os",
+                        value: this.state.osFilter,
+                    },
+                    {
+                        key: "owner",
+                        value: AppContext.get().auth().getUsername(),
+                    }
+                ],
+                paginator: {
+                    page_size: 100,
+                    cursor: cursor,
+                },
+            });
+            response.listing?.push(...result.listing ?? []);
+            cursor = result.paginator?.cursor;
+        } while (cursor);
+
+        return response;
     }
 
     setFlashMessage = (content: React.ReactNode, type: "success" | "info" | "error") => {
@@ -411,7 +426,7 @@ class MyVirtualDesktopSessions extends Component<MyVirtualDesktopSessionsProps, 
                 let os_filters: VirtualDesktopBaseOS[] = ["windows"];
 
                 if (os_filter === OS_FILTER_LINUX_ID) {
-                    os_filters = ["amazonlinux2", "rhel8", "rhel9"];
+                    os_filters = ["amazonlinux2", "amzn2023", "rhel8", "rhel9", "rocky9"];
                 }
 
                 if (!os_filters?.includes(session?.base_os)) {
@@ -709,6 +724,7 @@ class MyVirtualDesktopSessions extends Component<MyVirtualDesktopSessionsProps, 
                 },
             })
             .then((result) => {
+                let certificatevalidationpolicy = this.virtualDesktopSettings.dcv_connection_gateway.certificate.provided === "true" ? "strict" : "ask-user";
                 let endpoint = result.connection_info?.endpoint;
                 if (endpoint === undefined) {
                     endpoint = AppContext.get().getAlbEndpoint();
@@ -723,7 +739,7 @@ class MyVirtualDesktopSessions extends Component<MyVirtualDesktopSessionsProps, 
                 sessionFileContent += `port=443\n`;
                 sessionFileContent += `webport=443\n`;
                 sessionFileContent += `quicport=443\n`;
-                sessionFileContent += `certificatevalidationpolicy=accept-untrusted\n`;
+                sessionFileContent += `certificatevalidationpolicy=${certificatevalidationpolicy}\n`;
                 sessionFileContent += `authtoken=${result.connection_info?.access_token}\n`;
 
                 const element = document.createElement("a");

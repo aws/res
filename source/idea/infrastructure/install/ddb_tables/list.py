@@ -115,6 +115,7 @@ user_table: RESDDBTable = RESDDBTable(
             ],
         ),
     ],
+    enable_kinesis_stream=True,
 )
 
 group_table: RESDDBTable = RESDDBTable(

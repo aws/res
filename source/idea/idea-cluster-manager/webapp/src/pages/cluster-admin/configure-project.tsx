@@ -1,7 +1,7 @@
 import React, {Component, RefObject} from "react";
 import IdeaAppLayout, {IdeaAppLayoutProps} from "../../components/app-layout";
 import {IdeaSideNavigationProps} from "../../components/side-navigation";
-import { AttributeEditor, Box, Button, Container, Header, Icon, Popover, Select, SpaceBetween } from "@cloudscape-design/components";
+import { AttributeEditor, Box, Button, Container, Header, Icon, Popover, Select, SpaceBetween, TagEditor } from "@cloudscape-design/components";
 import IdeaForm from "../../components/form";
 import {withRouter} from "../../navigation/navigation-utils";
 import Utils from "../../common/utils";
@@ -369,7 +369,7 @@ class ConfigureProject extends Component<ConfigureProjectProps, ConfigureProject
         });
       });
     }
-
+ 
     getPermissionProfileOptions(): OptionDefinition[] {
       const permissionProfiles = Array.from(this.state.permissionProfiles.values());
       return permissionProfiles.map(profile => {
@@ -473,6 +473,78 @@ class ConfigureProject extends Component<ConfigureProjectProps, ConfigureProject
           />
         </SpaceBetween>
     }
+
+    buildTagsParam(): React.ReactElement {
+      
+      return <SpaceBetween size="m">
+        <TagEditor
+          tags={(this.state.project?.tags ||[]).map(tag => ({
+            key: tag.key || '',  
+            value: tag.value || '',
+            existing: false,
+            markedForRemoval: false
+          }))}
+          tagLimit={20}
+          onChange={(event) => {
+            let tags: any[] = []
+
+            for (let i: number = 0; i < event.detail.tags.length; i++) {
+              let tag: any = event.detail.tags[i];
+              if (tag.markedForRemoval) {
+                continue
+              }
+              
+              tags.push({
+                key: tag.key,
+                value: tag.value,
+                existing: false              
+              })
+            }
+            
+            this.setState(prevState => ({
+                project: {
+                    ...prevState.project,
+                    tags: tags 
+                }
+            }))
+          }}
+          i18nStrings={{
+              keyPlaceholder: "Enter key",
+              valuePlaceholder: "Enter value",
+              addButton: "Add new tag",
+              removeButton: "Remove",
+              undoButton: "Undo",
+              undoPrompt: "This tag will be removed upon saving changes",
+              loading: "Loading tags that are associated with this resource",
+              keyHeader: "Key",
+              valueHeader: "Value",
+              optional: "optional",
+              keySuggestion: "Custom tag key",
+              valueSuggestion: "Custom tag value",
+              emptyTags: "No tags associated with the resource.",
+              tooManyKeysSuggestion: "You have more keys than can be displayed",
+              tooManyValuesSuggestion: "You have more values than can be displayed",
+              keysSuggestionLoading: "Loading tag keys",
+              keysSuggestionError: "Tag keys could not be retrieved",
+              valuesSuggestionLoading: "Loading tag values",
+              valuesSuggestionError: "Tag values could not be retrieved",
+              emptyKeyError: "You must specify a tag key",
+              maxKeyCharLengthError: "The maximum number of characters you can use in a tag key is 128.",
+              maxValueCharLengthError: "The maximum number of characters you can use in a tag value is 256.",
+              duplicateKeyError: "You must specify a unique tag key.",
+              invalidKeyError: "Invalid key. Keys can only contain alphanumeric characters, spaces and any of the following: _.:/=+@-",
+              invalidValueError: "Invalid value. Values can only contain alphanumeric characters, spaces and any of the following: _.:/=+@-",
+              awsPrefixError: "Cannot start with aws:",
+              tagLimit: (availableTags) => (availableTags === 1 ? "You can add up to 1 more tag." : "You can add up to " + availableTags + " more tags."),
+              tagLimitReached: (tagLimit) => (tagLimit === 1 ? "You have reached the limit of 1 tag." : "You have reached the limit of " + tagLimit + " tags."),
+              tagLimitExceeded: (tagLimit) => (tagLimit === 1 ? "You have exceeded the limit of 1 tag." : "You have exceeded the limit of " + tagLimit + " tags."),
+              enteredKeyLabel: (key) => 'Use "' + key + '"',
+              enteredValueLabel: (value) => 'Use "' + value + '"',
+          }}
+        />
+      </SpaceBetween>
+    }
+    
 
     buildGroupParam(): React.ReactElement {
       return <SpaceBetween size="m">
@@ -1142,7 +1214,6 @@ class ConfigureProject extends Component<ConfigureProjectProps, ConfigureProject
         if (this.state.isUpdate) {
             createOrUpdate = async (request: any) => {
                 // Only admin can update project
-
                 const updates = [];
 
                 if (this.isAdmin()) {
@@ -1178,10 +1249,11 @@ class ConfigureProject extends Component<ConfigureProjectProps, ConfigureProject
             scripts = this.retrieveScripts(values)
             dot.set("scripts", scripts, values)
         }
+        values.tags = this.state.project?.tags;            
         createOrUpdate({
             project: values,
             filesystem_names: combinedFilesystemNames,
-        })
+          })
             .then(() => {
                 this.props.navigate("/cluster/projects")
             })
@@ -1243,6 +1315,11 @@ class ConfigureProject extends Component<ConfigureProjectProps, ConfigureProject
                               {this.buildUserParam()}
                             </SpaceBetween>
                           </Container>
+                          <Container header={<Header variant="h3">Tags</Header>}>
+                            <SpaceBetween size="m">
+                              {this.buildTagsParam()}
+                            </SpaceBetween>
+                          </Container> 
                           <SpaceBetween size="m" direction="vertical" alignItems="end">
                             <SpaceBetween size="m" direction="horizontal">
                                 <Button variant="normal" onClick={() => this.props.navigate("/cluster/projects")}>Cancel</Button>

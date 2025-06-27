@@ -2,6 +2,8 @@ administrator_email: "{{administrator_email}}"
 administrator_username: "{{administrator_username}}"
 cluster_name: "{{cluster_name}}"
 cluster_s3_bucket: "{{cluster_name}}-cluster-{{aws_region}}-{{aws_account_id}}"
+staging_bucket_name: "{{ staging_bucket_name }}"
+installation_scripts_uri: "s3://{{ staging_bucket_name }}/releases/{{ version }}/res-installation-scripts.tar.gz"
 encoding: utf-8
 home_dir: "{{internal_mount_dir}}/{{cluster_name}}"
 locale: "{{ cluster_locale }}"
@@ -130,6 +132,10 @@ iam:
   ec2_managed_policy_arns: []
   # IAM permission boundary policy ARN provided below will be attached to all IAM roles created in RES.
   permission_boundary_arn: {{ permission_boundary_arn if permission_boundary_arn else '~'}}
+  # IAM resource prefix provided below will be used for all IAM resources created in RES.
+  iam_resource_prefix: {{ iam_resource_prefix if iam_resource_prefix else '~' }}
+  # IAM resource path provided below will be used for all IAM resources created in RES.
+  iam_resource_path: {{ iam_resource_path if iam_resource_path else '~'}}
 
 load_balancers:
   external_alb:

@@ -9,9 +9,10 @@
 #  OR CONDITIONS OF ANY KIND, express or implied. See the License for the specific language governing permissions
 #  and limitations under the License.
 
+from ideadatamodel import constants
+
 import ideasdk.app
 from ideasdk.auth import TokenService, TokenServiceOptions
-from ideadatamodel import constants
 from ideasdk.client.evdi_client import EvdiClient
 from ideasdk.server import SocaServerOptions
 from ideasdk.utils import GroupNameHelper
@@ -33,9 +34,33 @@ from ideaclustermanager.app.snapshots.snapshots_service import SnapshotsService
 from ideaclustermanager.app.shared_filesystem.shared_filesystem_service import SharedFilesystemService
 
 from res.clients.ad_sync import ad_sync_client
+from res.utils.sssd_utils import SSSDConfigEventSubscriber
 import res.exceptions as exceptions
 
+from ideabootstrap.file_system import shared_storage
+from ideabootstrap.ssh import restrict_ssh, disable_ssh
+from ideabootstrap.sudo import sudoer_secure_path
+from ideabootstrap.common import (
+    cognito_modules,
+    idea_certs,
+    amazon_ssm_agent,
+    idea_proxy,
+    network_interface_tags,
+    ebs_volume_tags,
+    chronyd,
+    idea_service_account,
+    cloudwatch_agent,
+    motd
+)
+from ideabootstrap import bootstrap_common
+from ideabootstrap.common.constants import (
+    INSTANCE_READY_LOCK
+)
+
+
 from typing import Optional
+import os
+import time
 
 
 class ClusterManagerApp(ideasdk.app.SocaApp):
@@ -51,6 +76,9 @@ class ClusterManagerApp(ideasdk.app.SocaApp):
                  **kwargs):
 
         api_path_prefix = context.config().get_string('cluster-manager.server.api_context_path', f'/{context.module_id()}')
+        enable_tls = context.config().get_bool('cluster-manager.server.enable_tls', False)
+        cert_key, cert_file = idea_certs.get_cert_key_and_file()
+
         super().__init__(
             context=context,
             config_file=config_file,
@@ -63,14 +91,75 @@ class ClusterManagerApp(ideasdk.app.SocaApp):
                     api_path_prefix
                 ],
                 enable_http_file_upload=True,
+                enable_tls=enable_tls,
+                tls_certificate_file=cert_file,
+                tls_key_file=cert_key,
                 enable_metrics=True
             ),
             **kwargs
         )
         self.context = context
+        self.logger = self.context.logger()
         self.web_portal: Optional[WebPortal] = None
 
-    def app_initialize(self):
+    def run_bootstrap(self):
+        if os.path.isfile(INSTANCE_READY_LOCK):
+            self.logger.info(f"Configuration was already completed, skipping. INSTANCE_READY_LOCK file: {INSTANCE_READY_LOCK}")
+            return
+
+        bootstrap_common.set_reboot_required("no")
+
+        # Configure SSH and Sudoer
+        restrict_ssh.configure()
+        disable_ssh.configure()
+        sudoer_secure_path.configure()
+
+        if os.environ.get('IDEA_HTTPS_PROXY'):
+            idea_proxy.set_proxy()
+
+        idea_service_account.setup_account()
+        amazon_ssm_agent.configure()
+        cloudwatch_agent.setup()
+
+        network_interface_tags.setup()
+        ebs_volume_tags.setup()
+
+        bootstrap_common.disable_se_linux()
+        chronyd.configure()
+        bootstrap_common.disable_ulimit()
+        bootstrap_common.disable_strict_host_check()
+        motd.disable_update()
+
+        messages = [f'{os.environ.get("IDEA_MODULE_NAME", "")} (v{os.environ.get("IDEA_MODULE_VERSION", "")}), Cluster: {os.environ.get("IDEA_CLUSTER_NAME", "")}']
+        motd.update(messages)
+
+        # Mount shared storage
+        shared_storage.configure()
+
+        idea_certs.setup()
+
+        # Cognito Setup
+        cognito_modules.configure()
+
+        timestamp = str(int(time.time()))
+        with open(INSTANCE_READY_LOCK, 'w') as f:
+            f.write(timestamp)
+
+        bootstrap_common.check_reboot_required()
+
+    def soca_app_warmup(self):
+        self.run_bootstrap()
+
+    def soca_app_initialize(self):
+        # Start SSSD service
+        sssd_config_event_subscriber = SSSDConfigEventSubscriber(
+            self.logger,
+            self.context.module_id(),
+        )
+        self.context.config().subscribe(
+            sssd_config_event_subscriber
+        )
+        sssd_config_event_subscriber.restart_sssd_service()
 
         # group name helper
         self.context.group_name_helper = GroupNameHelper(self.context)
@@ -184,10 +273,7 @@ class ClusterManagerApp(ideasdk.app.SocaApp):
         )
         self.web_portal.initialize()
 
-        # Start SSSD service
-        self.context.config().restart_sssd()
-
-    def app_start(self):
+    def soca_app_start(self):
         if self.context.ad_automation_agent is not None:
             self.context.ad_automation_agent.start()
 
@@ -205,7 +291,7 @@ class ClusterManagerApp(ideasdk.app.SocaApp):
         finally:
             self.context.distributed_lock().release(key='initialize-defaults')
 
-    def app_stop(self):
+    def soca_app_stop(self):
 
         if self.context.ad_automation_agent is not None:
             self.context.ad_automation_agent.stop()

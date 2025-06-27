@@ -2,16 +2,19 @@
 #  SPDX-License-Identifier: Apache-2.0
 
 import configparser
+import copy
 import json
 import os
 import subprocess
 from logging import Logger
 from pathlib import Path
 from string import Template
-from typing import Any, Dict
+from typing import Dict, Optional
 
-from res.constants import MODULE_ID_VIRTUAL_DESKTOP_APP
-from res.resources import cluster_settings
+from res.constants import MODULE_NAME_CLUSTER_MANAGER, MODULE_NAME_VIRTUAL_DESKTOP_APP
+from res.resources import ad_automation, cluster_settings
+from res.resources.dynamodb.dynamodb_stream_subscriber import IDynamoDBStreamSubscriber
+from res.utils import logging_utils
 
 DIRECTORY_SERVICE_KEY_PREFIX = "directoryservice."
 TLS_CERTIFICATE_SECRET_KEY = f"{DIRECTORY_SERVICE_KEY_PREFIX}tls_certificate_secret_arn"
@@ -96,8 +99,6 @@ ldap_id_mapping = $sssd_ldap_id_mapping
 use_fully_qualified_names = false
 fallback_homedir = /home/%u
 
-enumerate = true
-
 sudo_provider = none
 ldap_sasl_authid = $ldap_sasl_authid"""
 )
@@ -147,7 +148,6 @@ ldap_group_uuid = objectGUID
 
 ldap_default_bind_dn = $service_account_dn
 
-enumerate = true
 ldap_id_mapping = $sssd_ldap_id_mapping
 
 cache_credentials = true
@@ -159,6 +159,8 @@ fallback_homedir = /home/%u"""
 OPEN_LDAP_DIR = "/etc/openldap/"
 TLS_CA_CERT_DIR = f"{OPEN_LDAP_DIR}cacerts/"
 TLS_CA_CERT_FILE_PATH = f"{TLS_CA_CERT_DIR}openldap-server.pem"
+
+logger = logging_utils.get_logger("sssd")
 
 
 def is_sssd_setting(key: str) -> bool:
@@ -176,11 +178,34 @@ def validate_additional_sssd_configs(additional_sssd_configs: Dict[str, str]) ->
             )
 
 
-def start_sssd(sssd_settings: Dict[str, str], logger: Logger) -> None:
+def get_sssd_settings() -> Optional[Dict[str, str]]:
+    sssd_settings = {}
+    for k, v in SSSD_SETTING_KEY_MAPPINGS.items():
+        try:
+            if v in [
+                SERVICE_ACCOUNT_DN_SECRET_KEY,
+                SERVICE_ACCOUNT_CREDENTIALS_KEY,
+                TLS_CERTIFICATE_SECRET_KEY,
+            ]:
+                sssd_settings[k] = cluster_settings.get_secret(v)
+            else:
+                sssd_settings[k] = cluster_settings.get_setting(v)
+
+            if not sssd_settings[k] and v != TLS_CERTIFICATE_SECRET_KEY:
+                # Required SSSD related settings are not available yet
+                return None
+        except Exception as e:
+            logger.error(f"Failed to retrieve SSSD related settings: {e}")
+            return None
+
+    return sssd_settings
+
+
+def start_sssd(sssd_settings: Dict[str, str]) -> None:
     if not sssd_settings:
         # Required SSSD settings are not provided yet. There's no need to start the SSSD service.
         return
-    _configure_sssd(sssd_settings, logger)
+    _configure_sssd(sssd_settings)
 
     logger.info("Starting SSSD service")
 
@@ -189,13 +214,16 @@ def start_sssd(sssd_settings: Dict[str, str], logger: Logger) -> None:
     logger.info("Started SSSD service successfully")
 
 
-def restart_sssd(
-    sssd_settings: Dict[str, str], logger: Logger, module_id: str = None
-) -> None:
+def restart_sssd(sssd_settings: Dict[str, str] = None) -> None:
+    if not sssd_settings:
+        sssd_settings = get_sssd_settings()
+
     if not sssd_settings:
         # Required SSSD settings are not provided yet. There's no need to start the SSSD service.
+        logger.info("Required SSSD settings are not configured")
         return
-    _configure_sssd(sssd_settings, logger, module_id)
+
+    _configure_sssd(sssd_settings)
 
     logger.info("Restarting SSSD service")
 
@@ -206,64 +234,42 @@ def restart_sssd(
     logger.info("Restarted SSSD service successfully")
 
 
-def _configure_sssd(
-    sssd_settings: Dict[str, str], logger: Logger, module_id: str = None
-) -> None:
-    _configure_ldap(sssd_settings, logger)
+def _configure_sssd(sssd_settings: Dict[str, str]) -> None:
+    _configure_ldap(sssd_settings)
 
     logger.info("Updating SSSD config")
 
-    _construct_sssd_configs(sssd_settings, logger, module_id)
+    _construct_sssd_configs(sssd_settings)
 
     logger.info("Updated SSSD config successfully")
 
 
 def _construct_sssd_configs(
-    sssd_settings: Dict[str, str], logger: Logger, module_id: str = None
+    sssd_settings: Dict[str, str],
 ) -> None:
     sssd_dir = "/etc/sssd"
     sssd_file_path = f"{sssd_dir}/sssd.conf"
-    disable_ad_join = cluster_settings.get_setting(DISABLE_AD_JOIN_KEY) == "true"
+    disable_ad_join = (
+        cluster_settings.get_setting(DISABLE_AD_JOIN_KEY) == "true"
+        or os.environ.get("IDEA_MODULE_NAME") != MODULE_NAME_VIRTUAL_DESKTOP_APP
+    )
+    domain_section = f'domain/{sssd_settings["domain_name"]}'
 
-    config_origin = configparser.ConfigParser()
-    config_origin.read(sssd_file_path)
-    config_sections = config_origin.sections()
+    sasl_authid_key = "ldap_sasl_authid"
+    if not disable_ad_join:
+        if is_in_active_directory() and os.path.exists(sssd_file_path):
+            # Keep the special dynamic field ldap_sasl_authid from the old SSSD config if current host is joining AD
+            config_origin = configparser.ConfigParser()
+            config_origin.read(sssd_file_path)
+            sssd_settings[sasl_authid_key] = config_origin[domain_section].get(
+                sasl_authid_key
+            )
+        if not sssd_settings.get(sasl_authid_key):
+            sssd_settings[sasl_authid_key] = ad_automation.get_authorization().get(
+                "hostname"
+            )
 
-    # Cognito user launched VDI SSSD Config cannot be updated when disable_ad_join is false and AD parameters not provided
-    if (
-        module_id == MODULE_ID_VIRTUAL_DESKTOP_APP
-        and not disable_ad_join
-        and not config_sections
-    ):
-        error_msg = "SSSD Config cannot be updated for Congito user launched VDI while disable_ad_join is false and AD parameters not provided"
-        logger.error(error_msg)
-        raise Exception(error_msg)
-
-    curr_host_join_ad = False
-    # Keep the special dynamic field ldap_sasl_authid from the old SSSD config if current host is joining AD
-    # This parameter could only be retrieved from the old SSSD config if exists
-    # ldap_sasl_authid will be populated back if SSSD_JOIN_AD_CONFIG_TEMPLATE is used
-    sasl_authid = "ldap_sasl_authid"
-    for section in config_sections:
-        if (
-            section.startswith("domain/")
-            and config_origin[section]["id_provider"] == "ad"
-        ):
-            sssd_settings[sasl_authid] = config_origin[section][sasl_authid]
-            curr_host_join_ad = True
-            break
-
-    # Connect AD VDI SSSD config cannot be updated to join AD SSSD config (disable_ad_join = false)
-    if (
-        not curr_host_join_ad
-        and not disable_ad_join
-        and module_id == MODULE_ID_VIRTUAL_DESKTOP_APP
-    ):
-        error_msg = "SSSD config cannot be updated for connect AD VDI while disable_ad_join is false"
-        logger.error(error_msg)
-        raise Exception(error_msg)
-    # Use join AD template if for join-AD VDI and disable_ad_join is false
-    if curr_host_join_ad and not disable_ad_join:
+        # Use join AD template if for join-AD VDI and disable_ad_join is false
         sssd_conf_content = SSSD_JOIN_AD_CONFIG_TEMPLATE.substitute(**sssd_settings)
     # Use connect AD template for VDI when disable_ad_join is true and other infra host
     else:
@@ -271,14 +277,13 @@ def _construct_sssd_configs(
 
     config_override = configparser.ConfigParser()
     config_override.read_string(sssd_conf_content)
-    new_domain_section = f'domain/{sssd_settings["domain_name"]}'
 
     additional_sssd_configs = json.loads(
         sssd_settings.get("additional_sssd_configs", "{}")
     )
     # Additional SSSD configs will be merged to the AD domain specific section by default
     for key, value in additional_sssd_configs.items():
-        config_override[new_domain_section][key] = value
+        config_override[domain_section][key] = value
 
     Path(sssd_dir).mkdir(parents=True, exist_ok=True)
     with open(sssd_file_path, "w") as configfile:
@@ -287,7 +292,7 @@ def _construct_sssd_configs(
 
     os.chmod(sssd_file_path, 0o600)
 
-    if config_override[new_domain_section]["id_provider"] == "ldap":
+    if disable_ad_join:
         service_account_credentials_secret = json.loads(
             sssd_settings["service_account_credentials"]
         )
@@ -305,7 +310,20 @@ def _construct_sssd_configs(
             )
 
 
-def _configure_ldap(sssd_settings: Dict[str, str], logger: Logger) -> None:
+def is_in_active_directory() -> bool:
+    cmd = [
+        "realm",
+        "list",
+    ]
+    try:
+        result = subprocess.run(cmd, check=True, capture_output=True, text=True)
+        return len(result.stdout.rstrip()) > 0
+    except subprocess.CalledProcessError as e:
+        logger.error(f"Failed to check whether the VDI has joined AD: {e.stderr}")
+        return False
+
+
+def _configure_ldap(sssd_settings: Dict[str, str]) -> None:
     logger.info("Updating ldap config")
 
     sssd_settings["tls_ca_cert_dir"] = TLS_CA_CERT_DIR
@@ -323,3 +341,46 @@ def _configure_ldap(sssd_settings: Dict[str, str], logger: Logger) -> None:
             f.write(sssd_settings["tls_certificate"].rstrip())
 
     logger.info("Updated ldap config successfully")
+
+
+class SSSDConfigEventSubscriber(IDynamoDBStreamSubscriber):
+    def __init__(
+        self,
+        logger_: Logger = None,
+        module_id: str = None,
+    ) -> None:
+        self.logger = logger_ if logger_ else logger
+        self.module_id = module_id
+        self.sssd_settings = None
+
+    def on_create(self, entry: Dict):
+        self.restart_sssd_service()
+
+    def on_update(self, old_entry: Dict, new_entry: Dict):
+        value = new_entry.get("value")
+        if value != old_entry.get("value"):
+            self.restart_sssd_service()
+
+    def on_delete(self, entry: Dict):
+        self.restart_sssd_service()
+
+    def is_entry_monitored(self, entry: Dict) -> bool:
+        return is_sssd_setting(entry.get("key"))
+
+    @property
+    def subscriber_name(self) -> Optional[str]:
+        return "sssd"
+
+    def restart_sssd_service(self) -> None:
+        sssd_settings = get_sssd_settings()
+        if sssd_settings == self.sssd_settings:
+            # SSSD config isn't changed. No need to restart SSSD
+            return
+
+        self.sssd_settings = copy.deepcopy(sssd_settings)
+        try:
+            restart_sssd(sssd_settings)
+        except Exception as e:
+            # Avoid throwing exceptions in the long-running application.
+            # The application should continue monitoring and trying to restart SSSD upon SSSD config updates.
+            self.logger.error(f"Failed to restart SSSD: {e}")

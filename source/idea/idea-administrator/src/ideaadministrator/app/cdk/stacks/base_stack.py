@@ -10,17 +10,20 @@
 #  and limitations under the License.
 
 from ideaadministrator.app.cdk.constructs import (
-    SocaBaseConstruct
+    SocaBaseConstruct,
+    IAMResourcePrefixAspect,
+    IAMResourcePathAspect
 )
 from ideadatamodel import constants, exceptions
 from ideaadministrator.app_context import AdministratorContext
-from ideasdk.utils import Utils, GroupNameHelper
+from ideasdk.utils import Utils
 
 import constructs
 import aws_cdk as cdk
 from aws_cdk import (
     aws_cognito as cognito,
-    aws_iam as iam
+    aws_iam as iam,
+    Aspects
 )
 
 from typing import Optional, Dict, List
@@ -52,6 +55,7 @@ class IdeaBaseStack(SocaBaseConstruct):
         self.module_id = module_id
         self.aws_region = aws_region
         self.deployment_id = deployment_id
+        self.account_id = env.account
 
         super().__init__(self.context, module_id)
 
@@ -67,7 +71,12 @@ class IdeaBaseStack(SocaBaseConstruct):
         tags = {**custom_tags_dict, **tags}
 
         cdk_toolkit_qualifier = Utils.shake_256(cluster_name, 5)
+        self.cdk_toolkit_qualifier = cdk_toolkit_qualifier
         cluster_s3_bucket = self.context.config().get_string('cluster.cluster_s3_bucket', required=True)
+
+        permission_boundary_arn = self.context.config().get_string('cluster.iam.permission_boundary_arn')
+
+        self.partition ='aws-us-gov' if self.aws_region.startswith('us-gov-') else 'aws'
 
         self.stack = cdk.Stack(
             scope,
@@ -80,14 +89,25 @@ class IdeaBaseStack(SocaBaseConstruct):
             synthesizer=cdk.DefaultStackSynthesizer(
                 qualifier=cdk_toolkit_qualifier,
                 bucket_prefix='cdk/',
-                file_assets_bucket_name=cluster_s3_bucket
+                file_assets_bucket_name=cluster_s3_bucket,
+                deploy_role_arn=f"{self.get_cdk_role_arn(role_name='deploy')}",
+                lookup_role_arn=f"{self.get_cdk_role_arn(role_name='lookup')}",
+                image_asset_publishing_role_arn=f"{self.get_cdk_role_arn(role_name='image-publishing')}",
+                file_asset_publishing_role_arn=f"{self.get_cdk_role_arn(role_name='file-publishing')}",
+                cloud_formation_execution_role=f"{self.get_cdk_role_arn(role_name='cfn-exec')}",
             )
         )
-        
-        permission_boundary_arn = self.context.config().get_string('cluster.iam.permission_boundary_arn')
-        if (permission_boundary_arn):
+
+        if permission_boundary_arn:
             permission_boundary_policy = iam.ManagedPolicy.from_managed_policy_arn(self.stack, 'PermissionBoundaryPolicy', permission_boundary_arn)
             iam.PermissionsBoundary.of(self.stack).apply(permission_boundary_policy)
+
+        if self.iam_resource_prefix:
+            Aspects.of(self.stack).add(IAMResourcePrefixAspect(prefix=self.iam_resource_prefix))
+
+        if self.iam_resource_path != "/":
+            Aspects.of(self.stack).add(IAMResourcePathAspect(path=self.iam_resource_path))
+
 
     def get_target_group_name(self, identifier: str) -> str:
         # target group name cannot be more than 32 characters
@@ -140,3 +160,7 @@ class IdeaBaseStack(SocaBaseConstruct):
             f'{self.cluster_name}-user-pool',
             self.context.config().get_string('identity-provider.cognito.user_pool_id', required=True)
         )
+
+    def get_cdk_role_arn(self, role_name) -> str:
+        return f"arn:{self.partition}:iam::{self.account_id}:role{self.iam_resource_path}{self.iam_resource_prefix}cdk-{self.cdk_toolkit_qualifier}-{role_name}-role-{self.aws_region}"
+

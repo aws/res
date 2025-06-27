@@ -182,6 +182,8 @@ class Installer(Construct):
                 "http_proxy": http_proxy,
                 "https_proxy": https_proxy,
                 "no_proxy": no_proxy,
+                "iam_resource_prefix": self.params.iam_resource_prefix_string,
+                "iam_resources_path": self.params.iam_resource_path_string,
             },
             lambda_layer=lambda_layers[SHARED_RES_LIBRARY_LAMBDA_LAYER_NAME],
         )

@@ -15,6 +15,8 @@ from ideadatamodel import (
 from ideasdk.bootstrap import BootstrapUserDataBuilder
 from ideasdk.utils import Utils
 
+import res.constants as res_constants
+
 import ideaadministrator
 from ideaadministrator.app.cdk.stacks import IdeaBaseStack
 from ideaadministrator.app.cdk.constructs import (
@@ -123,7 +125,7 @@ class BastionHostStack(IdeaBaseStack):
         else:
              ebs_kms_key = kms.Alias.from_alias_name(scope=self.stack, id=f'ebs-kms-key-default', alias_name='alias/aws/ebs')
         cluster_settings['kms_key_id'] = ebs_kms_key.key_id
-        
+
         https_proxy = self.context.config().get_string('cluster.network.https_proxy', required=False, default='')
         proxy_config = {}
         if Utils.is_not_empty(https_proxy):
@@ -137,7 +139,7 @@ class BastionHostStack(IdeaBaseStack):
             aws_region=self.aws_region,
             bootstrap_package_uri=self.bootstrap_package_uri,
             install_commands=[
-                '/bin/bash bastion-host/setup.sh'
+                f'/bin/bash scripts/infrastructure-host/install.sh -p false -c {res_constants.MODULE_NAME_BASTION_HOST} -m {res_constants.MODULE_ID_BASTION_HOST} -e {self.cluster_name}'
             ],
             proxy_config=proxy_config,
             base_os=base_os,

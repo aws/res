@@ -45,15 +45,17 @@ export const EditADDomainForm = (props: EditADDomainFormProps) => {
     // When component mounts - prepopulate form with existing directoryservice module settings data
     useEffect(() => {
         const fetchExistingAdDomainData = async () => {
-            const adDomain = await AppContext.get().client().clusterSettings().getModuleSettings({module_id: "directoryservice"});
-            const initialFormData = initializeFormData(adDomain.settings);
-            setFormData(initialFormData);
-            const disableADJoin = initialFormData.disable_ad_join;
-            const ladpIdMapping = initialFormData.sssd.ldap_id_mapping;
-            const additionConfigsDict = initialFormData.sssd.additional_sssd_configs
-                ? JSON.parse(initialFormData.sssd.additional_sssd_configs)
-                : {};
-            initializeAdditionalConfigs(additionConfigsDict, disableADJoin, ladpIdMapping);
+            AppContext.get().client().clusterSettings().getModuleSettings({module_id: "directoryservice"})
+            .then((adDomain) => {
+                const initialFormData = initializeFormData(adDomain.settings);
+                setFormData(initialFormData);
+                const disableADJoin = initialFormData.disable_ad_join;
+                const ladpIdMapping = initialFormData.sssd.ldap_id_mapping;
+                const additionConfigsDict = initialFormData.sssd.additional_sssd_configs
+                    ? JSON.parse(initialFormData.sssd.additional_sssd_configs)
+                    : {};
+                initializeAdditionalConfigs(additionConfigsDict, disableADJoin, ladpIdMapping);
+            })
         }
         const initializeAdditionalConfigs = (additionalConfigsDict: any, disableADJoin: string, ladpIdMapping: string) => {
             const configsKeys = Object.keys(additionalConfigsDict);

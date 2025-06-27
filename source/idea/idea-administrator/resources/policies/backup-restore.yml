@@ -41,39 +41,6 @@ Statement:
 
 - Effect: Allow
   Action:
-  - storagegateway:DeleteVolume
-  - storagegateway:DescribeCachediSCSIVolumes
-  - storagegateway:DescribeStorediSCSIVolumes
-  Resource: arn:{{ context.aws_partition }}:storagegateway:*:*:gateway/*/volume/*
-
-- Effect: Allow
-  Action:
-  - storagegateway:DescribeGatewayInformation
-  - storagegateway:CreateStorediSCSIVolume
-  - storagegateway:CreateCachediSCSIVolume
-  Resource: arn:{{ context.aws_partition }}:storagegateway:*:*:gateway/*
-
-- Effect: Allow
-  Action:
-  - storagegateway:ListVolumes
-  Resource: arn:{{ context.aws_partition }}:storagegateway:*:*:*
-
-- Effect: Allow
-  Action:
-  - rds:DescribeDBInstances
-  - rds:DescribeDBSnapshots
-  - rds:ListTagsForResource
-  - rds:RestoreDBInstanceFromDBSnapshot
-  - rds:DeleteDBInstance
-  - rds:AddTagsToResource
-  - rds:DescribeDBClusters
-  - rds:RestoreDBClusterFromSnapshot
-  - rds:DeleteDBCluster
-  - rds:RestoreDBInstanceToPointInTime
-  Resource: '*'
-
-- Effect: Allow
-  Action:
   - elasticfilesystem:Restore
   - elasticfilesystem:CreateFilesystem
   - elasticfilesystem:DescribeFilesystems
@@ -98,8 +65,6 @@ Statement:
       - dynamodb.*.{{ context.aws_dns_suffix }}
       - ec2.*.{{ context.aws_dns_suffix }}
       - elasticfilesystem.*.{{ context.aws_dns_suffix }}
-      - rds.*.{{ context.aws_dns_suffix }}
-      - redshift.*.{{ context.aws_dns_suffix }}
 
 - Effect: Allow
   Action: kms:CreateGrant
@@ -114,11 +79,6 @@ Statement:
   - ebs:StartSnapshot
   - ebs:PutSnapshotBlock
   Resource: arn:{{ context.aws_partition }}:ec2:*::snapshot/*
-
-- Effect: Allow
-  Action:
-  - rds:CreateDBInstance
-  Resource: arn:{{ context.aws_partition }}:rds:*:*:db:*
 
 - Effect: Allow
   Action:
@@ -216,36 +176,11 @@ Statement:
   - dynamodb:RestoreTableFromAwsBackup
   Resource: arn:{{ context.aws_partition }}:dynamodb:*:*:table/*
 
-- Sid: GatewayRestorePermissions
-  Effect: Allow
-  Action:
-  - backup-gateway:Restore
-  Resource: arn:{{ context.aws_partition }}:backup-gateway:*:*:hypervisor/*
-
 - Effect: Allow
   Action:
   - cloudformation:CreateChangeSet
   - cloudformation:DescribeChangeSet
   Resource: arn:{{ context.aws_partition }}:cloudformation:*:*:stack/*/*
-
-- Effect: Allow
-  Action:
-  - redshift:RestoreFromClusterSnapshot
-  - redshift:RestoreTableFromClusterSnapshot
-  Resource:
-  - arn:{{ context.aws_partition }}:redshift:*:*:snapshot:*/*
-  - arn:{{ context.aws_partition }}:redshift:*:*:cluster:*
-
-- Effect: Allow
-  Action:
-  - redshift:DescribeClusters
-  Resource:
-  - arn:{{ context.aws_partition }}:redshift:*:*:cluster:*
-
-- Effect: Allow
-  Action:
-  - redshift:DescribeTableRestoreStatus
-  Resource: '*'
 
 - Effect: Allow
   Action:

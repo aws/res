@@ -5,6 +5,7 @@ from ideaclustermanager.app.shared_filesystem.object_storage_service import (
     ObjectStorageService,
 )
 from ideasdk.context import SocaContext
+from ideasdk.utils import Utils
 from ideadatamodel import (
     constants,
     CommonCreateFileSystemRequest,
@@ -1087,7 +1088,18 @@ class SharedFilesystemService:
                 if efs["LifeCycleState"] != "available":
                     continue
                 fs_id = efs["FileSystemId"]
-                efs_mt_response = efs_client.describe_mount_targets(FileSystemId=fs_id)
+                try:
+                    self.logger.info(f"Describing mount targets for {fs_id} using retry with backoff.")
+                    efs_mt_response = Utils.retry_with_backoff(
+                        fn=lambda: efs_client.describe_mount_targets(FileSystemId=fs_id),
+                        retries=5,
+                        backoff_in_seconds=5
+                    )
+                except exceptions.SocaException as e:
+                    if e.error_code == errorcodes.EXCEEDED_MAX_RETRIES:
+                        self.logger.error(f"EFS describe_mount_targets hitting throttling, failure after retries.")
+                    raise exceptions.general_exception(e.message)
+
                 if len(efs_mt_response["MountTargets"]) == 0:
                     continue
                 if (

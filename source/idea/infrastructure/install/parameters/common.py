@@ -15,6 +15,8 @@ class CommonKey(Key):
     CLIENT_IP = "ClientIp"
     CLIENT_PREFIX_LIST = "ClientPrefixList"
     IAM_PERMISSION_BOUNDARY = "IAMPermissionBoundary"
+    IAM_RESOURCE_PREFIX = "IAMResourcePrefix"
+    IAM_RESOURCE_PATH = "IAMResourcePath"
     VPC_ID = "VpcId"
     LOAD_BALANCER_SUBNETS = "LoadBalancerSubnets"
     INFRASTRUCTURE_HOST_SUBNETS = "InfrastructureHostSubnets"
@@ -99,6 +101,33 @@ class CommonParameters(Base):
         )
     )
 
+    iam_resource_prefix: str = Base.parameter(
+        Attributes(
+            id=CommonKey.IAM_RESOURCE_PREFIX,
+            type="String",
+            description=(
+                "You may provide an IAM resource prefix that will be attached to all IAM resources created in RES. "
+                "The prefix should end with hyphen ('-') and contain no slash ('/') character."
+            ),
+            allowed_pattern="^([a-zA-Z0-9][a-zA-Z0-9\-\_]{0,10}[\-])?$",
+            constraint_description="IAM resource prefix must contain only letters, numbers, hyphens, or underscores and end with a hyphen (-), and be less than or equal to 12 characters.",
+        )
+    )
+
+    iam_resource_path: str = Base.parameter(
+        Attributes(
+            id=CommonKey.IAM_RESOURCE_PATH,
+            type="String",
+            description=(
+                "You may provide an IAM resource path that will be attached to all IAM resources created in RES. "
+                "The path should start and end with slashes ('/') and be less than or equal to 512 characters. "
+                "It can contain multiple slashes ('/') between the start and end slashes ('/')."
+            ),
+            allowed_pattern="^(\/[a-zA-Z0-9\-\_\.\/]{0,510}\/)?$",
+            constraint_description="IAM resource path must start and end with '/', and be less than or equal to 512 characters.",
+        )
+    )
+
     infrastructure_host_ami: str = Base.parameter(
         Attributes(
             id=CommonKey.INFRASTRUCTURE_HOST_AMI,
@@ -155,6 +184,8 @@ class CommonParameters(Base):
         )
     )
 
+    iam_resource_prefix_string: str = ""
+    iam_resource_path_string: str = "/"
     load_balancer_subnets_string: Optional[str] = None
     infrastructure_host_subnets_string: Optional[str] = None
     dcv_session_private_subnets_string: Optional[str] = None
@@ -171,6 +202,8 @@ class CommonParameterGroups:
             CommonKey.CLIENT_PREFIX_LIST,
             CommonKey.INFRASTRUCTURE_HOST_AMI,
             CommonKey.IAM_PERMISSION_BOUNDARY,
+            CommonKey.IAM_RESOURCE_PREFIX,
+            CommonKey.IAM_RESOURCE_PATH,
         ],
     }
 
@@ -196,5 +229,11 @@ class CommonParameterLabels:
         },
         CommonKey.IAM_PERMISSION_BOUNDARY: {
             "default": f"{CommonKey.IAM_PERMISSION_BOUNDARY}{OPTIONAL_INPUT_PARAMETER_LABEL_SUFFIX}"
+        },
+        CommonKey.IAM_RESOURCE_PREFIX: {
+            "default": f"{CommonKey.IAM_RESOURCE_PREFIX}{OPTIONAL_INPUT_PARAMETER_LABEL_SUFFIX}"
+        },
+        CommonKey.IAM_RESOURCE_PATH: {
+            "default": f"{CommonKey.IAM_RESOURCE_PATH}{OPTIONAL_INPUT_PARAMETER_LABEL_SUFFIX}"
         },
     }

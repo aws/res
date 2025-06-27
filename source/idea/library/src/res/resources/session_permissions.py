@@ -1,19 +1,16 @@
 #  Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 #  SPDX-License-Identifier: Apache-2.0
 
-import logging
 from typing import Any, Dict, List, Optional
 
 import res.exceptions as exceptions
-from res.utils import table_utils
-
-logger = logging.getLogger(__name__)
-logger.addHandler(logging.StreamHandler())
-logger.setLevel(logging.INFO)
+from res.utils import logging_utils, table_utils
 
 SESSION_PERMISSION_TABLE_NAME = "vdc.controller.session-permissions"
 SESSION_PERMISSION_DB_HASH_KEY = "idea_session_id"
 SESSION_PERMISSION_DB_RANGE_KEY = "actor_name"
+
+logger = logging_utils.get_logger(SESSION_PERMISSION_TABLE_NAME)
 
 
 def get_session_permission(session_id: str, user: str) -> Optional[Dict[str, Any]]:

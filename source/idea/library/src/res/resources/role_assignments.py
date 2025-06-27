@@ -1,21 +1,18 @@
 #  Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 #  SPDX-License-Identifier: Apache-2.0
 
-import logging
 from typing import Any, Dict, List, Optional
 
 import res.constants as constants  # type: ignore
 from res.resources import accounts, projects  # type: ignore
-from res.utils import table_utils  # type: ignore
-
-logger = logging.getLogger(__name__)
-logger.addHandler(logging.StreamHandler())
-logger.setLevel(logging.INFO)
+from res.utils import logging_utils, table_utils  # type: ignore
 
 GSI_RESOURCE_KEY = "resource-key-index"
 GSI_RESOURCE_KEY_HASH_KEY = ROLE_ASSIGNMENTS_DB_RANGE_KEY = "resource_key"
 GSI_RESOURCE_KEY_RANGE_KEY = ROLE_ASSIGNMENTS_DB_HASH_KEY = "actor_key"
 ROLE_ASSIGNMENTS_TABLE_NAME = "authz.role-assignments"
+
+logger = logging_utils.get_logger(ROLE_ASSIGNMENTS_TABLE_NAME)
 
 
 def delete_role_assignment(role_assignment: Dict[str, str]) -> None:

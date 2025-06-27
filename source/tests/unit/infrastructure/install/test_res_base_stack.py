@@ -771,10 +771,16 @@ def test_cluster_settings_table_event_handler_role_creation(
             type=IAM_ROLE_CFN_TYPE,
             props={
                 "Properties": {
+                    "Path": res_base_stack.nested_stack.resolve(
+                        res_base_stack.parameters.iam_resource_path_string
+                    ),
                     "RoleName": {
                         "Fn::Join": [
                             "",
                             [
+                                res_base_stack.nested_stack.resolve(
+                                    res_base_stack.parameters.iam_resource_prefix_string
+                                ),
                                 res_base_stack.nested_stack.resolve(
                                     res_base_stack.cluster_name
                                 ),
@@ -822,164 +828,171 @@ def test_cluster_settings_table_event_handler_role_policy_creation(
     assert (
         cluster_settings_table_event_handler_role_policy is not None
     ), "Expected to find ClusterSettingsTableEventHandlerRolePolicy resource"
-    cluster_settings_table_event_handler_role_policy_resource = (
-        res_base_template.find_resources(
-            type=IAM_ROLE_POLICY_CFN_TYPE,
-            props={
-                "Properties": {
-                    "PolicyDocument": {
-                        "Statement": [
-                            {
-                                "Action": "logs:CreateLogGroup",
-                                "Effect": "Allow",
-                                "Resource": "*",
-                                "Sid": "CloudWatchLogsPermissions",
-                            },
-                            {
-                                "Action": [
-                                    "logs:CreateLogStream",
-                                    "logs:PutLogEvents",
-                                    "logs:DeleteLogStream",
-                                ],
-                                "Effect": "Allow",
-                                "Resource": "*",
-                                "Sid": "CloudWatchLogStreamPermissions",
-                            },
-                            {
-                                "Action": [
-                                    "dynamodb:GetItem",
-                                    "dynamodb:PutItem",
-                                    "dynamodb:DeleteItem",
-                                ],
-                                "Effect": "Allow",
-                                "Resource": {
-                                    "Fn::Join": [
-                                        "",
-                                        [
-                                            "arn:",
-                                            {"Ref": "AWS::Partition"},
-                                            ":dynamodb:",
-                                            {"Ref": "AWS::Region"},
-                                            ":",
-                                            {"Ref": "AWS::AccountId"},
-                                            ":table/",
-                                            res_base_stack.nested_stack.resolve(
-                                                res_base_stack.cluster_name
-                                            ),
-                                            ".ad-sync.distributed-lock",
-                                        ],
-                                    ]
-                                },
-                                "Sid": "ADSyncLockTablePermissions",
-                            },
-                            {
-                                "Action": [
-                                    "dynamodb:Query",
-                                    "dynamodb:Scan",
-                                    "dynamodb:UpdateItem",
-                                    "dynamodb:PutItem",
-                                ],
-                                "Effect": "Allow",
-                                "Resource": {
-                                    "Fn::Join": [
-                                        "",
-                                        [
-                                            "arn:",
-                                            {"Ref": "AWS::Partition"},
-                                            ":dynamodb:",
-                                            {"Ref": "AWS::Region"},
-                                            ":",
-                                            {"Ref": "AWS::AccountId"},
-                                            ":table/",
-                                            res_base_stack.nested_stack.resolve(
-                                                res_base_stack.cluster_name
-                                            ),
-                                            ".ad-sync.status",
-                                        ],
-                                    ]
-                                },
-                                "Sid": "ADSyncStatusTablePermissions",
-                            },
-                            {
-                                "Action": [
-                                    "ecs:RunTask",
-                                    "ecs:StopTask",
-                                    "ecs:ListTasks",
-                                ],
-                                "Condition": {
-                                    "ArnEquals": {
-                                        "ecs:cluster": {
-                                            "Fn::Join": [
-                                                "",
-                                                [
-                                                    "arn:",
-                                                    {"Ref": "AWS::Partition"},
-                                                    ":ecs:",
-                                                    {"Ref": "AWS::Region"},
-                                                    ":",
-                                                    {"Ref": "AWS::AccountId"},
-                                                    ":cluster/",
-                                                    res_base_stack.nested_stack.resolve(
-                                                        res_base_stack.cluster_name
-                                                    ),
-                                                    "-ad-sync-cluster",
-                                                ],
-                                            ]
-                                        }
-                                    }
-                                },
-                                "Effect": "Allow",
-                                "Resource": "*",
-                            },
-                            {
-                                "Action": "iam:PassRole",
-                                "Effect": "Allow",
-                                "Resource": {
-                                    "Fn::Join": [
-                                        "",
-                                        [
-                                            "arn:",
-                                            {"Ref": "AWS::Partition"},
-                                            ":iam::",
-                                            {"Ref": "AWS::AccountId"},
-                                            ":role/",
-                                            res_base_stack.nested_stack.resolve(
-                                                res_base_stack.cluster_name
-                                            ),
-                                            "-ad-sync-task-role",
-                                        ],
-                                    ]
-                                },
-                            },
-                            {
-                                "Action": "ec2:DescribeSecurityGroups",
-                                "Effect": "Allow",
-                                "Resource": "*",
-                            },
-                        ]
-                    },
-                    "PolicyName": {
-                        "Fn::Join": [
-                            "",
-                            [
-                                res_base_stack.nested_stack.resolve(
-                                    res_base_stack.cluster_name
-                                ),
-                                "-cluster-settings-table-event-handler-role-policy",
-                            ],
-                        ]
-                    },
-                    "Roles": [
+    cluster_settings_table_event_handler_role_policy_resource = res_base_template.find_resources(
+        type=IAM_ROLE_POLICY_CFN_TYPE,
+        props={
+            "Properties": {
+                "PolicyDocument": {
+                    "Statement": [
                         {
-                            "Ref": util.get_logical_id(
-                                res_base_stack.nested_stack,
-                                ["ClusterSettingsTableEventHandlerRole"],
-                            )
-                        }
-                    ],
+                            "Action": "logs:CreateLogGroup",
+                            "Effect": "Allow",
+                            "Resource": "*",
+                            "Sid": "CloudWatchLogsPermissions",
+                        },
+                        {
+                            "Action": [
+                                "logs:CreateLogStream",
+                                "logs:PutLogEvents",
+                                "logs:DeleteLogStream",
+                            ],
+                            "Effect": "Allow",
+                            "Resource": "*",
+                            "Sid": "CloudWatchLogStreamPermissions",
+                        },
+                        {
+                            "Action": [
+                                "dynamodb:GetItem",
+                                "dynamodb:PutItem",
+                                "dynamodb:DeleteItem",
+                            ],
+                            "Effect": "Allow",
+                            "Resource": {
+                                "Fn::Join": [
+                                    "",
+                                    [
+                                        "arn:",
+                                        {"Ref": "AWS::Partition"},
+                                        ":dynamodb:",
+                                        {"Ref": "AWS::Region"},
+                                        ":",
+                                        {"Ref": "AWS::AccountId"},
+                                        ":table/",
+                                        res_base_stack.nested_stack.resolve(
+                                            res_base_stack.cluster_name
+                                        ),
+                                        ".ad-sync.distributed-lock",
+                                    ],
+                                ]
+                            },
+                            "Sid": "ADSyncLockTablePermissions",
+                        },
+                        {
+                            "Action": [
+                                "dynamodb:Query",
+                                "dynamodb:Scan",
+                                "dynamodb:UpdateItem",
+                                "dynamodb:PutItem",
+                            ],
+                            "Effect": "Allow",
+                            "Resource": {
+                                "Fn::Join": [
+                                    "",
+                                    [
+                                        "arn:",
+                                        {"Ref": "AWS::Partition"},
+                                        ":dynamodb:",
+                                        {"Ref": "AWS::Region"},
+                                        ":",
+                                        {"Ref": "AWS::AccountId"},
+                                        ":table/",
+                                        res_base_stack.nested_stack.resolve(
+                                            res_base_stack.cluster_name
+                                        ),
+                                        ".ad-sync.status",
+                                    ],
+                                ]
+                            },
+                            "Sid": "ADSyncStatusTablePermissions",
+                        },
+                        {
+                            "Action": [
+                                "ecs:RunTask",
+                                "ecs:StopTask",
+                                "ecs:ListTasks",
+                            ],
+                            "Condition": {
+                                "ArnEquals": {
+                                    "ecs:cluster": {
+                                        "Fn::Join": [
+                                            "",
+                                            [
+                                                "arn:",
+                                                {"Ref": "AWS::Partition"},
+                                                ":ecs:",
+                                                {"Ref": "AWS::Region"},
+                                                ":",
+                                                {"Ref": "AWS::AccountId"},
+                                                ":cluster/",
+                                                res_base_stack.nested_stack.resolve(
+                                                    res_base_stack.cluster_name
+                                                ),
+                                                "-ad-sync-cluster",
+                                            ],
+                                        ]
+                                    }
+                                }
+                            },
+                            "Effect": "Allow",
+                            "Resource": "*",
+                        },
+                        {
+                            "Action": "iam:PassRole",
+                            "Effect": "Allow",
+                            "Resource": {
+                                "Fn::Join": [
+                                    "",
+                                    [
+                                        "arn:",
+                                        {"Ref": "AWS::Partition"},
+                                        ":iam::",
+                                        {"Ref": "AWS::AccountId"},
+                                        ":role",
+                                        res_base_stack.nested_stack.resolve(
+                                            res_base_stack.parameters.iam_resource_path_string
+                                        ),
+                                        res_base_stack.nested_stack.resolve(
+                                            res_base_stack.parameters.iam_resource_prefix_string
+                                        ),
+                                        res_base_stack.nested_stack.resolve(
+                                            res_base_stack.cluster_name
+                                        ),
+                                        "-ad-sync-task-role",
+                                    ],
+                                ]
+                            },
+                        },
+                        {
+                            "Action": "ec2:DescribeSecurityGroups",
+                            "Effect": "Allow",
+                            "Resource": "*",
+                        },
+                    ]
                 },
+                "PolicyName": {
+                    "Fn::Join": [
+                        "",
+                        [
+                            res_base_stack.nested_stack.resolve(
+                                res_base_stack.parameters.iam_resource_prefix_string
+                            ),
+                            res_base_stack.nested_stack.resolve(
+                                res_base_stack.cluster_name
+                            ),
+                            "-cluster-settings-table-event-handler-role-policy",
+                        ],
+                    ]
+                },
+                "Roles": [
+                    {
+                        "Ref": util.get_logical_id(
+                            res_base_stack.nested_stack,
+                            ["ClusterSettingsTableEventHandlerRole"],
+                        )
+                    }
+                ],
             },
-        )
+        },
     )
     assert cluster_settings_table_event_handler_role_policy_resource
 

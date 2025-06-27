@@ -1,11 +1,15 @@
 #  Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 #  SPDX-License-Identifier: Apache-2.0
 
-from typing import Optional
+import json
+from typing import Any, Dict, Optional
 
 import boto3
 import res.constants as constants
 from botocore.exceptions import ClientError
+from res.utils import logging_utils
+
+logger = logging_utils.get_logger("virtual-desktop-app")
 
 
 def get_secret_string(secret_id: str) -> str:
@@ -39,3 +43,25 @@ def create_or_update_secret(
             raise e
 
     return result.get("ARN")
+
+
+def sqs_send_message(
+    payload: Dict[str, Any],
+    queue_url: str,
+    group_id: str,
+    dedup_id: Optional[str] = None,
+):
+
+    sqs = boto3.client("sqs")
+    request = {
+        "QueueUrl": queue_url,
+        "MessageBody": json.dumps(payload),
+        "MessageGroupId": group_id,
+    }
+    if dedup_id:
+        request["MessageDeduplicationId"] = dedup_id
+
+    try:
+        sqs.send_message(**request)
+    except Exception as e:
+        logger.info(f"Unexpected error sending SQS message: {str(e)}")

@@ -1,5 +1,7 @@
 -r idea-sdk.in
 -r library.in
+-r bootstrap.in
 supervisor~=4.0
-python-ldap~=3.0
-ldappool~=3.0
+python-ldap~=3.0; sys_platform != 'win32'
+ldappool~=3.0; sys_platform != 'win32'
+

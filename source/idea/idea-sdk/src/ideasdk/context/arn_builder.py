@@ -127,7 +127,9 @@ class ArnBuilder:
             self.get_arn('s3', 'nvidia-gaming-drivers', aws_account_id='', aws_region=''),
             self.get_arn('s3', 'nvidia-gaming-drivers/*', aws_account_id='', aws_region=''),
             self.get_arn('s3', 'ec2-amd-linux-drivers/*', aws_account_id='', aws_region=''),
-            self.get_arn('s3', 'ec2-amd-linux-drivers', aws_account_id='', aws_region='')
+            self.get_arn('s3', 'ec2-amd-linux-drivers', aws_account_id='', aws_region=''),
+            self.get_arn('s3', 'ec2-windows-nvidia-drivers', aws_account_id='', aws_region=''),
+            self.get_arn('s3', 'ec2-amd-windows-drivers', aws_account_id='', aws_region='')
         ]
 
     @property
@@ -224,7 +226,10 @@ class ArnBuilder:
         return [
             self.get_arn(service='s3', aws_region='', aws_account_id='',
                          resource=f'{self.config.get_string("cluster.cluster_s3_bucket")}/*'),
-            self.get_arn(service='s3', aws_region='', aws_account_id='', resource=f'{self.config.get_string("cluster.cluster_s3_bucket")}')
+            self.get_arn(service='s3', aws_region='', aws_account_id='', resource=f'{self.config.get_string("cluster.cluster_s3_bucket")}'),
+            self.get_arn(service='s3', aws_region='', aws_account_id='',
+                         resource=f'{self.config.get_string("cluster.staging_bucket_name")}/*'),
+            self.get_arn(service='s3', aws_region='', aws_account_id='', resource=f'{self.config.get_string("cluster.staging_bucket_name")}'),
         ]
 
     def get_s3_bucket_arns(self, bucket_name: str) -> List[str]:
@@ -299,21 +304,24 @@ class ArnBuilder:
     def get_route53_hostedzone_arn(self) -> str:
         return f'arn:{self.config.get_string("cluster.aws.partition", required=True)}:route53:::hostedzone/*'
 
-    def get_iam_arn(self, role_name_suffix: str) -> str:
+    def get_iam_arn(self, role_name_suffix: str, ) -> str:
+        iam_resource_prefix = self.config.get_string('cluster.iam.iam_resource_prefix', default="")
+        iam_resource_path = self.config.get_string('cluster.iam.iam_resource_path', default="/")
+
         return self.get_arn(service='iam',
-                            resource=f'role/{self.config.get_string("cluster.cluster_name")}-{role_name_suffix}-{self.config.get_string("cluster.aws.region")}',
+                            resource=f'role{iam_resource_path}{iam_resource_prefix}{self.config.get_string("cluster.cluster_name")}-{role_name_suffix}',
                             aws_region='')
 
     def get_vdi_iam_role_arn(self, project_name:str) -> str:
         return self.get_arn(service = 'iam',
                             aws_region='',
-                            resource= f'role/{LaunchRoleHelper.get_vdi_role_path( cluster_name=self.config.get_string("cluster.cluster_name"), region=self.config.get_string("cluster.aws.region"))}/{LaunchRoleHelper.get_vdi_role_name(self.config.get_string("cluster.cluster_name"),project_name)}'
+                            resource= f'role{LaunchRoleHelper.get_vdi_role_path(cluster_name=self.config.get_string("cluster.cluster_name"), region=self.config.get_string("cluster.aws.region"), path=self.config.get_string("cluster.iam.iam_resource_path", default="/"))}/{LaunchRoleHelper.get_vdi_role_name(self.config.get_string("cluster.cluster_name"),project_name, prefix=self.config.get_string("cluster.iam.iam_resource_prefix", default=""))}'
                             )
 
     def get_vdi_iam_instance_profile_arn(self, project_name:str) -> str:
         return self.get_arn(service = 'iam',
                             aws_region='',
-                            resource= f'instance-profile/{LaunchRoleHelper.get_vdi_instance_profile_path( cluster_name=self.config.get_string("cluster.cluster_name"), region=self.config.get_string("cluster.aws.region"))}/{LaunchRoleHelper.get_vdi_instance_profile_name(self.config.get_string("cluster.cluster_name"),project_name)}'
+                            resource= f'instance-profile{LaunchRoleHelper.get_vdi_instance_profile_path(cluster_name=self.config.get_string("cluster.cluster_name"), region=self.config.get_string("cluster.aws.region"), path=self.config.get_string("cluster.iam.iam_resource_path", default="/"))}/{LaunchRoleHelper.get_vdi_instance_profile_name(self.config.get_string("cluster.cluster_name"),project_name, prefix=self.config.get_string("cluster.iam.iam_resource_prefix", default=""))}'
                             )
     @property
     def kms_secretsmanager_key_arn(self) -> str:
@@ -385,6 +393,9 @@ class ArnBuilder:
         return self.get_arn(service='ds',
                             resource=f'directory/{self.config.get_string("directoryservice.directory_id", required=True)}',
                             aws_region=self.config.get_string("cluster.aws.region"))
+    
+    def get_secretmanager_secret_arn(self, name) -> str:
+        return self.get_arn(service='secretsmanager', resource=f'secret:{name}*')
 
     def get_ddb_application_autoscaling_service_role_arn(self) -> str:
         return self.get_arn(service='iam', aws_region='', resource='role/aws-service-role/dynamodb.application-autoscaling.amazonaws.com/AWSServiceRoleForApplicationAutoScaling_DynamoDBTable')
@@ -403,7 +414,10 @@ class ArnBuilder:
                             resource=f'cluster/{self.config.get_string("cluster.cluster_name")}-ad-sync-cluster')
 
     def get_ad_sync_task_role_arn(self) -> str:
+        iam_resource_prefix = self.config.get_string('cluster.iam.iam_resource_prefix', default="")
+        iam_resource_path = self.config.get_string('cluster.iam.iam_resource_path', default="/")
+
         return self.get_arn(service='iam',
                             aws_region='',
-                            resource=f'role/{self.config.get_string("cluster.cluster_name")}-ad-sync-task-role')
+                            resource=f'role{iam_resource_path}{iam_resource_prefix}{self.config.get_string("cluster.cluster_name")}-ad-sync-task-role')
 

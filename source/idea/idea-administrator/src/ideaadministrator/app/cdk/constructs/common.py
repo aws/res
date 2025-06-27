@@ -188,12 +188,24 @@ class ManagedPolicy(SocaBaseConstruct, iam.ManagedPolicy):
         self.policy_template_name = policy_template_name
         self.vars = vars
         self.module_id = module_id
-        super().__init__(context, name, scope, managed_policy_name=managed_policy_name, description=description, document=self.build_policy_json())
+
+        super().__init__(
+            context,
+            name,
+            scope,
+            managed_policy_name=managed_policy_name,
+            description=description,
+            document=self.build_policy_json(),
+            path=self.get_policy_path()
+        )
 
         self.add_nag_suppression(suppressions=[
             IdeaNagSuppression(rule_id='AwsSolutions-IAM5', reason='AWS Managed Policies are expected to be customized and scoped down.'
                                                                    'AWS Managed policies are copied over to enable these customizations.')
         ])
+
+    def get_policy_path(self) -> str:
+        return self.context.config().get_string('cluster.iam.iam_resource_path', default="/")
 
     def build_policy_json(self) -> iam.PolicyDocument:
         policy = AdministratorUtils.render_policy(
@@ -216,24 +228,27 @@ class Role(SocaBaseConstruct, iam.Role):
                  managed_policies: List[str] = None):
 
         self.context = context
-        role_name = self.build_resource_name(name, region_suffix=True)
+
+        self.role_path = self.context.config().get_string('cluster.iam.iam_resource_path', default="/")
+        role_name = self.build_resource_name(name, region_suffix=False)
         if isinstance(role_name, tuple):
             role_name = ' '.join(role_name)
 
         if len(role_name) > self.MAX_NAME_LENGTH:
-            role_name = self.build_trimmed_resource_name(name, region_suffix=True, trim_length=self.MAX_NAME_LENGTH)
+            role_name = self.build_trimmed_resource_name(name, region_suffix=False, trim_length=self.MAX_NAME_LENGTH)
 
         super().__init__(context, name, scope,
                          role_name=role_name,
                          description=description,
-                         assumed_by=self.build_assumed_by(assumed_by))
+                         assumed_by=self.build_assumed_by(assumed_by),
+                         path=self.role_path)
         if inline_policies is not None:
             for policy in inline_policies:
                 self.attach_inline_policy(policy)
         if managed_policies is not None:
             for policy in managed_policies:
                 if policy.startswith('arn:'):
-                    name = policy.split('/')[1]
+                    name = policy.split('/', maxsplit=1)[1]
                     self.add_managed_policy(iam.ManagedPolicy.from_managed_policy_arn(self, name, policy))
                 else:
                     self.add_managed_policy(iam.ManagedPolicy.from_aws_managed_policy_name(policy))
@@ -249,10 +264,13 @@ class InstanceProfile(SocaBaseConstruct, iam.CfnInstanceProfile):
     def __init__(self, context: AdministratorContext, name: str, scope: constructs.Construct,
                  roles: List[iam.Role]):
         self.context = context
+        # path = self.context.config().get_string('cluster.iam.iam_resource_path', default="/")
+        instance_profile_name = self.build_resource_name(name, region_suffix=False)
+
         role_names = []
         for role in roles:
             role_names.append(role.role_name)
-        super().__init__(context, name, scope, instance_profile_name=self.build_resource_name(name, region_suffix=True), roles=role_names)
+        super().__init__(context, name, scope, instance_profile_name=instance_profile_name, roles=role_names)
 
 
 class CustomResource(SocaBaseConstruct):

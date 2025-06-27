@@ -45,6 +45,8 @@ from ideasdk.bootstrap import BootstrapUserDataBuilder
 from ideasdk.context import ArnBuilder
 from ideasdk.utils import Utils
 
+import res.constants as res_constants
+
 import aws_cdk as cdk
 import constructs
 from aws_cdk import (
@@ -63,12 +65,16 @@ from aws_cdk import (
     aws_kms as kms,
     aws_apigateway as apigateway,
     aws_logs as logs,
+    aws_secretsmanager,
     aws_lambda,
     RemovalPolicy,
 )
 
 from aws_cdk.aws_events import Schedule
 from typing import Optional, List
+
+import secrets
+import string
 
 
 class VirtualDesktopControllerStack(IdeaBaseStack):
@@ -133,6 +139,8 @@ class VirtualDesktopControllerStack(IdeaBaseStack):
 
         self.oauth2_client_secret: Optional[OAuthClientIdAndSecret] = None
 
+        self.custom_broker_secret: Optional[aws_secretsmanager.Secret] = None
+
         self.custom_credential_broker_lambda_function: Optional[LambdaFunction] = None
         self.custom_credential_broker_api_gateway_rest_api: Optional[APIGatewayRestApi] = None
         self.custom_credential_broker_lambda_role: Optional[Role] = None
@@ -144,10 +152,14 @@ class VirtualDesktopControllerStack(IdeaBaseStack):
         self.vdi_helper_lambda_function: Optional[LambdaFunction] = None
 
         self.dcv_host_role: Optional[Role] = None
+        self.dcv_host_role_scoped_down: Optional[Role] = None
+
         self.controller_role: Optional[Role] = None
         self.dcv_broker_role: Optional[Role] = None
         self.scheduled_event_transformer_lambda_role: Optional[Role] = None
+
         self.dcv_host_instance_profile: Optional[InstanceProfile] = None
+        self.dcv_host_scoped_down_instance_profile: Optional[InstanceProfile] = None
 
         self.dcv_host_security_group: Optional[VirtualDesktopBastionAccessSecurityGroup] = None
         self.controller_security_group: Optional[VirtualDesktopPublicLoadBalancerAccessSecurityGroup] = None
@@ -166,6 +178,7 @@ class VirtualDesktopControllerStack(IdeaBaseStack):
         self.controller_auto_scaling_group: Optional[asg.AutoScalingGroup] = None
         self.dcv_broker_autoscaling_group: Optional[asg.AutoScalingGroup] = None
         self.dcv_connection_gateway_autoscaling_group: Optional[asg.AutoScalingGroup] = None
+        self.client_target_group: Optional[elbv2.ApplicationTargetGroup] = None
 
         self.backup_plan: Optional[BackupPlan] = None
 
@@ -173,6 +186,7 @@ class VirtualDesktopControllerStack(IdeaBaseStack):
 
         self.resource_server = None
         self.build_oauth2_client()
+        self.build_custom_broker_bootstrap_token_secret()
         self.update_cluster_manager_client_scopes()
 
         self.build_api_gateway_vpc_endpoint()
@@ -186,6 +200,7 @@ class VirtualDesktopControllerStack(IdeaBaseStack):
         self.build_virtual_desktop_controller()
         self.build_dcv_broker()
         self.build_dcv_connection_gateway()
+        self.build_dcv_host_infra_scoped_down()
         self.build_dcv_host_infra()
 
         self.build_controller_ssm_commands_notification_infra()
@@ -193,6 +208,29 @@ class VirtualDesktopControllerStack(IdeaBaseStack):
 
         self.setup_egress_rules_for_quic()
         self.build_cluster_settings()
+
+    def build_custom_broker_bootstrap_token_secret(self):
+        generate_secret_string=aws_secretsmanager.SecretStringGenerator(
+            exclude_characters=" %+~`#$&*()|[]{}:;<>?!'/\"\\@",
+            include_space=False,
+            password_length=32
+        )
+
+        # Pending - Remove the -2 *
+        self.custom_broker_secret = aws_secretsmanager.Secret(
+            self.stack,
+            id=f"{self.cluster_name}-custom-credential-broker-secret-2",
+            description="Custom credential broker secret used for generating JWT bootstrap token",
+            secret_name=f"{self.cluster_name}-secret-test-2",
+            generate_secret_string=generate_secret_string,
+        )
+
+        self.add_nag_suppression(
+            construct=self.custom_broker_secret,
+            suppressions=[
+                IdeaNagSuppression(rule_id='AwsSolutions-SMG4', reason='The secret does not have automatic rotation scheduled.')
+            ]
+        )
 
     def setup_egress_rules_for_quic(self):
         quic_supported = self.context.config().get_bool('virtual-desktop-controller.dcv_session.quic_support', required=True)
@@ -442,7 +480,7 @@ class VirtualDesktopControllerStack(IdeaBaseStack):
         Allow the cluster manager client to access VDC APIs via the VDC scopes
         :return:
         """
-        lambda_name = f'{self.module_id}-update-cluster-manager-client-scope'
+        lambda_name = f'{self.module_id}-update-cm-client-scope'
         update_cluster_manager_client_scope_lambda_role = Role(
             context=self.context,
             name=f'{lambda_name}-role',
@@ -517,6 +555,13 @@ class VirtualDesktopControllerStack(IdeaBaseStack):
             assumed_by=['lambda'],
             description=f'{lambda_name}-role',
         )
+
+        secret_access_policy = iam.PolicyStatement(
+            actions=["secretsmanager:GetSecretValue"],
+            resources=[self.custom_broker_secret.secret_arn]
+        )
+
+        self.custom_credential_broker_lambda_role.add_to_policy(secret_access_policy)
 
         self.s3_mount_base_bucket_read_only_role = Role(
             context=self.context,
@@ -608,6 +653,9 @@ class VirtualDesktopControllerStack(IdeaBaseStack):
             vdi_cidr_blocks=vdi_cidr_blocks,
         )
 
+        http_proxy = self.context.config().get_string('cluster.network.http_proxy', required=False, default='')
+        https_proxy = self.context.config().get_string('cluster.network.https_proxy', required=False, default='')
+        no_proxy = self.context.config().get_string('cluster.network.no_proxy', required=False, default='')
         self.custom_credential_broker_lambda_function = LambdaFunction(
             context=self.context,
             name=lambda_name,
@@ -631,10 +679,14 @@ class VirtualDesktopControllerStack(IdeaBaseStack):
                 "SHARED_STORAGE_PREFIX": f'{constants.MODULE_SHARED_STORAGE}',
                 "STORAGE_PROVIDER_S3_BUCKET": constants.STORAGE_PROVIDER_S3_BUCKET,
                 "USER_SESSION_OWNER_KEY": app_constants.USER_SESSION_DB_HASH_KEY,
-                "USER_SESSION_SESSION_ID_KEY": app_constants.USER_SESSION_DB_RANGE_KEY
+                "USER_SESSION_SESSION_ID_KEY": app_constants.USER_SESSION_DB_RANGE_KEY,
+                "HTTP_PROXY": http_proxy,
+                "HTTPS_PROXY": https_proxy,
+                "NO_PROXY": no_proxy,
             },
             role=self.custom_credential_broker_lambda_role,
             timeout_seconds=60,
+            runtime=aws_lambda.Runtime.PYTHON_3_12,
             idea_code_asset=IdeaCodeAsset(
                 lambda_package_name='res_custom_credential_broker',
                 lambda_platform=SupportedLambdaPlatforms.PYTHON
@@ -642,7 +694,7 @@ class VirtualDesktopControllerStack(IdeaBaseStack):
         )
         self.custom_credential_broker_lambda_function.node.add_dependency(custom_credential_broker_lambda_role_policy)
         self.add_common_tags(self.custom_credential_broker_lambda_function)
-
+        self.custom_credential_broker_lambda_function.add_layers(self.shared_library_lambda_layer)
         self.custom_credential_broker_api_gateway_rest_api = self._build_private_api_for_lambda(
             lambda_function=self.custom_credential_broker_lambda_function,
             api_name=api_gateway_name,
@@ -826,6 +878,22 @@ class VirtualDesktopControllerStack(IdeaBaseStack):
 
         return api_gateway_rest_api
 
+    def build_dcv_host_infra_scoped_down(self):
+        self.dcv_host_role_scoped_down = self._build_iam_role(
+            role_description=f'IAM role assigned to virtual-desktop-{self.COMPONENT_DCV_HOST}-scoped-down',
+            component_name=f'{self.COMPONENT_DCV_HOST}-scoped-down',
+            component_jinja='virtual-desktop-dcv-host-scoped-down.yml'
+        )
+
+        self.dcv_host_role_scoped_down.grant_pass_role(self.controller_role)
+
+        self.dcv_host_scoped_down_instance_profile = InstanceProfile(
+            context=self.context,
+            name=f'{self.module_id}-{self.COMPONENT_DCV_HOST}-scoped-down-instance-profile',
+            scope=self.stack,
+            roles=[self.dcv_host_role_scoped_down]
+        )
+
     def build_dcv_host_infra(self):
         self.dcv_host_role = self._build_iam_role(
             role_description=f'IAM role assigned to virtual-desktop-{self.COMPONENT_DCV_HOST}',
@@ -833,6 +901,16 @@ class VirtualDesktopControllerStack(IdeaBaseStack):
             component_jinja='virtual-desktop-dcv-host.yml'
         )
         self.dcv_host_role.grant_pass_role(self.controller_role)
+
+        custom_credential_broker_principal = iam.ArnPrincipal(self.custom_credential_broker_lambda_role.role_arn)
+
+        self.dcv_host_role.assume_role_policy.add_statements(
+            iam.PolicyStatement(
+                effect=iam.Effect.ALLOW,
+                actions=["sts:AssumeRole"],
+                principals=[custom_credential_broker_principal]
+            )
+        )
 
         self.dcv_host_instance_profile = InstanceProfile(
             context=self.context,
@@ -863,7 +941,7 @@ class VirtualDesktopControllerStack(IdeaBaseStack):
 
     def build_dcv_broker(self):
         # client target group and registration
-        client_target_group = elbv2.ApplicationTargetGroup(
+        self.client_target_group = elbv2.ApplicationTargetGroup(
             self.stack,
             f'{self.COMPONENT_DCV_BROKER}-client-target-group',
             port=self.BROKER_CLIENT_COMMUNICATION_PORT,
@@ -872,7 +950,7 @@ class VirtualDesktopControllerStack(IdeaBaseStack):
             vpc=self.cluster.vpc,
             target_group_name=self.get_target_group_name(f'{self.COMPONENT_DCV_BROKER}-c')
         )
-        client_target_group.configure_health_check(
+        self.client_target_group.configure_health_check(
             enabled=True,
             path='/health'
         )
@@ -889,7 +967,7 @@ class VirtualDesktopControllerStack(IdeaBaseStack):
                 'actions': [
                     {
                         'Type': 'forward',
-                        'TargetGroupArn': client_target_group.target_group_arn
+                        'TargetGroupArn': self.client_target_group.target_group_arn
                     }
                 ]
             },
@@ -995,7 +1073,7 @@ class VirtualDesktopControllerStack(IdeaBaseStack):
             aws_region=self.aws_region,
             bootstrap_package_uri=dcv_broker_package_uri,
             install_commands=[
-                '/bin/bash dcv-broker/setup.sh'
+                f'/bin/bash scripts/infrastructure-host/install.sh -p false -c dcv-broker -m {res_constants.MODULE_ID_VDC} -e {self.cluster_name}'
             ],
             infra_config={
                 'BROKER_CLIENT_TARGET_GROUP_ARN': '${__BROKER_CLIENT_TARGET_GROUP_ARN__}',
@@ -1006,7 +1084,7 @@ class VirtualDesktopControllerStack(IdeaBaseStack):
             base_os=self.context.config().get_string('virtual-desktop-controller.dcv_broker.autoscaling.base_os', required=True)
         ).build()
         substituted_userdata = cdk.Fn.sub(broker_userdata, {
-            '__BROKER_CLIENT_TARGET_GROUP_ARN__': client_target_group.target_group_arn,
+            '__BROKER_CLIENT_TARGET_GROUP_ARN__': self.client_target_group.target_group_arn,
             '__CONTROLLER_EVENTS_QUEUE_URL__': self.event_sqs_queue.queue_url
         })
 
@@ -1030,7 +1108,7 @@ class VirtualDesktopControllerStack(IdeaBaseStack):
         # workaround below - reference to https://github.com/aws/aws-cdk/issues/5667#issuecomment-827549394
         self.dcv_broker_autoscaling_group.node.default_child.target_group_arns = [
             agent_target_group.target_group_arn,
-            client_target_group.target_group_arn,
+            self.client_target_group.target_group_arn,
             gateway_target_group.target_group_arn
         ]
 
@@ -1099,7 +1177,7 @@ class VirtualDesktopControllerStack(IdeaBaseStack):
                 aws_region=self.aws_region,
                 bootstrap_package_uri=controller_bootstrap_package_uri,
                 install_commands=[
-                    '/bin/bash virtual-desktop-controller/setup.sh'
+                    f'/bin/bash scripts/infrastructure-host/install.sh -p false -c virtual-desktop-controller -m {res_constants.MODULE_ID_VDC} -e {self.cluster_name}'
                 ],
                 proxy_config=proxy_config,
                 bootstrap_source_dir_path=ideaadministrator.props.bootstrap_source_dir,
@@ -1228,6 +1306,13 @@ class VirtualDesktopControllerStack(IdeaBaseStack):
         else:
             ebs_kms_key = kms.Alias.from_alias_name(scope=self.stack, id=f'{component_name}-ebs-kms-key-default', alias_name='alias/aws/ebs')
 
+        instance_profile = InstanceProfile(
+            context=self.context,
+            name=f'{component_name}-profile',
+            scope=self.stack,
+            roles=[iam_role]
+        )
+
         launch_template = ec2.LaunchTemplate(
             self.stack, f'{component_name}-lt',
             instance_type=ec2.InstanceType(self.context.config().get_string(f'virtual-desktop-controller.{self.CONFIG_MAPPING[component_name]}.autoscaling.instance_type', required=True)),
@@ -1246,9 +1331,16 @@ class VirtualDesktopControllerStack(IdeaBaseStack):
                     volume_type=ec2.EbsDeviceVolumeType.GP3
                 ))
             )],
-            role=iam_role,
             require_imdsv2=True if metadata_http_tokens == "required" else False,
-            associate_public_ip_address=is_public
+            associate_public_ip_address=is_public,
+            version_description=self.deployment_id
+        )
+
+        cfn_launch_template: ec2.CfnLaunchTemplate = launch_template.node.default_child
+        cfn_launch_template.add_property_override(
+            "LaunchTemplateData.IamInstanceProfile", {
+                "Arn": instance_profile.attr_arn
+            }
         )
 
         auto_scaling_group = asg.AutoScalingGroup(
@@ -1332,7 +1424,7 @@ class VirtualDesktopControllerStack(IdeaBaseStack):
             aws_region=self.aws_region,
             bootstrap_package_uri=dcv_connection_gateway_bootstrap_package_uri,
             install_commands=[
-                '/bin/bash dcv-connection-gateway/setup.sh'
+                f'/bin/bash scripts/infrastructure-host/install.sh -p false -c dcv-connection-gateway -m {res_constants.MODULE_ID_VDC} -e {self.cluster_name}'
             ],
             infra_config={
                 'CERTIFICATE_SECRET_ARN': '${__CERTIFICATE_SECRET_ARN__}',
@@ -1515,6 +1607,11 @@ class VirtualDesktopControllerStack(IdeaBaseStack):
             'dcv_host_role_arn': self.dcv_host_role.role_arn,
             'dcv_host_role_name': self.dcv_host_role.role_name,
             'dcv_host_role_id': self.dcv_host_role.role_id,
+            'dcv_host_role_scoped_down_arn': self.dcv_host_role_scoped_down.role_arn,
+            'dcv_host_scoped_down_instance_profile_name': self.dcv_host_scoped_down_instance_profile.ref,
+            'dcv_host_scoped_down_instance_profile_arn': self.build_instance_profile_arn(self.dcv_host_scoped_down_instance_profile.ref),
+            'dcv_host_role_scoped_down_name': self.dcv_host_role_scoped_down.role_name,
+            'dcv_host_role_scoped_down_id': self.dcv_host_role_scoped_down.role_id,
             'dcv_broker_role_arn': self.dcv_broker_role.role_arn,
             'dcv_broker_role_name': self.dcv_broker_role.role_name,
             'dcv_broker_role_id': self.dcv_broker_role.role_id,
@@ -1524,6 +1621,8 @@ class VirtualDesktopControllerStack(IdeaBaseStack):
             'custom_credential_broker_lambda_function_arn': self.custom_credential_broker_lambda_function.function_arn,
             'custom_credential_broker_api_gateway_url': self._build_private_api_gateway_url(self.custom_credential_broker_api_gateway_rest_api.rest_api_id, constants.API_GATEWAY_CUSTOM_CREDENTIAL_BROKER_STAGE) + constants.API_GATEWAY_CUSTOM_CREDENTIAL_BROKER_RESOURCE,
             'vdi_helper_api_gateway_url': self._build_private_api_gateway_url(self.vdi_helper_api_gateway_rest_api.rest_api_id, constants.API_GATEWAY_VDI_HELPER_STAGE) + constants.API_GATEWAY_VDI_HELPER_RESOURCE,
+            'custom_credential_broker_secret_name': self.custom_broker_secret.secret_name,
+            'custom_credential_broker_secret_arn': self.custom_broker_secret.secret_arn,
             'custom_credential_broker_api_gateway_id': self.custom_credential_broker_api_gateway_rest_api.rest_api_id,
             'custom_credential_broker_lambda_role_arn': self.custom_credential_broker_lambda_role.role_arn,
             's3_mount_base_bucket_read_only_role_arn': self.s3_mount_base_bucket_read_only_role.role_arn,
@@ -1548,6 +1647,7 @@ class VirtualDesktopControllerStack(IdeaBaseStack):
             'controller.asg_arn': self.controller_auto_scaling_group.auto_scaling_group_arn,
             'dcv_broker.asg_name': self.dcv_broker_autoscaling_group.auto_scaling_group_name,
             'dcv_broker.asg_arn': self.dcv_broker_autoscaling_group.auto_scaling_group_arn,
+            'dcv_broker.client_target_group_arn': self.client_target_group.target_group_arn,
             'dcv_connection_gateway.asg_name': self.dcv_connection_gateway_autoscaling_group.auto_scaling_group_name,
             'dcv_connection_gateway.asg_arn': self.dcv_connection_gateway_autoscaling_group.auto_scaling_group_arn,
             'gateway_security_group_id': self.dcv_connection_gateway_security_group.security_group_id,

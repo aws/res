@@ -26,7 +26,7 @@ def get_parameters_for_templates() -> Dict[str, Any]:
 
 
 def _get_base_os() -> str:
-    return "amazonlinux2"
+    return "amzn2023"
 
 
 def _add_instance_ami(input_parameters: Dict[str, Any]) -> None:
@@ -134,6 +134,7 @@ def _add_hardcoded_parameters(input_parameters: Dict[str, Any]) -> None:
     input_parameters["base_os"] = _get_base_os()
     input_parameters["volume_size"] = "200"
     input_parameters["instance_type"] = "m5.large"
+    input_parameters["dcv_connection_gateway_instance_type"] = "c5.large"
     input_parameters["cluster_name"] = input_parameters[ENVIRONMENT_NAME_KEY]
     input_parameters["administrator_username"] = "clusteradmin"
     input_parameters["cluster_locale"] = "en_US"
@@ -164,10 +165,12 @@ def _add_enabled_modules(input_parameters: Dict[str, Any]) -> None:
 def _add_supported_os(input_parameters: Dict[str, Any]) -> None:
     input_parameters["supported_base_os"] = [
         "amazonlinux2",
+        "amzn2023",
         "rhel8",
         "rhel9",
         "ubuntu2204",
         "windows",
+        "rocky9",
     ]
 
 
@@ -187,6 +190,8 @@ def get_input_parameters_from_environment() -> Dict[str, Any]:
         "client_ip": os.environ.get("client_ip"),
         "prefix_list": os.environ.get("prefix_list"),
         "permission_boundary_arn": os.environ.get("permission_boundary_arn"),
+        "iam_resource_path": os.environ.get("iam_resource_path"),
+        "iam_resource_prefix": os.environ.get("iam_resource_prefix"),
         # Network configuration for the RES environment
         "vpc_id": os.environ.get("vpc_id"),
         "alb_public": os.environ.get("alb_public"),
@@ -225,5 +230,9 @@ def get_input_parameters_from_environment() -> Dict[str, Any]:
         "http_proxy": os.environ.get("http_proxy_value"),
         "https_proxy": os.environ.get("https_proxy_value"),
         "no_proxy": os.environ.get("no_proxy_value"),
+        "staging_bucket_name": os.environ.get("staging_bucket_name").replace(
+            "${AWS::Region}", os.environ.get("aws_region")
+        ),
+        "version": os.environ.get("version"),
     }
     return input_parameters

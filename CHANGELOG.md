@@ -1,6 +1,38 @@
 # Change Log
 This file is used to list changes made in each release of Research and Engineering Studio (RES).
 
+2025.06
+------
+
+**ENHANCEMENTS**
+
+- Added support for the AWS GovCloud (US-East) region
+- Added support for g6e instance type
+- Added support for launching virtual desktop sessions with Amazon Linux 2023
+- Added support for launching virtual desktop sessions with Rocky Linux 9
+- Added support for IAM resources prefix and path customization
+- Added the ability to delete a mounted file system from the RES UI
+- Added the ability to retrieve VDI bootstrap logs from Amazon CloudWatch
+- Enabled hibernation for RedHat 8 and RedHat 9 VDIs
+
+**CHANGES**
+
+- Scoped down IAM permissions for infrastructure hosts and VDI hosts
+- Improved bootstrap process for infrastructure hosts and VDI hosts
+- Increased the DCV broker DynamoDB tables WCU from 20 to 100
+
+**BUG FIXES**
+
+- Resolved an issue where RES can fail to list Elastic Filesystem for onboarding
+- Resolved an issue where RES can fail to apply snapshot caused by Elastic Filesystem listing
+- Resolved an issue where DCV Console session resolution cannot be adjusted
+- Resolved an issue where custom VDIs schedule can be deleted when re-saving the schedule without change
+- Resolved an issue where File browser can become unresponsive with large number of users and groups in AD
+- Resolved an issue where VDI sessions can be missing under Session Management
+- Resolved an issue where VDI session can be missing under My Virtual Desktop page
+- Resolved an issue where Idle timeout is not working for VDIs with hibernation enabled
+- Resolved an issue where software stack AMIs predate older RES version
+
 2025.03
 ------
 

@@ -3,24 +3,19 @@
 
 import base64
 import json
-import os
-from typing import Dict
+from unittest.mock import Mock
 
-from res.resources.dynamodb_stream_subscriber import (
-    IDynamoDBStreamSubscriber,
-    register_table_stream_subscriber,
-)
+from res.clients.ad_sync import ad_sync_client
+from res.resources.dynamodb import dynamodb_stream_subscription
 
 from idea.infrastructure.resources.lambda_functions.table_stream_subscription_lambda import (
     table_stream_subscription_handler,
 )
+from idea.infrastructure.resources.lambda_functions.table_stream_subscription_lambda.table_stream_subscription_handler import (
+    ADConfigEventSubscriber,
+)
 
-ON_CREATE_INVOKED = False
-ON_UPDATE_INVOKED = False
-ON_DELETE_INVOKED = False
-
-TEST_TABLE_NAME = "test_table_name"
-INSERT_EVENTS = {
+EVENTS = {
     "Records": [
         {
             "kinesis": {
@@ -39,10 +34,6 @@ INSERT_EVENTS = {
                 )
             },
         },
-    ]
-}
-MODIFY_EVENTS = {
-    "Records": [
         {
             "kinesis": {
                 "data": base64.b64encode(
@@ -63,11 +54,7 @@ MODIFY_EVENTS = {
                     ).encode("utf-8")
                 )
             },
-        }
-    ]
-}
-DELETE_EVENTS = {
-    "Records": [
+        },
         {
             "kinesis": {
                 "data": base64.b64encode(
@@ -84,54 +71,81 @@ DELETE_EVENTS = {
                     ).encode("utf-8")
                 )
             },
-        }
+        },
     ]
 }
 
-
-@register_table_stream_subscriber(TEST_TABLE_NAME)
-class MockStreamSubscriber(IDynamoDBStreamSubscriber):
-    def on_create(self, entry: Dict):
-        global ON_CREATE_INVOKED
-        ON_CREATE_INVOKED = True
-
-    def on_update(self, old_entry: Dict, new_entry: Dict):
-        global ON_UPDATE_INVOKED
-        ON_UPDATE_INVOKED = True
-
-    def on_delete(self, entry: Dict):
-        global ON_DELETE_INVOKED
-        ON_DELETE_INVOKED = True
-
-
-def test_handle_insert_event_on_create_invoked():
-    os.environ["TABLE_NAME"] = TEST_TABLE_NAME
-
-    table_stream_subscription_handler.handle(INSERT_EVENTS, {})
-    global ON_CREATE_INVOKED
-    assert ON_CREATE_INVOKED, "on_create is not invoked"
-
-    os.environ.pop("TABLE_NAME", None)
-    ON_CREATE_INVOKED = False
+AD_CONFIG_EVENT_SUBSCRIBER = ADConfigEventSubscriber()
+ENTRY_WITH_DOMAIN_NAME_KEY = {
+    "key": "directoryservice.name",
+    "value": "value",
+}
+ENTRY_WITH_ADDITIONAL_SSSD_CONFIGS_KEY = {
+    "key": "directoryservice.sssd.additional_sssd_configs",
+    "value": "value",
+}
+ENTRY_WITH_NON_AD_KEY = {
+    "key": "test",
+    "value": "value",
+}
+OLD_ENTRY_WITH_DOMAIN_NAME_KEY = {
+    "key": "directoryservice.name",
+    "value": "old_value",
+}
 
 
-def test_handle_insert_event_on_update_invoked():
-    os.environ["TABLE_NAME"] = TEST_TABLE_NAME
+def test_table_stream_subscription_lambda_handle_stream_event_invoked():
+    handle_record_data_mock = Mock()
+    dynamodb_stream_subscription.handle_record_data = handle_record_data_mock
 
-    table_stream_subscription_handler.handle(MODIFY_EVENTS, {})
-    global ON_UPDATE_INVOKED
-    assert ON_UPDATE_INVOKED, "on_update is not invoked"
-
-    os.environ.pop("TABLE_NAME", None)
-    ON_UPDATE_INVOKED = False
+    table_stream_subscription_handler.handle(EVENTS, {})
+    assert handle_record_data_mock.call_count == 3
 
 
-def test_handle_insert_event_on_delete_invoked():
-    os.environ["TABLE_NAME"] = TEST_TABLE_NAME
+def test_ad_config_event_subscriber_required_ad_key_is_monitored(
+    monkeypatch,
+):
+    assert AD_CONFIG_EVENT_SUBSCRIBER.is_entry_monitored(ENTRY_WITH_DOMAIN_NAME_KEY)
 
-    table_stream_subscription_handler.handle(DELETE_EVENTS, {})
-    global ON_DELETE_INVOKED
-    assert ON_DELETE_INVOKED, "on_delete is not invoked"
 
-    os.environ.pop("TABLE_NAME", None)
-    ON_DELETE_INVOKED = False
+def test_ad_config_event_subscriber_optional_ad_key_is_monitored(
+    monkeypatch,
+):
+    assert AD_CONFIG_EVENT_SUBSCRIBER.is_entry_monitored(
+        ENTRY_WITH_ADDITIONAL_SSSD_CONFIGS_KEY
+    )
+
+
+def test_ad_config_event_subscriber_non_ad_key_skipped(
+    monkeypatch,
+):
+    assert not AD_CONFIG_EVENT_SUBSCRIBER.is_entry_monitored(ENTRY_WITH_NON_AD_KEY)
+
+
+def test_ad_config_event_subscriber_on_create_start_ad_sync(
+    monkeypatch,
+):
+    start_ad_sync_mock = Mock()
+    monkeypatch.setattr(ad_sync_client, "start_ad_sync", start_ad_sync_mock)
+    AD_CONFIG_EVENT_SUBSCRIBER.on_create(ENTRY_WITH_DOMAIN_NAME_KEY)
+    start_ad_sync_mock.assert_called_once()
+
+
+def test_ad_config_event_subscriber_on_update_start_ad_sync(
+    monkeypatch,
+):
+    start_ad_sync_mock = Mock()
+    monkeypatch.setattr(ad_sync_client, "start_ad_sync", start_ad_sync_mock)
+    AD_CONFIG_EVENT_SUBSCRIBER.on_update(
+        OLD_ENTRY_WITH_DOMAIN_NAME_KEY, ENTRY_WITH_DOMAIN_NAME_KEY
+    )
+    start_ad_sync_mock.assert_called_once()
+
+
+def test_ad_config_event_subscriber_on_delete_start_ad_sync(
+    monkeypatch,
+):
+    start_ad_sync_mock = Mock()
+    monkeypatch.setattr(ad_sync_client, "start_ad_sync", start_ad_sync_mock)
+    AD_CONFIG_EVENT_SUBSCRIBER.on_delete(ENTRY_WITH_ADDITIONAL_SSSD_CONFIGS_KEY)
+    start_ad_sync_mock.assert_called_once()

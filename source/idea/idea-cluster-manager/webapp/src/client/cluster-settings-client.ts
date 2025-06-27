@@ -41,7 +41,7 @@ class ClusterSettingsClient extends IdeaBaseClient<ClusterSettingsClientProps> {
     }
 
     updateModuleSettings(req: UpdateModuleSettingsRequest): Promise<UpdateModuleSettingsResult> {
-        return this.apiInvoker.invoke_alt<UpdateModuleSettingsRequest, UpdateModuleSettingsResult>("ClusterSettings.UpdateModuleSettings", req);
+        return this.apiInvoker.invoke_alt<UpdateModuleSettingsRequest, UpdateModuleSettingsResult>("ClusterSettings.UpdateModuleSettings", req); 
     }
 
     describeInstanceTypes(req: DescribeInstanceTypesRequest): Promise<DescribeInstanceTypesResult> {

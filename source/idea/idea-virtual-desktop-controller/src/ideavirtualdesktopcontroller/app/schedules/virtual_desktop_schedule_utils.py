@@ -63,30 +63,6 @@ class VirtualDesktopScheduleUtils:
             sunday=self._get_default_schedule_for_day_of_week(DayOfWeek.SUNDAY),
         )
 
-    def _is_same_schedule(self, schedule_a: VirtualDesktopSchedule, schedule_b: VirtualDesktopSchedule) -> bool:
-        if Utils.is_empty(schedule_a) and Utils.is_empty(schedule_b):
-            self._logger.debug('Both the schedules are emtpy and hence equivalent...')
-            # both are empty.
-            return True
-
-        if (Utils.is_not_empty(schedule_a) and Utils.is_empty(schedule_b)) or (Utils.is_not_empty(schedule_b) and Utils.is_empty(schedule_a)):
-            # exactly one is not empty.
-            self._logger.debug('Exactly one schedule is empty and hence different...')
-            return False
-
-        # both are not empty
-        if (schedule_a.schedule_type == schedule_b.schedule_type) and (
-            schedule_a.schedule_type == VirtualDesktopScheduleType.STOP_ALL_DAY or schedule_a.schedule_type == VirtualDesktopScheduleType.START_ALL_DAY or schedule_a.schedule_type == VirtualDesktopScheduleType.NO_SCHEDULE or schedule_a.schedule_type == VirtualDesktopScheduleType.WORKING_HOURS):
-            self._logger.debug('Both are not empty but are the same static schedule type...')
-            return True
-
-        if schedule_a.schedule_type == VirtualDesktopScheduleType.NO_SCHEDULE or schedule_b.schedule_type == VirtualDesktopScheduleType.NO_SCHEDULE:
-            # at this point both do not have the same schedule type, but one is NO SCHEDULE for sure. They are different
-            self._logger.debug('At least one of the schedules is NO_SCHEDULE and hence different...')
-            return False
-
-        return False
-
     def _delete_schedule(self, schedule: VirtualDesktopSchedule):
         if Utils.is_empty(schedule) or schedule.schedule_type == VirtualDesktopScheduleType.NO_SCHEDULE:
             self._logger.debug("No Schedule to delete. Returning")
@@ -119,28 +95,20 @@ class VirtualDesktopScheduleUtils:
             current_schedule = self._schedule_db.get_empty_schedule(day_of_week)
 
         if Utils.is_empty(new_schedule):
-            self._logger.debug(f'No schedule provided for {day_of_week}, will leave it as is.')
             return current_schedule
-
-        if self._is_same_schedule(new_schedule, current_schedule):
-            self._logger.debug(f'Both schedules for {day_of_week} are the same. NO OP. Returning')
+                
+        if current_schedule.schedule_type == new_schedule.schedule_type and new_schedule.schedule_type != VirtualDesktopScheduleType.CUSTOM_SCHEDULE:
+            self._logger.debug(f'Same schedule type, no need to update schedule')
             return current_schedule
+        
+        if current_schedule.schedule_type == VirtualDesktopScheduleType.CUSTOM_SCHEDULE and new_schedule.schedule_type == VirtualDesktopScheduleType.CUSTOM_SCHEDULE:
+            self._logger.debug(f'Checking for custom schedule changes')
+            if current_schedule.start_up_time == new_schedule.start_up_time and current_schedule.shut_down_time == new_schedule.shut_down_time:
+                self._logger.debug(f'Same custom schedule, no need to update schedule')
+                return current_schedule
 
-        create_new = False
-
-        if new_schedule.schedule_type == VirtualDesktopScheduleType.NO_SCHEDULE:
-            self._logger.info(f'no new schedule for {day_of_week}')
-            create_new = False
-            new_schedule = self._schedule_db.get_empty_schedule(day_of_week)
-        elif Utils.is_empty(current_schedule) or current_schedule.schedule_type != new_schedule.schedule_type:
-            self._logger.info(f'schedule types mismatch. Delete old, create new for {day_of_week}')
-            create_new = True
-
-        if Utils.is_not_empty(current_schedule) and (current_schedule.schedule_type != VirtualDesktopScheduleType.NO_SCHEDULE or Utils.is_not_empty(current_schedule.schedule_id)):
-            self._delete_schedule(current_schedule)
-
-        if create_new:
-            new_schedule = self._create_schedule_for_day_of_week(day_of_week, new_schedule, idea_session_id, idea_session_owner)
+        self._delete_schedule(current_schedule)
+        new_schedule = self._create_schedule_for_day_of_week(day_of_week, new_schedule, idea_session_id, idea_session_owner)
 
         return new_schedule
 

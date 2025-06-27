@@ -18,6 +18,10 @@ from ideasdk.utils import EnvironmentUtils
 
 from ideaclustermanager.app.cluster_manager_app import ClusterManagerApp
 
+import res.constants as res_constants
+from res.resources import cluster_settings
+
+import os
 import sys
 import click
 import traceback
@@ -33,27 +37,31 @@ def main(**kwargs):
 
         cluster_name = EnvironmentUtils.idea_cluster_name(required=True)
         module_id = EnvironmentUtils.idea_module_id(required=True)
-        module_set = EnvironmentUtils.idea_module_set(required=True)
+        module_set = res_constants.DEFAULT_MODULE_SET
         aws_region = EnvironmentUtils.aws_default_region(required=True)
 
+        context = ideaclustermanager.AppContext(
+            options=SocaContextOptions(
+                cluster_name=cluster_name,
+                module_name=constants.MODULE_CLUSTER_MANAGER,
+                module_id=module_id,
+                module_set=module_set,
+                aws_region=aws_region,
+                is_app_server=True,
+                enable_aws_client_provider=True,
+                enable_aws_util=True,
+                enable_instance_metadata_util=True,
+                use_vpc_endpoints=True,
+                enable_distributed_lock=True,
+                enable_leader_election=True,
+                enable_metrics=True,
+            )
+        )
+
+        configure_environment(context)
+
         ClusterManagerApp(
-            context=ideaclustermanager.AppContext(
-                options=SocaContextOptions(
-                    cluster_name=cluster_name,
-                    module_name=constants.MODULE_CLUSTER_MANAGER,
-                    module_id=module_id,
-                    module_set=module_set,
-                    aws_region=aws_region,
-                    is_app_server=True,
-                    enable_aws_client_provider=True,
-                    enable_aws_util=True,
-                    enable_instance_metadata_util=True,
-                    use_vpc_endpoints=True,
-                    enable_distributed_lock=True,
-                    enable_leader_election=True,
-                    enable_metrics=True,
-                )
-            ),
+            context=context,
             **kwargs
         ).launch()
 
@@ -62,6 +70,22 @@ def main(**kwargs):
         traceback.print_exc()
         print('exit code: 1')
         sys.exit(1)
+
+
+def configure_environment(context: ideaclustermanager.AppContext):
+    # RES environment configuration
+    os.environ["IDEA_MODULE_NAME"] = context.module_name()
+    os.environ["IDEA_MODULE_SET"] = context.module_set()
+    os.environ["IDEA_MODULE_VERSION"] = context.module_version()
+    os.environ["IDEA_CLUSTER_NAME"] = context.cluster_name()
+
+    # Proxy configuration
+    os.environ["IDEA_HTTPS_PROXY"] = (
+        cluster_settings.get_setting("cluster.network.https_proxy") or ""
+    )
+    os.environ["IDEA_NO_PROXY"] = (
+        cluster_settings.get_setting("cluster.network.no_proxy") or ""
+    )
 
 
 # used only for local testing

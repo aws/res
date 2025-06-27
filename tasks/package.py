@@ -15,7 +15,7 @@ import shutil
 from invoke import Context, task
 
 import tasks.idea as idea
-from tasks.tools.infra_ami_package_tool import InfraAmiPackageTool
+from tasks.tools.res_installation_scripts_package_tool import ResInstallationScriptsPackageTool
 from tasks.tools.package_tool import PackageTool
 
 
@@ -89,21 +89,25 @@ def virtual_desktop_controller(c):
     package_tool.package()
     idea.console.success(f'distribution created: {package_tool.output_archive_name}')
 
+@task
+def dcv_connection_gateway(c):
     package_tool = PackageTool(c, 'idea-dcv-connection-gateway')
     package_tool.package()
     idea.console.success(f'distribution created: {package_tool.output_archive_name}')
 
-    package_tool = PackageTool(c, 'idea-virtual-desktop')
+@task
+def dcv_broker(c):
+    package_tool = PackageTool(c, 'idea-dcv-broker')
     package_tool.package()
     idea.console.success(f'distribution created: {package_tool.output_archive_name}')
 
 
-@task(name='infra_ami_deps')
-def package_infra_ami_dependencies(c):
+@task(name='res_installation_scripts')
+def package_res_installation_scripts(c):
     """
-    package infrastructure ami dependencies
+    package RES installation scripts
     """
-    package_tool = InfraAmiPackageTool(c)
+    package_tool = ResInstallationScriptsPackageTool(c)
     package_tool.package()
     idea.console.success(f'distribution created: {package_tool.output_archive_name}')
 
@@ -191,6 +195,10 @@ def package_all(c):
 
     virtual_desktop_controller(c)
 
+    dcv_connection_gateway(c)
+
+    dcv_broker(c)
+
     library(c)
 
     bastion_host(c)
@@ -200,8 +208,8 @@ def package_all(c):
     # all archive
     make_all_archive(c)
 
-    #infra ami dependencies
-    package_infra_ami_dependencies(c)
+    # RES installation scripts
+    package_res_installation_scripts(c)
 
     print()
     idea.console.print_header_block('end: package all', style='main')

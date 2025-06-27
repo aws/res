@@ -203,10 +203,12 @@ def test_ecr_images_handler_role_creation(
                         {"Ref": "AWS::NoValue"},
                     ]
                 },
+                "Path": stack.resolve(stack.parameters.iam_resource_path_string),
                 "RoleName": {
                     "Fn::Join": [
                         "",
                         [
+                            stack.resolve(stack.parameters.iam_resource_prefix_string),
                             {
                                 "Ref": CommonKey.CLUSTER_NAME,
                             },
@@ -277,6 +279,7 @@ def test_ecr_images_handler_role_policy_creation(
                     "Fn::Join": [
                         "",
                         [
+                            stack.resolve(stack.parameters.iam_resource_prefix_string),
                             {
                                 "Ref": CommonKey.CLUSTER_NAME,
                             },
@@ -374,10 +377,12 @@ def test_params_transformer_handler_role_creation(
                         {"Ref": "AWS::NoValue"},
                     ]
                 },
+                "Path": stack.resolve(stack.parameters.iam_resource_path_string),
                 "RoleName": {
                     "Fn::Join": [
                         "",
                         [
+                            stack.resolve(stack.parameters.iam_resource_prefix_string),
                             {
                                 "Ref": CommonKey.CLUSTER_NAME,
                             },
@@ -425,6 +430,7 @@ def test_params_transformer_handler_role_policy_creation(
                     "Fn::Join": [
                         "",
                         [
+                            stack.resolve(stack.parameters.iam_resource_prefix_string),
                             {
                                 "Ref": CommonKey.CLUSTER_NAME,
                             },

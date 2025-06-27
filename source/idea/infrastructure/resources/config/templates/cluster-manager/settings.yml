@@ -1,4 +1,5 @@
 # Cluster Manager Settings
+app_package_uri: s3://{{ staging_bucket_name }}/releases/{{ version }}/idea-cluster-manager-{{ version }}.tar.gz
 
 endpoints:
   external:

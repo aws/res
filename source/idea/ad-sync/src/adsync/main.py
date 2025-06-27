@@ -1,7 +1,6 @@
 #  Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 #  SPDX-License-Identifier: Apache-2.0
 
-import logging
 import signal
 import sys
 import time
@@ -17,14 +16,13 @@ from res.resources import accounts  # type: ignore
 from res.utils import (  # type: ignore
     aws_utils,
     ldap_utils,
+    logging_utils,
     sssd_utils,
     table_utils,
     time_utils,
 )
 
-logger = logging.getLogger("ad-sync")
-logger.addHandler(logging.StreamHandler())
-logger.setLevel(logging.INFO)
+logger = logging_utils.get_logger("ad-sync")
 
 DEFAULT_LDAP_GROUP_FILTERSTR = "(objectClass=group)"
 DEFAULT_LDAP_USER_FILTERSTR = "(objectClass=user)"
@@ -411,7 +409,7 @@ def _start_sssd(active_directory_client: ActiveDirectoryClient) -> None:
             active_directory_client.options.tls_certificate_secret_arn
         )
 
-    sssd_utils.start_sssd(sssd_settings, logger)
+    sssd_utils.start_sssd(sssd_settings)
 
 
 def main() -> None:

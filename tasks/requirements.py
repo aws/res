@@ -84,8 +84,13 @@ def update(c, name=None, upgrade=False, package_name=None):
                  'build',
                  'tests',
                  'idea-administrator',
+                 'idea-bastion-host',
                  'ad-sync',
                  'idea-cluster-manager',
+                 'idea-dcv-broker',
+                 'idea-dcv-connection-gateway',
+                 'idea-sdk',
+                 'idea-virtual-desktop',
                  'idea-virtual-desktop-controller',
                  'library'):
         _update_requirement(c, name, upgrade, package_name)

@@ -16,6 +16,7 @@ import invoke.exceptions
 from invoke import Context, task
 
 import tasks.idea as idea
+from tasks.build import bootstrap
 
 
 def _run_unit_tests(c: Context,
@@ -104,6 +105,7 @@ def cluster_manager(c, keywords=None, params=None, capture_output=False, cov_rep
     """
     run cluster-manager unit tests
     """
+
     exit_code = _run_unit_tests(
         c=c,
         component_name='cluster-manager',
@@ -215,6 +217,7 @@ def infrastructure(c, keywords=None, params=None, capture_output=False, cov_repo
     )
     raise SystemExit(exit_code)
 
+
 @task(iterable=['params'])
 def library(c, keywords=None, params=None, capture_output=False, cov_report=None):
     # type: (Context, str, List[str], bool, str) -> None
@@ -234,6 +237,27 @@ def library(c, keywords=None, params=None, capture_output=False, cov_report=None
     )
     raise SystemExit(exit_code)
 
+
+@task(iterable=['params'])
+def bootstrap(c, keywords=None, params=None, capture_output=False, cov_report=None):
+    # type: (Context, str, List[str], bool, str) -> None
+    """
+    run bootstrap unit tests
+    """
+    exit_code = _run_unit_tests(
+        c=c,
+        component_name='bootstrap',
+        component_src=idea.props.bootstrap_src,
+        component_tests_src=idea.props.bootstrap_tests_src,
+        package_name='ideabootstrap',
+        params=params,
+        capture_output=capture_output,
+        keywords=keywords,
+        cov_report=cov_report
+    )
+    raise SystemExit(exit_code)
+
+
 @task(name='all', iterable=['params'], default=True)
 def run_all(c, keywords=None, params=None, capture_output=False, cov_report=None):
     # type: (Context, str, List[str], bool, str) -> None
@@ -248,7 +272,8 @@ def run_all(c, keywords=None, params=None, capture_output=False, cov_report=None
         lambda_functions,
         pipeline,
         infrastructure,
-        library
+        library,
+        bootstrap,
     ]
 
     exit_code = 0

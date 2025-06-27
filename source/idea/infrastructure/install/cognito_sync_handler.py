@@ -69,7 +69,7 @@ def disable_cognito_user_AD_dups(cognito_users: list[CognitoUser]) -> None:
 
 
 def update_group_member_association_in_ddb(
-    cognito_group_to_usernames: dict[str, list[str]]
+    cognito_group_to_usernames: dict[str, list[str]],
 ) -> None:
     # Get users from DDB
     dynamodb_client = boto3.client("dynamodb")

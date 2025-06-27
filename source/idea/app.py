@@ -14,6 +14,7 @@ from idea.constants import (
     HOST_MODULES_PIPELINE_STACK_NAME,
     INSTALL_STACK_NAME,
     PIPELINE_STACK_NAME,
+    STAGING_BUCKET_PREFIX_NAME,
 )
 from idea.infrastructure.install.parameters.parameters import RESParameters
 from idea.infrastructure.install.proxy import ProxyStack
@@ -66,6 +67,11 @@ def main() -> None:
         parameters=parameters,
         installer_registry_name=installer_registry_name,
         ad_sync_registry_name=ad_sync_registry_name,
+        staging_bucket_name=(
+            f"{ARTIFACTS_BUCKET_PREFIX_NAME}-${{AWS::Region}}"
+            if is_publish_templates
+            else f"{STAGING_BUCKET_PREFIX_NAME}-{cdk.Aws.REGION}-{cdk.Aws.ACCOUNT_ID}"
+        ),
         synthesizer=install_synthesizer,
     )
 

@@ -11,7 +11,7 @@
  * and limitations under the License.
  */
 
-import React, { forwardRef, useImperativeHandle, useState } from "react";
+import React, {forwardRef, useCallback, useEffect, useImperativeHandle, useState} from "react";
 import { NonCancelableEventHandler } from "@cloudscape-design/components/internal/events";
 import { TableProps } from "@cloudscape-design/components/table/interfaces";
 import { Box, CollectionPreferences, Pagination, PropertyFilter, PropertyFilterProps, Select, SpaceBetween, Table, TextFilter } from "@cloudscape-design/components";
@@ -91,7 +91,7 @@ const IdeaTableSelectFilters = (props: IdeaTableSelectFiltersProps) => {
         return selectFilters;
     });
 
-    const buildFilters = (): SocaFilter[] => {
+    const buildFilters = useCallback((): SocaFilter[] => {
         let result = [];
         if (Utils.isNotEmpty(textFilterValue)) {
             result.push({
@@ -111,7 +111,11 @@ const IdeaTableSelectFilters = (props: IdeaTableSelectFiltersProps) => {
             });
         }
         return result;
-    };
+    }, [selectFilters, textFilterValue]);
+
+    useEffect(() => {
+        props.onFilter(buildFilters());
+    }, [selectFilters]);
 
     return (
         <SpaceBetween size={"m"} direction={"horizontal"}>
@@ -143,7 +147,6 @@ const IdeaTableSelectFilters = (props: IdeaTableSelectFiltersProps) => {
                                     selectedOption: event.detail.selectedOption,
                                 }
                             }));
-                            props.onFilter(buildFilters());
                         }}
                     />
                 );
@@ -169,7 +172,7 @@ const IdeaTable = forwardRef<IdeaTableRef, IdeaTableProps>((props, ref) => {
         setSeletedItems([]);
         setFilteringText("");
     };
-    
+
     const clearSelectedItems = () => {
         setSeletedItems([]);
     };

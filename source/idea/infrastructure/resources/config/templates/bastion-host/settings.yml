@@ -1,3 +1,5 @@
+app_package_uri: s3://{{ staging_bucket_name }}/releases/{{ version }}/idea-bastion-host-{{ version }}.tar.gz
+
 public: {{ alb_public | lower }}
 instance_type: t3.medium
 base_os: {{base_os}}

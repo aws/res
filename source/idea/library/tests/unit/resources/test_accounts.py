@@ -227,6 +227,27 @@ def test_accounts_crud_list_users(context):
     assert found is not None
 
 
+def test_accounts_crud_list_users_admin(context):
+    """
+    list admin users
+    """
+    created_user = accounts.create_user(
+        user={
+            "username": "admin_user",
+            "email": "accounts_admin@example.com",
+            "role": constants.ADMIN_ROLE,
+            "additional_groups": [],
+            "is_active": True,
+            "enabled": True,
+        },
+    )
+
+    result = accounts.list_users(admin=True)
+    assert result is not None
+    assert len(result) == 1
+    assert result[0].get("username") == created_user.get("username")
+
+
 def test_accounts_create_group_with_invalid_name_or_type_should_fail(context):
     """
     external group with invalid name or type

@@ -1,19 +1,16 @@
 #  Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 #  SPDX-License-Identifier: Apache-2.0
 
-import logging
 from typing import Any, Dict, Optional
 
-from res.utils import table_utils  # type: ignore
-
-logger = logging.getLogger(__name__)
-logger.addHandler(logging.StreamHandler())
-logger.setLevel(logging.INFO)
+from res.utils import logging_utils, table_utils  # type: ignore
 
 GSI_PROJECT_NAME = "project-name-index"
 GSI_PROJECT_NAME_HASH_KEY = "name"
 PROJECTS_TABLE_NAME = "projects"
 PROJECTS_DB_HASH_KEY = "project_id"
+
+logger = logging_utils.get_logger(PROJECTS_TABLE_NAME)
 
 
 def get_project(

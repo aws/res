@@ -39,7 +39,7 @@ class SetTestModeThread(threading.Thread):
             "sudo sed -i '/^RES_TEST_MODE/d' /etc/environment && "
             f"echo 'RES_TEST_MODE={str(self._enable)}' | sudo tee -a /etc/environment && "
             "sudo service supervisord restart && "
-            "sudo /opt/idea/python/3.9.16/bin/supervisorctl start all"
+            "sudo /opt/idea/python/latest/bin/supervisorctl start all"
         ]
         health_check_commands = ["curl https://localhost:8443/healthcheck -k"]
 

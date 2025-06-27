@@ -29,7 +29,9 @@ us-east-1:
 us-east-2:
   amazonlinux2: ami-013ce69c368262d19
 us-gov-west-1:
-  amazonlinux2: ami-06c442589e803c7ab
+  amazonlinux2: ami-05f376d4ff38e8d00
+us-gov-east-1:
+  amazonlinux2: ami-0bc5efe43b225145f
 us-west-1:
   amazonlinux2: ami-06f932bfd69e55cc3
 us-west-2:

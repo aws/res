@@ -1,0 +1,4 @@
+-r idea-sdk.in
+-r library.in
+pyOpenSSL~=25.0.0
+schedule~=1.2.2

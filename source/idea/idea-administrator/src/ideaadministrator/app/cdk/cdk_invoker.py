@@ -359,53 +359,6 @@ class CdkInvoker:
         finally:
             self.log('CdkInvoker: End Destroy')
 
-    def upload_vdi_install_scripts(self, cluster_config: ClusterConfig,
-                                           force_build=False,
-                                           upload=True) -> None:
-        """
-        render the bootstrap package for VDI install scripts and upload to the cluster's s3 bucket.
-        returns None.
-        """
-
-        session = Utils.create_boto_session(self.aws_region, self.aws_profile)
-        s3_client = session.client('s3')
-
-        for vdi_os in ['linux', 'windows']:
-            bootstrap_context = BootstrapContext(
-                config=cluster_config,
-                module_name=self.module_name,
-                module_id=self.module_id,
-                module_set=self.module_set,
-                base_os=BaseOS.AMAZON_LINUX_2.value if vdi_os == 'linux' else BaseOS.WINDOWS.value,
-                instance_type='t3.medium',
-            )
-
-            components = ['virtual-desktop-host-linux', 'nice-dcv-linux', 'vdi-helper']
-            if vdi_os == BaseOS.WINDOWS:
-                components = ['virtual-desktop-host-windows', 'vdi-helper']
-
-            builder = BootstrapPackageBuilder(
-                bootstrap_context=bootstrap_context,
-                source_directory=ideaadministrator.props.bootstrap_source_dir,
-                target_package_basename=f"res_{vdi_os}_install_{bootstrap_context.module_version}",
-                components=components,
-                tmp_dir=self.deployment_dir,
-                force_build=force_build,
-                build_only_install_scripts=True
-            )
-            bootstrap_package_archive_file = builder.build()
-
-            cluster_s3_bucket = bootstrap_context.config.get_string('cluster.cluster_s3_bucket', required=True)
-            bootstrap_package_uri = f's3://{cluster_s3_bucket}/idea/vdc/res-ready-install-script-packages/{vdi_os}/{os.path.basename(bootstrap_package_archive_file)}'
-
-            if upload:
-                self.log(f'uploading bootstrap install script package {bootstrap_package_uri} ...')
-                s3_client.upload_file(
-                    Bucket=cluster_s3_bucket,
-                    Filename=bootstrap_package_archive_file,
-                    Key=f'idea/vdc/res-ready-install-script-packages/{vdi_os}/{os.path.basename(bootstrap_package_archive_file)}'
-                )
-
     def build_and_upload_bootstrap_package(self, bootstrap_context: BootstrapContext,
                                            bootstrap_package_basename: str,
                                            bootstrap_components: List[str],
@@ -493,7 +446,9 @@ class CdkInvoker:
                 'aws_dns_suffix': aws_client.aws_dns_suffix(),
                 'cluster_s3_bucket': cluster_config.get_string('cluster.cluster_s3_bucket', required=True),
                 'config': cluster_config,
-                'permission_boundary_arn': cluster_config.get_string('cluster.iam.permission_boundary_arn', default='')
+                'permission_boundary_arn': cluster_config.get_string('cluster.iam.permission_boundary_arn', default=''),
+                "iam_resource_prefix": cluster_config.get_string('cluster.iam.iam_resource_prefix', default=''),
+                "iam_resource_path": cluster_config.get_string('cluster.iam.iam_resource_path', default='/'),
             })
             with open(toolkit_stack_target_file, 'w') as f:
                 f.write(toolkit_stack_content)
@@ -644,8 +599,6 @@ class CdkInvoker:
 
     def invoke_cluster_manager(self, **kwargs):
         upload_release_package = Utils.get_value_as_bool('upload_release_package', kwargs, True)
-        render_bootstrap_package = Utils.get_value_as_bool('render_bootstrap_package', kwargs, True)
-        force_build_bootstrap = Utils.get_value_as_bool('force_build_bootstrap', kwargs, True)
         upload_bootstrap_package = Utils.get_value_as_bool('upload_bootstrap_package', kwargs, True)
         deploy_stack = Utils.get_value_as_bool('deploy_stack', kwargs, True)
 
@@ -668,13 +621,6 @@ class CdkInvoker:
             instance_type=instance_type
         )
 
-        app_package_uri = self.upload_release_package(
-            bootstrap_context=bootstrap_context,
-            package_name=f'idea-cluster-manager-{ideaadministrator.props.current_release_version}.tar.gz',
-            upload=upload_release_package
-        )
-        bootstrap_context.vars.app_package_uri = app_package_uri
-
         bootstrap_context.vars.cognito_min_id = constants.COGNITO_MIN_ID_INCLUSIVE
         bootstrap_context.vars.cognito_max_id = constants.COGNITO_MAX_ID_INCLUSIVE
         bootstrap_context.vars.cognito_uid_attribute = constants.COGNITO_UID_ATTRIBUTE
@@ -694,17 +640,7 @@ class CdkInvoker:
             ]
         )
 
-        bootstrap_package_uri = None
-        if render_bootstrap_package or upload_bootstrap_package:
-            bootstrap_package_uri = self.build_and_upload_bootstrap_package(
-                bootstrap_context=bootstrap_context,
-                bootstrap_package_basename=f'bootstrap-{self.module_id}-{self.deployment_id}',
-                bootstrap_components=[
-                    'cluster-manager'
-                ],
-                upload=upload_bootstrap_package,
-                force_build=force_build_bootstrap
-            )
+        bootstrap_package_uri = cluster_config.get_string('cluster.installation_scripts_uri', required=True)
 
         if upload_release_package and upload_bootstrap_package and deploy_stack:
             outputs_file = os.path.join(self.deployment_dir, 'cluster-manager-outputs.json')
@@ -810,8 +746,6 @@ class CdkInvoker:
 
     def invoke_virtual_desktop_controller(self, **kwargs):
         upload_release_package = Utils.get_value_as_bool('upload_release_package', kwargs, True)
-        render_bootstrap_package = Utils.get_value_as_bool('render_bootstrap_package', kwargs, True)
-        force_build_bootstrap = Utils.get_value_as_bool('force_build_bootstrap', kwargs, True)
         upload_bootstrap_package = Utils.get_value_as_bool('upload_bootstrap_package', kwargs, True)
         deploy_stack = Utils.get_value_as_bool('deploy_stack', kwargs, True)
 
@@ -832,12 +766,6 @@ class CdkInvoker:
             base_os=cluster_config.get_string('virtual-desktop-controller.controller.autoscaling.base_os', required=True),
             instance_type=cluster_config.get_string('virtual-desktop-controller.controller.autoscaling.instance_type', required=True)
         )
-        app_package_uri = self.upload_release_package(
-            bootstrap_context=controller_bootstrap_context,
-            package_name=f'idea-virtual-desktop-controller-{ideaadministrator.props.current_release_version}.tar.gz',
-            upload=upload_release_package
-        )
-        controller_bootstrap_context.vars.controller_package_uri = app_package_uri
         BootstrapUtils.check_and_attach_cloudwatch_logging_and_metrics(
             bootstrap_context=controller_bootstrap_context,
             metrics_namespace=f'{self.cluster_name}/{self.module_id}/controller',
@@ -850,22 +778,6 @@ class CdkInvoker:
                     log_stream_name='application_{ip_address}'
                 )
             ]
-        )
-
-        # virtual desktop app
-        # TODO: remove hard coded bootstrap config after moving virtual-desktop-app to stack
-        app_bootstrap_context = BootstrapContext(
-            config=cluster_config,
-            module_name=constants.MODULE_VIRTUAL_DESKTOP_APP,
-            module_id=constants.MODULE_ID_VIRTUAL_DESKTOP_APP,
-            module_set="default",
-            base_os=cluster_config.get_string('virtual-desktop-controller.controller.autoscaling.base_os', required=True),
-            instance_type=cluster_config.get_string('virtual-desktop-controller.controller.autoscaling.instance_type', required=True)
-        )
-        virtual_desktop_app_package_uri = self.upload_release_package(
-            bootstrap_context=app_bootstrap_context,
-            package_name=f'idea-virtual-desktop-{ideaadministrator.props.current_release_version}.tar.gz',
-            upload=upload_release_package
         )
 
         # dcv broker
@@ -888,6 +800,11 @@ class CdkInvoker:
                     file_path='/var/log/dcv-session-manager-broker/**.log',
                     log_group_name=f'/{self.cluster_name}/{self.module_id}/dcv-broker',
                     log_stream_name='dcv-session-manager-broker_{ip_address}'
+                ),
+                CloudWatchAgentLogFileOptions(
+                    file_path='/opt/idea/app/logs/**.log',
+                    log_group_name=f'/{self.cluster_name}/{self.module_id}/dcv-broker-app',
+                    log_stream_name='application_{ip_address}'
                 )
             ]
         )
@@ -901,12 +818,6 @@ class CdkInvoker:
             base_os=cluster_config.get_string('virtual-desktop-controller.dcv_connection_gateway.autoscaling.base_os', required=True),
             instance_type=cluster_config.get_string('virtual-desktop-controller.dcv_connection_gateway.autoscaling.instance_type', required=True)
         )
-        dcv_connection_gateway_uri = self.upload_release_package(
-            bootstrap_context=dcv_connection_gateway_bootstrap_context,
-            package_name=f'idea-dcv-connection-gateway-{ideaadministrator.props.current_release_version}.tar.gz',
-            upload=upload_release_package
-        )
-        dcv_connection_gateway_bootstrap_context.vars.dcv_connection_gateway_package_uri = dcv_connection_gateway_uri
         BootstrapUtils.check_and_attach_cloudwatch_logging_and_metrics(
             bootstrap_context=dcv_connection_gateway_bootstrap_context,
             metrics_namespace=f'{self.cluster_name}/{self.module_id}/dcv-connection-gateway',
@@ -917,47 +828,18 @@ class CdkInvoker:
                     file_path='/var/log/dcv-connection-gateway/**.log',
                     log_group_name=f'/{self.cluster_name}/{self.module_id}/dcv-connection-gateway',
                     log_stream_name='dcv-connection-gateway_{ip_address}'
+                ),
+                CloudWatchAgentLogFileOptions(
+                    file_path='/opt/idea/app/logs/**.log',
+                    log_group_name=f'/{self.cluster_name}/{self.module_id}/dcv-connection-gateway-app',
+                    log_stream_name='application_{ip_address}'
                 )
             ]
         )
 
-        controller_bootstrap_package_uri = None
-        dcv_broker_package_uri = None
-        dcv_connection_gateway_package_uri = None
-        if render_bootstrap_package or upload_bootstrap_package:
-            controller_bootstrap_package_uri = self.build_and_upload_bootstrap_package(
-                bootstrap_context=controller_bootstrap_context,
-                bootstrap_package_basename=f'bootstrap-{self.module_id}-controller-{self.deployment_id}',
-                bootstrap_components=[
-                    'virtual-desktop-controller'
-                ],
-                upload=upload_bootstrap_package,
-                force_build=force_build_bootstrap
-            )
-            dcv_broker_package_uri = self.build_and_upload_bootstrap_package(
-                bootstrap_context=broker_bootstrap_context,
-                bootstrap_package_basename=f'bootstrap-{self.module_id}-dcv-broker-{self.deployment_id}',
-                bootstrap_components=[
-                    'dcv-broker'
-                ],
-                upload=upload_bootstrap_package,
-                force_build=force_build_bootstrap
-            )
-            dcv_connection_gateway_package_uri = self.build_and_upload_bootstrap_package(
-                bootstrap_context=dcv_connection_gateway_bootstrap_context,
-                bootstrap_package_basename=f'bootstrap-{self.module_id}-dcv-connection-gateway-{self.deployment_id}',
-                bootstrap_components=[
-                    'dcv-connection-gateway'
-                ],
-                upload=upload_bootstrap_package,
-                force_build=force_build_bootstrap
-            )
-            self.upload_vdi_install_scripts(
-                cluster_config=cluster_config,
-                upload=upload_bootstrap_package,
-                force_build=force_build_bootstrap
-            )
-
+        controller_bootstrap_package_uri = cluster_config.get_string('cluster.installation_scripts_uri', required=True)
+        dcv_broker_package_uri = cluster_config.get_string('cluster.installation_scripts_uri', required=True)
+        dcv_connection_gateway_package_uri = cluster_config.get_string('cluster.installation_scripts_uri', required=True)
         if upload_release_package and upload_bootstrap_package and deploy_stack:
             outputs_file = os.path.join(self.deployment_dir, 'virtual-desktop-controller-outputs.json')
             cdk_app_cmd = self.get_cdk_app_cmd()
@@ -981,9 +863,6 @@ class CdkInvoker:
             if module_name == constants.MODULE_SCHEDULER and status == 'not-deployed':
                 raise exceptions.general_exception(f'cannot deploy {self.module_id}. module: {module_id} is not yet deployed.')
 
-        upload_release_package = Utils.get_value_as_bool('upload_release_package', kwargs, True)
-        render_bootstrap_package = Utils.get_value_as_bool('render_bootstrap_package', kwargs, True)
-        force_build_bootstrap = Utils.get_value_as_bool('force_build_bootstrap', kwargs, True)
         upload_bootstrap_package = Utils.get_value_as_bool('upload_bootstrap_package', kwargs, True)
         deploy_stack = Utils.get_value_as_bool('deploy_stack', kwargs, True)
 
@@ -1010,13 +889,6 @@ class CdkInvoker:
         bootstrap_context.vars.cognito_max_id = constants.COGNITO_MAX_ID_INCLUSIVE
         bootstrap_context.vars.cognito_uid_attribute = constants.COGNITO_UID_ATTRIBUTE
         bootstrap_context.vars.cognito_default_user_group = constants.COGNITO_DEFAULT_USER_GROUP
-        
-        app_package_uri = self.upload_release_package(
-            bootstrap_context=bootstrap_context,
-            package_name=f'idea-bastion-host-{ideaadministrator.props.current_release_version}.tar.gz',
-            upload=upload_release_package
-        )
-        bootstrap_context.vars.app_package_uri = app_package_uri
 
         BootstrapUtils.check_and_attach_cloudwatch_logging_and_metrics(
             bootstrap_context=bootstrap_context,
@@ -1032,18 +904,7 @@ class CdkInvoker:
             ]
         )
 
-        bootstrap_package_uri = None
-        if render_bootstrap_package or upload_bootstrap_package:
-            bootstrap_package_uri = self.build_and_upload_bootstrap_package(
-                bootstrap_context=bootstrap_context,
-                bootstrap_package_basename=f'bootstrap-{self.module_id}-{self.deployment_id}',
-                bootstrap_components=[
-                    'common',
-                    'bastion-host'
-                ],
-                upload=upload_bootstrap_package,
-                force_build=force_build_bootstrap
-            )
+        bootstrap_package_uri = cluster_config.get_string('cluster.installation_scripts_uri', required=True)
 
         if upload_bootstrap_package and deploy_stack:
             outputs_file = os.path.join(self.deployment_dir, 'bastion-host-outputs.json')

@@ -55,14 +55,14 @@ def test_role_creation(
         props={
             "Properties": {
                 "AssumeRolePolicyDocument": assume_role_policy_document,
+                "Path": stack.resolve(stack.installer.tasks.iam_resource_path),
                 "RoleName": {
                     "Fn::Join": [
                         "",
                         [
+                            stack.resolve(stack.installer.tasks.iam_resource_prefix),
                             "Admin-",
                             {"Ref": CommonKey.CLUSTER_NAME},
-                            "-",
-                            {"Ref": "AWS::Region"},
                             f"-PipelineRole",
                         ],
                     ]

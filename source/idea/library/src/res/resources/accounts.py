@@ -2,7 +2,6 @@
 #  SPDX-License-Identifier: Apache-2.0
 
 import grp
-import logging
 import os
 import pwd
 import re
@@ -11,11 +10,7 @@ from typing import Any, Dict, List, Optional
 import res.constants as constants  # type: ignore
 import res.exceptions as exceptions  # type: ignore
 from res.resources import role_assignments  # type: ignore
-from res.utils import auth_utils, table_utils, time_utils  # type: ignore
-
-logger = logging.getLogger(__name__)
-logger.addHandler(logging.StreamHandler())
-logger.setLevel(logging.INFO)
+from res.utils import auth_utils, logging_utils, table_utils, time_utils  # type: ignore
 
 GROUPS_TABLE_NAME = "accounts.groups"
 GROUPS_DB_HASH_KEY = "group_name"
@@ -36,6 +31,8 @@ SSO_STATE_DB_HASH_KEY = "state"
 
 GROUP_NAME_CHARACTER_LIMIT = 64
 GROUP_NAME_INVALID_CHARACTERS = set('[]:;|=+*?<>@"/\\')
+
+logger = logging_utils.get_logger("accounts")
 
 
 def list_groups() -> List[Dict[str, Any]]:
@@ -213,12 +210,17 @@ def update_group(group: Dict[str, Any], force: bool = False) -> Dict[str, Any]:
     return updated_group
 
 
-def list_users() -> List[Dict[str, Any]]:
+def list_users(admin: bool = False) -> List[Dict[str, Any]]:
     """
     Retrieve the users from DDB
     :return: list of users
     """
-    users: List[Dict[str, Any]] = table_utils.list_items(USERS_TABLE_NAME)
+    if admin:
+        users: List[Dict[str, Any]] = table_utils.scan(
+            USERS_TABLE_NAME, {"role": "admin"}
+        )
+    else:
+        users: List[Dict[str, Any]] = table_utils.list_items(USERS_TABLE_NAME)
     return users
 
 

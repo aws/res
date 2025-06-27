@@ -23,7 +23,7 @@ import VirtualDesktopBaseOSChart from "./charts/virtual-desktop-baseos-chart";
 import VirtualDesktopSoftwareStackChart from "./charts/virtual-desktop-software-stack-chart";
 import VirtualDesktopProjectChart from "./charts/virtual-desktop-project-chart";
 import { withRouter } from "../../navigation/navigation-utils";
-import { VirtualDesktopSession } from '../../client/data-model'
+import { ListSessionsResponse, VirtualDesktopSession } from '../../client/data-model'
 
 export interface VirtualDesktopDashboardProps extends IdeaAppLayoutProps, IdeaSideNavigationProps {}
 
@@ -64,10 +64,7 @@ class VirtualDesktopDashboard extends Component<VirtualDesktopDashboardProps, Vi
 
     loadSessionsData() {
         this.setState({loading: true})
-        AppContext.get().client().virtualDesktopAdmin()
-            .listSessions({
-                paginator: { page_size: 100 }
-            })
+        this.fetchAllSessions()
             .then((sessions) => {
                 this.setState({sessions: sessions.listing ?? [], loading: false})
             })
@@ -83,6 +80,25 @@ class VirtualDesktopDashboard extends Component<VirtualDesktopDashboardProps, Vi
                 });
                 throw error;
             });
+    }
+
+    async fetchAllSessions(): Promise<ListSessionsResponse> {
+        const response: ListSessionsResponse = {
+            paginator: { page_size: 100 },
+            listing: [],
+        }
+
+        let cursor: string | undefined = undefined;
+        let client = AppContext.get().client().virtualDesktopAdmin()
+        do {
+            const result: ListSessionsResponse = await client.listSessions({
+                paginator: { page_size: 100, cursor: cursor },
+            });
+            response.listing?.push(...result.listing ?? []);
+            cursor = result.paginator?.cursor;
+        } while (cursor);
+
+        return response;
     }
 
     render() {

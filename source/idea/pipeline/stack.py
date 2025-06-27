@@ -20,6 +20,7 @@ from aws_cdk import aws_codecommit as codecommit
 from aws_cdk import aws_ecr as ecr
 from aws_cdk import aws_iam as iam
 from aws_cdk import aws_lambda as lambda_
+from aws_cdk import aws_s3 as s3
 from aws_cdk import pipelines
 from constructs import Construct
 
@@ -30,6 +31,7 @@ from idea.constants import (
     BATTERIES_INCLUDED_STACK_NAME,
     DEFAULT_ECR_REPOSITORY_NAME,
     INSTALL_STACK_NAME,
+    STAGING_BUCKET_PREFIX_NAME,
 )
 from idea.infrastructure.install.parameters.parameters import RESParameters
 from idea.infrastructure.install.stacks.install_stack import InstallStack
@@ -42,6 +44,7 @@ UNIT_TESTS = [
     "tests.virtual-desktop-controller",
     "tests.library",
     "tests.sdk",
+    "tests.bootstrap",
     "tests.pipeline",
     "tests.infrastructure",
     "tests.lambda-functions",
@@ -51,7 +54,7 @@ COMPONENT_INTEG_TESTS = ["integ-tests.cluster-manager"]
 SCANS = ["npm_audit", "bandit", "viperlight_scan"]
 PUBLICECRRepository = "public.ecr.aws/l6g7n3r5/research-engineering-studio"
 ONBOARDED_REGIONS = "ap-northeast-1,ap-northeast-2,ap-south-1,ap-southeast-1,ap-southeast-2,ca-central-1,eu-central-1,eu-north-1,eu-south-1,eu-west-1,eu-west-2,eu-west-3,us-east-1,us-east-2,us-west-1,us-west-2"
-ONBOARDED_REGIONS_GOVCLOUD = "us-gov-west-1"
+ONBOARDED_REGIONS_GOVCLOUD = "us-gov-west-1,us-gov-east-1"
 
 
 class PipelineStack(Stack):
@@ -207,6 +210,30 @@ class PipelineStack(Stack):
             resources=["*"],
         )
 
+        # Create staging bucket
+        self.staging_bucket_name = f"{STAGING_BUCKET_PREFIX_NAME}-{aws_cdk.Aws.REGION}-{aws_cdk.Aws.ACCOUNT_ID}"
+        staging_bucket = s3.Bucket(
+            self,
+            STAGING_BUCKET_PREFIX_NAME,
+            bucket_name=self.staging_bucket_name,
+            access_control=s3.BucketAccessControl.PRIVATE,
+            encryption=s3.BucketEncryption.S3_MANAGED,
+            removal_policy=RemovalPolicy.DESTROY,
+            auto_delete_objects=True,
+            versioned=True,
+        )
+        staging_bucket_write_access = iam.PolicyStatement(
+            effect=iam.Effect.ALLOW,
+            actions=[
+                "s3:PutObject",
+                "s3:DeleteObject",
+            ],
+            resources=[
+                f"arn:{self.partition}:s3:::{self.staging_bucket_name}",
+                f"arn:{self.partition}:s3:::{self.staging_bucket_name}/*",
+            ],
+        )
+
         # Create a CodeBuild project
         self._pipeline = pipelines.CodePipeline(
             self,
@@ -216,6 +243,7 @@ class PipelineStack(Stack):
                 ecr_public_repository_name,
                 bi_stack_template_url,
                 context_use_bi_parameters_from_ssm,
+                self.staging_bucket_name,
             ),
             code_build_defaults=pipelines.CodeBuildOptions(
                 build_environment=codebuild.BuildEnvironment(
@@ -228,6 +256,7 @@ class PipelineStack(Stack):
                     codebuild_ecr_push,
                     ssm_access,
                     vpc_access,
+                    staging_bucket_write_access,
                 ],
             ),
         )
@@ -246,6 +275,7 @@ class PipelineStack(Stack):
                 "Deploy",
                 use_bi_parameters_from_ssm=self._use_bi_parameters_from_ssm,
                 parameters=self.params,
+                staging_bucket_name=self.staging_bucket_name,
             )
 
             post_steps = []
@@ -294,7 +324,9 @@ class PipelineStack(Stack):
                 ONBOARDED_REGIONS_GOVCLOUD,
             ).to_string()
             publish_wave = self._pipeline.add_wave("Publish")
-            publish_steps = self.get_publish_steps(ecr_public_repository_name)
+            publish_steps = self.get_publish_steps(
+                ecr_public_repository_name, self.staging_bucket_name
+            )
             publish_wave.add_post(publish_steps)
 
             # After the artifacts gets published into each region's "RELEASE_VERSION" prefixed bucket, we will release
@@ -333,6 +365,7 @@ class PipelineStack(Stack):
         ecr_public_repository_name: str,
         bi_stack_template_url: str,
         use_bi_parameters_from_ssm: str,
+        staging_bucket_name: str,
     ) -> pipelines.CodeBuildStep:
         return pipelines.CodeBuildStep(
             "Synth",
@@ -347,6 +380,7 @@ class PipelineStack(Stack):
                 BATTERIES_INCLUDED="true" if self._bi else "false",
                 BIStackTemplateURL=bi_stack_template_url,
                 ECR_REPOSITORY=ecr_repository_name,
+                STAGING_BUCKET_NAME=staging_bucket_name,
                 ECR_PUBLIC_REPOSITORY_NAME=ecr_public_repository_name,
                 USE_BI_PARAMETERS_FROM_SSM=use_bi_parameters_from_ssm,
                 PUBLISH_TEMPLATES="true" if self._publish_templates else "false",
@@ -382,7 +416,10 @@ class PipelineStack(Stack):
         codebuild_route53_policy = iam.PolicyStatement(
             effect=iam.Effect.ALLOW,
             actions=["route53:ChangeResourceRecordSets", "route53:GetChange"],
-            resources=["arn:aws:route53:::hostedzone/*", "arn:aws:route53:::change/*"],
+            resources=[
+                f"arn:{self.partition}:route53:::hostedzone/*",
+                f"arn:{self.partition}:route53:::change/*",
+            ],
         )
         return codebuild_read_policy, codebuild_route53_policy
 
@@ -826,7 +863,7 @@ class PipelineStack(Stack):
         )
 
     def get_publish_steps(
-        self, ecr_public_repository_name: str
+        self, ecr_public_repository_name: str, staging_bucket_name: str
     ) -> pipelines.CodeBuildStep:
         ecr_public_repository_uri = (
             "" if ecr_public_repository_name else PUBLICECRRepository
@@ -860,6 +897,19 @@ class PipelineStack(Stack):
             actions=["ec2:DescribeRegions"],
             resources=["*"],
         )
+        staging_bucket_read_access = iam.PolicyStatement(
+            effect=iam.Effect.ALLOW,
+            actions=[
+                "s3:GetObjectTagging",
+                "s3:getBucketLocation",
+                "s3:ListBucket",
+                "s3:GetObject",
+            ],
+            resources=[
+                f"arn:{self.partition}:s3:::{self.staging_bucket_name}",
+                f"arn:{self.partition}:s3:::{self.staging_bucket_name}/*",
+            ],
+        )
         return pipelines.CodeBuildStep(
             "Publish templates and docker image",
             build_environment=codebuild.BuildEnvironment(
@@ -875,6 +925,7 @@ class PipelineStack(Stack):
                 ECR_REPOSITORY_URI_PARAMETER=ecr_public_repository_uri,
                 SKIP_ENV_UPDATE="true",
                 ONBOARDED_REGIONS=self.onboarded_regions,
+                STAGING_BUCKET_NAME=staging_bucket_name,
             ),
             install_commands=get_commands_for_scripts(
                 [
@@ -891,6 +942,7 @@ class PipelineStack(Stack):
                 codebuild_ecr_access,
                 codebuild_ecr_repository,
                 codebuild_describe_regions,
+                staging_bucket_read_access,
             ],
         )
 
@@ -960,6 +1012,7 @@ class DeployStage(Stage):
         construct_id: str,
         use_bi_parameters_from_ssm: bool,
         parameters: Union[RESParameters, BIParameters],
+        staging_bucket_name: str = "",
     ):
         super().__init__(scope, construct_id)
         installer_registry_name = self.node.try_get_context("installer_registry_name")
@@ -979,6 +1032,7 @@ class DeployStage(Stage):
             self,
             INSTALL_STACK_NAME,
             parameters=parameters,
+            staging_bucket_name=staging_bucket_name,
             installer_registry_name=installer_registry_name,
             ad_sync_registry_name=ad_sync_registry_name,
         )

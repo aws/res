@@ -1,18 +1,11 @@
 #  Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 #  SPDX-License-Identifier: Apache-2.0
 
-import logging
 import uuid
-from typing import Any, Dict, Optional
+from typing import Any, Dict
 
-import res.exceptions as exceptions
 from res.clients.events import events_client
-from res.resources import cluster_settings
-from res.utils import aws_utils, table_utils, time_utils
-
-logger = logging.getLogger(__name__)
-logger.addHandler(logging.StreamHandler())
-logger.setLevel(logging.INFO)
+from res.utils import logging_utils, table_utils
 
 SCHEDULE_DB_HASH_KEY = "day_of_week"
 SCHEDULE_DB_RANGE_KEY = "schedule_id"
@@ -27,6 +20,8 @@ SCHEDULE_DAYS = [
     "saturday",
     "sunday",
 ]
+
+logger = logging_utils.get_logger(SCHEDULE_DB_TABLE_NAME)
 
 
 def create_schedule(schedule: Dict[str, Any]) -> Dict[str, Any]:

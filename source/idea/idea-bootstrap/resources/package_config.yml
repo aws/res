@@ -1,0 +1,373 @@
+package_config:
+  amazon_cloudwatch_agent:
+    download_link: ~
+    # since there are multiple variations and platforms, to avoid creating multiple configuration entries, below pattern is used.
+    # you can always override the downloading link by providing the download_link.
+    # if download_link is empty, download_link_pattern will be used to download cloudwatch agent
+    # refer to below files to perform additional customizations or implementation details:
+    #  * idea-bootstrap/_templates/linux/cloudwatch_agent.jinja2
+    #  * idea-bootstrap/_templates/windows/cloudwatch_agent.jinja2
+    # CN and GovCloud Partitions will need to change or adjust the download_url_pattern accordingly.
+    download_link_pattern: https://s3.%region%.amazonaws.com/amazoncloudwatch-agent-%region%/%os%/%architecture%/latest/amazon-cloudwatch-agent.%ext%
+
+  aws_ssm:
+    x86_64: https://s3.amazonaws.com/ec2-downloads-windows/SSMAgent/latest/linux_amd64/amazon-ssm-agent.rpm
+    aarch64: https://s3.amazonaws.com/ec2-downloads-windows/SSMAgent/latest/linux_arm64/amazon-ssm-agent.rpm
+
+  system:
+    red_hat:
+      # Default packages installed on all Linux systems, kernel related packages' version is pinned to the running kernel's
+      # version to keep them synchronized.
+      - dnf-plugins-core
+      - git
+      - kernel-core-$(uname -r)
+      - kernel-devel-$(uname -r)
+      - kernel-headers-$(uname -r)
+      - kernel-modules-$(uname -r)
+      - kernel-modules-core-$(uname -r)
+      - kernel-tools-$(uname -r)
+      - kernel-tools-libs-$(uname -r)
+      - libselinux
+      - libselinux-devel
+      - libselinux-utils
+      - nscd
+      - rpm-build
+      - tar
+      - vim
+      - wget
+      - cronie
+    debian:
+      - policycoreutils
+      - expect
+      - nscd
+      - libsasl2-dev
+
+  sssd:
+    # SSSD and dependencies
+    red_hat:
+      - adcli
+      - authconfig
+      - krb5-workstation
+      - oddjob
+      - oddjob-mkhomedir
+      - openldap-clients
+      - openldap-devel
+      - realmd
+      - samba-common-tools
+      - sssd
+      - sssd-tools
+    debian:
+      - sssd-ad
+      - sssd-ldap
+      - ldap-utils
+      - libldap2-dev
+      - realmd
+      - krb5-user
+      - sssd-krb5
+      - sssd-tools
+      - adcli
+
+  putty:
+    # used by cluster-manager to convert .pem files to .ppk files
+    red_hat:
+      - putty
+
+
+  host_modules:
+    nss:
+      - libnss_cognito
+    pam:
+      - pam_cognito
+      - ssh_keygen
+
+  fsx_lustre_client:
+    prerequisites:
+      red_hat:
+        public_key: https://fsx-lustre-client-repo-public-keys.s3.amazonaws.com/fsx-rpm-public-key.asc
+        repo:
+          rhel8: https://fsx-lustre-client-repo.s3.amazonaws.com/el/8/fsx-lustre-client.repo
+          rhel9: https://fsx-lustre-client-repo.s3.amazonaws.com/el/9/fsx-lustre-client.repo
+      debian:
+        public_key: https://fsx-lustre-client-repo-public-keys.s3.amazonaws.com/fsx-ubuntu-public-key.asc
+        repo: https://fsx-lustre-client-repo.s3.amazonaws.com/ubuntu
+    red_hat:
+      al2:
+        - lustre
+      al2023:
+        - lustre-client
+      rhel:
+        - kmod-lustre-client
+        - lustre-client
+    debian:
+      ubuntu:
+        - lustre-client-modules-$(uname -r)
+
+  efs_mount_helper:
+    build_dependencies:
+      red_hat:
+        rhel:
+          - rust-toolset
+          - rust
+          - cargo
+          - make
+          - openssl-devel
+      debian:
+        ubuntu:
+          - binutils
+          - rustc
+          - cargo
+          - pkg-config
+          - libssl-dev
+    al2: amazon-efs-utils
+    repo: https://github.com/aws/efs-utils
+
+  python:
+    build_dependencies:
+      red_hat:
+        al2:
+          - gcc
+          - make
+          - patch
+          - zlib-devel
+          - bzip2
+          - bzip2-devel
+          - readline-devel
+          - sqlite
+          - sqlite-devel
+          - openssl11-devel
+          - tk-devel
+          - libffi-devel
+          - xz-devel
+        amzn2023:
+          - gcc
+          - make
+          - patch
+          - zlib-devel
+          - bzip2
+          - bzip2-devel
+          - readline-devel
+          - sqlite
+          - sqlite-devel
+          - openssl11-devel
+          - tk-devel
+          - libffi-devel
+          - xz-devel
+          - openssl-devel
+        rhel:
+          - make
+          - gcc
+          - patch
+          - zlib-devel
+          - bzip2
+          - bzip2-devel
+          - readline-devel
+          - sqlite
+          - sqlite-devel
+          - openssl-devel
+          - tk-devel
+          - libffi-devel
+          - xz-devel
+          - libuuid-devel
+          - gdbm-libs
+          - libnsl2
+      debian:
+        ubuntu2204:
+          - build-essential
+          - libssl-dev
+          - zlib1g-dev
+          - libbz2-dev
+          - libreadline-dev
+          - libsqlite3-dev
+          - curl
+          - git
+          - libncursesw5-dev
+          - xz-utils
+          - tk-dev
+          - libxml2-dev
+          - libxmlsec1-dev
+          - libffi-dev
+          - liblzma-dev
+    version: 3.9.16
+
+  epel_repo:
+    rhel8: https://dl.fedoraproject.org/pub/epel/epel-release-latest-8.noarch.rpm
+    rhel9: https://dl.fedoraproject.org/pub/epel/epel-release-latest-9.noarch.rpm
+    rocky9: https://dl.fedoraproject.org/pub/epel/epel-release-latest-9.noarch.rpm
+
+  dcv:
+    gpg_key: https://d1uj6qtbmh3dt5.cloudfront.net/NICE-GPG-KEY
+    host:
+      prerequisites:
+        debian:
+          ubuntu2204:
+            - ubuntu-desktop
+            - gdm3
+        red_hat:
+          al2:
+            # List of packages to install when using Mate Desktop
+            - gdm
+            - gnome-session
+            - gnome-classic-session
+            - gnome-session-xsession
+            - gnome-terminal
+            - gnu-free-fonts-common
+            - gnu-free-mono-fonts
+            - gnu-free-sans-fonts
+            - gnu-free-serif-fonts
+            - xorg-x11-server-Xorg
+            - xorg-x11-server-utils
+            - xorg-x11-utils
+            - xorg-x11-fonts-Type1
+            - xorg-x11-drivers
+            - gstreamer1-plugins-good
+            - pcsc-lite-libs
+      x86_64:
+        linux:
+          al2:
+            url: https://d1uj6qtbmh3dt5.cloudfront.net/nice-dcv-el7-x86_64.tgz
+            sha256sum: https://d1uj6qtbmh3dt5.cloudfront.net/nice-dcv-el7-x86_64.tgz.sha256sum
+          al2023:
+            url: https://d1uj6qtbmh3dt5.cloudfront.net/nice-dcv-amzn2023-x86_64.tgz
+            sha256sum: https://d1uj6qtbmh3dt5.cloudfront.net/nice-dcv-amzn2023-x86_64.tgz.sha256sum
+          rhel_centos_rocky8:
+            url: https://d1uj6qtbmh3dt5.cloudfront.net/nice-dcv-el8-x86_64.tgz
+            sha256sum: https://d1uj6qtbmh3dt5.cloudfront.net/nice-dcv-el8-x86_64.tgz.sha256sum
+          rhel_centos_rocky9:
+            url: https://d1uj6qtbmh3dt5.cloudfront.net/nice-dcv-el9-x86_64.tgz
+            sha256sum: https://d1uj6qtbmh3dt5.cloudfront.net/nice-dcv-el9-x86_64.tgz.sha256sum
+        debian:
+          ubuntu2204:
+            url: https://d1uj6qtbmh3dt5.cloudfront.net/nice-dcv-ubuntu2204-x86_64.tgz
+            sha256sum: https://d1uj6qtbmh3dt5.cloudfront.net/nice-dcv-ubuntu2204-x86_64.tgz.sha256sum
+      aarch64:
+        linux:
+          al2:
+            url: https://d1uj6qtbmh3dt5.cloudfront.net/nice-dcv-el7-aarch64.tgz
+            sha256sum: https://d1uj6qtbmh3dt5.cloudfront.net/nice-dcv-el7-aarch64.tgz.sha256sum
+          al2023:
+            url: https://d1uj6qtbmh3dt5.cloudfront.net/nice-dcv-amzn2023-aarch64.tgz
+            sha256sum: https://d1uj6qtbmh3dt5.cloudfront.net/nice-dcv-amzn2023-aarch64.tgz.sha256sum
+          rhel_centos_rocky8:
+            url: https://d1uj6qtbmh3dt5.cloudfront.net/nice-dcv-el8-aarch64.tgz
+            sha256sum: https://d1uj6qtbmh3dt5.cloudfront.net/nice-dcv-el8-aarch64.tgz.sha256sum
+          rhel_centos_rocky9:
+            url: https://d1uj6qtbmh3dt5.cloudfront.net/nice-dcv-el9-aarch64.tgz
+            sha256sum: https://d1uj6qtbmh3dt5.cloudfront.net/nice-dcv-el9-aarch64.tgz.sha256sum
+    agent:
+      x86_64:
+        linux:
+          al2:
+            url: https://d1uj6qtbmh3dt5.cloudfront.net/nice-dcv-session-manager-agent-el7.x86_64.rpm
+            sha256sum: https://d1uj6qtbmh3dt5.cloudfront.net/nice-dcv-session-manager-agent-el7.x86_64.rpm.sha256sum
+          al2023:
+            url: https://d1uj6qtbmh3dt5.cloudfront.net/nice-dcv-session-manager-agent-amzn2023.x86_64.rpm
+            sha256sum: https://d1uj6qtbmh3dt5.cloudfront.net/nice-dcv-session-manager-agent-amzn2023.x86_64.rpm.sha256sum
+          rhel_centos_rocky8:
+            url: https://d1uj6qtbmh3dt5.cloudfront.net/nice-dcv-session-manager-agent-el8.x86_64.rpm
+            sha256sum: https://d1uj6qtbmh3dt5.cloudfront.net/nice-dcv-session-manager-agent-el8.x86_64.rpm.sha256sum
+          rhel_centos_rocky9:
+            url: https://d1uj6qtbmh3dt5.cloudfront.net/nice-dcv-session-manager-agent-el9.x86_64.rpm
+            sha256sum: https://d1uj6qtbmh3dt5.cloudfront.net/nice-dcv-session-manager-agent-el9.x86_64.rpm.sha256sum
+        ubuntu:
+          ubuntu2204:
+            url: https://d1uj6qtbmh3dt5.cloudfront.net/nice-dcv-session-manager-agent_amd64.ubuntu2204.deb
+            sha256sum: https://d1uj6qtbmh3dt5.cloudfront.net/nice-dcv-session-manager-agent_amd64.ubuntu2204.deb.sha256sum
+      aarch64:
+        linux:
+          al2:
+            url: https://d1uj6qtbmh3dt5.cloudfront.net/nice-dcv-session-manager-agent-el7.aarch64.rpm
+            sha256sum: https://d1uj6qtbmh3dt5.cloudfront.net/nice-dcv-session-manager-agent-el7.aarch64.rpm.sha256sum
+          al2023:
+            url: https://d1uj6qtbmh3dt5.cloudfront.net/nice-dcv-session-manager-agent-amzn2023.aarch64.rpm
+            sha256sum: https://d1uj6qtbmh3dt5.cloudfront.net/nice-dcv-session-manager-agent-amzn2023.aarch64.rpm.sha256sum
+          rhel_centos_rocky8:
+            url: https://d1uj6qtbmh3dt5.cloudfront.net/nice-dcv-session-manager-agent-el8.aarch64.rpm
+            sha256sum: https://d1uj6qtbmh3dt5.cloudfront.net/nice-dcv-session-manager-agent-el8.aarch64.rpm.sha256sum
+          rhel_centos_rocky9:
+            url: https://d1uj6qtbmh3dt5.cloudfront.net/nice-dcv-session-manager-agent-el9.aarch64.rpm
+            sha256sum: https://d1uj6qtbmh3dt5.cloudfront.net/nice-dcv-session-manager-agent-el9.aarch64.rpm.sha256sum
+    connection_gateway:
+      x86_64:
+        linux:
+          al2:
+            url: https://d1uj6qtbmh3dt5.cloudfront.net/nice-dcv-connection-gateway-el7.x86_64.rpm
+            sha256sum: https://d1uj6qtbmh3dt5.cloudfront.net/nice-dcv-connection-gateway-el7.x86_64.rpm.sha256sum
+          rhel_centos_rocky8:
+            url: https://d1uj6qtbmh3dt5.cloudfront.net/nice-dcv-connection-gateway-el8.x86_64.rpm
+            sha256sum: https://d1uj6qtbmh3dt5.cloudfront.net/nice-dcv-connection-gateway-el8.x86_64.rpm.sha256sum
+          rhel_centos_rocky9:
+            url: https://d1uj6qtbmh3dt5.cloudfront.net/nice-dcv-connection-gateway-el9.x86_64.rpm
+            sha256sum: https://d1uj6qtbmh3dt5.cloudfront.net/nice-dcv-connection-gateway-el9.x86_64.rpm.sha256sum
+      aarch64:
+        linux:
+          al2:
+            url: https://d1uj6qtbmh3dt5.cloudfront.net/nice-dcv-connection-gateway-el7.aarch64.rpm
+            sha256sum: https://d1uj6qtbmh3dt5.cloudfront.net/nice-dcv-connection-gateway-el7.aarch64.rpm.sha256sum
+          rhel_centos_rocky8:
+            url: https://d1uj6qtbmh3dt5.cloudfront.net/nice-dcv-connection-gateway-el8.aarch64.rpm
+            sha256sum: https://d1uj6qtbmh3dt5.cloudfront.net/nice-dcv-connection-gateway-el8.aarch64.rpm.sha256sum
+          rhel_centos_rocky9:
+            url: https://d1uj6qtbmh3dt5.cloudfront.net/nice-dcv-connection-gateway-el8.aarch64.rpm
+            sha256sum: https://d1uj6qtbmh3dt5.cloudfront.net/nice-dcv-connection-gateway-el8.aarch64.rpm.sha256sum
+    broker:
+      linux:
+        al2:
+          url: https://d1uj6qtbmh3dt5.cloudfront.net/nice-dcv-session-manager-broker-el7.noarch.rpm
+          sha256sum: https://d1uj6qtbmh3dt5.cloudfront.net/nice-dcv-session-manager-broker-el7.noarch.rpm.sha256sum
+        al2023:
+          url: https://d1uj6qtbmh3dt5.cloudfront.net/nice-dcv-session-manager-broker-amzn2023.noarch.rpm
+          sha256sum: https://d1uj6qtbmh3dt5.cloudfront.net/nice-dcv-session-manager-broker-amzn2023.noarch.rpm.sha256sum
+        rhel_centos_rocky8:
+          url: https://d1uj6qtbmh3dt5.cloudfront.net/nice-dcv-session-manager-broker-el8.noarch.rpm
+          sha256sum: https://d1uj6qtbmh3dt5.cloudfront.net/nice-dcv-session-manager-broker-el8.noarch.rpm.sha256sum
+        rhel_centos_rocky9:
+          url: https://d1uj6qtbmh3dt5.cloudfront.net/nice-dcv-session-manager-broker-el9.noarch.rpm
+          sha256sum: https://d1uj6qtbmh3dt5.cloudfront.net/nice-dcv-session-manager-broker-el9.noarch.rpm.sha256sum
+
+  gpu_driver:
+    prerequisites:
+      debian:
+        - mesa-utils
+        - gcc
+        - make
+        - linux-headers-$(uname -r)
+        - gcc-12
+      red_hat:
+        - gcc
+        - make
+        - kernel-headers-$(uname -r)
+        - kernel-modules-extra-$(uname -r)
+        - kernel-devel-$(uname -r)
+    nvidia:
+      s3_bucket_url: "ec2-linux-nvidia-drivers.s3.amazonaws.com"
+      s3_bucket_path: "s3://ec2-linux-nvidia-drivers/latest/"
+    amd:
+      debian:
+        download_link: "https://repo.radeon.com/amdgpu-install/6.2.1/ubuntu/jammy/amdgpu-install_6.2.60201-1_all.deb"
+      red_hat:
+        s3_bucket_url: "ec2-amd-linux-drivers.s3.amazonaws.com"
+        s3_bucket_path: "s3://ec2-amd-linux-drivers/latest/"
+    nvidia_public_driver_versions:
+      ltsb_version: &ltsb_version 470.141.03
+      production_version: &production_version 510.47.03
+      p2: *ltsb_version
+      g2: *ltsb_version
+      g3: *production_version
+      g3s: *production_version
+      g4dn: *production_version
+      g5: *production_version
+      g5g: *production_version
+      g6: *production_version
+      g6e: *production_version
+      gr6: *production_version
+      p3: *production_version
+      p4d: *production_version
+      p4de: *production_version
+
+  s3_mountpoint:
+    debian:
+      x86_64: https://s3.amazonaws.com/mountpoint-s3-release/latest/x86_64/mount-s3.deb
+      aarch64: https://s3.amazonaws.com/mountpoint-s3-release/latest/arm64/mount-s3.deb
+    red_hat:
+      x86_64: https://s3.amazonaws.com/mountpoint-s3-release/latest/x86_64/mount-s3.rpm
+      aarch64: https://s3.amazonaws.com/mountpoint-s3-release/latest/arm64/mount-s3.rpm

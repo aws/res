@@ -273,13 +273,16 @@ class Proxy(Construct):
         cognito_provider_url: str,
     ) -> Function:
 
-        execution_role = self.create_execution_role()
-        assume_role = self.create_assume_role(execution_role.role_arn)
-
         users_table_name = self.params["ddb_users_table_name"]
         groups_table_name = self.params["ddb_groups_table_name"]
         cluster_settings_table_name = self.params["ddb_cluster_settings_table_name"]
         cluster_name = self.params["cluster_name"]
+
+        execution_role = InfraUtils.create_execution_role(
+            self,
+            "proxy-lambda-role",
+        )
+        assume_role = self.create_assume_role(execution_role.role_arn, cluster_name)
 
         proxy_lambda = lambda_.Function(
             self,
@@ -342,27 +345,14 @@ class Proxy(Construct):
         proxy_lambda.apply_removal_policy(aws_cdk.RemovalPolicy.RETAIN)
         return proxy_lambda
 
-    def create_execution_role(self) -> aws_iam.Role:
-        lambda_execution_role = aws_iam.Role(
-            self,
-            "LambdaExecutionRole",
-            assumed_by=aws_iam.ServicePrincipal("lambda.amazonaws.com"),
-            managed_policies=[
-                aws_iam.ManagedPolicy.from_aws_managed_policy_name(
-                    "service-role/AWSLambdaBasicExecutionRole"
-                ),
-                aws_iam.ManagedPolicy.from_aws_managed_policy_name(
-                    "service-role/AWSLambdaVPCAccessExecutionRole"
-                ),
-            ],
-        )
-        return lambda_execution_role
-
-    def create_assume_role(self, execution_role_arn: str) -> aws_iam.Role:
+    def create_assume_role(
+        self, execution_role_arn: str, cluster_name: str
+    ) -> aws_iam.Role:
         proxy_assume_role = aws_iam.Role(
             self,
             "ProxyLambdaAssumeRole",
             assumed_by=aws_iam.ArnPrincipal(execution_role_arn),
+            role_name=f"{cluster_name}-ProxyLambdaAssumeRole",
         )
         proxy_assume_role.add_to_policy(
             aws_iam.PolicyStatement(

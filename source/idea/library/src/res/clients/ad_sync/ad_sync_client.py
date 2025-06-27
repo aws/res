@@ -25,11 +25,9 @@ from res.constants import (
     VPC_ID_KEY,
 )
 from res.resources.cluster_settings import CLUSTER_SETTINGS_TABLE_NAME, get_settings
-from res.utils import table_utils, time_utils
+from res.utils import logging_utils, table_utils, time_utils
 
-logger = logging.getLogger(__name__)
-logger.addHandler(logging.StreamHandler())
-logger.setLevel(logging.INFO)
+logger = logging_utils.get_logger("ad-sync-client")
 
 
 class ADSyncStatus(str, Enum):

@@ -65,7 +65,7 @@ LINUX_SOFTWARE_STACKS = [
         description="RES integ test software stack",
         base_os=VirtualDesktopBaseOS.UBUNTU2204,
         architecture=VirtualDesktopArchitecture.X86_64,
-        min_storage=MIN_WINDOWS_STORAGE,
+        min_storage=MIN_LINUX_STORAGE,
         min_ram=MIN_RAM,
         gpu=VirtualDesktopGPU.NO_GPU,
     ),

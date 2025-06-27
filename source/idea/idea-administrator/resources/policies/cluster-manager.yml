@@ -10,7 +10,6 @@ Statement:
       - ec2:DescribeInstances
       - ec2:DescribeInstanceTypes
       - budgets:ViewBudget
-      - elasticfilesystem:CreateFileSystem
       - elasticfilesystem:DescribeFileSystems
       - fsx:DescribeFileSystems
       - fsx:DescribeVolumes
@@ -24,25 +23,6 @@ Statement:
       - iam:ListPolicies
       - ec2:DescribeSecurityGroups
     Resource: '*'
-    Effect: Allow
-
-  - Action:
-      - elasticfilesystem:CreateMountTarget
-      - elasticfilesystem:TagResource
-      - elasticfilesystem:PutFileSystemPolicy
-    Resource:
-      - '{{ context.arns.get_arn("elasticfilesystem", "file-system/*", aws_region="*") }}'
-    Effect: Allow
-
-  - Action:
-      - fsx:CreateFileSystem
-      - fsx:CreateStorageVirtualMachine
-      - fsx:CreateVolume
-      - fsx:TagResource
-    Resource:
-      - '{{ context.arns.get_arn("fsx", "file-system/*", aws_region="*") }}'
-      - '{{ context.arns.get_arn("fsx", "storage-virtual-machine/*", aws_region="*") }}'
-      - '{{ context.arns.get_arn("fsx", "volume/*", aws_region="*") }}'
     Effect: Allow
 
   - Action:
@@ -89,8 +69,6 @@ Statement:
       - dynamodb:TagResource
       - dynamodb:CreateTable
       - dynamodb:TransactWriteItems
-      - dynamodb:UpdateTable
-      - dynamodb:UpdateTimeToLive
     Resource:
       - '{{ context.arns.get_ddb_table_arn("cluster-settings") }}'
       - '{{ context.arns.get_ddb_table_arn("cluster-settings/stream/*") }}'
@@ -116,7 +94,6 @@ Statement:
       - '{{ context.arns.get_ddb_table_arn("ad-sync.distributed-lock") }}'
       - '{{ context.arns.get_ddb_table_arn("ad-sync.status") }}'
       - '{{ context.arns.get_ddb_table_arn("ad-sync.status/index/*") }}'
-
     Effect: Allow
 
   - Action:
@@ -149,22 +126,6 @@ Statement:
     Resource:
       - '{{ context.arns.get_ddb_table_stream_arn("cluster-settings") }}'
     Effect: Allow
-
-  - Action:
-      - cloudwatch:PutMetricData
-    Resource: '*'
-    Effect: Allow
-    Condition:
-      StringLike:
-        cloudwatch:namespace: IDEA/*
-
-    {%- if context.config.get_string('directoryservice.provider') == 'aws_managed_activedirectory' %}
-  - Action:
-      - ds:ResetUserPassword
-    Resource: '{{ context.arns.get_directory_service_arn() }}'
-    Effect: Allow
-    {%- endif %}
-
 
   # Permissions for the cluster-manager to create or update the service account DN secret
   - Action:
@@ -215,7 +176,11 @@ Statement:
     Effect: Allow
 
   - Action:
-      - sqs:*
+      - sqs:ChangeMessageVisibility
+      - sqs:Delete*
+      - sqs:Get*
+      - sqs:List*
+      - sqs:ReceiveMessage
     Resource:
       - '{{ context.arns.get_sqs_arn(context.module_id + "-notifications.fifo") }}'
       - '{{ context.arns.get_sqs_arn(context.config.get_module_id("directoryservice") + "-ad-automation.fifo") }}'

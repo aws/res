@@ -2,9 +2,6 @@
 #  SPDX-License-Identifier: Apache-2.0
 
 import ideavirtualdesktop_meta
-from ideasdk.context import SocaContext
 
 __name__ = ideavirtualdesktop_meta.__name__
 __version__ = ideavirtualdesktop_meta.__version__
-
-AppContext = SocaContext

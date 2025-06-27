@@ -1,6 +1,8 @@
 #  Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 #  SPDX-License-Identifier: Apache-2.0
-from typing import Any, Dict, List, Union
+import typing
+from pathlib import Path
+from typing import Any, Dict, Union
 
 import aws_cdk as cdk
 import constructs
@@ -49,6 +51,7 @@ class ResBaseStack(ResBaseConstruct):
         self,
         scope: constructs.Construct,
         shared_library_lambda_layer: lambda_.LayerVersion,
+        staging_bucket_name: str,
         params_transformer: cdk.CustomResource,
         parameters: Union[RESParameters, BIParameters] = RESParameters(),
     ):
@@ -57,6 +60,7 @@ class ResBaseStack(ResBaseConstruct):
         self.cluster_name = parameters.get_str(CommonKey.CLUSTER_NAME)
         self.shared_library_lambda_layer = shared_library_lambda_layer
         self.shared_library_arn = shared_library_lambda_layer.layer_version_arn
+        self.staging_bucket_name = staging_bucket_name
         super().__init__(
             self.cluster_name,
             cdk.Aws.REGION,
@@ -69,6 +73,13 @@ class ResBaseStack(ResBaseConstruct):
             scope,
             "res-base",
             description="Nested RES Base Stack",
+        )
+
+        self.has_iam_prefix_condition = InfraUtils.get_iam_prefix_condition(
+            self.nested_stack, parameters
+        )
+        self.has_iam_path_condition = InfraUtils.get_iam_path_condition(
+            self.nested_stack, parameters
         )
 
         for table in ddb_tables_list:
@@ -89,7 +100,7 @@ class ResBaseStack(ResBaseConstruct):
                 ),
             )
 
-        dcvBrokerTableDeltionPolicy = iam.PolicyDocument(
+        dcvBrokerTableDeletionPolicy = iam.PolicyDocument(
             statements=[
                 iam.PolicyStatement(
                     actions=["dynamodb:DeleteTable"],
@@ -105,24 +116,26 @@ class ResBaseStack(ResBaseConstruct):
                 ),
             ]
         )
-        dcvBrokerTableDeltionRole = iam.Role(
+        brokerDeletionLambdaName = "dcvBrokerTableDeletionLambda"
+        dcvBrokerTableDeletionRole = iam.Role(
             self,
-            "DcvBrokerTableDeltionRole",
+            f"{brokerDeletionLambdaName}Role",
             assumed_by=iam.ServicePrincipal("lambda.amazonaws.com"),
             managed_policies=[
                 iam.ManagedPolicy.from_aws_managed_policy_name(
                     "service-role/AWSLambdaBasicExecutionRole"
                 )
             ],
-            inline_policies={"DDBPolicy": dcvBrokerTableDeltionPolicy},
+            inline_policies={"DDBPolicy": dcvBrokerTableDeletionPolicy},
+            role_name=f"{self.cluster_name}{brokerDeletionLambdaName}Role",
         )
 
         dcvBrokerTableDeletionLambda = lambda_.Function(
             baseStack,
-            "dcvBrokerTableDeletionLambda",
+            brokerDeletionLambdaName,
             runtime=RES_COMMON_LAMBDA_RUNTIME,
             description="Lambda to handle deletion of the NICE DCV Broker tables",
-            role=dcvBrokerTableDeltionRole,
+            role=dcvBrokerTableDeletionRole,
             **utils.InfraUtils.get_handler_and_code_for_function(
                 installer_handlers.delete_dcv_broker_tables
             ),
@@ -145,6 +158,7 @@ class ResBaseStack(ResBaseConstruct):
         self.populator_custom_resource = self.populate_default_values()
         self.create_bucket()
         self.apply_permission_boundary(self.nested_stack)
+        self.modify_provider_roles()
 
     def get_directory_service_secret_arn(self, key: DirectoryServiceKey) -> str:
         scope = self.nested_stack
@@ -289,6 +303,8 @@ class ResBaseStack(ResBaseConstruct):
             "permission_boundary_arn": self.parameters.get_str(
                 CommonKey.IAM_PERMISSION_BOUNDARY
             ),
+            "iam_resource_path": self.parameters.iam_resource_path_string,
+            "iam_resource_prefix": self.parameters.iam_resource_prefix_string,
             # Network configuration for the RES environment
             "vpc_id": self.parameters.get_str(CommonKey.VPC_ID),
             "alb_public": self.parameters.get_str(
@@ -352,8 +368,18 @@ class ResBaseStack(ResBaseConstruct):
             "http_proxy_value": self.parameters.get_str(InternetProxyKey.HTTP_PROXY),
             "https_proxy_value": self.parameters.get_str(InternetProxyKey.HTTPS_PROXY),
             "no_proxy_value": self.parameters.get_str(InternetProxyKey.NO_PROXY),
+            "staging_bucket_name": self.staging_bucket_name,
+            "version": self._get_res_release_version(),
         }
         return environment_variables
+
+    @staticmethod
+    def _get_res_release_version() -> str:
+        # Cannot retrieve version number from importlib.metadata.version directly since setuptools
+        # strips leading zeros in date based releases: https://github.com/pypa/setuptools/issues/302
+        project_dir = Path(__file__).parent.parent.parent.parent.parent.parent.resolve()
+        with project_dir.joinpath("RES_VERSION.txt").open("r") as f:
+            return f.read().strip()
 
     def create_bucket(self) -> None:
         scope = self.nested_stack
@@ -538,7 +564,7 @@ class ResBaseStack(ResBaseConstruct):
                     iam.PolicyStatement(
                         actions=["iam:PassRole"],
                         resources=[
-                            f"arn:{cdk.Aws.PARTITION}:iam::{cdk.Aws.ACCOUNT_ID}:role/{self.cluster_name}-ad-sync-task-role",
+                            f"arn:{cdk.Aws.PARTITION}:iam::{cdk.Aws.ACCOUNT_ID}:role{self.parameters.iam_resource_path_string}{self.parameters.iam_resource_prefix_string}{self.cluster_name}-ad-sync-task-role",
                         ],
                     ),
                     iam.PolicyStatement(
@@ -552,3 +578,29 @@ class ResBaseStack(ResBaseConstruct):
         self.add_common_tags(cluster_settings_table_event_handler_role)
 
         return cluster_settings_table_event_handler_role
+
+    # Manually modify provider roles that could not be modified by Aspect.
+    # https://github.com/aws/aws-cdk/issues/17198
+    # Note: Need to find better way instead of making force modification.
+    def modify_provider_roles(self) -> None:
+        require_force_modification_provider = {
+            "Custom::S3AutoDeleteObjectsCustomResourceProvider": "S3AutoDeleteObjectsRole",
+            "AWSCDKCfnUtilsProviderCustomResourceProvider": "AWSCDKCfnUtilsProviderRole",
+        }
+
+        for resource_name, role_name in require_force_modification_provider.items():
+            provider = cdk.Stack.of(self.nested_stack).node.try_find_child(
+                resource_name
+            )
+            if not provider:
+                continue
+
+            role = typing.cast(cdk.CfnResource, provider.node.try_find_child("Role"))
+            if not role:
+                continue
+
+            role.add_property_override(
+                "RoleName",
+                f"{self.parameters.iam_resource_prefix_string}{self.cluster_name}-{role_name}",
+            )
+            role.add_property_override("Path", self.parameters.iam_resource_path_string)

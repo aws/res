@@ -3,6 +3,7 @@ server:
   hostname: 0.0.0.0
   port: 8443
   enable_tls: true
+  enable_adv_options_non_admin: true
   tls_certificate_file: {{internal_mount_dir}}/{{cluster_name}}/certs/idea.crt
   tls_key_file: {{internal_mount_dir}}/{{cluster_name}}/certs/idea.key
   enable_unix_socket: true
@@ -22,6 +23,7 @@ server:
 
 
 controller:
+  app_package_uri: s3://{{ staging_bucket_name }}/releases/{{ version }}/idea-virtual-desktop-controller-{{ version }}.tar.gz
   autoscaling:
     public: false
     instance_type: t3.medium
@@ -58,6 +60,7 @@ controller:
       path_patterns: [ '/vdc/*' ]
 
 dcv_broker:
+  app_package_uri: s3://{{ staging_bucket_name }}/releases/{{ version }}/idea-dcv-broker-{{ version }}.tar.gz
   autoscaling:
     public: false
     instance_type: {{instance_type}}
@@ -100,15 +103,16 @@ dcv_broker:
       scale_out_cooldown: 60 # in seconds
     write_capacity:
       min_units: 5
-      max_units: 20
+      max_units: 100
       target_utilization: 70 # in percentage
       scale_in_cooldown: 60 # in seconds
       scale_out_cooldown: 60 # in seconds
 
 dcv_connection_gateway:
+  app_package_uri: s3://{{ staging_bucket_name }}/releases/{{ version }}/idea-dcv-connection-gateway-{{ version }}.tar.gz
   autoscaling:
     public: false
-    instance_type: {{instance_type}}
+    instance_type: {{dcv_connection_gateway_instance_type}}
     base_os: {{base_os}}
     instance_ami: {{instance_ami}}
     volume_size: {{volume_size}}

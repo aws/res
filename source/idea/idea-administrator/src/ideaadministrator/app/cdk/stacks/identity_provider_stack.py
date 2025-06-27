@@ -131,6 +131,7 @@ class IdentityProviderStack(IdeaBaseStack):
                 self_sign_up_enabled=True,
                 auto_verify=cognito.AutoVerifiedAttrs(email="email" in cognito_params.auto_verified_attributes, phone="phone" in cognito_params.auto_verified_attributes),
                 advanced_security_mode=advanced_security_mode,
+                feature_plan=cognito.FeaturePlan.PLUS if advanced_security_mode else cognito.FeaturePlan.ESSENTIALS
             )
         )
 

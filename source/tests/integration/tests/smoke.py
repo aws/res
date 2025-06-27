@@ -542,140 +542,6 @@ class TestsSmoke(object):
         [
             (
                 Project(
-                    title="res-integ-test-soft-stack",
-                    name="res-integ-test-soft-stack",
-                    description="RES integ test project software stack",
-                    enable_budgets=False,
-                ),
-                ["home"],
-                ["RESAdministrators", "group_1", "group_2"],
-                [],
-                "admin",
-            )
-        ],
-        indirect=True,
-    )
-    @pytest.mark.parametrize(
-        "software_stack",
-        [(AL2_SOFTWARE_STACK, "project", "admin")],
-        indirect=True,
-    )
-    @pytest.mark.parametrize(
-        "session",
-        [
-            (
-                VirtualDesktopSession(
-                    name="VirtualDesktop-soft-stack",
-                    description="RES integ test VDI session",
-                    hibernation_enabled=False,
-                ),
-                "project",
-                "software_stack",
-                "admin",
-            )
-        ],
-        indirect=True,
-    )
-    def test_software_stack_creation(
-        self,
-        request: FixtureRequest,
-        region: str,
-        admin: ClientAuth,
-        res_environment: ResEnvironment,
-        project: Project,
-        software_stack: VirtualDesktopSoftwareStack,
-        session: Optional[VirtualDesktopSession],
-    ) -> None:
-        """
-        Test the AL2 software stack creation from a session workflow:
-            Launch VDI -> connect to VDI -> create software stack ->
-            -> launch new VDI with that software stack -> connect to VDI
-        """
-        if not session:
-            # VDI is not supported with the current configuration
-            return
-
-        api_invoker_type = request.config.getoption("--api-invoker-type")
-        client = ResClient(res_environment, admin, api_invoker_type)
-        web_driver = client.join_session(session)
-        wait_for_session_connection_count(region, session, 1)
-        logger.info(f"leaving session {session.dcv_session_id}...")
-        web_driver.quit()
-
-        new_software_stack = VirtualDesktopSoftwareStack(
-            name="integ-test-created-software-stack-from-session",
-            projects=[project],
-            base_os=session.base_os,
-            min_storage=session.software_stack.min_storage,
-        )
-        logger.info(f"New software stack {new_software_stack}")
-        software_stack_create_request = CreateSoftwareStackFromSessionRequest(
-            session=session,
-            new_software_stack=new_software_stack,
-        )
-
-        software_stack_create_response = client.create_software_stack_from_session(
-            request=software_stack_create_request
-        )
-        logger.info(f"Software stack create response {software_stack_create_response}")
-        new_software_stack = software_stack_create_response.software_stack
-        wait_for_software_stack_to_be_active(
-            client=client, software_stack=software_stack_create_response.software_stack
-        )
-        created_stack = client.get_software_stack(
-            request=GetSoftwareStackInfoRequest(
-                stack_id=new_software_stack.stack_id, base_os=software_stack.base_os
-            )
-        ).software_stack
-        logger.info(f"Created stack {created_stack}")
-        try:
-            logger.info(f"Creating session from software stack {created_stack.name}...")
-            new_session = create_session(
-                session=VirtualDesktopSession(
-                    name="integ-test-created-session-from-created-software-stack",
-                    description="RES integ test VDI session new software stack",
-                    hibernation_enabled=False,
-                    software_stack=created_stack,
-                    project=project,
-                ),
-                software_stack=created_stack,
-                client=client,
-            )
-            logger.info(f"Joining session {session.name}...")
-            web_driver = client.join_session(new_session)
-
-            logger.info(f"Connecting to dcv session {session.name}...")
-            wait_for_session_connection_count(region, new_session, 1)
-
-            logger.info(
-                f"Leaving session {new_session.name} {new_session.dcv_session_id}..."  # type: ignore
-            )
-            web_driver.quit()
-            wait_for_session_connection_count(region, new_session, 0)
-        finally:
-            delete_session(
-                client=client,
-                session=new_session,
-            )
-            client.delete_software_stack(
-                request=DeleteSoftwareStackRequest(software_stack=created_stack)
-            )
-            deregistered = deregister_ami(created_stack.ami_id)
-            if not deregistered:
-                logger.error(f"AMI {created_stack.ami_id} could not be deregistered")
-
-    @pytest.mark.usefixtures("admin")
-    @pytest.mark.parametrize(
-        "admin_username",
-        [
-            "admin1",
-        ],
-    )
-    @pytest.mark.parametrize(
-        "project",
-        [
-            (
-                Project(
                     title="res-integ-test-sssd-config-update",
                     name="res-integ-test-sssd-config-update",
                     description="RES integ test SSSD config update",
@@ -775,7 +641,6 @@ class TestsSmoke(object):
                 settings={"sssd": {"additional_sssd_configs": json.dumps({})}},
             )
         )
-        time.sleep(20)
 
         check_sssd_config_field(
             region,
@@ -787,3 +652,140 @@ class TestsSmoke(object):
         check_sssd_config_field(
             region, vdi_instance_id, EC2InstancePlatform.LINUX, "debug_level", ""
         )
+
+    @pytest.mark.usefixtures("admin")
+    @pytest.mark.parametrize(
+        "admin_username",
+        [
+            "admin1",
+        ],
+    )
+    @pytest.mark.parametrize(
+        "project",
+        [
+            (
+                Project(
+                    title="res-integ-test-soft-stack",
+                    name="res-integ-test-soft-stack",
+                    description="RES integ test project software stack",
+                    enable_budgets=False,
+                ),
+                ["home"],
+                ["RESAdministrators", "group_1", "group_2"],
+                [],
+                "admin",
+            )
+        ],
+        indirect=True,
+    )
+    @pytest.mark.parametrize(
+        "software_stack",
+        [(AL2_SOFTWARE_STACK, "project", "admin")],
+        indirect=True,
+    )
+    @pytest.mark.parametrize(
+        "session",
+        [
+            (
+                VirtualDesktopSession(
+                    name="VirtualDesktop-soft-stack",
+                    description="RES integ test VDI session",
+                    hibernation_enabled=False,
+                ),
+                "project",
+                "software_stack",
+                "admin",
+            )
+        ],
+        indirect=True,
+    )
+    def test_software_stack_creation(
+        self,
+        request: FixtureRequest,
+        region: str,
+        admin: ClientAuth,
+        res_environment: ResEnvironment,
+        project: Project,
+        software_stack: VirtualDesktopSoftwareStack,
+        session: Optional[VirtualDesktopSession],
+    ) -> None:
+        """
+        Test the AL2 software stack creation from a session workflow:
+            Launch VDI -> connect to VDI -> create software stack ->
+            -> launch new VDI with that software stack -> connect to VDI
+        """
+        if not session:
+            # VDI is not supported with the current configuration
+            return
+
+        api_invoker_type = request.config.getoption("--api-invoker-type")
+        client = ResClient(res_environment, admin, api_invoker_type)
+        web_driver = client.join_session(session)
+        wait_for_session_connection_count(region, session, 1)
+        logger.info(f"leaving session {session.dcv_session_id}...")
+        web_driver.quit()
+
+        new_software_stack = VirtualDesktopSoftwareStack(
+            name="integ-test-created-software-stack-from-session",
+            description="integ-test-created-software-stack-from-session",
+            projects=[project],
+            base_os=session.base_os,
+            min_storage=session.software_stack.min_storage,
+        )
+
+        logger.info(f"New software stack {new_software_stack}")
+        software_stack_create_request = CreateSoftwareStackFromSessionRequest(
+            session=session,
+            new_software_stack=new_software_stack,
+        )
+
+        software_stack_create_response = client.create_software_stack_from_session(
+            request=software_stack_create_request
+        )
+        logger.info(f"Software stack create response {software_stack_create_response}")
+        new_software_stack = software_stack_create_response.software_stack
+        try:
+            wait_for_software_stack_to_be_active(
+                client=client,
+                software_stack=software_stack_create_response.software_stack,
+            )
+            created_stack = client.get_software_stack(
+                request=GetSoftwareStackInfoRequest(
+                    stack_id=new_software_stack.stack_id, base_os=software_stack.base_os
+                )
+            ).software_stack
+            logger.info(f"Created stack {created_stack}")
+            logger.info(f"Creating session from software stack {created_stack.name}...")
+            new_session = create_session(
+                session=VirtualDesktopSession(
+                    name="integ-test-created-session-from-created-software-stack",
+                    description="RES integ test VDI session new software stack",
+                    hibernation_enabled=False,
+                    software_stack=created_stack,
+                    project=project,
+                ),
+                software_stack=created_stack,
+                client=client,
+            )
+            logger.info(f"Joining session {session.name}...")
+            web_driver = client.join_session(new_session)
+
+            logger.info(f"Connecting to dcv session {session.name}...")
+            wait_for_session_connection_count(region, new_session, 1)
+
+            logger.info(
+                f"Leaving session {new_session.name} {new_session.dcv_session_id}..."  # type: ignore
+            )
+            web_driver.quit()
+            wait_for_session_connection_count(region, new_session, 0)
+        finally:
+            delete_session(
+                client=client,
+                session=new_session,
+            )
+            client.delete_software_stack(
+                request=DeleteSoftwareStackRequest(software_stack=created_stack)
+            )
+            deregistered = deregister_ami(created_stack.ami_id)
+            if not deregistered:
+                logger.error(f"AMI {created_stack.ami_id} could not be deregistered")

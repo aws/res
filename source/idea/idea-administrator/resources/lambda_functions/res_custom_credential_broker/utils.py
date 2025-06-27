@@ -13,12 +13,13 @@ import re
 import boto3
 from botocore.exceptions import BotoCoreError, ClientError
 import logging
+import jwt
+import base64
 
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
 # 1 hour expiration time
 TEMPORARY_CREDENTIALS_TIME_IN_SECONDS = 3600
-
 
 class Utils:
 
@@ -62,6 +63,64 @@ class Utils:
         if instance.get('PrivateIpAddress') != source_ip:
             return False
         return True
+
+    @staticmethod
+    def verify_jwt_token(token, secret):
+        try:
+            payload = jwt.decode(token, secret, algorithms=['HS256'])
+            return payload
+        except jwt.PyJWTError:
+            return None
+
+    @staticmethod
+    def get_bootstrap_token_from_request_context(event):
+        return event.get('queryStringParameters', {}).get('bootstrapToken')
+
+    
+    @staticmethod
+    def get_bootstrap_temporary_credentials(role_arn, role_session_name):
+        sts = boto3.client('sts')
+        try:
+            response = sts.assume_role(
+                RoleArn=role_arn,
+                RoleSessionName=role_session_name,
+                DurationSeconds=TEMPORARY_CREDENTIALS_TIME_IN_SECONDS
+            )
+        except (BotoCoreError, ClientError) as e:
+            logger.error(f"Error assuming role: {e}")
+            return None
+
+        credentials = response['Credentials']
+        return {
+            "Version": 1,
+            "AccessKeyId": credentials['AccessKeyId'],
+            "SecretAccessKey": credentials['SecretAccessKey'],
+            "SessionToken": credentials['SessionToken'],
+            "Expiration": credentials['Expiration'].isoformat()
+        }
+
+    @staticmethod
+    def get_custom_broker_secret(secret_name, region_name):
+        session = boto3.session.Session()
+        
+        client = session.client(
+            service_name='secretsmanager',
+            region_name=region_name
+        )
+
+        try:
+            get_secret_value_response = client.get_secret_value(
+                SecretId=secret_name
+            )
+        except Exception as e:
+            raise e
+        else:
+            if 'SecretString' in get_secret_value_response:
+                secret = get_secret_value_response['SecretString']
+                return secret
+            else:
+                decoded_binary_secret = base64.b64decode(get_secret_value_response['SecretBinary'])
+                return decoded_binary_secret
 
     @staticmethod
     def generate_session_policy(read_only, bucket_arn, prefix=None):

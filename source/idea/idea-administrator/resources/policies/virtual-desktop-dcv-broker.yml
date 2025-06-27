@@ -37,17 +37,15 @@ Statement:
     Effect: Allow
   - Action:
       - dynamodb:GetItem
+      - dynamodb:Scan
+      - dynamodb:DescribeTable
     Resource:
       {{ context.utils.to_yaml(context.arns.cluster_config_ddb_arn) | indent(6) }}
     Effect: Allow
-    Condition:
-      ForAllValues:StringLike:
-        dynamodb:LeadingKeys:
-          - global-settings.package_config.*
-          - global-settings.gpu_settings.*
   - Action:
-      - cloudwatch:PutMetricData
-    Resource: '*'
+      - dynamodb:DescribeTable
+    Resource:
+      {{ context.utils.to_yaml(context.arns.get_ddb_table_arn("modules")) | indent(6) }}
     Effect: Allow
   - Action:
       - sns:*
@@ -63,15 +61,10 @@ Statement:
       - ec2:DescribeInstances
       - ec2:ModifyInstanceAttribute
       - ec2:CreateImage
-      - ec2:StartInstances
-      - ec2:TerminateInstances
-      - ec2:StopInstances
       - ec2:RebootInstances
       - ec2:CreateTags
       - ec2:RegisterImage
-      - ec2:DeregisterImage
       - ec2:RunInstances
-      - fsx:CreateDataRepositoryTask
       - fsx:DescribeFileSystems
       - tag:GetResources
       - tag:GetTagValues
@@ -89,6 +82,17 @@ Statement:
       - ssm:DescribeAutomationExecutions
       - elasticloadbalancing:DescribeTargetHealth
     Resource: '*'
+    Effect: Allow
+  - Action:
+      - ec2:StartInstances
+      - ec2:TerminateInstances
+      - ec2:StopInstances
+      - ec2:DeregisterImage
+    Resource: '*'
+    Condition:
+      StringEquals:
+        aws:ResourceTag/res:EnvironmentName: '{{ context.cluster_name }}'
+        aws:ResourceTag/res:ModuleName: virtual-desktop-controller
     Effect: Allow
   - Action:
       - logs:PutRetentionPolicy

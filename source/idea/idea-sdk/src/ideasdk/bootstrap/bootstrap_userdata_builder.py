@@ -72,7 +72,9 @@ class BootstrapUserDataBuilder:
      }}
      Tar -xf "$BootstrapDir\\$PackageArchive"
  }}
- if (-not (Get-Module AWSPowerShell -ListAvailable)) {{
+ $AWSPowerShellVersion = "4.1.648"
+ $AWSPowerShellModule = Get-Module AWSPowerShell -ListAvailable
+ if (-not $AWSPowerShellModule -or (($AWSPowerShellModule | Sort-Object Version -Descending)[0].Version -lt [Version]$AWSPowerShellVersion)) {{
      Install-PackageProvider NuGet -Force
      Install-Module -Name AWSPowerShell -Force
  }}

@@ -4,6 +4,11 @@
 -r idea-cluster-manager.in
 -r doc.in
 -r library.in
+-r bootstrap.in
+-r idea-dcv-connection-gateway.in
+-r idea-dcv-broker.in
+-r idea-virtual-desktop.in
+-r idea-bastion-host.in
 -r lint.in
 -r build.in
 -r tests.in
@@ -19,5 +24,4 @@ pylint~=2.0
 PyYAML~=6.0
 types-PyYAML~=6.0
 types-requests~=2.0
-moto~=5.0
 types-xmltodict~=0.14

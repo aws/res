@@ -42,7 +42,6 @@ from ideavirtualdesktopcontroller.app.events.handlers.validate_dcv_session_event
 from ideavirtualdesktopcontroller.app.events.handlers.validate_dcv_session_event_handlers.validate_dcv_session_deletion_event_handler import ValidateDCVSessionDeletionEventHandler
 from ideavirtualdesktopcontroller.app.events.handlers.validate_software_stack_event_handler import ValidateSoftwareStackEventHandler
 
-
 class EventsHandlerThread(IdeaThread):
 
     def __init__(self, context: ideavirtualdesktopcontroller.AppContext, thread_number: int, num_of_messages_to_retrieve_per_call: int, wait_time: int):
@@ -109,7 +108,7 @@ class EventsHandlerThread(IdeaThread):
 
             message_body_str = Utils.get_value_as_string('Body', message, None)
             should_delete_message = False
-
+            
             if not self._is_checksum_valid(md5checksum, message_body_str):
                 self._logger.error(f'[msg-id: {message_id}] Invalid checksum. Ignoring message')
                 should_delete_message = True

@@ -84,7 +84,7 @@ class Vpc(SocaBaseConstruct, ec2.Vpc):
         iam_role = iam.Role(self.scope, 'vpc-flow-logs-role',
                             assumed_by=self.build_service_principal('vpc-flow-logs'),
                             description=f'IAM Role for VPC Flow Logs, Cluster: {self.cluster_name}',
-                            role_name=f'{self.cluster_name}-vpc-flow-logs-{self.context.aws().aws_region()}')
+                            role_name=self.build_trimmed_resource_name('vpc-flow-logs'))
         return {
             'cloud-watch': ec2.FlowLogOptions(
                 destination=ec2.FlowLogDestination.to_cloud_watch_logs(

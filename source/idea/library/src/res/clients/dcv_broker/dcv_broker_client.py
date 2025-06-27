@@ -13,11 +13,9 @@ from res.clients.dcv_swagger_client.models.describe_sessions_request_data import
 )
 from res.clients.dcv_swagger_client.models.key_value_pair import KeyValuePair
 from res.resources import cluster_settings, token
-from res.utils import aws_utils
+from res.utils import aws_utils, logging_utils
 
-logger = logging.getLogger(__name__)
-logger.addHandler(logging.StreamHandler())
-logger.setLevel(logging.INFO)
+logger = logging_utils.get_logger("dcv-broker-client")
 
 DCV_SESSION_DELETE_ERROR_SESSION_DOESNT_EXIST = (
     "The requested dcvSession does not exist"
@@ -99,7 +97,7 @@ def delete_sessions(sessions: List[Dict[str, Any]]) -> Tuple[List, List]:
 
 
 def get_active_counts_for_sessions(
-    sessions: List[Dict[str, Any]]
+    sessions: List[Dict[str, Any]],
 ) -> List[Dict[str, Any]]:
     if not sessions:
         return []

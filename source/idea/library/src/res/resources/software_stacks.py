@@ -1,15 +1,10 @@
 #  Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 #  SPDX-License-Identifier: Apache-2.0
 
-import logging
 from typing import Any, Dict, List
 
 import res.exceptions as exceptions  # type: ignore
-from res.utils import table_utils, time_utils  # type: ignore
-
-logger = logging.getLogger(__name__)
-logger.addHandler(logging.StreamHandler())
-logger.setLevel(logging.INFO)
+from res.utils import logging_utils, table_utils, time_utils  # type: ignore
 
 SOFTWARE_STACK_TABLE_NAME = "vdc.controller.software-stacks"
 SOFTWARE_STACK_DB_HASH_KEY = "base_os"
@@ -32,8 +27,17 @@ SOFTWARE_STACK_DB_ALLOWED_INSTANCE_TYPES_KEY = "allowed_instance_types"
 SOFTWARE_STACK_DB_VERSION_KEY = "version"
 BASE_STACK_PREFIX = "ss-base"
 
-BASE_OS = ["amazonlinux2", "rhel8", "rhel9", "ubuntu2204", "windows"]
+BASE_OS = [
+    "amazonlinux2",
+    "amzn2023",
+    "rhel8",
+    "rhel9",
+    "ubuntu2204",
+    "windows",
+]
 ARCHITECTURE = ["x86_64", "arm64"]
+
+logger = logging_utils.get_logger(SOFTWARE_STACK_TABLE_NAME)
 
 
 def create_software_stack(software_stack: Dict[str, Any]) -> Dict[str, Any]:

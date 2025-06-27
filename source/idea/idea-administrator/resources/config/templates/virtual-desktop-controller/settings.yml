@@ -108,7 +108,7 @@ dcv_broker:
 dcv_connection_gateway:
   autoscaling:
     public: false
-    instance_type: {{instance_type}}
+    instance_type: c5.large
     base_os: {{base_os}}
     instance_ami: {{instance_ami}}
     volume_size: {{volume_size}}

@@ -1,17 +1,12 @@
 #  Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 #  SPDX-License-Identifier: Apache-2.0
 
-import logging
 import os
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 import res.exceptions as exceptions
-from res.utils import table_utils, time_utils
-
-logger = logging.getLogger(__name__)
-logger.addHandler(logging.StreamHandler())
-logger.setLevel(logging.INFO)
+from res.utils import logging_utils, table_utils, time_utils
 
 EMAIL_TEMPLATE_TABLE_NAME = "email-templates"
 EMAIL_TEMPLATE_DB_NAME_KEY = "name"
@@ -21,6 +16,8 @@ BASE_DIR = Path(os.path.realpath(__file__)).parent.parent
 BASE_PERMISSION_PROFILE_CONFIG_PATH = os.path.join(
     BASE_DIR, "templates", "base-permission-profile-config.yaml"
 )
+
+logger = logging_utils.get_logger(EMAIL_TEMPLATE_TABLE_NAME)
 
 
 def create_email_template(email_template: Optional[Dict[str, Any]]) -> Dict[str, Any]:

@@ -14,7 +14,7 @@
 import React, { Component, RefObject } from "react";
 import { TableProps } from "@cloudscape-design/components/table/interfaces";
 import { Link } from "@cloudscape-design/components";
-import { Project, SocaUserInputChoice, VirtualDesktopSession, VirtualDesktopSessionBatchResponsePayload } from "../../client/data-model";
+import { Project, SocaUserInputChoice, ListSessionsResponse, VirtualDesktopSession, VirtualDesktopSessionBatchResponsePayload } from "../../client/data-model";
 import IdeaListView from "../../components/list-view";
 import { AppContext } from "../../common";
 import { ProjectsClient, VirtualDesktopAdminClient, VirtualDesktopClient } from "../../client";
@@ -885,28 +885,46 @@ class VirtualDesktopSessions extends Component<VirtualDesktopSessionsProps, Virt
                     });
                 }}
                 onFetchRecords={() => {
-                    return (this.isAdmin() ? this.getVirtualDesktopAdminClient() : this.getVirtualDesktopClient())
-                        .listSessions({
-                            filters: this.getListing().getFilters(),
-                            paginator: { page_size: 100 },
-                            date_range: this.getListing().getFormatedDateRange(),
-                        })
-                        .catch((error) => {
-                            this.props.onFlashbarChange({
-                                items: [
-                                    {
-                                        content: error.message,
-                                        type: "error",
-                                        dismissible: true,
-                                    },
-                                ],
-                            });
-                            throw error;
-                        });
+                    return this.fetchAllSessions()
                 }}
                 columnDefinitions={VIRTUAL_DESKTOP_SESSIONS_TABLE_COLUMN_DEFINITIONS}
             />
         );
+    }
+
+    async fetchAllSessions(): Promise<ListSessionsResponse> {
+        const response: ListSessionsResponse = {
+            filters: this.getListing().getFilters(),
+            paginator: { page_size: 100 },
+            date_range: this.getListing().getFormatedDateRange(),
+            listing: [],
+        }
+
+        let cursor: string | undefined = undefined;
+        let client = this.isAdmin() ? this.getVirtualDesktopAdminClient() : this.getVirtualDesktopClient()
+        do {
+            const result: ListSessionsResponse = await client.listSessions({
+                filters: this.getListing().getFilters(),
+                paginator: { page_size: 100, cursor: cursor },
+                date_range: this.getListing().getFormatedDateRange(),
+            })
+            .catch((error) => {
+                this.props.onFlashbarChange({
+                    items: [
+                        {
+                            content: error.message,
+                            type: "error",
+                            dismissible: true,
+                        },
+                    ],
+                });
+                throw error;
+            });
+            response.listing?.push(...result.listing ?? []);
+            cursor = result.paginator?.cursor;
+        } while (cursor);
+
+        return response;
     }
 
     render() {

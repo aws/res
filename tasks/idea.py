@@ -227,6 +227,18 @@ class SocaDevelopmentProps:
         return os.path.join(self.library_project_dir, 'tests')
 
     @property
+    def bootstrap_project_dir(self) -> str:
+        return os.path.join(self.project_source_dir, 'idea-bootstrap')
+
+    @property
+    def bootstrap_src(self) -> str:
+        return os.path.join(self.bootstrap_project_dir, 'src')
+
+    @property
+    def bootstrap_tests_src(self) -> str:
+        return os.path.join(self.bootstrap_project_dir, 'tests')
+
+    @property
     def virtual_desktop_project_dir(self) -> str:
         return os.path.join(self.project_source_dir, 'idea-virtual-desktop-controller')
 

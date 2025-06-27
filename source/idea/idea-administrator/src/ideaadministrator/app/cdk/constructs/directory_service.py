@@ -58,7 +58,7 @@ class DirectoryServiceCredentials(SocaBaseConstruct):
         kms_key_id = self.context.config().get_string('cluster.secretsmanager.kms_key_id')
 
         ds_provider = self.context.config().get_string('directoryservice.provider', required=True)
-        
+
         admin_credentials_key = f'{ds_provider}-admin-credentials'
         if Utils.is_empty(admin_password):
             admin_password = self.generate_random_password()
@@ -192,7 +192,7 @@ class ActiveDirectory(SocaBaseConstruct):
         vpc_settings = ds.CfnMicrosoftAD.VpcSettingsProperty(
             subnet_ids=self.launch_subnets,
             vpc_id=self.cluster.vpc.vpc_id)
-        
+
         secret_string = cdk.SecretValue.secrets_manager(self.credentials.get_credentials_secret_arn()).to_string()
         secret_dict = json.loads(secret_string)
         password_value = secret_dict[list(secret_dict.keys())[0]]
@@ -389,7 +389,8 @@ class UserPool(SocaBaseConstruct):
             standard_attributes=standard_attributes,
             user_invitation=user_invitation,
             user_pool_name=user_pool_name,
-            user_verification=props.user_verification
+            user_verification=props.user_verification,
+            feature_plan=cognito.FeaturePlan.PLUS if advanced_security_mode else cognito.FeaturePlan.ESSENTIALS
         )
         self.add_common_tags(self.user_pool)
 

@@ -1,3 +1,4 @@
 -r idea-sdk.in
 -r library.in
+-r bootstrap.in
 supervisor~=4.0
