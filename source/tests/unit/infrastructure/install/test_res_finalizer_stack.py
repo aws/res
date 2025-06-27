@@ -53,10 +53,16 @@ def test_ddb_final_populator_lambda_role_creation(
                         {"Ref": "AWS::NoValue"},
                     ]
                 },
+                "Path": res_finalizer_stack.nested_stack.resolve(
+                    res_finalizer_stack.parameters.iam_resource_path_string
+                ),
                 "RoleName": {
                     "Fn::Join": [
                         "",
                         [
+                            res_finalizer_stack.nested_stack.resolve(
+                                res_finalizer_stack.parameters.iam_resource_prefix_string
+                            ),
                             res_finalizer_stack.nested_stack.resolve(
                                 res_finalizer_stack.cluster_name
                             ),

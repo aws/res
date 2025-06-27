@@ -36,6 +36,7 @@ export interface VirtualDesktopSettingsState {
     clusterSettings: any;
     activeTabId: string;
     instanceTypeAndFamilyChoices: SocaUserInputChoice[];
+    advOptionsEnabled: boolean;
 }
 
 const DEFAULT_ACTIVE_TAB_ID = "general";
@@ -57,7 +58,8 @@ class VirtualDesktopSettings extends Component<VirtualDesktopSettingsProps, Virt
             clusterManager: {},
             clusterSettings: {},
             activeTabId: DEFAULT_ACTIVE_TAB_ID,
-            instanceTypeAndFamilyChoices: []
+            instanceTypeAndFamilyChoices: [],
+            advOptionsEnabled: AppContext.get().getClusterSettingsService().isAdvOptionsEnabled
         };
     }
 
@@ -444,6 +446,35 @@ class VirtualDesktopSettings extends Component<VirtualDesktopSettingsProps, Virt
             return !Utils.asBoolean(dot.pick("dcv_connection_gateway.certificate.provided", this.state.vdcSettings), false);
         };
 
+        const handleAdvancedOptionsToggle = (newToggleStatus: boolean) => {
+            AppContext.get().client().clusterSettings().updateModuleSettings(
+                {
+                    module_id: "vdc",
+                    settings: {
+                        server: {
+                            enable_adv_options_non_admin: newToggleStatus
+                        }
+                    }
+                }
+            ).then((res) => {
+
+                this.props.onFlashbarChange({
+                    items: [
+                        {
+                            type: "success",
+                            content: "Successfully updated advanced options.",
+                            dismissible: true
+                        }
+                    ]
+                })
+                this.setState({
+                    advOptionsEnabled: newToggleStatus
+                })
+                AppContext.get().getClusterSettingsService().isAdvOptionsEnabled = newToggleStatus
+            })
+        } 
+
+
         const handleQuicToggleChange = (newToggleStatus: boolean) => {
             AppContext.get().client().clusterSettings().configureQUIC(
                 {
@@ -570,101 +601,113 @@ class VirtualDesktopSettings extends Component<VirtualDesktopSettingsProps, Virt
                                     label: "General",
                                     id: "general",
                                     content: (
-                                        <SpaceBetween size={"m"}>
-                                            {this.buildGeneralSettingsForm()}
-                                            <Container header={<Header variant={"h2"}>General</Header>}>
-                                                <ColumnLayout variant={"text-grid"} columns={2}>
-                                                    <KeyValue title="QUIC">
-                                                        <div>
-                                                            <TextContent>
-                                                                <p><small>Quick UDP Internet Connections (QUIC) is a protocol that attempts to improve streaming in higher latency environments.<br />Toggle on to activate QUIC in favor of TCP as the default streaming protocol for all your virtual desktops</small></p>
-                                                            </TextContent>
-                                                            <div style={{display: 'flex', flexDirection: 'row', gap: '4px'}}>
-                                                                <EnabledDisabledStatusIndicator enabled={Utils.asBoolean(dot.pick("dcv_session.quic_support", this.state.vdcSettings))} />
-                                                                <Toggle checked={Utils.asBoolean(dot.pick("dcv_session.quic_support", this.state.vdcSettings))} onChange={({ detail }) => handleQuicToggleChange(detail.checked)} />
-                                                            </div>
-                                                        </div>
-                                                    </KeyValue>
-                                                    <KeyValue title="eVDI Subnets" value={dot.pick("dcv_session.network.private_subnets", this.state.vdcSettings)} clipboard={true} />
-                                                    <KeyValue title="Subnet AutoRetry">
-                                                        <EnabledDisabledStatusIndicator enabled={Utils.asBoolean(dot.pick("dcv_session.network.subnet_autoretry", this.state.vdcSettings))} />
-                                                    </KeyValue>
-                                                    <KeyValue title="Randomize Subnets">
-                                                        <EnabledDisabledStatusIndicator enabled={Utils.asBoolean(dot.pick("dcv_session.network.randomize_subnets", this.state.vdcSettings))} />
-                                                    </KeyValue>
-                                                    <KeyValue title="Default DCV Session Type">
-                                                        <div>
-                                                            <TextContent>
-                                                                <p><small>Default setting will only apply in cases where Instance Type and Operating System supports either Virtual or Console Session Types.</small></p>
-                                                            </TextContent>
+                                        <>
+                                            <SpaceBetween size={"m"}>
+                                                {this.buildGeneralSettingsForm()}
+                                                <Container header={<Header variant={"h2"}>General</Header>}>
+                                                    <ColumnLayout variant={"text-grid"} columns={2}>
+                                                        <KeyValue title="QUIC">
                                                             <div>
-                                                                <Select
-                                                                    options={
-                                                                        Utils.getDCVSessionTypes().map(x =>
-                                                                            ({ label: x.title as string, value: x.value as string })
-                                                                    )}
-                                                                    selectedOption={{value: getDefaultDCVSessionType()}}
-                                                                    onChange={(e) => {
-                                                                        AppContext.get().client().clusterSettings().updateModuleSettings({
-                                                                            module_id: VDC_MODULE_ID,
-                                                                            settings: {
-                                                                                dcv_session: {
-                                                                                    [UpdateModuleSettingsValuesDCVSession.DEFAULT_DCV_SESSION_TYPE]: e.detail.selectedOption.value
-                                                                                }
-                                                                            }
-                                                                        }).then((res)=> {
-                                                                            this.props.onFlashbarChange({
-                                                                                items: [
-                                                                                    {
-                                                                                        type: "success",
-                                                                                        content: "Successfully updated default DCV Session Type.",
-                                                                                        dismissible: true
+                                                                <TextContent>
+                                                                    <p><small>Quick UDP Internet Connections (QUIC) is a protocol that attempts to improve streaming in higher latency environments.<br />Toggle on to activate QUIC in favor of TCP as the default streaming protocol for all your virtual desktops</small></p>
+                                                                </TextContent>
+                                                                <div style={{display: 'flex', flexDirection: 'row', gap: '4px'}}>
+                                                                    <EnabledDisabledStatusIndicator enabled={Utils.asBoolean(dot.pick("dcv_session.quic_support", this.state.vdcSettings))} />
+                                                                    <Toggle checked={Utils.asBoolean(dot.pick("dcv_session.quic_support", this.state.vdcSettings))} onChange={({ detail }) => handleQuicToggleChange(detail.checked)} />
+                                                                </div>
+                                                            </div>
+                                                        </KeyValue>
+                                                        <KeyValue title="eVDI Subnets" value={dot.pick("dcv_session.network.private_subnets", this.state.vdcSettings)} clipboard={true} />
+                                                        <KeyValue title="Subnet AutoRetry">
+                                                            <EnabledDisabledStatusIndicator enabled={Utils.asBoolean(dot.pick("dcv_session.network.subnet_autoretry", this.state.vdcSettings))} />
+                                                        </KeyValue>
+                                                        <KeyValue title="Randomize Subnets">
+                                                            <EnabledDisabledStatusIndicator enabled={Utils.asBoolean(dot.pick("dcv_session.network.randomize_subnets", this.state.vdcSettings))} />
+                                                        </KeyValue>
+                                                        <KeyValue title="Default DCV Session Type">
+                                                            <div>
+                                                                <TextContent>
+                                                                    <p><small>Default setting will only apply in cases where Instance Type and Operating System supports either Virtual or Console Session Types.</small></p>
+                                                                </TextContent>
+                                                                <div>
+                                                                    <Select
+                                                                        options={
+                                                                            Utils.getDCVSessionTypes().map(x =>
+                                                                                ({ label: x.title as string, value: x.value as string })
+                                                                        )}
+                                                                        selectedOption={{value: getDefaultDCVSessionType()}}
+                                                                        onChange={(e) => {
+                                                                            AppContext.get().client().clusterSettings().updateModuleSettings({
+                                                                                module_id: VDC_MODULE_ID,
+                                                                                settings: {
+                                                                                    dcv_session: {
+                                                                                        [UpdateModuleSettingsValuesDCVSession.DEFAULT_DCV_SESSION_TYPE]: e.detail.selectedOption.value
                                                                                     }
-                                                                                ]
-                                                                            })
-                                                                            const vdcSettings = {...this.state.vdcSettings}
-                                                                            dot.set("dcv_session.default_dcv_session_type", e.detail.selectedOption.value, vdcSettings)
-                                                                            this.setState({vdcSettings: vdcSettings})
-                                                                        }).catch((error) =>{
+                                                                                }
+                                                                            }).then((res)=> {
                                                                                 this.props.onFlashbarChange({
                                                                                     items: [
                                                                                         {
-                                                                                            type: "error",
-                                                                                            content: error.message,
+                                                                                            type: "success",
+                                                                                            content: "Successfully updated default DCV Session Type.",
                                                                                             dismissible: true
                                                                                         }
                                                                                     ]
                                                                                 })
-                                                                        });
-                                                                    }}
-                                                                ></Select>
+                                                                                const vdcSettings = {...this.state.vdcSettings}
+                                                                                dot.set("dcv_session.default_dcv_session_type", e.detail.selectedOption.value, vdcSettings)
+                                                                                this.setState({vdcSettings: vdcSettings})
+                                                                            }).catch((error) =>{
+                                                                                    this.props.onFlashbarChange({
+                                                                                        items: [
+                                                                                            {
+                                                                                                type: "error",
+                                                                                                content: error.message,
+                                                                                                dismissible: true
+                                                                                            }
+                                                                                        ]
+                                                                                    })
+                                                                            });
+                                                                        }}
+                                                                    ></Select>
+                                                                </div>
                                                             </div>
-                                                        </div>
-                                                    </KeyValue>
-                                                    <KeyValue title="Default Allowed Sessions Per User Per Project">
-                                                        <div>
-                                                            <TextContent>
-                                                                <p><small>Default value for allowed sessions per user per project.</small></p>
-                                                            </TextContent>
+                                                        </KeyValue>
+                                                        <KeyValue title="Default Allowed Sessions Per User Per Project">
                                                             <div>
-                                                            {dot.pick("dcv_session.default_allowed_sessions_per_user_per_project", this.state.vdcSettings)}
-                                                            <Button
-                                                                iconName="edit"
-                                                                variant="link"
-                                                                onClick={() => {
-                                                                    this.generalSettingsForm.current?.setParamValue(
-                                                                        "default_allowed_sessions_per_user_per_project",
-                                                                        dot.pick("dcv_session.default_allowed_sessions_per_user_per_project", this.state.vdcSettings)
-                                                                    );
-                                                                    this.generalSettingsForm.current?.showModal();
-                                                                }}
-                                                            />
+                                                                <TextContent>
+                                                                    <p><small>Default value for allowed sessions per user per project.</small></p>
+                                                                </TextContent>
+                                                                <div>
+                                                                {dot.pick("dcv_session.default_allowed_sessions_per_user_per_project", this.state.vdcSettings)}
+                                                                <Button
+                                                                    iconName="edit"
+                                                                    variant="link"
+                                                                    onClick={() => {
+                                                                        this.generalSettingsForm.current?.setParamValue(
+                                                                            "default_allowed_sessions_per_user_per_project",
+                                                                            dot.pick("dcv_session.default_allowed_sessions_per_user_per_project", this.state.vdcSettings)
+                                                                        );
+                                                                        this.generalSettingsForm.current?.showModal();
+                                                                    }}
+                                                                />
+                                                                </div>
                                                             </div>
+                                                        </KeyValue>
+                                                    </ColumnLayout>
+                                                </Container>
+                                                <Container header={<Header variant={"h2"}>Advanced Options</Header>}>
+                                                    <KeyValue title="Enabled options for non-admin users">
+                                                        <div style={{display: 'flex', flexDirection: 'row', gap: '4px'}}>
+                                                            <EnabledDisabledStatusIndicator enabled={Utils.asBoolean(dot.pick("server.enable_adv_options_non_admin", this.state.advOptionsEnabled))} />
+                                                            <Toggle checked={this.state.advOptionsEnabled} onChange={({ detail }) => {
+                                                                handleAdvancedOptionsToggle(!this.state.advOptionsEnabled)
+                                                            }} />    
                                                         </div>
                                                     </KeyValue>
-                                                </ColumnLayout>
-                                            </Container>
-                                        </SpaceBetween>
+                                                </Container>     
+                                            </SpaceBetween>
+                                        </>
                                     ),
                                 },
                                 {

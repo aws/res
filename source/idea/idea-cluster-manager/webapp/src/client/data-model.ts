@@ -44,7 +44,7 @@ export type SocaUserInputParamType =
     | "container"
     | "expandable"
     | "attribute_editor";
-export type VirtualDesktopBaseOS = "amazonlinux2" | "rhel8" | "rhel9" | "windows";
+export type VirtualDesktopBaseOS = "amazonlinux2" | "amzn2023" | "rhel8" | "rhel9" | "windows" | "rocky9";
 export type SocaMemoryUnit = "bytes" | "kib" | "mib" | "gib" | "tib" | "kb" | "mb" | "gb" | "tb";
 export type VirtualDesktopArchitecture = "x86_64" | "arm64";
 export type VirtualDesktopGPU = "NO_GPU" | "NVIDIA" | "AMD";
@@ -1750,11 +1750,22 @@ export enum UpdateModuleSettingsValuesDCVSession {
     DEFAULT_DCV_SESSION_TYPE= "default_dcv_session_type"
 }
 
+export enum UpdateModuleSettingsValuesSever {
+    ENABLE_ADV_OPTIONS_NON_ADMIN = "enable_adv_options_non_admin",
+}
+
 export type UpdateModuleSettingsVDC = {
     dcv_session: {
         [key in UpdateModuleSettingsValuesDCVSession]?: unknown;
     };
 };
+
+export type UpdateModuleSettingsServer = {
+    server: {
+        [key in UpdateModuleSettingsValuesSever]?: unknown;
+    };
+};
+
 export type UpdateModuleSettingsRequestVDC = {
     module_id: "vdc";
     settings: UpdateModuleSettingsVDC;
@@ -1789,7 +1800,7 @@ export type UpdateModuleSettingsIdentityProvider = {
 };
 export type UpdateModuleSettingsRequest = {
     module_id: string;
-    settings?: UpdateModuleSettingsVDC | UpdateModuleSettingsWebPortal | UpdateModuleSettingsFileBrowser | UpdateModuleSettingsIdentityProvider | UpdateModuleSettingsDirectoryService;
+    settings?: UpdateModuleSettingsVDC | UpdateModuleSettingsServer | UpdateModuleSettingsWebPortal | UpdateModuleSettingsFileBrowser | UpdateModuleSettingsIdentityProvider | UpdateModuleSettingsDirectoryService;
 }
 export type UpdateModuleSettingsDirectoryService = {
     [index: string]: any;

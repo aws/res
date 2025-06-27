@@ -167,7 +167,7 @@ class BuildTool:
       + <project-name>/
     """
 
-    def __init__(self, c: Context, app_name: str):
+    def __init__(self, c: Context, app_name: str, skip_resources: bool = False):
         self.c = c
 
         if app_name is None:
@@ -181,6 +181,7 @@ class BuildTool:
         self.release_version = idea.props.idea_release_version
         self._given_app_name = app_name
         self._app_name: Optional[str] = None
+        self._skip_resources = skip_resources
 
     @property
     def app_name(self) -> str:
@@ -383,7 +384,7 @@ class BuildTool:
             shutil.copytree(self.config_dir, os.path.join(output_dir, 'config'))
 
         # resources
-        if self.has_resources():
+        if self.has_resources() and not self._skip_resources:
             shutil.copytree(self.resources_dir, os.path.join(output_dir, 'resources'))
             shutil.copytree(self.bootstrap_dir, os.path.join(output_dir, 'resources', 'bootstrap'))
 

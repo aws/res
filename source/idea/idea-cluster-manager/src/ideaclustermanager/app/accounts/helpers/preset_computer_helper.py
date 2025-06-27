@@ -79,7 +79,6 @@ class PresetComputeHelper:
                 message='nonce is required'
             )
         self.nonce = nonce
-
         # when sent from an EC2 Instance with an IAM Role attached, SenderId is of below format (IAM role ID):
         # AROAZKN2GIY65I74VE5YH:i-035b89c7f49714a3e
         sender_id_tokens = sender_id.split(':')
@@ -90,6 +89,10 @@ class PresetComputeHelper:
             )
 
         instance_id = sender_id_tokens[1]
+        
+        if isinstance(payload, dict) and 'instance_id' in payload:
+            instance_id = payload['instance_id']
+        
         try:
             ec2_instances = self.context.aws_util().ec2_describe_instances(filters=[
                 {

@@ -783,7 +783,7 @@ class ClusterStack(IdeaBaseStack):
         )
         self.add_common_tags(self.ec2_events_sns_topic)
 
-        lambda_name = f'{self.module_id}-ec2state-event-transformer'
+        lambda_name = f'{self.module_id}-ec2-event-xformer'
         ec2_state_event_transformation_lambda_role = Role(
             context=self.context,
             name=f'{lambda_name}-role',

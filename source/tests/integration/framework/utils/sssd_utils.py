@@ -10,12 +10,16 @@
 #  and limitations under the License.
 
 import logging
+import time
 from typing import Any
 
 from tests.integration.framework.utils.remote_command_runner import (
     EC2InstancePlatform,
     RemoteCommandRunner,
 )
+
+MAX_RETRIES = 3
+RETRY_INTERVAL = 20
 
 logger = logging.getLogger(__name__)
 
@@ -39,9 +43,18 @@ def check_sssd_config_field(
     key: str,
     expected_value: str,
 ) -> None:
-    sssd_config_value = grep_sssd_config_from_instance(
-        region, instance_id, platform, key
-    )
+    sssd_config_value = ""
+    num_retries = 0
+    while num_retries < MAX_RETRIES:
+        sssd_config_value = grep_sssd_config_from_instance(
+            region, instance_id, platform, key
+        )
+        if sssd_config_value == expected_value:
+            return
+
+        num_retries += 1
+        time.sleep(RETRY_INTERVAL)
+
     assert (
-        sssd_config_value == expected_value
+        False
     ), f"Expect SSSD config {key} to be {expected_value}, but got {sssd_config_value} from instance {instance_id}"

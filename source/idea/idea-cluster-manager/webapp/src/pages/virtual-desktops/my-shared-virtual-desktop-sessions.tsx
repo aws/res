@@ -100,10 +100,21 @@ class MySharedVirtualDesktopSessions extends Component<MySharedVirtualDesktopPro
         },
     ];
     listing: RefObject<IdeaListView>;
+    virtualDesktopSettings: any;
 
     constructor(props: MySharedVirtualDesktopProps) {
         super(props);
         this.listing = React.createRef();
+        this.virtualDesktopSettings = undefined;
+    }
+
+    componentDidMount() {
+        AppContext.get()
+            .getClusterSettingsService()
+            .getVirtualDesktopSettings()
+            .then((settings) => {
+                this.virtualDesktopSettings = settings;
+            });
     }
 
     onDownloadDcvSessionFile = (idea_session_name: string, idea_session_id: string, idea_session_owner: string, username: string): Promise<boolean> => {
@@ -118,6 +129,7 @@ class MySharedVirtualDesktopSessions extends Component<MySharedVirtualDesktopPro
                 },
             })
             .then((result) => {
+                let certificatevalidationpolicy = this.virtualDesktopSettings.dcv_connection_gateway.certificate.provided === "true" ? "strict" : "ask-user";
                 let endpoint = result.connection_info?.endpoint;
                 if (endpoint === undefined) {
                     endpoint = AppContext.get().getAlbEndpoint();
@@ -132,7 +144,7 @@ class MySharedVirtualDesktopSessions extends Component<MySharedVirtualDesktopPro
                 sessionFileContent += `port=443\n`;
                 sessionFileContent += `webport=443\n`;
                 sessionFileContent += `quicport=443\n`;
-                sessionFileContent += `certificatevalidationpolicy=accept-untrusted\n`;
+                sessionFileContent += `certificatevalidationpolicy=${certificatevalidationpolicy}\n`;
                 sessionFileContent += `authtoken=${result.connection_info?.access_token}\n`;
 
                 const element = document.createElement("a");

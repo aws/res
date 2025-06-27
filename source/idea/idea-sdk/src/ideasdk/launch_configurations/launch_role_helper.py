@@ -13,17 +13,17 @@
 class LaunchRoleHelper:
 
     @staticmethod
-    def get_vdi_role_path(cluster_name: str, region: str) -> str:
-        return f'{cluster_name}-{region}/vdi'
+    def get_vdi_role_path(cluster_name: str, region: str, path: str="") -> str:
+        return f'{path}{cluster_name}-{region}/vdi'
 
     @staticmethod
-    def get_vdi_instance_profile_path(cluster_name: str, region: str) -> str:
-        return LaunchRoleHelper.get_vdi_role_path(cluster_name, region)
+    def get_vdi_instance_profile_path(cluster_name: str, region: str, path: str="") -> str:
+        return LaunchRoleHelper.get_vdi_role_path(cluster_name, region, path)
 
     @staticmethod
-    def get_vdi_role_name(cluster_name: str, project_name: str) -> str:
-        return f'{cluster_name}-vdi-{project_name}'
+    def get_vdi_role_name(cluster_name: str, project_name: str, prefix: str="") -> str:
+        return f'{prefix}{cluster_name}-vdi-{project_name}'
 
     @staticmethod
-    def get_vdi_instance_profile_name(cluster_name: str, project_name: str) -> str:
-        return LaunchRoleHelper.get_vdi_role_name(cluster_name, project_name)
+    def get_vdi_instance_profile_name(cluster_name: str, project_name: str, prefix: str="") -> str:
+        return LaunchRoleHelper.get_vdi_role_name(cluster_name, project_name, prefix)

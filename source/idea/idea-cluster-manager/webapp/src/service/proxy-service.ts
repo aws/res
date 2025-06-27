@@ -17,6 +17,7 @@ import ClusterSettingsService from "./cluster-settings-service";
 import { ClusterSettingsClient } from "../client";
 import { DescribeMountTargetResult, EFS, FSx, FSxLUSTREFileSystem, FSxONTAPFileSystem, ListFileSystemsInVPCResult, MountTarget, SVM, Volume } from "../client/data-model";
 import { Constants } from "../common/constants";
+import { THROTTLE_ERROR } from "../common/error-codes";
 
 class ProxyService {
     private proxyClient: ProxyClient;
@@ -56,16 +57,67 @@ class ProxyService {
         const fileSystemIDsAvailableForOnboard = fileSystemForOnboard.filter((fileSystem: EFS) => fileSystem.LifeCycleState == "available").map((fileSystem: EFS) => fileSystem.FileSystemId);
 
         const fileSystemIDsAvailableForOnboardInVpc: string[] = [];
-        const mountTargetRequests = fileSystemIDsAvailableForOnboard.map(async (fileSystemId: string): Promise<DescribeMountTargetResult> => {
-            return this.proxyClient.describeEFSMountTarget({ AWSRegion: aws_region, FileSystemId: fileSystemId });
-        });
-        const mountTargetResults = await Promise.all(mountTargetRequests);
-        mountTargetResults.forEach((mountTargetResult) => {
-            const targetInVPC = mountTargetResult.MountTargets.filter((mountTarget: MountTarget) => mountTarget.VpcId == vpc_id);
-            if (targetInVPC.length > 0) {
-                fileSystemIDsAvailableForOnboardInVpc.push(targetInVPC[0].FileSystemId);
+        
+        const describeMountTargetWithRetry = async (fileSystemId: string): Promise<DescribeMountTargetResult | null> => {
+            const maxRetries = 5;
+            const baseDelay = 100;
+            
+            for (let attempt = 0; attempt < maxRetries; attempt++) {
+                try {
+                    const backoffDelay = baseDelay * Math.pow(2, attempt) + (Math.random() * 100);
+                    await new Promise(resolve => setTimeout(resolve, backoffDelay));
+                    const response: any = await this.proxyClient.describeEFSMountTarget({ 
+                        AWSRegion: aws_region,
+                        FileSystemId: fileSystemId
+                    });
+                    
+                    if (response && response.success === false) {
+                        if (response.error_code !== THROTTLE_ERROR) {
+                            console.error(`Failed to describe mount target for ${fileSystemId}:`, response);
+                            return null; 
+                        }
+                        else if (attempt === maxRetries - 1) {
+                            console.error(`Failed to describe mount target for ${fileSystemId} after ${maxRetries} attempts:`, response);
+                            return null;
+                        } else {
+                            console.info(`Hitting throttling when describe mount target for ${fileSystemId}, retrying...`);
+                            continue;
+                        }
+                    } else {
+                        return response
+                    }
+                } catch (error: any) {    
+                    console.error(`Failed to describe mount target for ${fileSystemId}:`, error);
+                    return null;
+                }
             }
-        });
+            return null;
+        };
+        
+        // describeMountTarget for EFS file systems in batches with retry
+        const batchSize = 5;
+        for (let i = 0; i < fileSystemIDsAvailableForOnboard.length; i += batchSize) {
+            const batch = fileSystemIDsAvailableForOnboard.slice(i, i + batchSize);
+            
+            // Process current batch in parallel
+            const batchResults = await Promise.all(
+                batch.map(fileSystemId => describeMountTargetWithRetry(fileSystemId))
+            );
+            
+            // Process current batch results
+            batchResults.forEach((mountTargetResult) => {
+                if (mountTargetResult) {
+                    const targetInVPC = mountTargetResult.MountTargets.filter(
+                        (mountTarget: MountTarget) => mountTarget.VpcId == vpc_id
+                    );
+                    
+                    if (targetInVPC.length > 0) {
+                        fileSystemIDsAvailableForOnboardInVpc.push(targetInVPC[0].FileSystemId);
+                    }
+                }
+            });
+        }
+        
         return fileSystemIDsAvailableForOnboardInVpc;
     }
 

@@ -25,7 +25,11 @@ class DCVHostReadyEventHandler(BaseVirtualDesktopControllerEventHandler):
         super().__init__(context, 'dcv-host-state-handler')
 
     def handle_event(self, message_id: str, sender_id: str, event: VirtualDesktopEvent):
-        sender_instance_id = self.get_dcv_instance_id_from_sender_id(sender_id)
+        
+        sender_instance_id = Utils.get_value_as_string('instance_id', event.detail, None)
+        if not sender_instance_id:
+            sender_instance_id = self.get_dcv_instance_id_from_sender_id(sender_id)
+        
         if Utils.is_empty(sender_instance_id):
             raise self.message_source_validation_failed(f'Corrupted sender_id: {sender_id}. Ignoring message')
 

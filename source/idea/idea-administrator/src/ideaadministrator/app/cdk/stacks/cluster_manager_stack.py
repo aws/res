@@ -15,6 +15,8 @@ from ideadatamodel import (
 from ideasdk.utils import Utils
 from ideasdk.bootstrap import BootstrapUserDataBuilder
 
+import res.constants as res_constants
+
 import ideaadministrator
 from ideaadministrator.app.cdk.stacks import IdeaBaseStack
 from ideaadministrator.app.cdk.idea_code_asset import IdeaCodeAsset, SupportedLambdaPlatforms
@@ -24,6 +26,7 @@ from ideaadministrator.app.cdk.constructs import (
     SQSQueue,
     Policy,
     Role,
+    InstanceProfile,
     WebPortalSecurityGroup,
     IdeaNagSuppression,
     LambdaFunction
@@ -271,12 +274,20 @@ class ClusterManagerStack(IdeaBaseStack):
             aws_region=self.aws_region,
             bootstrap_package_uri=self.bootstrap_package_uri,
             install_commands=[
-                '/bin/bash cluster-manager/setup.sh'
+                f'/bin/bash scripts/infrastructure-host/install.sh -p false -c {res_constants.MODULE_NAME_CLUSTER_MANAGER} -m {res_constants.MODULE_ID_CLUSTER_MANAGER} -e {self.cluster_name}'
             ],
             proxy_config=proxy_config,
             base_os=base_os,
             bootstrap_source_dir_path=ideaadministrator.props.bootstrap_source_dir
         ).build()
+
+
+        instance_profile = InstanceProfile(
+            context=self.context,
+            name=f'{self.module_id}-profile',
+            scope=self.stack,
+            roles=[self.cluster_manager_role]
+        )
 
         launch_template = ec2.LaunchTemplate(
             self.stack, f'{self.module_id}-lt',
@@ -296,9 +307,17 @@ class ClusterManagerStack(IdeaBaseStack):
                     volume_type=ec2.EbsDeviceVolumeType.GP3
                 ))
             )],
-            role=self.cluster_manager_role,
             require_imdsv2=True if metadata_http_tokens == "required" else False,
-            associate_public_ip_address=is_public
+            associate_public_ip_address=is_public,
+            version_description=self.deployment_id
+        )
+
+        
+        cfn_launch_template: ec2.CfnLaunchTemplate = launch_template.node.default_child
+        cfn_launch_template.add_property_override(
+            "LaunchTemplateData.IamInstanceProfile", {
+                "Arn": instance_profile.attr_arn
+            }
         )
 
         self.auto_scaling_group = asg.AutoScalingGroup(
@@ -468,7 +487,7 @@ class ClusterManagerStack(IdeaBaseStack):
             internal_target_group.ref,
             external_target_group.ref
         ]
-    
+
     def host_modules(self) -> List[str]:
         return self.context.config().get_list("global-settings.package_config.host_modules.pam", []) + self.context.config().get_list("global-settings.package_config.host_modules.nss", [])
 

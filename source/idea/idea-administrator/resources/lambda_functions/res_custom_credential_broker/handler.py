@@ -28,6 +28,7 @@ logger.setLevel(logging.INFO)
 
 CLUSTER_NAME = os.environ.get('CLUSTER_NAME')
 MODULE_ID = os.environ.get('MODULE_ID')
+AWS_REGION = os.environ.get('AWS_REGION')
 READ_ONLY_ROLE_NAME_ARN = os.environ.get('READ_ONLY_ROLE_NAME_ARN')
 READ_AND_WRITE_ROLE_NAME_ARN = os.environ.get('READ_AND_WRITE_ROLE_NAME_ARN')
 OBJECT_STORAGE_CUSTOM_PROJECT_NAME_PREFIX = os.environ.get('OBJECT_STORAGE_CUSTOM_PROJECT_NAME_PREFIX')
@@ -37,17 +38,36 @@ OBJECT_STORAGE_NO_CUSTOM_PREFIX = os.environ.get('OBJECT_STORAGE_NO_CUSTOM_PREFI
 vdc_server_db = VirtualDesktopControllerServerDB(CLUSTER_NAME, MODULE_ID, logger)
 vdc_user_session_db = VirtualDesktopControllerUserSessionsDB(CLUSTER_NAME, MODULE_ID, logger)
 shared_storage_db = SharedStorageDB(logger)
-
+secret_name = shared_storage_db.get_shared_storage_db_item('vdc.custom_credential_broker_secret_name')
+CUSTOM_BROKER_SECRET = Utils.get_custom_broker_secret(secret_name, AWS_REGION)
 
 def handler(event, _):
     try:
-        logger.info(f'event: {event}')
-        request_context = event['requestContext']
-
+        request_context = event['requestContext']      
+        boostrap_token = Utils.get_bootstrap_token_from_request_context(event)
+        if boostrap_token:
+            decode_token = Utils.verify_jwt_token(boostrap_token, CUSTOM_BROKER_SECRET)
+            if not decode_token:
+                return {
+                    'statusCode': 403,
+                    'body': "Invalid Token"
+                }
+            else:
+                aws_boostrap_credentials = Utils.get_bootstrap_temporary_credentials(decode_token['role_arn'], decode_token['role_session_name'])
+                if aws_boostrap_credentials:
+                    return {
+                        'statusCode': 200,
+                        'body': json.dumps(aws_boostrap_credentials)
+                    }
+                else:
+                    return {
+                        'statusCode': 403,
+                        'body': 'Error retriving credentials' 
+                    }
         filesystem_name = Utils.get_filesystem_name_from_request_context(event)
         instance_id = Utils.get_instance_id_from_request_context(request_context)
         source_ip = Utils.get_source_ip_from_request_context(request_context)
-
+        
         if not all([filesystem_name, instance_id, source_ip]):
             raise ValueError('Invalid input parameters in the request context')
 

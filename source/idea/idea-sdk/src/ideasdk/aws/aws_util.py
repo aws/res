@@ -151,7 +151,7 @@ class AWSUtil(AWSUtilProtocol):
             return 'Inf', False
         elif family.startswith(('trn1', 'trn')):
             return 'Trn', False
-        elif family.startswith(('g6', 'gr6', 'g4dn', 'g4ad', 'g5', 'g5g', 'g3s', 'g3', 'g2', 'g')):
+        elif family.startswith(('g6', 'g6e', 'gr6', 'g4dn', 'g4ad', 'g5', 'g5g', 'g3s', 'g3', 'g2', 'g')):
             return 'G', False
         elif family.startswith(('f1', 'f')):
             return 'F', False
@@ -1118,6 +1118,7 @@ class AWSUtil(AWSUtilProtocol):
         )
 
     def create_vdi_host_role(self, role_name: str, permissions_boundary: Optional[str]) -> bool:
+        iam_resource_path = self._context.config().get_string('cluster.iam.iam_resource_path', default="/")
         region = self.aws().aws_region()
         assume_role_policy_document = {
             "Version": "2012-10-17",
@@ -1139,7 +1140,7 @@ class AWSUtil(AWSUtilProtocol):
             ]
         }
         arguments = {
-            "Path":f'/{LaunchRoleHelper.get_vdi_role_path(cluster_name=self._context.cluster_name(), region=region)}/',
+            "Path":f'{LaunchRoleHelper.get_vdi_role_path(cluster_name=self._context.cluster_name(), region=region, path=iam_resource_path)}/',
             "Description": f'{role_name} used for VDI instance',
             "RoleName": role_name,
             "AssumeRolePolicyDocument": json.dumps(assume_role_policy_document),
@@ -1190,9 +1191,10 @@ class AWSUtil(AWSUtilProtocol):
 
     def create_vdi_instance_profile(self, instance_profile_name: str) -> bool:
         region = self.aws().aws_region()
+        iam_resource_path = self._context.config().get_string('cluster.iam.iam_resource_path', default="/")
         self.aws().iam().create_instance_profile(
             InstanceProfileName=instance_profile_name,
-            Path=f'/{LaunchRoleHelper.get_vdi_instance_profile_path(cluster_name=self._context.cluster_name(), region=region)}/'
+            Path=f'{LaunchRoleHelper.get_vdi_instance_profile_path(cluster_name=self._context.cluster_name(), region=region, path=iam_resource_path)}/'
         )
         return True
 
@@ -1227,10 +1229,11 @@ class AWSUtil(AWSUtilProtocol):
 
     def does_vdi_role_exist(self, role_name: str) -> bool:
         try:
+            iam_resource_path = self._context.config().get_string('cluster.iam.iam_resource_path', default="/")
             response = self.aws().iam().get_role(RoleName=role_name)
             role = response['Role']
             region = self.aws().aws_region()
-            if role['Path'] != f'/{LaunchRoleHelper.get_vdi_role_path(cluster_name=self._context.cluster_name(), region=region)}/':
+            if role['Path'] != f'{LaunchRoleHelper.get_vdi_role_path(cluster_name=self._context.cluster_name(), region=region, path=iam_resource_path)}/':
                 return False
             return True
         except botocore.exceptions.ClientError as e:

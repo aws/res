@@ -44,6 +44,7 @@ def handler(event: Dict[str, Any], context: Dict[str, Any]) -> None:
         logger.info(f"Lb subnets {load_balancer_subnets}")
         logger.info(f"Infra subnets {infra_subnets}")
         logger.info(f"VDI subnets {vdi_subnets}")
+
         response["Data"] = {
             LB_SUBNETS: load_balancer_subnets,
             INFRA_SUBNETS: infra_subnets,

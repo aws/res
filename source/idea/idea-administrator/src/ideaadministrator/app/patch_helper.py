@@ -22,6 +22,7 @@ import time
 from prettytable import PrettyTable
 
 PATCH_LOG = '/root/bootstrap/logs/patch.log'
+SCRIPT_DIR = '/root/bootstrap/latest/scripts/infrastructure-host'
 
 
 class PatchHelper:
@@ -96,32 +97,40 @@ class PatchHelper:
         if not Utils.is_file(package_uri):
             raise exceptions.file_not_found(f'release package not found: {package_uri}')
 
-        cluster_s3_bucket = self.context.config().get_string('cluster.cluster_s3_bucket', required=True)
+        cluster_s3_bucket = self.context.config().get_string('cluster.staging_bucket_name', required=True)
 
-        s3_path = f'idea/patches/{os.path.basename(package_uri)}'
-        s3_package_uri = f's3://{cluster_s3_bucket}/{s3_path}'
+        s3_release_path = f'releases/{ideaadministrator.props.current_release_version}/{os.path.basename(package_uri)}'
+        s3_package_uri = f's3://{cluster_s3_bucket}/{s3_release_path}'
         self.context.info(f'uploading package: {package_uri} to {s3_package_uri} ...')
         self.context.aws().s3().upload_file(
             Bucket=cluster_s3_bucket,
             Filename=package_uri,
-            Key=s3_path
+            Key=s3_release_path
         )
-        return s3_package_uri
 
-    def get_patch_run_command(self, package_uri: str) -> str:
+        # Upload vdi-app zip file when patching virtual-desktop-controller
+        if self.module_name == constants.MODULE_VIRTUAL_DESKTOP_CONTROLLER:
+            vdi_app_package_uri = os.path.join(package_dist_dir,
+                                       f'idea-virtual-desktop-{ideaadministrator.props.current_release_version}.tar.gz')
+            vdi_app_s3_release_path = f'releases/{ideaadministrator.props.current_release_version}/{os.path.basename(vdi_app_package_uri)}'
+            self.context.info(f'uploading vdi-app package: {vdi_app_package_uri} to s3://{cluster_s3_bucket}/{vdi_app_s3_release_path}')
+            self.context.aws().s3().upload_file(
+                Bucket=cluster_s3_bucket,
+                Filename=vdi_app_package_uri,
+                Key=vdi_app_s3_release_path
+            )
+
+
+    def get_patch_run_command(self) -> str:
         if self.module_name in (
             constants.MODULE_DIRECTORYSERVICE,
             constants.MODULE_CLUSTER_MANAGER,
             constants.MODULE_SCHEDULER,
             constants.MODULE_BASTION_HOST,
         ):
-            return f'sudo /bin/bash /root/bootstrap/latest/{self.module_name}/install_app.sh {package_uri} >> {PATCH_LOG}'
+            return f'sudo /bin/bash /root/bootstrap/latest/scripts/common/linux/install_app.sh  -s {SCRIPT_DIR} -c {self.module_name} -m {self.module_name} -e {self.cluster_name} >> {PATCH_LOG}'
         elif self.module_name == constants.MODULE_VIRTUAL_DESKTOP_CONTROLLER:
-            if Utils.is_empty(self.component):
-                return f'sudo /bin/bash /root/bootstrap/latest/{self.module_name}/install_app.sh {package_uri} >> {PATCH_LOG}'
-            else:
-                # TODO: Deprecate
-                return f'sudo /bin/bash /root/bootstrap/latest/reverse-proxy-server/install_app.sh {package_uri} >> {PATCH_LOG}'
+            return f'sudo /bin/bash /root/bootstrap/latest/scripts/common/linux/install_app.sh  -s {SCRIPT_DIR} -c {self.module_name} -m vdc -e {self.cluster_name} >> {PATCH_LOG}'
 
     def print_ec2_instance_table(self, instances: List[EC2Instance]):
         table = PrettyTable(['Instance Id', 'Instance Name', 'Host Name', 'Private IP', 'State'])
@@ -192,8 +201,8 @@ class PatchHelper:
         with self.context.spinner('patching ec2 instances via AWS Systems Manager (Run Command) ... '):
 
             if Utils.is_empty(self.patch_command):
-                package_uri = self.try_get_s3_package_uri()
-                patch_command = self.get_patch_run_command(package_uri)
+                self.try_get_s3_package_uri()
+                patch_command = self.get_patch_run_command()
             else:
                 patch_command = self.patch_command
             print(f'patch command: {patch_command}')
@@ -208,6 +217,7 @@ class PatchHelper:
                 Parameters={
                     'commands': [
                         f'sudo echo "# $(date) executing patch ..." >> {PATCH_LOG}',
+                        'sudo rm -f /root/bootstrap/semaphore/app_installed.lock',
                         patch_command,
                         f'sudo tail -10 {PATCH_LOG}'
                     ]

@@ -19,57 +19,13 @@ Statement:
 
 - Effect: Allow
   Action:
-  - rds:AddTagsToResource
-  - rds:ListTagsForResource
-  - rds:DescribeDBSnapshots
-  - rds:CreateDBSnapshot
-  - rds:CopyDBSnapshot
-  - rds:DescribeDBInstances
-  - rds:CreateDBClusterSnapshot
-  - rds:DescribeDBClusters
-  - rds:DescribeDBClusterSnapshots
-  - rds:CopyDBClusterSnapshot
-  Resource: '*'
-
-- Effect: Allow
-  Action:
-  - rds:ModifyDBInstance
-  Resource:
-  - arn:{{ context.aws_partition }}:rds:*:*:db:*
-
-- Effect: Allow
-  Action:
-  - rds:DeleteDBSnapshot
-  - rds:ModifyDBSnapshotAttribute
-  Resource:
-  - arn:{{ context.aws_partition }}:rds:*:*:snapshot:awsbackup:*
-
-- Effect: Allow
-  Action:
-  - rds:DeleteDBClusterSnapshot
-  - rds:ModifyDBClusterSnapshotAttribute
-  Resource:
-  - arn:{{ context.aws_partition }}:rds:*:*:cluster-snapshot:awsbackup:*
-
-- Effect: Allow
-  Action:
-  - storagegateway:CreateSnapshot
-  - storagegateway:ListTagsForResource
-  Resource: arn:{{ context.aws_partition }}:storagegateway:*:*:gateway/*/volume/*
-
-- Effect: Allow
-  Action:
-  - ec2:CopySnapshot
-  Resource: arn:{{ context.aws_partition }}:ec2:*::snapshot/*
-
-- Effect: Allow
-  Action:
   - ec2:CopyImage
   Resource: '*'
 
 - Effect: Allow
   Action:
   - ec2:CreateTags
+  - ec2:CopySnapshot
   - ec2:DeleteSnapshot
   Resource: arn:{{ context.aws_partition }}:ec2:*::snapshot/*
 
@@ -224,43 +180,9 @@ Statement:
   - dynamodb:ListTagsOfResource
   Resource: arn:{{ context.aws_partition }}:dynamodb:*:*:table/*
 
-- Sid: BackupGatewayBackupPermissions
-  Effect: Allow
-  Action:
-  - backup-gateway:Backup
-  - backup-gateway:ListTagsForResource
-  Resource: arn:{{ context.aws_partition }}:backup-gateway:*:*:vm/*
-
 - Effect: Allow
   Action:
   - cloudformation:GetTemplate
   - cloudformation:DescribeStacks
   - cloudformation:ListStackResources
   Resource: arn:{{ context.aws_partition }}:cloudformation:*:*:stack/*/*
-
-- Effect: Allow
-  Action:
-  - redshift:CreateClusterSnapshot
-  - redshift:DescribeClusterSnapshots
-  - redshift:DescribeTags
-  Resource:
-  - arn:{{ context.aws_partition }}:redshift:*:*:snapshot:*/*
-  - arn:{{ context.aws_partition }}:redshift:*:*:cluster:*
-
-- Effect: Allow
-  Action:
-  - redshift:DeleteClusterSnapshot
-  Resource:
-  - arn:{{ context.aws_partition }}:redshift:*:*:snapshot:*/*
-
-- Effect: Allow
-  Action:
-  - redshift:DescribeClusters
-  Resource:
-  - arn:{{ context.aws_partition }}:redshift:*:*:cluster:*
-
-- Effect: Allow
-  Action:
-  - redshift:CreateTags
-  Resource:
-  - arn:{{ context.aws_partition }}:redshift:*:*:snapshot:*/*

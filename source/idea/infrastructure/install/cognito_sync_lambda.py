@@ -36,6 +36,7 @@ class CognitoSyncLambda(Construct):
         # Get existing resource
         cluster_name = params.get_str(CommonKey.CLUSTER_NAME)
         self.params = params
+
         sudoer_group_name = InfraUtils.get_cluster_setting_string(
             self, "identity-provider.cognito.sudoers.group_name", cluster_name
         )
@@ -123,7 +124,10 @@ class CognitoSyncLambda(Construct):
         user_pool_id: str,
         cluster_admin_name: str,
     ) -> lambda_.Function:
-        execution_role = InfraUtils.create_execution_role(self)
+        execution_role = InfraUtils.create_execution_role(
+            self,
+            "cognito-sync-role",
+        )
         cognito_sync_lambda = lambda_.Function(
             self,
             "cognito-sync",

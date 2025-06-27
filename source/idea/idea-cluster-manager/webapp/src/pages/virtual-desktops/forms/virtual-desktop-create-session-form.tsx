@@ -41,6 +41,7 @@ export interface VirtualDesktopCreateSessionFormState {
     softwareStacks: { [k: string]: VirtualDesktopSoftwareStack };
     dcvSessionTypeChoice: DCVSessionTypeChoice;
     eVDIUsers: User[];
+    advEnabled: false
 }
 
 class VirtualDesktopCreateSessionForm extends Component<VirtualDesktopCreateSessionFormProps, VirtualDesktopCreateSessionFormState> {
@@ -59,11 +60,13 @@ class VirtualDesktopCreateSessionForm extends Component<VirtualDesktopCreateSess
             dcvSessionTypeChoice: {
                 choices: Utils.getDCVSessionTypes(),
                 defaultChoice: undefined,
-                disabled: false,
+                disabled: false
             },
+            advEnabled: false
         };
         this.instanceTypesInfo = {};
         this.defaultInstanceTypeChoices = [];
+
     }
 
     authAdmin(): AccountsClient {
@@ -158,10 +161,11 @@ class VirtualDesktopCreateSessionForm extends Component<VirtualDesktopCreateSess
             .getVirtualDesktopSettings()
             .then((settings) => {
                 this.setState({
+                    advEnabled: settings?.server.enable_adv_options_non_admin,                    
                     dcvSessionTypeChoice: {
                     choices: Utils.getDCVSessionTypes(),
                     defaultChoice: settings?.dcv_session.default_dcv_session_type,
-                    disabled: false,
+                    disabled: false
                 },
                 });
             });
@@ -170,6 +174,10 @@ class VirtualDesktopCreateSessionForm extends Component<VirtualDesktopCreateSess
 
     isAdmin(): boolean {
         return AppContext.get().auth().isAdmin();
+    }
+
+    advOptionsEnabled(): boolean {
+        return AppContext.get().getClusterSettingsService().isAdvOptionsEnabled;
     }
 
     generateInstanceTypeReverseIndex(instanceTypeList: any[]): { [k: string]: any } {
@@ -549,74 +557,77 @@ class VirtualDesktopCreateSessionForm extends Component<VirtualDesktopCreateSess
             },
             readonly: true,
         });
-        formParams.push({
-            name: "advanced_options",
-            title: "Show Advanced Options",
-            data_type: "bool",
-            param_type: "confirm",
-            validate: {
-                required: true,
-            },
-            default: false,
-        });
-        formParams.push({
-            name: "dcv_session_type",
-            title: "DCV Session Type",
-            description: "Select the DCV Session Type",
-            data_type: "str",
-            param_type: "select",
-            readonly: this.state.dcvSessionTypeChoice.disabled,
-            default: this.state.dcvSessionTypeChoice.defaultChoice,
-            choices: this.state.dcvSessionTypeChoice.choices,
-            validate: {
-                required: true,
-            },
-            when: {
-                param: "advanced_options",
-                eq: true,
-            },
-        });
-        formParams.push({
-            name: "vpc_subnet_id",
-            title: "VPC Subnet ID",
-            description: "Launch your virtual desktop in a specific subnet",
-            data_type: "str",
-            param_type: "text",
-            when: {
-                param: "advanced_options",
-                eq: true,
-            },
-        });
-        const sessionTagKeys: SocaUserInputParamMetadata = {
-            name: "session_tags_keys",
-            description: "Key",
-            param_type: "text",
-            data_type: "str"
-        };
-        const sessionTagValues: SocaUserInputParamMetadata = {
-            name: "session_tags_values",
-            description: "Value",
-            param_type: "text",
-            data_type: "str"
-        };
-        formParams.push({
-            name: "session_tags",
-            title: "Session Tags",
-            description: "Add tags for your virtual desktop. Provided tags will be added to the EC2 Instance.",
-            param_type: "container",
-            data_type: "record",
-            container_items: [sessionTagKeys, sessionTagValues],
-            multiple: true,
-            default: [],
-            when: {
-                param: "advanced_options",
-                eq: true,
-            },
-            validate: {
-                required: true
-            },
-            custom_error_message: "Keys and Values cannot be empty."
-        })
+
+        if (this.isAdmin() || this.state.advEnabled) {
+            formParams.push({
+                name: "advanced_options",
+                title: "Show Advanced Options",
+                data_type: "bool",
+                param_type: "confirm",
+                validate: {
+                    required: true,
+                },
+                default: false,
+            });
+            formParams.push({
+                name: "dcv_session_type",
+                title: "DCV Session Type",
+                description: "Select the DCV Session Type",
+                data_type: "str",
+                param_type: "select",
+                readonly: this.state.dcvSessionTypeChoice.disabled,
+                default: this.state.dcvSessionTypeChoice.defaultChoice,
+                choices: this.state.dcvSessionTypeChoice.choices,
+                validate: {
+                    required: true,
+                },
+                when: {
+                    param: "advanced_options",
+                    eq: true,
+                },
+            });
+            formParams.push({
+                name: "vpc_subnet_id",
+                title: "VPC Subnet ID",
+                description: "Launch your virtual desktop in a specific subnet",
+                data_type: "str",
+                param_type: "text",
+                when: {
+                    param: "advanced_options",
+                    eq: true,
+                },
+            });
+            const sessionTagKeys: SocaUserInputParamMetadata = {
+                name: "session_tags_keys",
+                description: "Key",
+                param_type: "text",
+                data_type: "str"
+            };
+            const sessionTagValues: SocaUserInputParamMetadata = {
+                name: "session_tags_values",
+                description: "Value",
+                param_type: "text",
+                data_type: "str"
+            };
+            formParams.push({
+                name: "session_tags",
+                title: "Session Tags",
+                description: "Add tags for your virtual desktop. Provided tags will be added to the EC2 Instance.",
+                param_type: "container",
+                data_type: "record",
+                container_items: [sessionTagKeys, sessionTagValues],
+                multiple: true,
+                default: [],
+                when: {
+                    param: "advanced_options",
+                    eq: true,
+                },
+                validate: {
+                    required: true
+                },
+                custom_error_message: "Keys and Values cannot be empty."
+            })
+        }
 
         return formParams;
     }

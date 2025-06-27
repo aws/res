@@ -28,6 +28,7 @@ def expected_environment() -> list[Any]:
             "Value": "Ec2InstanceMetadata",
         },
         {"Name": "AWS_STS_REGIONAL_ENDPOINTS", "Value": "regional"},
+        {"Name": "environment_name", "Value": {"Ref": "EnvironmentName"}},
     ]
 
 

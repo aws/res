@@ -2,6 +2,7 @@
 #  SPDX-License-Identifier: Apache-2.0
 
 import os
+from decimal import Decimal
 from functools import lru_cache
 from typing import Any, Dict, List, Optional
 
@@ -15,6 +16,15 @@ from res.constants import ENVIRONMENT_NAME_KEY
 def table(table_name: str) -> Any:
     dynamodb = boto3.resource("dynamodb")
     return dynamodb.Table(f"{os.environ.get(ENVIRONMENT_NAME_KEY)}.{table_name}")
+
+
+def resolve_table_name(table_name: str) -> str:
+    return f"{os.environ.get(ENVIRONMENT_NAME_KEY)}.{table_name}"
+
+
+def get_table_kinesis_stream_name(table_name: str) -> str:
+    resolved_table_name = resolve_table_name(table_name)
+    return f"{resolved_table_name}-kinesis-stream"
 
 
 def list_items(table_name: str) -> List[Dict[str, Any]]:
@@ -59,7 +69,7 @@ def delete_item(table_name: str, key: Dict[str, str]) -> None:
     table(table_name).delete_item(Key=key)
 
 
-def get_item(table_name: str, key: Dict[str, str]) -> Optional[Dict[str, Any]]:
+def get_item(table_name: str, key: Dict[str, Any]) -> Optional[Dict[str, Any]]:
     item: Optional[Dict[str, Any]] = (
         table(table_name).get_item(Key=key).get("Item", None)
     )
@@ -218,3 +228,41 @@ def get_distributed_lock_client(table_name: str) -> Any:
 def is_table_empty(table_name: str) -> bool:
     query_result = table(table_name).scan(Limit=1).get("Items", [])
     return len(query_result) == 0
+
+
+def check_and_convert_decimal_value(value: Any) -> Any:
+    """
+    since the ddb table resource returns all Number (N) types as decimals, additional processing is required to distinguish between int and float
+
+    if value is of type Decimal, return it's applicable int or float value
+    if value is a list of Decimals, converts all values in the list to applicable int of float
+
+    see: https://github.com/boto/boto3/issues/369
+    below implementation will not work for very large decimal numbers and exponent values for float
+    :param value: Any
+    :return: value with Decimal types converted to float of int if applicable
+    """
+    if value is None:
+        return value
+    updated_value = None
+    if isinstance(value, Decimal):
+        string_val = str(value)
+        if "." in string_val:
+            updated_value = float(string_val)
+        else:
+            updated_value = int(string_val)
+    elif isinstance(value, list):
+        list_entry = value
+        if len(list_entry) > 0 and isinstance(list_entry[0], Decimal):
+            updated_list = []
+            for list_val in list_entry:
+                string_val = str(list_val)
+                if "." in string_val:
+                    updated_list.append(float(string_val))
+                else:
+                    updated_list.append(int(string_val))
+                updated_list.append(value)
+            updated_value = updated_list
+    if updated_value is None:
+        return value
+    return updated_value

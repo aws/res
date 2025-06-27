@@ -42,12 +42,11 @@ def software_stack(
     api_invoker_type = request.config.getoption("--api-invoker-type")
     client = ResClient(res_environment, admin, api_invoker_type)
 
-    if (res_environment.region == "us-gov-west-1") and (
-        software_stack.name not in TEST_SOFTWARE_STACKS_GOVCLOUD
-    ):
-        pytest.skip(
-            f"Software stack: {software_stack.name} not supported in us-gov-west-1"
-        )
+    if (
+        res_environment.region == "us-gov-west-1"
+        or res_environment.region == "us-gov-east-1"
+    ) and (software_stack.name not in TEST_SOFTWARE_STACKS_GOVCLOUD):
+        pytest.skip(f"Software stack: {software_stack.name} not supported in GovCloud")
 
     if not software_stack.ami_id:
         base_os = software_stack.base_os

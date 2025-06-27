@@ -63,6 +63,12 @@ Parameters:
   PermissionsBoundaryPolicy:
     Type: String
     Default: '{{ permission_boundary_arn }}'
+  IAMResourcePrefix:
+    Type: String
+    Default: '{{ iam_resource_prefix }}'
+  IAMResourcePath:
+    Type: String
+    Default: '{{ iam_resource_path }}'
 Conditions:
   HasTrustedAccounts:
     Fn::Not:
@@ -111,6 +117,14 @@ Conditions:
     - !Equals
       - !Ref PermissionsBoundaryPolicy
       - ''
+  HasIAMResourcePrefix: !Not
+    - !Equals
+      - !Ref IAMResourcePrefix
+      - ''
+  HasIAMResourcePath: !Not
+    - !Equals
+      - !Ref IAMResourcePath
+      - ''
 Resources:
   FileAssetsBucketEncryptionKey:
     Type: AWS::KMS::Key
@@ -131,6 +145,8 @@ Resources:
               - kms:ScheduleKeyDeletion
               - kms:CancelKeyDeletion
               - kms:GenerateDataKey
+              - kms:TagResource
+              - kms:UntagResource
             Effect: Allow
             Principal:
               AWS:
@@ -219,7 +235,15 @@ Resources:
         - !Ref PermissionsBoundaryPolicy
         - !Ref AWS::NoValue
       RoleName:
-        Fn::Sub: cdk-${Qualifier}-file-publishing-role-${AWS::AccountId}-${AWS::Region}
+        Fn::If:
+          - HasIAMResourcePrefix
+          - !Sub ${IAMResourcePrefix}cdk-${Qualifier}-file-publishing-role-${AWS::Region}
+          - !Sub cdk-${Qualifier}-file-publishing-role-${AWS::Region}
+      Path:
+        Fn::If:
+          - HasIAMResourcePath
+          - !Ref IAMResourcePath
+          - !Ref AWS::NoValue
       Tags:
         - Key: aws-cdk:bootstrap-role
           Value: file-publishing
@@ -247,7 +271,15 @@ Resources:
         - !Ref PermissionsBoundaryPolicy
         - !Ref AWS::NoValue
       RoleName:
-        Fn::Sub: cdk-${Qualifier}-image-publishing-role-${AWS::AccountId}-${AWS::Region}
+        Fn::If:
+          - HasIAMResourcePrefix
+          - !Sub ${IAMResourcePrefix}cdk-${Qualifier}-image-publishing-role-${AWS::Region}
+          - !Sub cdk-${Qualifier}-image-publishing-role-${AWS::Region}
+      Path:
+        Fn::If:
+          - HasIAMResourcePath
+          - !Ref IAMResourcePath
+          - !Ref AWS::NoValue
       Tags:
         - Key: aws-cdk:bootstrap-role
           Value: image-publishing
@@ -283,7 +315,15 @@ Resources:
         - !Ref PermissionsBoundaryPolicy
         - !Ref AWS::NoValue
       RoleName:
-        Fn::Sub: cdk-${Qualifier}-lookup-role-${AWS::AccountId}-${AWS::Region}
+        Fn::If:
+          - HasIAMResourcePrefix
+          - !Sub ${IAMResourcePrefix}cdk-${Qualifier}-lookup-role-${AWS::Region}
+          - !Sub cdk-${Qualifier}-lookup-role-${AWS::Region}
+      Path:
+        Fn::If:
+          - HasIAMResourcePath
+          - !Ref IAMResourcePath
+          - !Ref AWS::NoValue
       ManagedPolicyArns:
         - Fn::Sub: arn:${AWS::Partition}:iam::aws:policy/ReadOnlyAccess
       Policies:
@@ -295,7 +335,12 @@ Resources:
                   - kms:Decrypt
                 Resource: "*"
             Version: "2012-10-17"
-          PolicyName: LookupRolePolicy
+          PolicyName:
+            Fn::If:
+              - HasIAMResourcePrefix
+              - !Sub ${IAMResourcePrefix}LookupRolePolicy
+              - LookupRolePolicy
+
       Tags:
         - Key: aws-cdk:bootstrap-role
           Value: lookup
@@ -332,7 +377,10 @@ Resources:
       Roles:
         - Ref: FilePublishingRole
       PolicyName:
-        Fn::Sub: cdk-${Qualifier}-file-publishing-role-default-policy-${AWS::AccountId}-${AWS::Region}
+        Fn::If:
+          - HasIAMResourcePrefix
+          - !Sub ${IAMResourcePrefix}cdk-${Qualifier}-file-publishing-role-default-policy-${AWS::Region}
+          - !Sub cdk-${Qualifier}-file-publishing-role-default-policy-${AWS::Region}
   ImagePublishingRoleDefaultPolicy:
     Type: AWS::IAM::Policy
     Properties:
@@ -359,7 +407,11 @@ Resources:
       Roles:
         - Ref: ImagePublishingRole
       PolicyName:
-        Fn::Sub: cdk-${Qualifier}-image-publishing-role-default-policy-${AWS::AccountId}-${AWS::Region}
+        Fn::If:
+          - HasIAMResourcePrefix
+          - !Sub ${IAMResourcePrefix}cdk-${Qualifier}-image-publishing-role-default-policy-${AWS::Region}
+          - !Sub cdk-${Qualifier}-image-publishing-role-default-policy-${AWS::Region}
+
   DeploymentActionRole:
     Type: AWS::IAM::Role
     Properties:
@@ -454,9 +506,21 @@ Resources:
                 Resource:
                   - Fn::Sub: arn:${AWS::Partition}:ssm:${AWS::Region}:${AWS::AccountId}:parameter${CdkBootstrapVersion}
             Version: "2012-10-17"
-          PolicyName: default
+          PolicyName:
+            Fn::If:
+              - HasIAMResourcePrefix
+              - !Sub ${IAMResourcePrefix}default
+              - !Sub default
       RoleName:
-        Fn::Sub: cdk-${Qualifier}-deploy-role-${AWS::AccountId}-${AWS::Region}
+        Fn::If:
+        - HasIAMResourcePrefix
+        - !Sub ${IAMResourcePrefix}cdk-${Qualifier}-deploy-role-${AWS::Region}
+        - !Sub cdk-${Qualifier}-deploy-role-${AWS::Region}
+      Path:
+        Fn::If:
+        - HasIAMResourcePath
+        - !Ref IAMResourcePath
+        - !Ref AWS::NoValue
       Tags:
         - Key: aws-cdk:bootstrap-role
           Value: deploy
@@ -484,7 +548,15 @@ Resources:
               - Ref: AWS::NoValue
               - - Fn::Sub: arn:${AWS::Partition}:iam::aws:policy/AdministratorAccess
       RoleName:
-        Fn::Sub: cdk-${Qualifier}-cfn-exec-role-${AWS::AccountId}-${AWS::Region}
+        Fn::If:
+        - HasIAMResourcePrefix
+        - !Sub ${IAMResourcePrefix}cdk-${Qualifier}-cfn-exec-role-${AWS::Region}
+        - !Sub cdk-${Qualifier}-cfn-exec-role-${AWS::Region}
+      Path:
+        Fn::If:
+          - HasIAMResourcePath
+          - !Ref IAMResourcePath
+          - !Ref AWS::NoValue
   CdkBootstrapVersion:
     Type: AWS::SSM::Parameter
     Properties:

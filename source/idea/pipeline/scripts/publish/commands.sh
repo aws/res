@@ -24,20 +24,14 @@ echo Uploading template to buckets
 npx cdk synth $INSTALL_STACK_NAME -c publish_templates=$PUBLISH_TEMPLATES -c file_asset_prefix="releases/$RELEASE_VERSION/" -c installer_registry_name=$ECR_REPOSITORY_URI:installer-$RELEASE_VERSION-$COMMIT_ID  -c ad_sync_registry_name=$ECR_REPOSITORY_URI:ad-sync-$RELEASE_VERSION-$COMMIT_ID
 ARTIFACT_FOLDER=$([ -z $RELEASE_VERSION ] && echo $COMMIT_ID || echo $RELEASE_VERSION)
 
-invoke package.infra-ami-deps
-infra_ami_package="dist/res-infra-dependencies.tar.gz"
-package_name="res-infra-dependencies.tar.gz"
-
 IFS=',' read -r -a regions <<< "$ONBOARDED_REGIONS"
 for region in "${regions[@]}"
 do
     AWS_REGION=$region
     npx cdk-assets publish -p cdk.out/$INSTALL_STACK_NAME.assets.json -v
+    aws s3 cp s3://$STAGING_BUCKET_NAME/releases/$RELEASE_VERSION/ s3://$ARTIFACTS_BUCKET_PREFIX_NAME-$region/releases/$RELEASE_VERSION/ --recursive --exclude "*" --include "*.tar.gz"
     # Overrides if there is an existing install template
     aws s3api put-object --bucket "$ARTIFACTS_BUCKET_PREFIX_NAME-$region" --key "releases/$RELEASE_VERSION/$INSTALL_STACK_NAME.template.json" --body ./cdk.out/$INSTALL_STACK_NAME.template.json
-    if [[ -f $infra_ami_package ]]; then
-      aws s3 cp $infra_ami_package "s3://$ARTIFACTS_BUCKET_PREFIX_NAME-$region/releases/$RELEASE_VERSION/$package_name"
-    fi
 done
 
 if [ "$ECR_REPOSITORY_URI_PARAMETER" == "" ]

@@ -45,6 +45,13 @@ class ResFinalizerStack(ResBaseConstruct):
             description="Nested RES Finalizer Stack",
         )
 
+        self.has_iam_prefix_condition = InfraUtils.get_iam_prefix_condition(
+            self.nested_stack, parameters
+        )
+        self.has_iam_path_condition = InfraUtils.get_iam_path_condition(
+            self.nested_stack, parameters
+        )
+
         self.populate_final_values()
         self.apply_permission_boundary(self.nested_stack)
 

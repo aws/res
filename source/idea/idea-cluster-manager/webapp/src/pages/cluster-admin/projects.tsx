@@ -38,7 +38,6 @@ export interface ProjectsProps extends IdeaAppLayoutProps, IdeaSideNavigationPro
 export interface ProjectsState {
     projectSelected: boolean;
     defaultFilteringText?: string;
-    showTagEditor: boolean;
     tags: any[];
     splitPanelOpen: boolean;
     projectAssignments: {
@@ -182,7 +181,6 @@ class Projects extends Component<ProjectsProps, ProjectsState> {
         this.state = {
             projectSelected: false,
             defaultFilteringText: state ? state?.defaultFilteringText : "",
-            showTagEditor: false,
             tags: [],
             splitPanelOpen: false,
             projectAssignments: {},
@@ -366,130 +364,6 @@ class Projects extends Component<ProjectsProps, ProjectsState> {
       }
       await Promise.all(requests);
       return projects;
-    }
-
-    buildTagEditor() {
-        const onCancel = () => {
-            this.hideTagEditor();
-        };
-
-        const onSubmit = () => {
-            this.projects()
-                .updateProject({
-                    project: {
-                        ...this.getSelected(),
-                        tags: this.state.tags,
-                    },
-                })
-                .then(() => {
-                    this.props.onFlashbarChange({
-                        items: [
-                            {
-                                type: "success",
-                                content: `Tags updated for project: ${this.getSelected()?.name}`,
-                                dismissible: true,
-                            },
-                        ],
-                    });
-                    this.getListing().fetchRecords();
-                    this.hideTagEditor();
-                });
-        };
-
-        return (
-            <Modal
-                size="large"
-                visible={this.state.showTagEditor}
-                onDismiss={onCancel}
-                header={<Header variant="h3">Tags: {this.getSelected()?.title}</Header>}
-                footer={
-                    <Box float="right">
-                        <SpaceBetween direction="horizontal" size="xs">
-                            <Button variant="link" onClick={onCancel}>
-                                Cancel
-                            </Button>
-                            <Button variant="primary" onClick={onSubmit}>
-                                Submit
-                            </Button>
-                        </SpaceBetween>
-                    </Box>
-                }
-            >
-                <TagEditor
-                    tags={this.state.tags}
-                    tagLimit={20}
-                    onChange={(event) => {
-                        const tags: any[] = [];
-                        event.detail.tags.forEach((tag) => {
-                            tags.push({
-                                key: tag.key,
-                                value: tag.value,
-                            });
-                        });
-                        this.setState({
-                            tags: tags,
-                        });
-                    }}
-                    i18nStrings={{
-                        keyPlaceholder: "Enter key",
-                        valuePlaceholder: "Enter value",
-                        addButton: "Add new tag",
-                        removeButton: "Remove",
-                        undoButton: "Undo",
-                        undoPrompt: "This tag will be removed upon saving changes",
-                        loading: "Loading tags that are associated with this resource",
-                        keyHeader: "Key",
-                        valueHeader: "Value",
-                        optional: "optional",
-                        keySuggestion: "Custom tag key",
-                        valueSuggestion: "Custom tag value",
-                        emptyTags: "No tags associated with the resource.",
-                        tooManyKeysSuggestion: "You have more keys than can be displayed",
-                        tooManyValuesSuggestion: "You have more values than can be displayed",
-                        keysSuggestionLoading: "Loading tag keys",
-                        keysSuggestionError: "Tag keys could not be retrieved",
-                        valuesSuggestionLoading: "Loading tag values",
-                        valuesSuggestionError: "Tag values could not be retrieved",
-                        emptyKeyError: "You must specify a tag key",
-                        maxKeyCharLengthError: "The maximum number of characters you can use in a tag key is 128.",
-                        maxValueCharLengthError: "The maximum number of characters you can use in a tag value is 256.",
-                        duplicateKeyError: "You must specify a unique tag key.",
-                        invalidKeyError: "Invalid key. Keys can only contain alphanumeric characters, spaces and any of the following: _.:/=+@-",
-                        invalidValueError: "Invalid value. Values can only contain alphanumeric characters, spaces and any of the following: _.:/=+@-",
-                        awsPrefixError: "Cannot start with aws:",
-                        tagLimit: (availableTags) => (availableTags === 1 ? "You can add up to 1 more tag." : "You can add up to " + availableTags + " more tags."),
-                        tagLimitReached: (tagLimit) => (tagLimit === 1 ? "You have reached the limit of 1 tag." : "You have reached the limit of " + tagLimit + " tags."),
-                        tagLimitExceeded: (tagLimit) => (tagLimit === 1 ? "You have exceeded the limit of 1 tag." : "You have exceeded the limit of " + tagLimit + " tags."),
-                        enteredKeyLabel: (key) => 'Use "' + key + '"',
-                        enteredValueLabel: (value) => 'Use "' + value + '"',
-                    }}
-                />
-            </Modal>
-        );
-    }
-
-    showTagEditor() {
-        const tags: any[] = [];
-        const selected = this.getSelected();
-        if (selected != null) {
-            selected.tags?.forEach((tag) => {
-                tags.push({
-                    key: tag.key,
-                    value: tag.value,
-                });
-            });
-        }
-        this.setState({
-            showTagEditor: true,
-            tags: tags,
-        });
-    }
-
-    hideTagEditor() {
-        this.setState({
-            showTagEditor: false,
-            tags: [],
-        });
     }
 
     canEditProjectDetails(): boolean {
@@ -687,14 +561,6 @@ class Projects extends Component<ProjectsProps, ProjectsState> {
                         disabled: !this.canUpdateProjectStatus(),
                     },
                     {
-                        id: "update-tags",
-                        text: "Update Tags",
-                        onClick: () => {
-                            this.showTagEditor();
-                        },
-                        disabled: !this.canEditProjectTags(),
-                    },
-                    {
                         id: "toggle-delete-project",
                         text: "Delete Project",
                         onClick: () => {
@@ -830,7 +696,6 @@ class Projects extends Component<ProjectsProps, ProjectsState> {
                 ]}
                 content={
                     <div>
-                        {this.buildTagEditor()}
                         {this.buildListing()}
                         {this.state.showDeleteProjectConfirmModal && this.buildDeleteProjectConfirmModal()}
                     </div>

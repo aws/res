@@ -1,7 +1,6 @@
 #  Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 #  SPDX-License-Identifier: Apache-2.0
 
-import logging
 from typing import Any, Dict, List, Tuple
 
 import boto3
@@ -12,12 +11,11 @@ from res.resources import schedules
 from res.resources import servers as server_db
 from res.resources import session_permissions
 from res.resources import sessions as user_sessions
-
-logger = logging.getLogger(__name__)
-logger.addHandler(logging.StreamHandler())
-logger.setLevel(logging.INFO)
+from res.utils import logging_utils
 
 SESSION_ID_KEY = "idea_session_id"
+
+logger = logging_utils.get_logger("vdi-management")
 
 
 # Stop VDI logic

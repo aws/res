@@ -1,12 +1,14 @@
 #  Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 #  SPDX-License-Identifier: Apache-2.0
 
-import logging
-from unittest.mock import ANY, call, patch
+import os
+from unittest.mock import ANY, Mock, call, patch
 
 import pytest
-from res.constants import MODULE_ID_CLUSTER_MANAGER, MODULE_ID_VIRTUAL_DESKTOP_APP
+from res.constants import MODULE_NAME_VIRTUAL_DESKTOP_APP
+from res.resources import cluster_settings
 from res.utils import sssd_utils
+from res.utils.sssd_utils import SSSDConfigEventSubscriber
 
 SSSD_SETTINGS_WITH_ADDITIONAL_CONFIG = {
     "domain_name": "domain_name",
@@ -64,7 +66,6 @@ ldap_group_uuid = objectGUID
 
 ldap_default_bind_dn = service_account_dn
 
-enumerate = true
 ldap_id_mapping = true
 
 cache_credentials = true
@@ -106,10 +107,38 @@ ldap_id_mapping = true
 use_fully_qualified_names = false
 fallback_homedir = /home/%u
 
-enumerate = true
-
 sudo_provider = none
 ldap_sasl_authid = ldap_sasl_authid"""
+
+SSSD_CONFIG_EVENT_SUBSCRIBER = SSSDConfigEventSubscriber(Mock())
+
+ENTRY_WITH_DOMAIN_NAME_KEY = {
+    "key": "directoryservice.name",
+    "value": "value",
+}
+ENTRY_WITH_ADDITIONAL_SSSD_CONFIGS_KEY = {
+    "key": "directoryservice.sssd.additional_sssd_configs",
+    "value": "value",
+}
+ENTRY_WITH_NON_SSSD_KEY = {
+    "key": "test",
+    "value": "value",
+}
+OLD_ENTRY_WITH_DOMAIN_NAME_KEY = {
+    "key": "directoryservice.name",
+    "value": "old_value",
+}
+
+CURRENT_SSSD_SETTINGS = {
+    "domain_name": "value",
+    "ldap_connection_uri": "value",
+    "ldap_base": "value",
+    "sssd_ldap_id_mapping": "value",
+    "service_account_dn": "value",
+    "service_account_credentials": "value",
+    "tls_certificate": "value",
+    "additional_sssd_configs": "value",
+}
 
 
 class MockProcess:
@@ -152,7 +181,7 @@ def test_configure_ldap_write_ldap_config():
     }
 
     with patch("pathlib.Path.mkdir"), patch("builtins.open") as mock_open:
-        sssd_utils._configure_ldap(sssd_settings, logging.getLogger("test"))
+        sssd_utils._configure_ldap(sssd_settings)
 
     mock_open.assert_has_calls(
         [
@@ -185,7 +214,7 @@ def test_configure_ldap_with_tls_cert_write_ldap_config():
     }
 
     with patch("pathlib.Path.mkdir"), patch("builtins.open") as mock_open:
-        sssd_utils._configure_ldap(sssd_settings, logging.getLogger("test"))
+        sssd_utils._configure_ldap(sssd_settings)
 
     mock_open.assert_has_calls(
         [
@@ -239,9 +268,7 @@ def test_configure_sssd_write_sssd_config():
     ):
         mock_run.return_value = MockProcess()
         mock_get_cluster_setting.return_value = "true"
-        sssd_utils._configure_sssd(
-            sssd_settings, logging.getLogger("test"), MODULE_ID_CLUSTER_MANAGER
-        )
+        sssd_utils._configure_sssd(sssd_settings)
 
     mock_open.assert_has_calls(
         [
@@ -251,10 +278,6 @@ def test_configure_sssd_write_sssd_config():
 
     mock_config_parser.assert_has_calls(
         [
-            call(),
-            call().read("/etc/sssd/sssd.conf"),
-            call().sections(),
-            call().sections().__iter__(),
             call(),
             call().read_string(CONNECT_AD_SSSD_CONFIG),
             call().write(ANY),
@@ -268,7 +291,7 @@ def test_configure_sssd_write_sssd_config():
     )
 
 
-def test_configure_sssd_write_sssd_config_with_additional_sssd_configs():
+def test_configure_sssd_while_disable_ad_join_is_true():
 
     with (
         patch("pathlib.Path.mkdir"),
@@ -277,103 +300,35 @@ def test_configure_sssd_write_sssd_config_with_additional_sssd_configs():
         patch("subprocess.run") as mock_run,
         patch("configparser.ConfigParser") as mock_config_parser,
         patch("res.resources.cluster_settings.get_setting") as mock_get_cluster_setting,
-    ):
-        mock_run.return_value = MockProcess()
-        mock_get_cluster_setting.return_value = "false"
-        sssd_utils._configure_sssd(
-            SSSD_SETTINGS_WITH_ADDITIONAL_CONFIG,
-            logging.getLogger("test"),
-            MODULE_ID_CLUSTER_MANAGER,
-        )
-
-    mock_config_parser.assert_has_calls(
-        [
-            call()
-            .__getitem__(SSSD_DOMAIN_SECTION)
-            .__setitem__("debug_level", "0xFFF0"),
-        ]
-    )
-
-
-def test_configure_sssd_for_connect_ad_vdi_while_disable_ad_join_is_false():
-
-    with (
-        patch("pathlib.Path.mkdir"),
-        patch("builtins.open") as mock_open,
-        patch("os.chmod") as mock_chmod,
-        patch("subprocess.run") as mock_run,
-        patch("configparser.ConfigParser") as mock_config_parser,
-        patch("res.resources.cluster_settings.get_setting") as mock_get_cluster_setting,
+        patch(
+            "res.resources.ad_automation.get_authorization"
+        ) as mock_get_authorization,
+        patch.dict(os.environ, {"IDEA_MODULE_NAME": MODULE_NAME_VIRTUAL_DESKTOP_APP}),
     ):
         mock_run.return_value = MockProcess()
         mock_config_parser_instance = mock_config_parser.return_value
         mock_config_parser_instance.sections.return_value = [SSSD_DOMAIN_SECTION]
-        mock_config_parser_instance.__getitem__.return_value = {
-            "id_provider": "ldap",
-        }
-        mock_get_cluster_setting.return_value = "false"
-        with pytest.raises(Exception) as exc_info:
-            sssd_utils._configure_sssd(
-                SSSD_SETTINGS_WITH_ADDITIONAL_CONFIG,
-                logging.getLogger("test"),
-                MODULE_ID_VIRTUAL_DESKTOP_APP,
-            )
-        assert (
-            "SSSD config cannot be updated for connect AD VDI while disable_ad_join is false"
-            in exc_info.value.args[0]
-        )
-
-    mock_config_parser.assert_has_calls(
-        [
-            call(),
-            call().read("/etc/sssd/sssd.conf"),
-            call().sections(),
-            call().__getitem__(SSSD_DOMAIN_SECTION),
-        ]
-    )
-
-
-def test_configure_sssd_for_join_ad_vdi_while_disable_ad_join_is_true():
-
-    with (
-        patch("pathlib.Path.mkdir"),
-        patch("builtins.open") as mock_open,
-        patch("os.chmod") as mock_chmod,
-        patch("subprocess.run") as mock_run,
-        patch("configparser.ConfigParser") as mock_config_parser,
-        patch("res.resources.cluster_settings.get_setting") as mock_get_cluster_setting,
-    ):
-        mock_run.return_value = MockProcess()
-        mock_config_parser_instance = mock_config_parser.return_value
-        mock_config_parser_instance.sections.return_value = [SSSD_DOMAIN_SECTION]
-        mock_config_parser_instance.__getitem__.return_value = {
-            "id_provider": "ad",
-            "ldap_sasl_authid": "ldap_sasl_authid",
-        }
         mock_get_cluster_setting.return_value = "true"
+        mock_get_authorization.return_value = {"hostname": "ldap_sasl_authid"}
         # with pytest.raises(Exception) as exc_info:
         sssd_utils._configure_sssd(
             SSSD_SETTINGS_WITH_ADDITIONAL_CONFIG,
-            logging.getLogger("test"),
-            MODULE_ID_VIRTUAL_DESKTOP_APP,
         )
 
     mock_config_parser.assert_has_calls(
         [
             call(),
-            call().read("/etc/sssd/sssd.conf"),
-            call().sections(),
-            call().__getitem__(SSSD_DOMAIN_SECTION),
-            call().__getitem__(SSSD_DOMAIN_SECTION),
-            call(),
             call().read_string(CONNECT_AD_SSSD_CONFIG),
             call().__getitem__(SSSD_DOMAIN_SECTION),
+            call()
+            .__getitem__(SSSD_DOMAIN_SECTION)
+            .__setitem__("debug_level", "0xFFF0"),
             call().write(ANY),
         ]
     )
 
 
-def test_configure_sssd_for_join_ad_vdi_while_disable_ad_join_is_false():
+def test_configure_sssd_while_disable_ad_join_is_false():
 
     with (
         patch("pathlib.Path.mkdir"),
@@ -382,65 +337,111 @@ def test_configure_sssd_for_join_ad_vdi_while_disable_ad_join_is_false():
         patch("subprocess.run") as mock_run,
         patch("configparser.ConfigParser") as mock_config_parser,
         patch("res.resources.cluster_settings.get_setting") as mock_get_cluster_setting,
+        patch(
+            "res.resources.ad_automation.get_authorization"
+        ) as mock_get_authorization,
+        patch.dict(os.environ, {"IDEA_MODULE_NAME": MODULE_NAME_VIRTUAL_DESKTOP_APP}),
+        patch(
+            "res.utils.sssd_utils.is_in_active_directory"
+        ) as mock_is_in_active_directory,
     ):
         mock_run.return_value = MockProcess()
         mock_config_parser_instance = mock_config_parser.return_value
         mock_config_parser_instance.sections.return_value = [SSSD_DOMAIN_SECTION]
-        mock_config_parser_instance.__getitem__.return_value = {
-            "id_provider": "ad",
-            "ldap_sasl_authid": "ldap_sasl_authid",
-        }
         mock_get_cluster_setting.return_value = "false"
+        mock_get_authorization.return_value = {"hostname": "ldap_sasl_authid"}
+        mock_is_in_active_directory.return_value = False
         sssd_utils._configure_sssd(
             SSSD_SETTINGS_WITH_ADDITIONAL_CONFIG,
-            logging.getLogger("test"),
-            MODULE_ID_VIRTUAL_DESKTOP_APP,
         )
 
     mock_config_parser.assert_has_calls(
         [
             call(),
-            call().read("/etc/sssd/sssd.conf"),
-            call().sections(),
-            call().__getitem__(SSSD_DOMAIN_SECTION),
-            call().__getitem__(SSSD_DOMAIN_SECTION),
-            call(),
             call().read_string(JOIN_AD_SSSSD_CONFIG),
             call().__getitem__(SSSD_DOMAIN_SECTION),
+            call()
+            .__getitem__(SSSD_DOMAIN_SECTION)
+            .__setitem__("debug_level", "0xFFF0"),
             call().write(ANY),
         ]
     )
 
 
-def test_configure_sssd_for_cognito_vdi_while_disable_ad_join_is_false():
+def test_sssd_config_event_subscriber_required_ad_key_is_monitored(
+    monkeypatch,
+):
+    assert SSSD_CONFIG_EVENT_SUBSCRIBER.is_entry_monitored(ENTRY_WITH_DOMAIN_NAME_KEY)
 
-    with (
-        patch("pathlib.Path.mkdir"),
-        patch("builtins.open") as mock_open,
-        patch("os.chmod") as mock_chmod,
-        patch("subprocess.run") as mock_run,
-        patch("configparser.ConfigParser") as mock_config_parser,
-        patch("res.resources.cluster_settings.get_setting") as mock_get_cluster_setting,
-    ):
-        mock_run.return_value = MockProcess()
-        mock_config_parser_instance = mock_config_parser.return_value
-        mock_config_parser_instance.sections.return_value = []
-        mock_get_cluster_setting.return_value = "false"
-        with pytest.raises(Exception) as exc_info:
-            sssd_utils._configure_sssd(
-                SSSD_SETTINGS_WITH_ADDITIONAL_CONFIG,
-                logging.getLogger("test"),
-                MODULE_ID_VIRTUAL_DESKTOP_APP,
-            )
-        assert (
-            "SSSD Config cannot be updated for Congito user launched VDI while disable_ad_join is false"
-            in exc_info.value.args[0]
-        )
 
-    mock_config_parser.assert_has_calls(
-        [
-            call(),
-            call().read("/etc/sssd/sssd.conf"),
-            call().sections(),
-        ]
+def test_sssd_config_event_subscriber_optional_ad_key_is_monitored(
+    monkeypatch,
+):
+    assert SSSD_CONFIG_EVENT_SUBSCRIBER.is_entry_monitored(
+        ENTRY_WITH_ADDITIONAL_SSSD_CONFIGS_KEY
     )
+
+
+def test_sssd_config_event_subscriber_non_ad_key_skipped(
+    monkeypatch,
+):
+    assert not SSSD_CONFIG_EVENT_SUBSCRIBER.is_entry_monitored(ENTRY_WITH_NON_SSSD_KEY)
+
+
+def test_sssd_config_event_subscriber_on_create_restart_sssd(
+    monkeypatch,
+):
+    restart_sssd_service_mock = Mock()
+    monkeypatch.setattr(
+        SSSD_CONFIG_EVENT_SUBSCRIBER, "restart_sssd_service", restart_sssd_service_mock
+    )
+    SSSD_CONFIG_EVENT_SUBSCRIBER.on_create(ENTRY_WITH_DOMAIN_NAME_KEY)
+    restart_sssd_service_mock.assert_called_once()
+
+
+def test_sssd_config_event_subscriber_on_update_restart_sssd(
+    monkeypatch,
+):
+    restart_sssd_service_mock = Mock()
+    monkeypatch.setattr(
+        SSSD_CONFIG_EVENT_SUBSCRIBER, "restart_sssd_service", restart_sssd_service_mock
+    )
+    SSSD_CONFIG_EVENT_SUBSCRIBER.on_update(
+        OLD_ENTRY_WITH_DOMAIN_NAME_KEY, ENTRY_WITH_DOMAIN_NAME_KEY
+    )
+    restart_sssd_service_mock.assert_called_once()
+
+
+def test_sssd_config_event_subscriber_on_delete_skip(
+    monkeypatch,
+):
+    restart_sssd_service_mock = Mock()
+    monkeypatch.setattr(
+        SSSD_CONFIG_EVENT_SUBSCRIBER, "restart_sssd_service", restart_sssd_service_mock
+    )
+    SSSD_CONFIG_EVENT_SUBSCRIBER.on_delete(ENTRY_WITH_DOMAIN_NAME_KEY)
+    restart_sssd_service_mock.assert_called_once()
+
+
+def test_restart_sssd_no_sssd_config_update_skip(
+    monkeypatch,
+):
+    SSSD_CONFIG_EVENT_SUBSCRIBER.sssd_settings = CURRENT_SSSD_SETTINGS
+    monkeypatch.setattr(cluster_settings, "get_setting", lambda x: "value")
+    monkeypatch.setattr(cluster_settings, "get_secret", lambda x: "value")
+    restart_sssd_mock = Mock()
+    monkeypatch.setattr(sssd_utils, "restart_sssd", lambda: restart_sssd_mock)
+    SSSD_CONFIG_EVENT_SUBSCRIBER.restart_sssd_service()
+    restart_sssd_mock.assert_not_called()
+
+
+def test_restart_sssd_sssd_config_updated_restart_sssd_service(
+    monkeypatch,
+):
+    SSSD_CONFIG_EVENT_SUBSCRIBER.sssd_settings = None
+    monkeypatch.setattr(cluster_settings, "get_setting", lambda x: "value")
+    monkeypatch.setattr(cluster_settings, "get_secret", lambda x: "value")
+    restart_sssd_mock = Mock()
+    monkeypatch.setattr(sssd_utils, "restart_sssd", restart_sssd_mock)
+    SSSD_CONFIG_EVENT_SUBSCRIBER.restart_sssd_service()
+    restart_sssd_mock.assert_called_once()

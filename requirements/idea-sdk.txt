@@ -117,7 +117,7 @@ s3transfer==0.10.0
     # via boto3
 semver==2.13.0
     # via -r idea-sdk.in
-sh==1.14.3
+sh==1.14.3 ; sys_platform != "win32"
     # via -r idea-sdk.in
 shortuuid==1.0.11
     # via -r idea-sdk.in
@@ -149,6 +149,8 @@ urllib3==1.26.18
     # via
     #   botocore
     #   requests
+uvloop==0.21.0 ; sys_platform != "win32"
+    # via -r idea-sdk.in
 validators==0.22.0
     # via -r idea-sdk.in
 wcwidth==0.2.13

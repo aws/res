@@ -1,0 +1,28 @@
+# CloudWatch Agent Configuration File Template for Windows
+# refer to: https://docs.aws.amazon.com/AmazonCloudWatch/latest/monitoring/CloudWatch-Agent-Configuration-File-Details.html for documentation
+
+agent:
+  # If you set this value below 60 seconds, each metric is collected as a high-resolution metric. For more information about high-resolution metrics, see High-resolution metrics.
+  {%- if metrics_collection_interval %}
+  metrics_collection_interval: {{metrics_collection_interval if enable_metrics else '~'}}
+  {%- endif %}
+  region: '{{aws_region}}'
+  logfile: "C:\\ProgramData\\Amazon\\AmazonCloudWatchAgent\\Logs\\amazon-cloudwatch-agent.log"
+  debug: false
+  run_as_user: root
+
+{%- if enable_logs and utils.is_not_empty(collected_log_files) %}
+logs:
+
+  # VPC Endpoint or FIPS Support
+  {%- if logs_endpoint_override %}
+  endpoint_override: '{{logs_endpoint_override}}'
+  {%- endif %}
+
+  force_flush_interval: {{logs_force_flush_interval if logs_force_flush_interval else 5}}
+
+  logs_collected:
+    files:
+      collect_list:
+        {{ utils.to_yaml(collected_log_files) | indent(8) }}
+{%- endif %}

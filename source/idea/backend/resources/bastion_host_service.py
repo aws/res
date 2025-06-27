@@ -470,7 +470,7 @@ def _get_bastion_host_config_from_ddb() -> Dict[str, Any]:
 
 
 def _modify_bastion_host_details_in_ddb(
-    new_bastion_host_details: Dict[str, str]
+    new_bastion_host_details: Dict[str, str],
 ) -> None:
     details_to_update = [
         (BASTION_HOST_INSTANCE_ID, "instance_id"),

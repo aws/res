@@ -152,12 +152,18 @@ def test_scheduled_ad_sync_lambda_role_creation(
                         "",
                         [
                             ad_sync_stack.nested_stack.resolve(
+                                ad_sync_stack.parameters.iam_resource_prefix_string
+                            ),
+                            ad_sync_stack.nested_stack.resolve(
                                 ad_sync_stack.cluster_name
                             ),
                             "-scheduled-ad-sync-role",
                         ],
                     ]
                 },
+                "Path": ad_sync_stack.nested_stack.resolve(
+                    ad_sync_stack.parameters.iam_resource_path_string
+                ),
                 "Tags": [
                     {
                         "Key": constants.IDEA_TAG_NAME,
@@ -322,7 +328,13 @@ def test_scheduled_ad_sync_lambda_role_policy_creation(
                                         {"Ref": "AWS::Partition"},
                                         ":iam::",
                                         {"Ref": "AWS::AccountId"},
-                                        ":role/",
+                                        ":role",
+                                        ad_sync_stack.nested_stack.resolve(
+                                            ad_sync_stack.parameters.iam_resource_path_string
+                                        ),
+                                        ad_sync_stack.nested_stack.resolve(
+                                            ad_sync_stack.parameters.iam_resource_prefix_string
+                                        ),
                                         ad_sync_stack.nested_stack.resolve(
                                             ad_sync_stack.cluster_name
                                         ),
@@ -342,6 +354,9 @@ def test_scheduled_ad_sync_lambda_role_policy_creation(
                     "Fn::Join": [
                         "",
                         [
+                            ad_sync_stack.nested_stack.resolve(
+                                ad_sync_stack.parameters.iam_resource_prefix_string
+                            ),
                             ad_sync_stack.nested_stack.resolve(
                                 ad_sync_stack.cluster_name
                             ),
@@ -493,10 +508,16 @@ def test_ad_sync_task_role(
                         {"Ref": "AWS::NoValue"},
                     ]
                 },
+                "Path": ad_sync_stack.nested_stack.resolve(
+                    ad_sync_stack.parameters.iam_resource_path_string
+                ),
                 "RoleName": {
                     "Fn::Join": [
                         "",
                         [
+                            ad_sync_stack.nested_stack.resolve(
+                                ad_sync_stack.parameters.iam_resource_prefix_string
+                            ),
                             ad_sync_stack.nested_stack.resolve(
                                 ad_sync_stack.cluster_name
                             ),
@@ -820,6 +841,9 @@ def test_ad_sync_task_policy_creation(
                         "",
                         [
                             ad_sync_stack.nested_stack.resolve(
+                                ad_sync_stack.parameters.iam_resource_prefix_string
+                            ),
+                            ad_sync_stack.nested_stack.resolve(
                                 ad_sync_stack.cluster_name
                             ),
                             "-ad-sync-task-policy",
@@ -1001,10 +1025,16 @@ def test_terminate_ad_sync_ecs_task_role_creation(
                         {"Ref": "AWS::NoValue"},
                     ]
                 },
+                "Path": ad_sync_stack.nested_stack.resolve(
+                    ad_sync_stack.parameters.iam_resource_path_string
+                ),
                 "RoleName": {
                     "Fn::Join": [
                         "",
                         [
+                            ad_sync_stack.nested_stack.resolve(
+                                ad_sync_stack.parameters.iam_resource_prefix_string
+                            ),
                             ad_sync_stack.nested_stack.resolve(
                                 ad_sync_stack.cluster_name
                             ),
@@ -1150,7 +1180,13 @@ def test_terminate_ad_sync_ecs_task_role_policy_creation(
                                         {"Ref": "AWS::Partition"},
                                         ":iam::",
                                         {"Ref": "AWS::AccountId"},
-                                        ":role/",
+                                        ":role",
+                                        ad_sync_stack.nested_stack.resolve(
+                                            ad_sync_stack.parameters.iam_resource_path_string
+                                        ),
+                                        ad_sync_stack.nested_stack.resolve(
+                                            ad_sync_stack.parameters.iam_resource_prefix_string
+                                        ),
                                         ad_sync_stack.nested_stack.resolve(
                                             ad_sync_stack.cluster_name
                                         ),
@@ -1165,6 +1201,9 @@ def test_terminate_ad_sync_ecs_task_role_policy_creation(
                     "Fn::Join": [
                         "",
                         [
+                            ad_sync_stack.nested_stack.resolve(
+                                ad_sync_stack.parameters.iam_resource_prefix_string
+                            ),
                             ad_sync_stack.nested_stack.resolve(
                                 ad_sync_stack.cluster_name
                             ),
@@ -1300,10 +1339,16 @@ def test_ad_sync_resources_populator_role_creation(
                         {"Ref": "AWS::NoValue"},
                     ]
                 },
+                "Path": ad_sync_stack.nested_stack.resolve(
+                    ad_sync_stack.parameters.iam_resource_path_string
+                ),
                 "RoleName": {
                     "Fn::Join": [
                         "",
                         [
+                            ad_sync_stack.nested_stack.resolve(
+                                ad_sync_stack.parameters.iam_resource_prefix_string
+                            ),
                             ad_sync_stack.nested_stack.resolve(
                                 ad_sync_stack.cluster_name
                             ),
@@ -1396,6 +1441,9 @@ def test_ad_sync_resources_populator_policy_creation(
                     "Fn::Join": [
                         "",
                         [
+                            ad_sync_stack.nested_stack.resolve(
+                                ad_sync_stack.parameters.iam_resource_prefix_string
+                            ),
                             ad_sync_stack.nested_stack.resolve(
                                 ad_sync_stack.cluster_name
                             ),

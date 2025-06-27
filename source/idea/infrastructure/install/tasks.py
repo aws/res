@@ -27,6 +27,7 @@ class TaskEnvironment(TypedDict):
     AWS_DEFAULT_REGION: str
     IDEA_ADMIN_AWS_CREDENTIAL_PROVIDER: str
     AWS_STS_REGIONAL_ENDPOINTS: str
+    environment_name: str
 
 
 class Tasks(Construct):
@@ -44,6 +45,8 @@ class Tasks(Construct):
 
         self.lambda_layer_arn = lambda_layer_arn
         self.installer_registry_name = installer_registry_name
+        self.iam_resource_prefix = params.iam_resource_prefix_string
+        self.iam_resource_path = params.iam_resource_path_string
 
         vpc = ec2.Vpc.from_vpc_attributes(
             self,
@@ -65,6 +68,8 @@ class Tasks(Construct):
             "Permissions",
             dependency_group=dependency_group,
             environment_name=params.get_str(CommonKey.CLUSTER_NAME),
+            iam_resource_prefix=params.iam_resource_prefix_string,
+            iam_resource_path=params.iam_resource_path_string,
         )
         self.params = params
         self.dependency_group = dependency_group
@@ -222,6 +227,7 @@ class Tasks(Construct):
                     AWS_DEFAULT_REGION=aws_cdk.Aws.REGION,
                     IDEA_ADMIN_AWS_CREDENTIAL_PROVIDER="Ec2InstanceMetadata",  # TODO: get proper credentials
                     AWS_STS_REGIONAL_ENDPOINTS="regional",
+                    environment_name=self.params.get_str(CommonKey.CLUSTER_NAME),
                 ),
                 command=command,
                 task_role=task_role,

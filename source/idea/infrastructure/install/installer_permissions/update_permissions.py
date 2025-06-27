@@ -11,10 +11,11 @@ from idea.infrastructure.install.constants import RES_ECR_REPO_NAME_SUFFIX
 
 class UpdatePermissions:
     def __init__(
-        self,
-        environment_name: str,
+        self, environment_name: str, iam_resource_path: str, iam_resource_prefix: str
     ):
         self.environment_name = environment_name
+        self.iam_resource_path = iam_resource_path
+        self.iam_resource_prefix = iam_resource_prefix
 
     def get_permissions(self) -> List[iam.PolicyStatement]:
         statements = []
@@ -98,7 +99,7 @@ class UpdatePermissions:
             iam.PolicyStatement(
                 effect=iam.Effect.ALLOW,
                 resources=[
-                    f"arn:{aws_cdk.Aws.PARTITION}:iam::{aws_cdk.Aws.ACCOUNT_ID}:role/cdk-*-role-{aws_cdk.Aws.ACCOUNT_ID}-{aws_cdk.Aws.REGION}",
+                    f"arn:{aws_cdk.Aws.PARTITION}:iam::{aws_cdk.Aws.ACCOUNT_ID}:role/*{self.iam_resource_prefix}cdk-*-role-{aws_cdk.Aws.REGION}",
                 ],
                 actions=[
                     "sts:AssumeRole",

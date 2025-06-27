@@ -2,19 +2,18 @@
 #  SPDX-License-Identifier: Apache-2.0
 
 import logging
-from typing import Any, Dict, List, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 import res.exceptions as exceptions
-from res.utils import table_utils
-
-logger = logging.getLogger(__name__)
-logger.addHandler(logging.StreamHandler())
-logger.setLevel(logging.INFO)
+from pyhocon import ConfigFactory
+from res.utils import aws_utils, cluster_settings_utils, logging_utils, table_utils
 
 CLUSTER_SETTINGS_TABLE_NAME = "cluster-settings"
 CLUSTER_SETTINGS_HASH_KEY = "key"
 CLUSTER_SETTINGS_VALUE_KEY = "value"
 CLUSTER_SETTINGS_VERSION_KEY = "version"
+
+logger = logging_utils.get_logger(CLUSTER_SETTINGS_TABLE_NAME)
 
 
 def create_setting(key: str, value: Any) -> Dict[str, Any]:
@@ -87,10 +86,23 @@ def get_setting(key: str) -> Any:
         raise exceptions.SettingNotFound(
             f"Setting not found: {key}",
         )
-    return settings.get(CLUSTER_SETTINGS_VALUE_KEY)
+    return table_utils.check_and_convert_decimal_value(
+        settings.get(CLUSTER_SETTINGS_VALUE_KEY)
+    )
+
+
+def get_secret(key: str) -> Optional[str]:
+    secret_id = get_setting(key)
+    if secret_id:
+        return aws_utils.get_secret_string(secret_id)
+    return None
 
 
 def get_settings() -> Dict[str, Any]:
-    settings: List[Dict[str, Any]] = table_utils.list_items("cluster-settings")
-
+    settings: List[Dict[str, Any]] = cluster_settings_utils.get_config_entries()
     return {setting["key"]: setting["value"] for setting in settings}
+
+
+def get_config(key: str) -> Dict[str, Any]:
+    config = ConfigFactory.from_dict(get_settings())
+    return config.get_config(key)

@@ -12,7 +12,7 @@
  */
 
 import { JwtTokenClaims, JwtTokenClaimsProvider, JwtTokenUtils } from "./token-utils";
-import { AUTH_TOKEN_EXPIRED, NETWORK_ERROR, REQUEST_TIMEOUT, SERVER_ERROR } from "./error-codes";
+import { AUTH_TOKEN_EXPIRED, NETWORK_ERROR, REQUEST_TIMEOUT, SERVER_ERROR, THROTTLE_ERROR } from "./error-codes";
 import { LocalStorageService } from "../service";
 import IdeaException from "./exceptions";
 import Utils from "./utils";
@@ -318,12 +318,22 @@ export class IdeaAuthenticationContext {
                 if (response.status === 200) {
                     return response.json();
                 } else {
-                    this.logger.error("server error", response);
-                    return {
-                        success: false,
-                        error_code: SERVER_ERROR,
-                        message: "Server error",
-                    };
+                    return response.text().then((text) => {
+                        const errorData = JSON.parse(text);
+                        if (errorData && errorData.message === "Rate exceeded") {
+                            return {
+                                success: false,
+                                error_code: THROTTLE_ERROR,
+                                message: "Throttle error",
+                            }
+                        } else {
+                            return {
+                                success: false,
+                                error_code: SERVER_ERROR,
+                                message: "Server error",
+                            };
+                        }
+                    })
                 }
             })
             .catch((error) => {

@@ -14,10 +14,11 @@ import { SharedStorageFileSystem } from "../../common/shared-storage-utils";
 import dot from "dot-object";
 import { Constants } from "../../common/constants";
 import IdeaSplitPanel from "../../components/split-panel";
-import { ColumnLayout, Container, Header, SpaceBetween } from "@cloudscape-design/components";
+import { ColumnLayout, Container, FormField, Header, Input, SpaceBetween } from "@cloudscape-design/components";
 import { KeyValue } from "../../components/key-value";
 import ProxyClient from "../../client/proxy-client";
 import ProxyService from "../../service/proxy-service";
+import IdeaConfirm from "../../components/modals";
 
 export interface FileSystemProps extends IdeaAppLayoutProps, IdeaSideNavigationProps {}
 
@@ -27,9 +28,11 @@ export interface FileSystemState {
     showAddFileSystemToProjectForm: boolean;
     showRemoveFileSystemFromProjectForm: boolean;
     showOnboardFileSystemForm: boolean;
+    showRemoveFileSystemConfirmModal: boolean;
     filesystemsNotOnboarded: FileSystemsNotOnboarded;
     splitPanelOpen: boolean;
     fileSystemOnboardingOptionLoading: boolean;
+    removeFileSystemConfirmText: string;
 }
 
 export const FILESYSTEM_TABLE_COLUMN_DEFINITIONS: TableProps.ColumnDefinition<SharedStorageFileSystem>[] = [
@@ -74,6 +77,7 @@ class FileSystems extends Component<FileSystemProps, FileSystemState> {
     addFileSystemToProjectForm: RefObject<IdeaForm>;
     removeFileSystemFromProjectForm: RefObject<IdeaForm>;
     onboardFileSystemForm: RefObject<IdeaForm>;
+    removeFileSystemConfirmModal: RefObject<IdeaConfirm>;
 
     constructor(props: FileSystemProps) {
         super(props);
@@ -81,15 +85,18 @@ class FileSystems extends Component<FileSystemProps, FileSystemState> {
         this.addFileSystemToProjectForm = React.createRef();
         this.removeFileSystemFromProjectForm = React.createRef();
         this.onboardFileSystemForm = React.createRef();
+        this.removeFileSystemConfirmModal = React.createRef();
         this.state = {
             filesystemSelected: false,
             showAddFileSystemToProjectForm: false,
             showRemoveFileSystemFromProjectForm: false,
             showOnboardFileSystemForm: false,
+            showRemoveFileSystemConfirmModal: false,
             filesystemsNotOnboarded: {},
             splitPanelOpen: false,
             selectedFileSystem: [],
             fileSystemOnboardingOptionLoading: false,
+            removeFileSystemConfirmText: '',
         };
     }
 
@@ -326,6 +333,84 @@ class FileSystems extends Component<FileSystemProps, FileSystemState> {
                 ]}
             />
         );
+    }
+
+    buildRemoveFileSystemConfirmModal() {
+        const selectedFileSystem = this.getSelectedFileSystem();
+        const selectedFileSystemProjects = selectedFileSystem?.getProjects()!
+        return (
+                <IdeaConfirm
+                    ref={this.removeFileSystemConfirmModal}
+                    title={`Remove FileSystem: ${selectedFileSystem?.name!}`}
+                    confirmButtonDisabled={(this.state.removeFileSystemConfirmText !== selectedFileSystem?.name!) || (selectedFileSystemProjects && selectedFileSystemProjects.length != 0)}
+                    onConfirm={() => {
+                        try {
+                            this.setState({
+                                removeFileSystemConfirmText: '',
+                            });
+                            this.filesystem().removeFileSystem({
+                                filesystem_name: selectedFileSystem?.name!,
+                            });
+                            this.props.onFlashbarChange({
+                                items: [{
+                                    type: "success",
+                                    content: `File System: ${selectedFileSystem?.name!} has been removed successfully`,
+                                    dismissible: true,
+                                }],
+                            });
+                        } catch (error: any) {
+                            this.props.onFlashbarChange({
+                                items: [{
+                                    type: "error",
+                                    content: error.message,
+                                    dismissible: true,
+                                }],
+                            });
+                        }
+                    }}
+                    onCancel={() => {
+                        this.setState({
+                            showRemoveFileSystemConfirmModal: false,
+                            removeFileSystemConfirmText: '',
+                        })
+                    }}
+                >
+                    {selectedFileSystemProjects ? (
+                        <div>
+                            <p>Unable to remove file system. This file system has the following attached projects:</p>
+                            <b><i>{selectedFileSystemProjects.join(', ')}</i></b>
+                            <p> Please remove all associated projects before removing this file system.</p>
+                        </div>
+                    ) : (
+                        <FormField
+                            label="To confirm deletion, enter the name of the file system in the text input field."
+                        >
+                            <Input
+                                value={this.state.removeFileSystemConfirmText}
+                                onChange={({ detail }) => 
+                                    this.setState({ removeFileSystemConfirmText: detail.value })
+                                }
+                                placeholder={selectedFileSystem?.name!}
+                            />
+                        </FormField>
+                    )}
+                </IdeaConfirm>
+        );
+    }
+
+    showRemoveFileSystemConfirmModal() {
+        this.setState(
+            {
+                showRemoveFileSystemConfirmModal: true,
+            },
+            () => {
+                this.getRemoveFileSystemConfirmModal().show();
+            }
+        );
+    }
+
+    getRemoveFileSystemConfirmModal() {
+        return this.removeFileSystemConfirmModal.current!;
     }
 
     showRemoveFileSystemFromProjectForm() {
@@ -614,6 +699,18 @@ class FileSystems extends Component<FileSystemProps, FileSystemState> {
                         }
                         attachFileSystem = (request: any) => this.filesystem().onboardFSXONTAPFileSystem(request);
                     }
+
+                    this.hideOnboardFileSystemForm();
+                    this.props.onFlashbarChange({
+                        items: [
+                            {
+                                type: "success",
+                                content: `File System: ${fileSystemId} is being onboarded, it will be available once the onboarding process is complete.`,
+                                dismissible: true,
+                            },
+                        ],
+                    });
+
                     attachFileSystem({
                         ...commonFileSystemValues,
                         ...providerValues,
@@ -621,28 +718,26 @@ class FileSystems extends Component<FileSystemProps, FileSystemState> {
                         volume_id: volumeId,
                     })
                         .then(() => {
-                            this.props.onFlashbarChange({
-                                items: [
-                                    {
-                                        type: "success",
-                                        content: `File System: ${fileSystemId} is being onboarded, it will be available once the onboarding process is complete.`,
-                                        dismissible: true,
-                                    },
-                                ],
-                            });
                             this.setState(
                                 {
                                     filesystemsNotOnboarded: {},
                                 },
                                 () => {
-                                    this.hideOnboardFileSystemForm();
                                     this.getListing().fetchRecords();
                                 }
                             );
                             this.saveFilesystemIdToLocalStorage(fileSystemId);
                         })
                         .catch((error) => {
-                            this.getOnboardFileSystemForm().setError(error.errorCode, error.message);
+                            this.props.onFlashbarChange({
+                                items: [
+                                    {
+                                        type: "error",
+                                        content: `Failed to onboard File System: ${fileSystemId}. Error: ${error.message}`,
+                                        dismissible: true,
+                                    },
+                                ],
+                            });
                         });
                 }}
                 onCancel={() => {
@@ -790,6 +885,23 @@ class FileSystems extends Component<FileSystemProps, FileSystemState> {
                             this.showRemoveFileSystemFromProjectForm();
                         },
                     },
+                    {
+                        id: "remove-filesystem",
+                        text: "Remove File System",
+                        onClick: () => {
+                            if (this.getSelectedFileSystem()?.name! === "home") {
+                                this.props.onFlashbarChange({
+                                    items: [{
+                                        type: "error",
+                                        content: "Deletion of the home file system is not permitted.",
+                                        dismissible: true,
+                                    }],
+                                });
+                            } else {
+                            this.showRemoveFileSystemConfirmModal();
+                            }
+                        },
+                    }
                 ]}
                 showPaginator={true}
                 showFilters={true}
@@ -925,6 +1037,7 @@ class FileSystems extends Component<FileSystemProps, FileSystemState> {
                         {this.state.showAddFileSystemToProjectForm && this.buildAddFileSystemToProjectForm()}
                         {this.state.showRemoveFileSystemFromProjectForm && this.buildRemoveFileSystemFromProjectForm()}
                         {this.state.showOnboardFileSystemForm && this.buildOnboardFileSystemForm()}
+                        {this.state.showRemoveFileSystemConfirmModal && this.buildRemoveFileSystemConfirmModal()}
                         {this.buildListing()}
                     </div>
                 }

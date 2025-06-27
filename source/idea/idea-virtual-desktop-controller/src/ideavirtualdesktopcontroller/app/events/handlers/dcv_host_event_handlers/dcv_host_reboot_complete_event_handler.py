@@ -24,7 +24,11 @@ class DCVHostRebootCompleteEventHandler(BaseVirtualDesktopControllerEventHandler
         super().__init__(context, 'dcv-host-reboot-complete-handler')
 
     def handle_event(self, message_id: str, sender_id: str, event: VirtualDesktopEvent):
-        sender_instance_id = self.get_dcv_instance_id_from_sender_id(sender_id)
+        
+        sender_instance_id = Utils.get_value_as_string('instance_id', event.detail, None)
+        if not sender_instance_id:
+            sender_instance_id = self.get_dcv_instance_id_from_sender_id(sender_id)
+        
         if Utils.is_empty(sender_instance_id):
             raise self.message_source_validation_failed(f'Corrupted sender_id: {sender_id}. Ignoring message')
 
@@ -39,6 +43,9 @@ class DCVHostRebootCompleteEventHandler(BaseVirtualDesktopControllerEventHandler
         session = self.session_db.get_from_db(idea_session_owner=idea_session_owner, idea_session_id=idea_session_id)
         if Utils.is_empty(session):
             self.log_error(message_id=message_id, message='Invalid RES Session ID.')
+            return
+        if not session.dcv_session_id:
+            self.log_error(message_id=message_id, message='DCV Session ID is empty. Cannot resume the session.')
             return
 
         # if session is RESUMING/READY/STOPPED/STOPPED_IDLE/ERROR continue, else ignore

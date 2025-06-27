@@ -90,6 +90,14 @@ class SocaBaseConstruct:
         aws_account_id = self.context.config().get_string('cluster.aws.account_id', required=True)
         return f'arn:{aws_partition}:*:*:{aws_account_id}:*'
 
+    @property
+    def iam_resource_prefix(self) -> str:
+        return self.context.config().get_string('cluster.iam.iam_resource_prefix', default="")
+
+    @property
+    def iam_resource_path(self) -> str:
+        return self.context.config().get_string('cluster.iam.iam_resource_path', default="/")
+
     @staticmethod
     def build_service_principal(service_name) -> iam.ServicePrincipal:
         service_fqdn = f'{service_name}.{cdk.Aws.URL_SUFFIX}'
@@ -137,7 +145,9 @@ class SocaBaseConstruct:
     def build_instance_profile_arn(self, instance_profile_ref: str):
         aws_partition = self.context.config().get_string('cluster.aws.partition', required=True)
         aws_account_id = self.context.config().get_string('cluster.aws.account_id', required=True)
-        return f'arn:{aws_partition}:iam::{aws_account_id}:instance-profile/{instance_profile_ref}'
+        iam_resource_path = self.context.config().get_string('cluster.iam.iam_resource_path', default="/")
+        instance_profile_path = iam_resource_path if iam_resource_path else ""
+        return f'arn:{aws_partition}:iam::{aws_account_id}:instance-profile{instance_profile_path}{instance_profile_ref}'
 
     def is_ds_activedirectory(self) -> bool:
         return self.context.config().get_string('directoryservice.provider') in (constants.DIRECTORYSERVICE_AWS_MANAGED_ACTIVE_DIRECTORY,

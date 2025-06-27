@@ -14,9 +14,9 @@ from ideadatamodel import (
 )
 from ideasdk.utils import Utils, ModuleMetadataHelper
 from ideasdk.config.soca_config import SocaConfig
-from ideasdk.dynamodb.dynamodb_stream_subscriber import DynamoDBStreamSubscriber
-from ideasdk.dynamodb.dynamodb_stream_subscription import DynamoDBStreamSubscription
 from ideasdk.aws import AwsClientProvider, AWSClientProviderOptions
+from res.resources.dynamodb.dynamodb_stream_subscriber import IDynamoDBStreamSubscriber
+from res.resources.dynamodb.dynamodb_stream_subscription import DynamoDBStreamSubscription
 
 from datetime import datetime
 import time
@@ -33,7 +33,7 @@ SHARD_PROCESSOR_INTERVAL = (10, 30)
 MAX_WAIT_TIME_FOR_RESOURCE_ACTIVATION = 300
 
 
-class ClusterConfigDB(DynamoDBStreamSubscriber):
+class ClusterConfigDB(IDynamoDBStreamSubscriber):
     """
     Cluster Configuration DB
 
@@ -42,7 +42,7 @@ class ClusterConfigDB(DynamoDBStreamSubscriber):
         * implementation from AwsUtil.dynamodb_create_table() cannot be used in this class and tables must be created manually
     """
 
-    def __init__(self, cluster_name: str, aws_region: str, aws_profile: Optional[str], dynamodb_kms_key_id: Optional[str] = None, create_database: bool = False, create_subscription: bool = False, cluster_config_subscriber: Optional[DynamoDBStreamSubscriber] = None, logger=None):
+    def __init__(self, cluster_name: str, aws_region: str, aws_profile: Optional[str], dynamodb_kms_key_id: Optional[str] = None, create_database: bool = False, create_subscription: bool = False, cluster_config_subscriber: Optional[IDynamoDBStreamSubscriber] = None, logger=None):
 
         self.logger = logger
 
@@ -99,8 +99,6 @@ class ClusterConfigDB(DynamoDBStreamSubscriber):
                 stream_subscriber=self,
                 table_name=self.get_cluster_settings_table_name(),
                 table_kinesis_stream_name=self.get_cluster_settings_table_kinesis_stream_name(),
-                aws_region=aws_region,
-                aws_profile=aws_profile
             )
 
     def set_logger(self, logger):
@@ -679,6 +677,9 @@ class ClusterConfigDB(DynamoDBStreamSubscriber):
     def on_delete(self, entry: Dict):
         updated_entry = self.post_process_ddb_config_entry(entry)
         self.stream_subscriber.on_delete(updated_entry)
+
+    def subscriber_name(self) -> Optional[str]:
+        return "cluster_config_event_subscriber"
 
     def stop(self):
         if self.stream_subscription is None:

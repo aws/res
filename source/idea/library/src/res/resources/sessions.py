@@ -1,15 +1,10 @@
 #  Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 #  SPDX-License-Identifier: Apache-2.0
 
-import logging
 from typing import Any, Dict, Optional
 
 import res.exceptions as exceptions
-from res.utils import table_utils, time_utils
-
-logger = logging.getLogger(__name__)
-logger.addHandler(logging.StreamHandler())
-logger.setLevel(logging.INFO)
+from res.utils import logging_utils, table_utils, time_utils
 
 SESSIONS_TABLE_NAME = "vdc.controller.user-sessions"
 SESSIONS_COUNTER_TABLE_NAME = "vdc.controller.user-sessions-counter"
@@ -21,6 +16,8 @@ SESSION_DB_STATE_KEY = "state"
 SESSION_DB_DCV_SESSION_ID_KEY = "dcv_session_id"
 SESSION_DB_SCHEDULE_SUFFIX = "_schedule"
 SESSION_DB_SERVER_KEY = "server"
+
+logger = logging_utils.get_logger(SESSIONS_TABLE_NAME)
 
 
 def get_session(owner: str, session_id: str) -> Optional[Dict[str, Any]]:

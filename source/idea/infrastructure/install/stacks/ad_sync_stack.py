@@ -79,6 +79,13 @@ class ADSyncStack(ResBaseConstruct):
             "ad-sync",
             description="Nested Stack for supporting AD Sync",
         )
+        self.has_iam_prefix_condition = InfraUtils.get_iam_prefix_condition(
+            self.nested_stack, parameters
+        )
+
+        self.has_iam_path_condition = InfraUtils.get_iam_path_condition(
+            self.nested_stack, parameters
+        )
 
         vpc = ec2.Vpc.from_vpc_attributes(
             self.nested_stack,
@@ -263,7 +270,7 @@ class ADSyncStack(ResBaseConstruct):
                     iam.PolicyStatement(
                         actions=["iam:PassRole"],
                         resources=[
-                            f"arn:{cdk.Aws.PARTITION}:iam::{cdk.Aws.ACCOUNT_ID}:role/{self.cluster_name}-ad-sync-task-role",
+                            f"arn:{cdk.Aws.PARTITION}:iam::{cdk.Aws.ACCOUNT_ID}:role{self.parameters.iam_resource_path_string}{self.parameters.iam_resource_prefix_string}{self.cluster_name}-ad-sync-task-role",
                         ],
                     ),
                     iam.PolicyStatement(
@@ -503,7 +510,7 @@ class ADSyncStack(ResBaseConstruct):
                 iam.PolicyStatement(
                     actions=["iam:PassRole"],
                     resources=[
-                        f"arn:{cdk.Aws.PARTITION}:iam::{cdk.Aws.ACCOUNT_ID}:role/{self.cluster_name}-ad-sync-task-role",
+                        f"arn:{cdk.Aws.PARTITION}:iam::{cdk.Aws.ACCOUNT_ID}:role{self.parameters.iam_resource_path_string}{self.parameters.iam_resource_prefix_string}{self.cluster_name}-ad-sync-task-role",
                     ],
                 ),
             ],

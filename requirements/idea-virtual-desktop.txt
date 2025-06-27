@@ -73,7 +73,7 @@ sanic==23.12.2
 sanic-ext==23.12.0
 sanic-routing==23.12.0
 semver==2.13.0
-sh==1.14.3
+sh==1.14.3 ; sys_platform != "win32"
 shortuuid==1.0.13
 six==1.16.0
 sqlalchemy==1.4.54
@@ -90,7 +90,7 @@ tzdata==2024.2
 tzlocal==4.3.1
 ujson==5.10.0
 urllib3==1.26.20
-uvloop==0.20.0
+uvloop==0.21.0 ; sys_platform != "win32"
 validators==0.34.0
 wcwidth==0.2.13
 websockets==13.1

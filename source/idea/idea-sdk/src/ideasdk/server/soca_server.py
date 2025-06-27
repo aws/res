@@ -56,8 +56,6 @@ DEFAULT_ENABLE_AUDIT_LOGS = True
 # these are never used to serve content but used to serve http content over Unix Domain Sockets
 DUMMY_HOSTNAME = 'localhost'
 DUMMY_PORT = 9999
-
-
 class SocaServerOptions(SocaBaseModel):
     enable_http: Optional[bool]
     hostname: Optional[str]

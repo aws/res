@@ -33,6 +33,7 @@ class ClusterSettingsService {
     clusterTimezone: string;
     clusterHomeDir: string;
     isFileBrowserEnabled: boolean;
+    isAdvOptionsEnabled: boolean;
     isSshEnabled: boolean;
     isGovCloudPartition: boolean;
 
@@ -46,6 +47,7 @@ class ClusterSettingsService {
         this.clusterTimezone = "UTC";
         this.clusterHomeDir = "";
         this.isFileBrowserEnabled = false;
+        this.isAdvOptionsEnabled = false;
         this.isSshEnabled = false;
         this.isGovCloudPartition = false;
     }
@@ -68,6 +70,10 @@ class ClusterSettingsService {
                 this.clusterTimezone = clusterSettings.timezone;
                 this.clusterName = clusterSettings.cluster_name;
                 this.isGovCloudPartition = clusterSettings.aws.partition === "aws-us-gov";
+                return this.getModuleSettings(Constants.MODULE_VIRTUAL_DESKTOP_CONTROLLER);
+            })
+            .then((vdcSettings) => {
+                this.isAdvOptionsEnabled = vdcSettings.server.enable_adv_options_non_admin;
                 return this.getModuleSettings(Constants.MODULE_SHARED_STORAGE);
             })
             .then((sharedStorageSettings) => {
@@ -136,6 +142,7 @@ class ClusterSettingsService {
     }
 
     getModuleSettings(name: string, cached: boolean = true): Promise<any> {
+        
         if (cached && name in this.moduleSettings) {
             return Promise.resolve(this.moduleSettings[name]);
         }

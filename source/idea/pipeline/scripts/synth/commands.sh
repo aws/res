@@ -37,5 +37,12 @@ echo Pushing the AD Sync Docker image...
 
 docker push $ECR_REPOSITORY_URI:ad-sync-$RELEASE_VERSION-$COMMIT_ID
 
+SCRIPT_DIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
+DIST_DIR=${SCRIPT_DIR}/../../../../../dist/
+
+echo Uploading build scripts and host Python applications...
+invoke package.res-installation-scripts
+aws s3 cp ${DIST_DIR} s3://${STAGING_BUCKET_NAME}/releases/$RELEASE_VERSION/ --recursive --exclude "*" --include "*.tar.gz"
+
 # Synthesize the template
 npx cdk synth -c repository_name=$REPOSITORY_NAME -c branch_name=$BRANCH -c deploy=$DEPLOY -c batteries_included=$BATTERIES_INCLUDED -c integration_tests=$INTEGRATION_TESTS -c destroy=$DESTROY -c installer_registry_name=$ECR_REPOSITORY_URI:installer-$RELEASE_VERSION-$COMMIT_ID -c ad_sync_registry_name=$ECR_REPOSITORY_URI:ad-sync-$RELEASE_VERSION-$COMMIT_ID -c publish_templates=$PUBLISH_TEMPLATES -c file_asset_prefix="releases/$RELEASE_VERSION/" -c ecr_public_repository_name=$ECR_PUBLIC_REPOSITORY_NAME -c use_bi_parameters_from_ssm=$USE_BI_PARAMETERS_FROM_SSM -c destroy_batteries_included=$DESTROY_BATTERIES_INCLUDED -c portal_domain_name=$PORTAL_DOMAIN_NAME -c vpc_id=$VpcId

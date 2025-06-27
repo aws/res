@@ -33,6 +33,15 @@ def sdk(c):
 
 
 @task
+def bootstrap(c):
+    # type: (Context) -> None
+    """
+    clean bootstrap
+    """
+    CleanTool(c, 'idea-bootstrap').clean()
+
+
+@task
 def administrator(c):
     # type: (Context) -> None
     """
@@ -66,8 +75,24 @@ def virtual_desktop_controller(c):
     clean virtual desktop controller
     """
     CleanTool(c, 'idea-virtual-desktop-controller').clean()
+
+
+@task
+def dcv_connection_gateway(c):
+    # type: (Context) -> None
+    """
+    clean virtual desktop app
+    """
     CleanTool(c, 'idea-dcv-connection-gateway').clean()
-    CleanTool(c, 'idea-virtual-desktop').clean()
+
+
+@task
+def dcv_broker(c):
+    # type: (Context) -> None
+    """
+    clean virtual desktop app
+    """
+    CleanTool(c, 'idea-dcv-broker').clean()
 
 
 @task
@@ -92,7 +117,7 @@ def bastion_host(c):
 def virtual_desktop(c):
     # type: (Context) -> None
     """
-    clean bastion host
+    clean virtual desktop app
     """
     CleanTool(c, 'idea-virtual-desktop').clean()
 
@@ -110,6 +135,8 @@ def clean_all(c):
 
     sdk(c)
 
+    bootstrap(c)
+
     administrator(c)
 
     ad_sync(c)
@@ -117,6 +144,10 @@ def clean_all(c):
     cluster_manager(c)
 
     virtual_desktop_controller(c)
+
+    dcv_connection_gateway(c)
+
+    dcv_broker(c)
 
     library(c)
 

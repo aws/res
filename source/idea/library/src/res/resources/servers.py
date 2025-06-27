@@ -1,15 +1,10 @@
 #  Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 #  SPDX-License-Identifier: Apache-2.0
 
-import logging
 from typing import Any, Dict
 
 import res.exceptions as exceptions
-from res.utils import table_utils, time_utils
-
-logger = logging.getLogger(__name__)
-logger.addHandler(logging.StreamHandler())
-logger.setLevel(logging.INFO)
+from res.utils import logging_utils, table_utils, time_utils
 
 SERVER_TABLE_NAME = "vdc.controller.servers"
 SERVER_DB_HASH_KEY = "instance_id"
@@ -17,6 +12,8 @@ SERVER_DB_UPDATED_ON_KEY = "updated_on"
 SERVER_DB_STATE_KEY = "state"
 SERVER_DB_SESSION_ID_KEY = "idea_session_id"
 SERVER_DB_SESSION_OWNER_KEY = "idea_session_owner"
+
+logger = logging_utils.get_logger(SERVER_TABLE_NAME)
 
 
 def get_server(instance_id: str) -> Dict[str, Any]:

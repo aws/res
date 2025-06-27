@@ -12,19 +12,14 @@ Statement:
       - ec2:DescribeImages
       - ec2:ModifyInstanceAttribute
       - ec2:CreateImage
-      - ec2:StartInstances
-      - ec2:TerminateInstances
-      - ec2:StopInstances
       - ec2:RebootInstances
       - ec2:DescribeInstances
       - ec2:DescribeInstanceTypes
       - ec2:CreateTags
       - ec2:RegisterImage
-      - ec2:DeregisterImage
       - ec2:RunInstances
       - budgets:ViewBudget
       - budgets:DescribeBudget*
-      - fsx:CreateDataRepositoryTask
       - fsx:DescribeFileSystems
       - tag:GetResources
       - tag:GetTagValues
@@ -45,6 +40,18 @@ Statement:
       - application-autoscaling:PutScalingPolicy
       - application-autoscaling:DescribeScalingPolicies
     Resource: '*'
+    Effect: Allow
+
+  - Action:
+      - ec2:StartInstances
+      - ec2:TerminateInstances
+      - ec2:StopInstances
+      - ec2:DeregisterImage
+    Resource: '*'
+    Condition:
+      StringEquals:
+        aws:ResourceTag/res:EnvironmentName: '{{ context.cluster_name }}'
+        aws:ResourceTag/res:ModuleName: virtual-desktop-controller
     Effect: Allow
 
   - Action:
@@ -110,11 +117,6 @@ Statement:
     Effect: Allow
 
   - Action:
-      - cloudwatch:PutMetricData
-    Resource: '*'
-    Effect: Allow
-
-  - Action:
       - secretsmanager:GetSecretValue
     Condition:
       StringEquals:
@@ -161,10 +163,6 @@ Statement:
     Resource: '{{ context.arns.get_vdi_iam_role_arn("*") }}'
     Effect: Allow
 
-  {% include '_templates/aws-managed-ad.yml' %}
-
   {% include '_templates/activedirectory.yml' %}
-
-  {% include '_templates/openldap.yml' %}
 
   {% include '_templates/custom-kms-key.yml' %}

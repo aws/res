@@ -8,6 +8,7 @@
 #  or in the 'license' file accompanying this file. This file is distributed on an 'AS IS' BASIS, WITHOUT WARRANTIES
 #  OR CONDITIONS OF ANY KIND, express or implied. See the License for the specific language governing permissions
 #  and limitations under the License.
+import base64
 import os
 import logging
 import random
@@ -29,13 +30,23 @@ from ideadatamodel import (
     SocaMemoryUnit,
     VirtualDesktopSoftwareStack
 )
-from ideasdk.bootstrap import BootstrapPackageBuilder, BootstrapUserDataBuilder, BootstrapUtils
+from ideasdk.bootstrap import BootstrapUserDataBuilder
 from ideasdk.context import BootstrapContext
 from ideasdk.launch_configurations import ScriptOSType, ScriptEventType
 from ideasdk.utils import Utils, GroupNameHelper
-from ideavirtualdesktopcontroller.app.clients.events_client.events_client import VirtualDesktopEventType
 from ideavirtualdesktopcontroller.app.events.events_utils import EventsUtils
 
+from res.resources import cluster_settings
+import res.constants as res_constants
+import boto3
+import json
+import requests
+import jwt
+import time
+
+from res.utils import table_utils, logging_utils
+
+logger = logging_utils.get_logger(constants.MODULE_ID_VIRTUAL_DESKTOP_APP)
 
 class VirtualDesktopControllerUtils:
 
@@ -52,6 +63,10 @@ class VirtualDesktopControllerUtils:
         self.INSTANCE_INFO_CACHE_KEY = 'aws.ec2.all-instance-types-data'
         self.instance_types_lock = RLock()
         self.group_name_helper = GroupNameHelper(self.context)
+    
+    def create_jwt(self, payload, secret):
+        token = jwt.encode(payload, secret, algorithm="HS256")
+        return token
 
     def create_tag(self, instance_id: str, tag_key: str, tag_value: str):
         self.ec2_client.create_tags(
@@ -63,72 +78,6 @@ class VirtualDesktopControllerUtils:
                 'Value': tag_value
             }]
         )
-
-    def _build_and_upload_bootstrap_package(self, session: VirtualDesktopSession) -> str:
-        bootstrap_context = BootstrapContext(
-            config=self.context.config(),
-            module_name=constants.MODULE_VIRTUAL_DESKTOP_CONTROLLER,
-            module_id=self.context.module_id(),
-            module_set=self.context.module_set(),
-            base_os=session.software_stack.base_os.value,
-            instance_type=session.server.instance_type
-        )
-
-        BootstrapUtils.check_and_attach_cloudwatch_logging_and_metrics(
-            bootstrap_context=bootstrap_context,
-            metrics_namespace=f'{self.context.cluster_name()}/vdi-app/{session.idea_session_id}',
-            node_type=constants.NODE_TYPE_APP,
-            enable_logging=self.context.config().get_bool('virtual-desktop-app.cloudwatch_logs.enabled', False),
-            log_files=[
-                CloudWatchAgentLogFileOptions(
-                    file_path='/opt/idea/app/logs/**.log',
-                    log_group_name=f'/{self.context.cluster_name()}/vdi-app/{session.idea_session_id}',
-                    log_stream_name='application_{ip_address}'
-                )
-            ]
-        )
-
-        cluster_s3_bucket = self.context.config().get_string('cluster.cluster_s3_bucket', required=True)
-
-        bootstrap_context.vars.session_owner = session.owner
-        bootstrap_context.vars.idea_session_id = session.idea_session_id
-        bootstrap_context.vars.project = session.project.name
-        bootstrap_context.vars.cognito_min_id = constants.COGNITO_MIN_ID_INCLUSIVE
-        bootstrap_context.vars.cognito_max_id = constants.COGNITO_MAX_ID_INCLUSIVE
-        bootstrap_context.vars.cognito_uid_attribute = constants.COGNITO_UID_ATTRIBUTE
-        bootstrap_context.vars.cognito_default_user_group = constants.COGNITO_DEFAULT_USER_GROUP
-        bootstrap_context.vars.app_package_uri = f's3://{cluster_s3_bucket}/idea/releases/idea-virtual-desktop-{self.context.module_version()}.tar.gz'  
-        if session.software_stack.base_os != VirtualDesktopBaseOS.WINDOWS:
-            escape_chars = '\\'
-        else:
-            escape_chars = '`'
-
-        # TODO: Deprecate
-        bootstrap_context.vars.dcv_host_ready_message = f'{{{escape_chars}"event_group_id{escape_chars}":{escape_chars}"{session.idea_session_id}{escape_chars}",{escape_chars}"event_type{escape_chars}":{escape_chars}"{VirtualDesktopEventType.DCV_HOST_READY_EVENT}{escape_chars}",{escape_chars}"detail{escape_chars}":{{{escape_chars}"idea_session_id{escape_chars}":{escape_chars}"{session.idea_session_id}{escape_chars}",{escape_chars}"idea_session_owner{escape_chars}":{escape_chars}"{session.owner}{escape_chars}"}}}}'
-
-        components = ['virtual-desktop-host-linux', 'nice-dcv-linux', 'vdi-helper']
-        if session.software_stack.base_os == VirtualDesktopBaseOS.WINDOWS:
-            components = ['virtual-desktop-host-windows', 'vdi-helper']
-
-        bootstrap_package_archive_file = BootstrapPackageBuilder(
-            bootstrap_context=bootstrap_context,
-            source_directory=self.context.get_bootstrap_dir(),
-            target_package_basename=f'dcv-host-{session.idea_session_id}',
-            components=components,
-            tmp_dir=os.path.join(f'{self.context.config().get_string("shared-storage.internal.mount_dir", required=True)}', self.context.cluster_name(), self.context.module_id(), 'dcv-host-bootstrap', session.owner, f'{Utils.to_secure_filename(session.name)}-{session.idea_session_id}'),
-            force_build=True,
-            logger=self._logger
-        ).build()
-
-        self._logger.debug(f'{session.idea_session_id} built bootstrap package: {bootstrap_package_archive_file}')
-        upload_key = f'idea/{self.context.module_id()}/dcv-host-bootstrap/{Utils.to_secure_filename(session.name)}-{session.idea_session_id}/{os.path.basename(bootstrap_package_archive_file)}'
-        self._logger.debug(f'{session.idea_session_id} uploading bootstrap package: {upload_key}')
-        self.s3_client.upload_file(
-            Bucket=cluster_s3_bucket,
-            Filename=bootstrap_package_archive_file,
-            Key=upload_key
-        )
-        return f's3://{cluster_s3_bucket}/{upload_key}'
 
     def _build_userdata(self, session: VirtualDesktopSession):
         bootstrap_context = BootstrapContext(
@@ -146,8 +95,6 @@ class VirtualDesktopControllerUtils:
         elif bootstrap_context.is_amd_gpu():
             gpu_family = "AMD"
 
-        # Store
-
         ## Add on vdi start commands here for linux here
         rerun_on_reboot = self._retrieve_rerun_on_reboot(session.project, ScriptOSType.LINUX)
         on_vdi_start_script_commands = self._retrieve_scripts_as_commands(session.project, ScriptOSType.LINUX, ScriptEventType.ON_VDI_START)
@@ -161,31 +108,58 @@ class VirtualDesktopControllerUtils:
         custom_script_check = [f"if [[ ! -f {lock_file} ]]; then"]
         if rerun_on_reboot:
             custom_script_check = [f"if [[ ! -f {lock_file} || -f {instance_ready_lock_file} ]]; then"]
+
         custom_script_commands = custom_script_check + [
             *on_vdi_start_script_store,
             *on_vdi_configured_script_store,
-            '/bin/bash virtual-desktop-host-linux/export_launch_script_env.sh -p {0} -o {1} -n {2} -e {3} -c {4} -s {5} -r {6}'.format(session.project.project_id, session.owner, session.project.name, self.context.config().cluster_name, f'{ScriptEventType.ON_VDI_CONFIGURED}.sh', f'{ScriptEventType.ON_VDI_START}.sh', rerun_on_reboot),
+            f'/bin/bash scripts/virtual-desktop-host/linux/export_launch_script_env.sh -p {session.project.project_id} -o {session.owner} -n {session.project.name} -e {self.context.config().cluster_name} -c {ScriptEventType.ON_VDI_CONFIGURED}.sh -s {ScriptEventType.ON_VDI_START}.sh -r {rerun_on_reboot}'
             'source /etc/launch_script_environment',
-            f'/bin/bash virtual-desktop-host-linux/{ScriptEventType.ON_VDI_START}.sh',
+            f'/bin/bash scripts/virtual-desktop-host/linux/{ScriptEventType.ON_VDI_START}.sh',
             f"echo $(date +%s) > {lock_file}",
             "fi"
         ]
+
+        custome_broker_api_url = cluster_settings.get_setting("vdc.custom_credential_broker_api_gateway_url")
+
+        region = self.context.config().aws_region
+        jwt_token = "DefaultValue"
+
+        try:
+            secret_value = cluster_settings.get_secret("vdc.custom_credential_broker_secret_name")
+
+            current_time = int(time.time())
+
+            payload = {
+                "region": region,
+                "project_name": session.project.name,
+                "session_owner": session.owner,
+                "session_id": session.idea_session_id,
+                "iat": current_time,
+                "exp": current_time + 31536000,
+                "role_arn": cluster_settings.get_setting("vdc.dcv_host_role_arn"),
+                "role_session_name": f"{session.owner}-{session.idea_session_id}"
+            }
+            
+            jwt_token = self.create_jwt(payload, secret_value)
+        except Exception as e:
+            logger.info(f"Error retriving secret from secret manager {str(e)}")
+
         install_commands = custom_script_commands + [
-            '/bin/bash virtual-desktop-host-linux/install.sh -r {0} -n {1} -g {2} -p false'.format(self.context.config().aws_region, self.context.config().cluster_name, gpu_family),
+            f'/bin/bash scripts/virtual-desktop-host/linux/install.sh -m {res_constants.MODULE_ID_VIRTUAL_DESKTOP_APP} -g {gpu_family} -u {custome_broker_api_url} -t {jwt_token} -p false -e {self.context.config().cluster_name} -n {session.project.name} -o {session.owner} -i {session.idea_session_id} -a {region} -h {session.hibernation_enabled}'
         ]
 
         if session.software_stack.base_os == BaseOS.WINDOWS:
-            change_directory_command = ['cd \"virtual-desktop-host-windows\"']
+            change_directory_command = ['cd \"scripts\\virtual-desktop-host\\windows\"']
             on_vdi_start_script_commands = self._retrieve_scripts_as_commands(session.project, ScriptOSType.WINDOWS, ScriptEventType.ON_VDI_START)
             on_vdi_configured_script_commands = self._retrieve_scripts_as_commands(session.project, ScriptOSType.WINDOWS, ScriptEventType.ON_VDI_CONFIGURED)
             on_vdi_start_script_store = self._store_commands_as_windows_script(on_vdi_start_script_commands, ScriptEventType.ON_VDI_START)
             on_vdi_configured_script_store = self._store_commands_as_windows_script(on_vdi_configured_script_commands, ScriptEventType.ON_VDI_CONFIGURED)
             export_env_variables_commands = ['Import-Module .\\ExportLaunchScriptEnv.ps1',
                                              f'Export-EnvironmentVariables -ProjectId "{session.project.project_id}" -OwnerId "{session.owner}" -EnvName "{self.context.config().cluster_name}" -ProjectName "{session.project.name}" -OnVDIStartCommands "{ScriptEventType.ON_VDI_START}.ps1" -OnVDIConfigureCommands "{ScriptEventType.ON_VDI_CONFIGURED}.ps1"']
-            on_vdi_start_script_commands = ['Import-Module .\\DownloadAndExecuteScript.ps1', '& .\\$env:ON_VDI_START_COMMANDS']
+            on_vdi_start_script_commands = ['& .\\$env:ON_VDI_START_COMMANDS']
             install_commands = change_directory_command + export_env_variables_commands + on_vdi_start_script_store + on_vdi_configured_script_store + on_vdi_start_script_commands + [
                 'Import-Module .\\Install.ps1',
-                f'Install-WindowsEC2Instance -ConfigureForRESVDI -AWSRegion "{self.context.config().aws_region}" -ENVName "{self.context.config().cluster_name}"'
+                f'Install-WindowsEC2Instance -ConfigureForRESVDI -AWSRegion "{self.context.config().aws_region}" -ENVName "{self.context.config().cluster_name}" -ModuleID "{res_constants.MODULE_ID_VIRTUAL_DESKTOP_APP}" -$ProjectName {session.project.name} -SessionOwner "{session.owner}" -SessionId "{session.idea_session_id}" -BootstrapToken "{jwt_token}" -CustomBrokerApi "{custome_broker_api_url}" -OnVDIConfiguredCommands "{ScriptEventType.ON_VDI_CONFIGURED}.ps1"'
             ]
 
         https_proxy = self.context.config().get_string('cluster.network.https_proxy', required=False, default='')
@@ -201,7 +175,7 @@ class VirtualDesktopControllerUtils:
         user_data_builder = BootstrapUserDataBuilder(
             base_os=session.software_stack.base_os.value,
             aws_region=self.context.config().get_string('cluster.aws.region', required=True),
-            bootstrap_package_uri=self._build_and_upload_bootstrap_package(session),
+            bootstrap_package_uri=cluster_settings.get_setting('cluster.installation_scripts_uri'),
             install_commands=install_commands,
             proxy_config=proxy_config,
             substitution_support=False,
@@ -213,7 +187,7 @@ class VirtualDesktopControllerUtils:
     def _store_commands_as_linux_script(self, commands: List[str], scriptName: str) -> List[str]:
         begin = "#!/bin/bash"
         script = "\n".join([begin] + commands)
-        return [f'echo "{script}" > virtual-desktop-host-linux/{scriptName}.sh']
+        return [f'echo "{script}" > scripts/virtual-desktop-host/linux/{scriptName}.sh']
 
     def _store_commands_as_windows_script(self, commands: List[str], scriptName: str) -> List[str]:
         script = "`n".join(commands)
@@ -224,14 +198,18 @@ class VirtualDesktopControllerUtils:
         if not scripts:
             return []
 
-        script_dir = '/root/bootstrap/latest'
         script_type = None
+        scripts_as_commands = []
+        command_prefix = ""
         if os_type == ScriptOSType.LINUX:
             script_type = scripts.linux
-            command_prefix = f'/bin/bash {script_dir}/virtual-desktop-host-linux/download_and_execute_script.sh'
+            boostrap_dir = "/root/bootstrap"
+            command_prefix = f'/bin/bash {boostrap_dir}/latest/scripts/virtual-desktop-host/linux/download_and_execute_script.sh'
         elif os_type == ScriptOSType.WINDOWS:
             script_type = scripts.windows
             command_prefix = "Download-And-Execute-Script -uri"
+            boostrap_dir = "$env:SystemDrive\\Users\\Administrator\\RES\\Bootstrap"
+            scripts_as_commands.append(f'Import-Module {boostrap_dir}\\scripts\\virtual-desktop-host\\windows\\DownloadAndExecuteScript.ps1 -force')
 
         if not script_type:
             return []
@@ -241,15 +219,17 @@ class VirtualDesktopControllerUtils:
             return []
 
         if os_type == ScriptOSType.LINUX:
-            return [f"{command_prefix} {script.script_location} {' '.join(script.arguments or [])}" for script in event_scripts]
+            scripts_as_commands.extend([f"{command_prefix} {script.script_location} {' '.join(script.arguments or [])}" for script in event_scripts])
         elif os_type == ScriptOSType.WINDOWS:
-            return [f"{command_prefix} {script.script_location} -arguments '{' '.join(script.arguments or [])}'" for script in event_scripts]
-        
+            scripts_as_commands.extend([f"{command_prefix} {script.script_location} -arguments '{' '.join(script.arguments or [])}'" for script in event_scripts])
+
+        return scripts_as_commands
+
     def _retrieve_rerun_on_reboot(self, project:Project, os_type:ScriptOSType) -> bool:
         scripts = project.scripts
         if not scripts:
             return False
-        
+
         script_type = None
 
         if os_type == ScriptOSType.LINUX:
@@ -259,7 +239,7 @@ class VirtualDesktopControllerUtils:
 
         if not script_type:
             return False
-        
+
         rerun_on_reboot = getattr(script_type, 'rerun_on_reboot', False)
         return rerun_on_reboot
 
@@ -363,6 +343,8 @@ class VirtualDesktopControllerUtils:
         _deployment_loop = 0
         _attempt_provision = True
 
+        dcv_host_scoped_down_instance_profile_arn = cluster_settings.get_setting("vdc.dcv_host_scoped_down_instance_profile_arn")
+
         while _attempt_provision:
             _deployment_loop += 1
             # We just .pop(0) since the list has been randomized already if it was requested
@@ -401,7 +383,7 @@ class VirtualDesktopControllerUtils:
                         }
                     ],
                     IamInstanceProfile={
-                        'Arn': session.server.instance_profile_arn
+                        'Arn': dcv_host_scoped_down_instance_profile_arn
                     },
                     BlockDeviceMappings=[
                         {
@@ -510,7 +492,7 @@ class VirtualDesktopControllerUtils:
     def dedicated_hosts_supported(self, instance_type: str) -> bool:
         instance_info = self.get_instance_type_info(instance_type)
         return instance_info.get('DedicatedHostsSupported', False)
-    
+
     def validate_min_ram(self, instance_type_name: str, software_stack: Optional[VirtualDesktopSoftwareStack]) -> bool:
         if software_stack and software_stack.min_ram > self.get_instance_ram(instance_type_name):
             # this instance doesn't have the minimum ram required to support the software stack.
@@ -573,13 +555,13 @@ class VirtualDesktopControllerUtils:
             if hibernation_support and not hibernation_supported:
                 self._logger.debug(f"Hibernation ({hibernation_support}) != Instance {instance_type_name} ({hibernation_supported}) Skipped.")
                 continue
-            
+
             # All checks passed if we make it this far
             self._logger.debug(f"Instance {instance_type_name} - Added as valid_instance_types")
             valid_instance_types_dict[instance_type_name] = instance_info
         self._logger.debug(f"Returning valid_instance_types: {valid_instance_types_dict.keys()}")
         return valid_instance_types_dict
-    
+
     def get_valid_instance_types_by_software_stack(self, hibernation_support: bool, software_stack: VirtualDesktopSoftwareStack = None, gpu: VirtualDesktopGPU = None) -> List[Dict]:
         allowed_instance_types = self.context.config().get_list('virtual-desktop-controller.dcv_session.instance_types.allow', default=[])
         valid_instance_types_dict = self.get_valid_instance_types_by_allowed_list(hibernation_support, allowed_instance_types)

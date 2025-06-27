@@ -24,6 +24,8 @@ class Permissions(Construct):
         id: str,
         dependency_group: DependencyGroup,
         environment_name: str,
+        iam_resource_prefix: str = "",
+        iam_resource_path: str = "/",
     ):
         super().__init__(scope, id)
         self.environment_name = environment_name
@@ -32,13 +34,20 @@ class Permissions(Construct):
             self,
             "PipelineRole",
             assumed_by=self.get_principal(),
-            role_name=f"Admin-{environment_name}-{aws_cdk.Aws.REGION}-PipelineRole",
+            role_name=f"Admin-{environment_name}-PipelineRole",
+            path=iam_resource_path,
         )
 
         statements = (
-            CreatePermissions(environment_name).get_permissions()
-            + DeletePermissions(environment_name).get_permissions()
-            + UpdatePermissions(environment_name).get_permissions()
+            CreatePermissions(
+                environment_name, iam_resource_path, iam_resource_prefix
+            ).get_permissions()
+            + DeletePermissions(
+                environment_name, iam_resource_path, iam_resource_prefix
+            ).get_permissions()
+            + UpdatePermissions(
+                environment_name, iam_resource_path, iam_resource_prefix
+            ).get_permissions()
         )
 
         for statement in statements:

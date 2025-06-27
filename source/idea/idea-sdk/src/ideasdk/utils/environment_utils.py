@@ -34,7 +34,7 @@ class EnvironmentUtils:
     @staticmethod
     def idea_cluster_name(required=False, default=None):
         return EnvironmentUtils.get_environment_variable(
-            key='IDEA_CLUSTER_NAME',
+            key='environment_name',
             required=required,
             default=default
         )

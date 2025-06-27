@@ -62,7 +62,7 @@ class VirtualDesktopSoftwareStackDetail extends Component<VirtualDesktopSoftware
     getVirtualDesktopAdminClient(): VirtualDesktopAdminClient {
         return AppContext.get().client().virtualDesktopAdmin();
     }
-    
+
     getVirtualDesktopUtilsClient(): VirtualDesktopUtilsClient {
         return AppContext.get().client().virtualDesktopUtils();
     }
@@ -70,35 +70,39 @@ class VirtualDesktopSoftwareStackDetail extends Component<VirtualDesktopSoftware
 
     async componentDidMount() {
         try {
-            const settings = await this.loadSettings();
-            this.setState(settings);
-        } catch (error) {
-            console.error('Error in componentDidMount:', error);
-        }
-    }
+            this.getVirtualDesktopUtilsClient()
+                .listSupportedOS({})
+                .then((result) => {
+                    this.setState({
+                        supportedOsChoices: Utils.getSupportedOSChoices(result.listing!)
+                    })
+                });
 
-    async loadSettings() {
-        try {
-            const supportedOs = await this.getVirtualDesktopUtilsClient()
-                .listSupportedOS({});
+            this.getVirtualDesktopUtilsClient()
+                .listSupportedGPUs({})
+                .then((result) => {
+                    this.setState({
+                        supportedGPUChoices: Utils.getSupportedGPUChoices(result.listing!)
+                    })
+                });
 
-            const supportedGPUs = await this.getVirtualDesktopUtilsClient()
-                .listSupportedGPUs({});
-
-            const stackInfo = await this.getVirtualDesktopAdminClient()
+            this.getVirtualDesktopAdminClient()
                 .getSoftwareStackInfo({
                     stack_id: this.getSoftwareStackId(),
                     base_os: this.getSoftwareStackBaseOS()
+                })
+                .then((result) => {
+                    this.setState(({
+                        softwareStack: result.software_stack!
+                    }));
+
+                    return Utils.getAllowedInstanceTypesOptionsForSelectedSoftwareStack(result.software_stack!)
+                })
+                .then((instanceTypes) => {
+                    this.setState({
+                        allowedInstanceTypes: instanceTypes
+                    })
                 });
-            
-            const instanceTypes = await Utils.getAllowedInstanceTypesOptionsForSelectedSoftwareStack(stackInfo.software_stack!)
-    
-            return {
-                allowedInstanceTypes: instanceTypes,
-                softwareStack: stackInfo.software_stack!,
-                supportedOsChoices: Utils.getSupportedOSChoices(supportedOs.listing!),
-                supportedGPUChoices: Utils.getSupportedGPUChoices(supportedGPUs.listing!),
-            };
         } catch (error) {
             console.error('Error in loadSettings:', error);
             throw error;

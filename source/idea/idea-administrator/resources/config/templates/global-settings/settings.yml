@@ -584,6 +584,7 @@ gpu_settings:
   - g4dn
   - g4ad
   - g6
+  - g6e
   - gr6
   nvidia_public_driver_versions:
     ltsb_version: &ltsb_version 470.141.03
@@ -596,6 +597,7 @@ gpu_settings:
     g5: *production_version
     g5g: *production_version
     g6: *production_version
+    g6e: *production_version
     gr6: *production_version
     p3: *production_version
     p4d: *production_version

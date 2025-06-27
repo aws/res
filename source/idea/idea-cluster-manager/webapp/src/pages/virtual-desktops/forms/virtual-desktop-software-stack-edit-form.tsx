@@ -74,15 +74,39 @@ class VirtualDesktopSoftwareStackEditForm extends Component<VirtualDesktopSoftwa
         );
     }
 
-    showModal() {
-        this.setState(
-            {
-                showModal: true,
+    async updateInstanceTypes() {
+        const software_stack: VirtualDesktopSoftwareStack = {
+            ...this.props.softwareStack,
+            gpu: this.state.selectedGPU,
+            ami_id: this.state.selectedAmiId,
+            placement: {
+                ...this.props.softwareStack.placement,
+                tenancy: this.state.selectedTenancy,
             },
-            () => {
-                this.getForm().showModal();
+            min_ram: {
+                value: this.state.selectedMinRam,
+                unit: "gb",
             }
-        );
+        };
+        
+        const instanceTypes = await Utils.getAllowedInstanceTypesOptionsForSelectedSoftwareStack(software_stack);
+        const instanceTypeChoices: SocaUserInputChoice[] = instanceTypes.map(type => ({
+            title: type,
+            value: type,
+        }));
+        
+        this.setState({ instanceTypeChoices }, () => {
+            this.getForm()?.getFormField("allowed_instance_types")?.setOptions({
+                listing: instanceTypeChoices,
+            });
+        });
+    }
+
+    async showModal() {
+        await this.updateInstanceTypes();
+        this.setState({ showModal: true }, () => {
+            this.getForm().showModal();
+        });
     }
 
     getProjectsClient(): ProjectsClient {
@@ -166,41 +190,14 @@ class VirtualDesktopSoftwareStackEditForm extends Component<VirtualDesktopSoftwa
             let amiIdUpdated = prevState.selectedAmiId !== this.state.selectedAmiId
             let tenancyUpdated = prevState.selectedTenancy !== this.state.selectedTenancy
             let minRamUpdated = prevState.selectedMinRam !== this.state.selectedMinRam
+
             if (gpuUpdated || amiIdUpdated || tenancyUpdated || minRamUpdated) {
                 this.getForm()?.clearError();
-                const software_stack: VirtualDesktopSoftwareStack = {
-                    ...this.props.softwareStack,
-                    gpu: this.state.selectedGPU,
-                    ami_id: this.state.selectedAmiId,
-                    architecture: undefined,
-                    placement: {
-                        ...this.props.softwareStack.placement,
-                        tenancy: this.state.selectedTenancy,
-                    },
-                    min_ram: {
-                        value: this.state.selectedMinRam,
-                        unit: "gb",
-                    }
-                }
-                const instanceTypes = await Utils.getAllowedInstanceTypesOptionsForSelectedSoftwareStack(software_stack)
-                let instanceTypeChoices: SocaUserInputChoice[] = [];
-                instanceTypes.forEach((type) => {
-                    instanceTypeChoices.push({
-                        title: type,
-                        value: type,
-                    });
-                });
-                this.setState({
-                    instanceTypeChoices: instanceTypeChoices,
-                    selectedAllowedInstanceTypes: []
-                }, () => {
-                    this.getForm()?.getFormField("allowed_instance_types")?.setOptions({
-                        listing: instanceTypeChoices,
-                    });
-                });
+                await this.updateInstanceTypes();
+                this.setState({ selectedAllowedInstanceTypes: [] });
             }
         } catch (error: any) {
-            this.getForm()?.setError(error.errorCode, error.message)
+            this.getForm()?.setError(error.errorCode, error.message);
         }
     }
 

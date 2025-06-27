@@ -8,7 +8,6 @@ from typing import Any, Callable, Dict, List, TypedDict
 import aws_cdk
 import aws_cdk.aws_elasticloadbalancingv2 as lb
 import aws_cdk.aws_elasticloadbalancingv2_targets as targets
-from aws_cdk import aws_ec2 as ec2
 from aws_cdk import aws_iam
 from aws_cdk import aws_lambda as lambda_
 from aws_cdk import custom_resources as cr
@@ -45,6 +44,8 @@ class BackendLambda(Construct):
         self.lambda_layer = lambda_layer
         self.params = params
 
+        self.iam_resource_prefix = self.params["iam_resource_prefix"]
+        self.iam_resource_path = self.params["iam_resources_path"]
         # Get existing resources in RES to integrate with this lambda
         cognito_domain_url = self.get_cluster_setting_string(
             "identity-provider.cognito.domain_url"
@@ -61,6 +62,7 @@ class BackendLambda(Construct):
         alb_security_group_id = self.get_cluster_setting_string(
             "cluster.network.security_groups.external-load-balancer"
         )
+
         vpc_id = self.get_cluster_setting_string("cluster.network.vpc_id")
         subnet_ids = self.get_cluster_setting_array("cluster.network.private_subnets")
 
@@ -324,8 +326,8 @@ class BackendLambda(Construct):
             aws_cdk.aws_iam.PolicyStatement(
                 actions=["iam:PassRole"],
                 resources=[
-                    f"arn:{aws_cdk.Aws.PARTITION}:iam::{aws_cdk.Aws.ACCOUNT_ID}:role/{self.params['cluster_name']}-bastion-host-role-{aws_cdk.Aws.REGION}",
-                    f"arn:{aws_cdk.Aws.PARTITION}:iam::{aws_cdk.Aws.ACCOUNT_ID}:role/{self.params['cluster_name']}-ad-sync-task-role",
+                    f"arn:{aws_cdk.Aws.PARTITION}:iam::{aws_cdk.Aws.ACCOUNT_ID}:role{self.iam_resource_path}{self.iam_resource_prefix}{self.params['cluster_name']}-bastion-host-role",
+                    f"arn:{aws_cdk.Aws.PARTITION}:iam::{aws_cdk.Aws.ACCOUNT_ID}:role{self.iam_resource_path}{self.iam_resource_prefix}{self.params['cluster_name']}-ad-sync-task-role",
                 ],
             )
         )
@@ -367,6 +369,7 @@ class BackendLambda(Construct):
                     "service-role/AWSLambdaVPCAccessExecutionRole"
                 ),
             ],
+            description="Execution role for the backend lambda",
         )
         return lambda_execution_role
 

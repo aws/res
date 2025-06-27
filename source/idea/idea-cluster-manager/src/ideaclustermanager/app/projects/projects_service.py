@@ -331,6 +331,10 @@ class ProjectsService:
 
         project_id = self.projects_dao.convert_from_db(project).project_id
         sessions_by_project_id = self.vdc_client.list_sessions_by_project_id(project_id)
+        for session in sessions_by_project_id:
+            # Force stop all the sessions associated with the project
+            session.force = True
+
         if sessions_by_project_id:
             self.vdc_client.stop_sessions(sessions_by_project_id)
         self.projects_dao.update_project({

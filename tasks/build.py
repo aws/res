@@ -41,6 +41,15 @@ def sdk(c):
 
 
 @task
+def bootstrap(c):
+    # type: (Context) -> None
+    """
+    build bootstrap
+    """
+    BuildTool(c, 'idea-bootstrap', skip_resources=True).build()
+
+
+@task
 def administrator(c):
     # type: (Context) -> None
     """
@@ -68,17 +77,15 @@ def cluster_manager(c):
     tool.build()
     apispec_cluster_manager(c, output_file=os.path.join(tool.output_dir, 'resources', 'api', 'openapi.yml'))
 
-
+@task
 def dcv_connection_gateway(c):
     # type: (Context) -> None
     """
     build dcv connection gateway
     """
     tool = BuildTool(c, 'idea-dcv-connection-gateway')
-    output_dir = tool.output_dir
-    shutil.rmtree(output_dir, ignore_errors=True)
-    os.makedirs(output_dir, exist_ok=True)
-    shutil.copytree(idea.props.dcv_connection_gateway_dir, os.path.join(tool.output_dir, 'static_resources'))
+    tool.build()
+    shutil.copytree(idea.props.dcv_connection_gateway_dir, os.path.join(tool.output_dir, 'resources'), ignore=shutil.ignore_patterns("src"))
 
 
 @task
@@ -90,8 +97,15 @@ def virtual_desktop_controller(c):
     tool = BuildTool(c, 'idea-virtual-desktop-controller')
     tool.build()
     apispec_virtual_desktop_controller(c, output_file=os.path.join(tool.output_dir, 'resources', 'api', 'openapi.yml'))
-    dcv_connection_gateway(c)
-    virtual_desktop(c)
+
+
+@task
+def dcv_broker(c):
+    # type: (Context) -> None
+    """
+    build DCV broker
+    """
+    BuildTool(c, 'idea-dcv-broker').build()
 
 
 @task
@@ -115,7 +129,7 @@ def bastion_host(c):
 def virtual_desktop(c):
     # type: (Context) -> None
     """
-    build bastion host
+    build virtual desktop app
     """
     BuildTool(c, 'idea-virtual-desktop').build()
 
@@ -141,13 +155,19 @@ def build_all(c):
 
     sdk(c)
 
+    bootstrap(c)
+
     administrator(c)
 
     ad_sync(c)
 
     cluster_manager(c)
 
+    dcv_connection_gateway(c)
+
     virtual_desktop_controller(c)
+
+    dcv_broker(c)
 
     library(c)
 

@@ -51,6 +51,7 @@ class InstallStack(Stack):
         parameters: Union[RESParameters, BIParameters] = RESParameters(),
         installer_registry_name: Optional[str] = None,
         ad_sync_registry_name: Optional[str] = None,
+        staging_bucket_name: str = "",
         env: Union[Environment, dict[str, Any], None] = None,
         synthesizer: Optional[IStackSynthesizer] = None,
     ):
@@ -76,6 +77,7 @@ class InstallStack(Stack):
             if ad_sync_registry_name is not None
             else PUBLIC_REGISTRY_NAME
         )
+        self.staging_bucket_name = staging_bucket_name
         self.lambda_layers = {}
 
         # Create a Lambda layer version from the local requirements file
@@ -111,6 +113,28 @@ class InstallStack(Stack):
             ",", self.parameters.get(CommonKey.VDI_SUBNETS).value_as_list
         )
 
+        has_iam_resource_prefix_condition = InfraUtils.get_iam_prefix_condition(
+            self, parameters
+        )
+        has_iam_resource_path_condition = InfraUtils.get_iam_path_condition(
+            self, parameters
+        )
+
+        self.iam_resource_path = self.parameters.iam_resource_path_string = (
+            aws_cdk.Fn.condition_if(
+                has_iam_resource_path_condition.logical_id,
+                self.parameters.get_str(CommonKey.IAM_RESOURCE_PATH),
+                "/",  # Default value if not provided
+            ).to_string()
+        )
+        self.iam_resource_prefix = self.parameters.iam_resource_prefix_string = (
+            aws_cdk.Fn.condition_if(
+                has_iam_resource_prefix_condition.logical_id,
+                self.parameters.get_str(CommonKey.IAM_RESOURCE_PREFIX),
+                "",  # Default value if not provided
+            ).to_string()
+        )
+
         # List parameters cannot be passed to nested stack
         # Transform them to String before parsing
         self.params_transformer = self.get_param_list_to_string_custom_resource()
@@ -121,6 +145,7 @@ class InstallStack(Stack):
         self.res_base_stack = ResBaseStack(
             self,
             self.lambda_layers[SHARED_RES_LIBRARY_LAMBDA_LAYER_NAME],
+            staging_bucket_name,
             self.params_transformer,
             self.parameters,
         )
@@ -169,6 +194,15 @@ class InstallStack(Stack):
 
         self.res_finalizer_stack.nested_stack.node.add_dependency(self.installer)
         self.attach_permission_boundaries()
+
+        self.apply_iam_resource_prefix = InfraUtils.create_iam_resource_prefix_applier(
+            has_iam_resource_prefix_condition, self.parameters
+        )
+        self.apply_iam_resource_prefix(self)
+        self.apply_iam_resource_path = InfraUtils.create_iam_resource_path_applier(
+            has_iam_resource_path_condition, self.parameters
+        )
+        self.apply_iam_resource_path(self)
 
     def create_shared_res_library_lambda_layer(self) -> lambda_.LayerVersion:
         # Copy requirements file and lambda library tar file to docker directory
@@ -253,6 +287,8 @@ class InstallStack(Stack):
                 self,
                 "ResEcrPush",
                 assumed_by=iam.ServicePrincipal("codebuild.amazonaws.com"),
+                role_name=f"{self.cluster_name}-ecr-push-role",
+                path=self.iam_resource_path,
             )
         )
         repository.grant_pull(
@@ -260,6 +296,8 @@ class InstallStack(Stack):
                 self,
                 "ResEcrPull",
                 assumed_by=iam.ServicePrincipal("ecs.amazonaws.com"),
+                role_name=f"{self.cluster_name}-ecr-pull-role",
+                path=self.iam_resource_path,
             )
         )
 
@@ -271,13 +309,14 @@ class InstallStack(Stack):
         ecr_image_handler_role = iam.Role(
             self,
             id="EcrImageHandlerRole",
-            role_name=f"{self.parameters.get_str(CommonKey.CLUSTER_NAME)}-ecr-image-handler-role",
+            role_name=f"{self.cluster_name}-ecr-image-handler-role",
+            path=self.iam_resource_path,
             assumed_by=iam.ServicePrincipal("lambda.amazonaws.com"),
         )
         ecr_image_handler_role_policy = iam.Policy(
             self,
             id="EcrImageHandlerRolePolicy",
-            policy_name=f"{self.parameters.get_str(CommonKey.CLUSTER_NAME)}-custom-resource-ecr-image-handler-role-policy",
+            policy_name=f"{self.cluster_name}-custom-resource-ecr-image-handler-role-policy",
             statements=[
                 iam.PolicyStatement(
                     actions=["logs:CreateLogGroup"],
@@ -465,6 +504,7 @@ class InstallStack(Stack):
             self,
             id="ParameterListToStringTransformLambdaRole",
             role_name=f"{self.cluster_name}-ParameterListToStringTransformLambdaRole",
+            path=self.iam_resource_path,
             assumed_by=iam.ServicePrincipal("lambda.amazonaws.com"),
         )
         role_policy = iam.Policy(

@@ -1,15 +1,10 @@
 #  Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 #  SPDX-License-Identifier: Apache-2.0
 
-import logging
 from typing import Any, Dict, Optional
 
 import res.exceptions as exceptions  # type: ignore
-from res.utils import table_utils, time_utils  # type: ignore
-
-logger = logging.getLogger(__name__)
-logger.addHandler(logging.StreamHandler())
-logger.setLevel(logging.INFO)
+from res.utils import logging_utils, table_utils, time_utils  # type: ignore
 
 PERMISSION_PROFILE_DB_HASH_KEY = "profile_id"
 PERMISSION_PROFILE_DB_TITLE_KEY = "title"
@@ -17,6 +12,8 @@ PERMISSION_PROFILE_DB_DESCRIPTION_KEY = "description"
 PERMISSION_PROFILE_DB_CREATED_ON_KEY = "created_on"
 PERMISSION_PROFILE_DB_UPDATED_ON_KEY = "updated_on"
 PERMISSION_PROFILE_TABLE_NAME = "vdc.controller.permission-profiles"
+
+logger = logging_utils.get_logger(PERMISSION_PROFILE_TABLE_NAME)
 
 
 def create_permission_profile(permission_profile: Dict[str, Any]) -> Dict[str, Any]:

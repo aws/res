@@ -930,6 +930,7 @@ def test_projects_crud_disable_project(context):
     )
     assert len(remaining_sessions) == 1
     assert remaining_sessions[0].state == "STOPPING"
+    assert remaining_sessions[0].force == True
 
 
 def test_projects_crud_list_projects(context, monkey_session):
