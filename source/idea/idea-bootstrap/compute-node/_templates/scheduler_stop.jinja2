@@ -1,7 +1,0 @@
-# Begin: Scheduler Stop
-{% if context.config.get_string('scheduler.provider') == 'openpbs' %}
-systemctl stop pbs
-{% endif %}
-# End: Scheduler Stop
-
-

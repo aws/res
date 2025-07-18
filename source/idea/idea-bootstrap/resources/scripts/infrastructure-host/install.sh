@@ -58,6 +58,7 @@ if [[ ! -f ${INSTALL_FINISHED_LOCK} ]]; then
 
   echo -n "no" > ${BOOTSTRAP_DIR}/reboot_required.txt
   /bin/bash "${SCRIPT_DIR}/../common/linux/install_common.sh" -s "${SCRIPT_DIR}"
+  source /etc/environment
 
   if [ "${COMPONENT}" = "ALL" ]; then
     INFRA_HOST_SCRIPTS_ROOT="${SCRIPT_DIR}"

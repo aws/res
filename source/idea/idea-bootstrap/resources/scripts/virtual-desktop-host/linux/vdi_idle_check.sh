@@ -80,7 +80,7 @@ vdi_idle_check() {
 
     local PARENT_DIR=$(dirname "$(dirname "$SCRIPT_DIR")")
 
-    /usr/local/bin/idea_python "${PARENT_DIR}/vdi-helper/vdi_auto_stop.py" \
+    idea_python "${PARENT_DIR}/vdi-helper/vdi_auto_stop.py" \
         --aws-region "$AWS_REGION" \
         --api-url "$VDI_HELPER_API_URL" \
         --log-file "$LOG_FILE" \

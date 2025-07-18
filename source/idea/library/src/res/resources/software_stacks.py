@@ -33,6 +33,7 @@ BASE_OS = [
     "rhel8",
     "rhel9",
     "ubuntu2204",
+    "ubuntu2404",
     "windows",
 ]
 ARCHITECTURE = ["x86_64", "arm64"]

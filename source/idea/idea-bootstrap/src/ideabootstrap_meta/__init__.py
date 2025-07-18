@@ -2,4 +2,4 @@
 #  SPDX-License-Identifier: Apache-2.0
 
 __name__ = 'idea-bootstrap'
-__version__ = '2025.06'
+__version__ = '2025.06.01'

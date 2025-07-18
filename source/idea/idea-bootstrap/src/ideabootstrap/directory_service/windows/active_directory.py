@@ -70,6 +70,8 @@ def is_in_active_directory(logger: logging.Logger) -> bool:
         logger.error(f"Failed to check whether the VDI has joined AD: {e.stderr}")
         return False
 
+def connect_to_active_directory(_logger: logging.Logger):
+    pass
 
 def configure_sssd(_logger: logging.Logger):
     pass

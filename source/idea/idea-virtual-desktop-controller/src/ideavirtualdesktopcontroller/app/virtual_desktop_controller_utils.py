@@ -8,6 +8,7 @@
 #  or in the 'license' file accompanying this file. This file is distributed on an 'AS IS' BASIS, WITHOUT WARRANTIES
 #  OR CONDITIONS OF ANY KIND, express or implied. See the License for the specific language governing permissions
 #  and limitations under the License.
+
 import base64
 import os
 import logging
@@ -47,7 +48,6 @@ import time
 from res.utils import table_utils, logging_utils
 
 logger = logging_utils.get_logger(constants.MODULE_ID_VIRTUAL_DESKTOP_APP)
-
 class VirtualDesktopControllerUtils:
 
     def __init__(self, context: ideavirtualdesktopcontroller.AppContext):
@@ -63,7 +63,7 @@ class VirtualDesktopControllerUtils:
         self.INSTANCE_INFO_CACHE_KEY = 'aws.ec2.all-instance-types-data'
         self.instance_types_lock = RLock()
         self.group_name_helper = GroupNameHelper(self.context)
-    
+
     def create_jwt(self, payload, secret):
         token = jwt.encode(payload, secret, algorithm="HS256")
         return token
@@ -112,7 +112,7 @@ class VirtualDesktopControllerUtils:
         custom_script_commands = custom_script_check + [
             *on_vdi_start_script_store,
             *on_vdi_configured_script_store,
-            f'/bin/bash scripts/virtual-desktop-host/linux/export_launch_script_env.sh -p {session.project.project_id} -o {session.owner} -n {session.project.name} -e {self.context.config().cluster_name} -c {ScriptEventType.ON_VDI_CONFIGURED}.sh -s {ScriptEventType.ON_VDI_START}.sh -r {rerun_on_reboot}'
+            f'/bin/bash scripts/virtual-desktop-host/linux/export_launch_script_env.sh -p {session.project.project_id} -o {session.owner} -n {session.project.name} -e {self.context.config().cluster_name} -c {ScriptEventType.ON_VDI_CONFIGURED}.sh -s {ScriptEventType.ON_VDI_START}.sh -r {rerun_on_reboot}',
             'source /etc/launch_script_environment',
             f'/bin/bash scripts/virtual-desktop-host/linux/{ScriptEventType.ON_VDI_START}.sh',
             f"echo $(date +%s) > {lock_file}",
@@ -139,7 +139,7 @@ class VirtualDesktopControllerUtils:
                 "role_arn": cluster_settings.get_setting("vdc.dcv_host_role_arn"),
                 "role_session_name": f"{session.owner}-{session.idea_session_id}"
             }
-            
+
             jwt_token = self.create_jwt(payload, secret_value)
         except Exception as e:
             logger.info(f"Error retriving secret from secret manager {str(e)}")
@@ -315,6 +315,7 @@ class VirtualDesktopControllerUtils:
             self._logger.debug(f"Found configured VDI subnets: {', '.join(configured_vdi_subnets)}")
             _attempt_subnets = configured_vdi_subnets
         else:
+            
             # fallback to a list of cluster private_subnets
             self._logger.debug(f"Fallback to cluster private_subnets: {', '.join(cluster_private_subnets)}")
             _attempt_subnets = cluster_private_subnets
@@ -342,8 +343,6 @@ class VirtualDesktopControllerUtils:
 
         _deployment_loop = 0
         _attempt_provision = True
-
-        dcv_host_scoped_down_instance_profile_arn = cluster_settings.get_setting("vdc.dcv_host_scoped_down_instance_profile_arn")
 
         while _attempt_provision:
             _deployment_loop += 1
@@ -383,7 +382,7 @@ class VirtualDesktopControllerUtils:
                         }
                     ],
                     IamInstanceProfile={
-                        'Arn': dcv_host_scoped_down_instance_profile_arn
+                        'Arn': session.server.instance_profile_arn
                     },
                     BlockDeviceMappings=[
                         {

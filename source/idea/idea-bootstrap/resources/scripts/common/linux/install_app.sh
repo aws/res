@@ -48,7 +48,7 @@ timestamp=$(date +%s)
 exec > ${BOOTSTRAP_DIR}/logs/install_app.log.${timestamp} 2>&1
 
 RES_BASE_OS=$(get_base_os)
-if [ "${RES_BASE_OS}" == "ubuntu2204" ]; then
+if [[ ${RES_BASE_OS} =~ ^(ubuntu2204|ubuntu2404)$ ]]; then
     DEBIAN_FRONTEND=noninteractive LC_ALL="en_US.UTF-8" LC_CTYPE="en_US.UTF-8" LANG="en_US.UTF-8" sed -i -e "s/# $LANG.*/$LANG UTF-8/" /etc/locale.gen && locale-gen "en_US.UTF-8" && dpkg-reconfigure --frontend=noninteractive locales
 fi
 

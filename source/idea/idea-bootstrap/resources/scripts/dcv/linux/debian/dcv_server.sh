@@ -27,8 +27,8 @@ function pre_installed() {
 
 function install_prerequisites() {
   case $BASE_OS in
-    ubuntu2204)
-      PREREQUISITES=($(get_list 'package_config.dcv.host.prerequisites.debian.ubuntu2204'))
+    ubuntu2204|ubuntu2404)
+      PREREQUISITES=($(get_list 'package_config.dcv.host.prerequisites.debian.ubuntu'))
       DEBIAN_FRONTEND=noninteractive apt install -y ${PREREQUISITES[*]}
       ;;
     *)
@@ -95,7 +95,7 @@ function install_gpu_driver_prerequisites() {
   done
 
   DEBIAN_FRONTEND=noninteractive apt install -y ${EVALUATED_GPU_DRIVER_PREREQUISITES[*]}
-  if [[ $BASE_OS =~ ^(ubuntu2204)$ ]]; then
+  if [[ $BASE_OS =~ ^(ubuntu2204|ubuntu2404)$ ]]; then
     update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-12 12
   fi
   unset IFS

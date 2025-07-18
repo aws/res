@@ -42,7 +42,7 @@ echo $(date) >> {gl_log_redirect}
 {dcvgladmin} enable >> {gl_log_redirect}
 echo $(date) >> {gl_log_redirect}
 echo "GLADMIN END" >> {gl_log_redirect}"""
-        if base_os == "ubuntu2204":
+        if base_os in ("ubuntu2204", "ubuntu2404"):
             rc_path = constants.RC_LOCAL_DEBIAN_PATH
             overwrite_file(script_content, rc_path)
             os.chmod(rc_path, 0o755)
@@ -87,7 +87,7 @@ def configure() -> None:
     Configure GL settings based on the operating system type.
     """
     base_os = os.environ.get("RES_BASE_OS")
-    if base_os not in ("amzn2", "amzn2023", "rhel8", "rhel9", "ubuntu2204", "rocky9"):
+    if base_os not in ("amzn2", "amzn2023", "rhel8", "rhel9", "ubuntu2204", "ubuntu2404", "rocky9"):
         logger.info("Base OS not supported.")
         return
     if not _is_gpu_instance_type():

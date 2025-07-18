@@ -33,7 +33,7 @@ source "${SCRIPT_DIR}/../common/linux/config_common.sh"
 
 if [[ $BASE_OS =~ ^(amzn2|amzn2023|rhel8|rhel9|rocky9)$ ]]; then
   /bin/bash "${SCRIPT_DIR}/../common/linux/red_hat/aws_ssm.sh" -s ${SCRIPT_DIR}
-elif [[ $BASE_OS =~ ^(ubuntu2204)$ ]]; then
+elif [[ $BASE_OS =~ ^(ubuntu2204|ubuntu2404)$ ]]; then
   /bin/bash "${SCRIPT_DIR}/../common/linux/debian/aws_ssm.sh"
 else
   log_warning "Base OS not supported."

@@ -32,6 +32,7 @@ def test_is_gpu_instance_type(monkeypatch, instance_family, expected_result) -> 
         ("rhel9", "x86_64"),
         ("rocky9", "x86_64"),
         ("ubuntu2204", "x86_64"),
+        ("ubuntu2404", "x86_64"),
     ],
 )
 def test_configure_gl(monkeypatch, base_os, machine) -> None:
@@ -60,7 +61,7 @@ def test_configure_gl(monkeypatch, base_os, machine) -> None:
                 assert mock_run.call_args_list == []
             else:
                 assert "dcvgladmin" in content
-                if base_os == "ubuntu2204":
+                if base_os == "ubuntu2204" or base_os == "ubuntu2404":
                     assert "test" not in content
                     mock_configure_rc.assert_called_once_with(temp_file_name)
                     assert mock_run.call_args_list == []

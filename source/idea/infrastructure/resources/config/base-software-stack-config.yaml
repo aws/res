@@ -416,6 +416,69 @@ ubuntu2204:
     us-west-2:
     - ami-id: ami-0ec1bf4a8f92e7bd1
       ss-id-suffix: base
+ubuntu2404:
+  x86-64:
+    default-description: UBUNTU2404 - x86_64
+    default-min-ram-unit: gb
+    default-min-ram-value: 4
+    default-min-storage-unit: gb
+    default-min-storage-value: 50
+    default-tenancy: default
+    default-name: UBUNTU2404 - x86_64
+    default-allowed-instance-types:
+      - t3
+      - m6a
+    ap-northeast-1:
+    - ami-id: ami-054400ced365b82a0
+      ss-id-suffix: base
+    ap-northeast-2:
+    - ami-id: ami-0662f4965dfc70aca
+      ss-id-suffix: base
+    ap-south-1:
+    - ami-id: ami-0f918f7e67a3323f0
+      ss-id-suffix: base
+    ap-southeast-1:
+    - ami-id: ami-02c7683e4ca3ebf58
+      ss-id-suffix: base
+    ap-southeast-2:
+    - ami-id: ami-010876b9ddd38475e
+      ss-id-suffix: base
+    ca-central-1:
+    - ami-id: ami-0c0a551d0459e9d39
+      ss-id-suffix: base
+    eu-central-1:
+    - ami-id: ami-02003f9f0fde924ea
+      ss-id-suffix: base
+    eu-north-1:
+    - ami-id: ami-042b4708b1d05f512
+      ss-id-suffix: base
+    eu-south-1:
+    - ami-id: ami-0ca232275a99ae442
+      ss-id-suffix: base
+    eu-west-1:
+    - ami-id: ami-01f23391a59163da9
+      ss-id-suffix: base
+    eu-west-2:
+    - ami-id: ami-044415bb13eee2391
+      ss-id-suffix: base
+    eu-west-3:
+    - ami-id: ami-04ec97dc75ac850b1
+      ss-id-suffix: base
+    il-central-1:
+    - ami-id: ami-0a47b03c99d29f7c2
+      ss-id-suffix: base
+    us-east-1:
+    - ami-id: ami-020cba7c55df1f615
+      ss-id-suffix: base
+    us-east-2:
+    - ami-id: ami-0d1b5a8c13042c939
+      ss-id-suffix: base
+    us-west-1:
+    - ami-id: ami-014e30c8a36252ae5
+      ss-id-suffix: base
+    us-west-2:
+    - ami-id: ami-05f991c49d264708f
+      ss-id-suffix: base
 rhel9:
   x86-64:
     default-description: RHEL9 - x86_64

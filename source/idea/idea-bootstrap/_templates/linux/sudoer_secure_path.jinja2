@@ -1,7 +1,0 @@
-# Begin: Update Sudoer Secure Path
-# Enables sudo users to execute commands on this path.
-if [[ $RES_BASE_OS =~ ^(amzn2|rhel8|rhel9)$ ]]; then
-  echo 'Defaults secure_path="{{ secure_path }}"' > /etc/sudoers.d/secure_path
-fi
-# End: Update Sudoer Secure Path
-

@@ -123,7 +123,7 @@ function request_and_export_aws_credentials() {
 
   aws configure set output json
   aws configure set region $AWS_REGION
-  aws configure set credential_process "/usr/local/bin/idea_python ${CUSTOM_BROKER_PATH} --bootstrap-token ${JWT_TOKEN} --api-url ${CUSTOM_BROKER_URL}" --profile "${PROFILE_NAME}"
+  aws configure set credential_process "/opt/idea/python/latest/bin/idea_python ${CUSTOM_BROKER_PATH} --bootstrap-token ${JWT_TOKEN} --api-url ${CUSTOM_BROKER_URL}" --profile "${PROFILE_NAME}"
   aws configure set --profile $PROFILE_NAME output json
   aws configure set --profile $PROFILE_NAME region $AWS_REGION
 }

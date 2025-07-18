@@ -66,7 +66,7 @@ if [[ ! -f ${INSTALL_FINISHED_LOCK} ]]; then
   echo "Installing...."
   exec > /root/bootstrap/logs/install.log.${timestamp} 2>&1
 
-  if [[ ! $BASE_OS =~ ^(amzn2|amzn2023|rhel8|rhel9|ubuntu2204|rocky9)$ ]]; then
+  if [[ ! $BASE_OS =~ ^(amzn2|amzn2023|rhel8|rhel9|ubuntu2204|ubuntu2404|rocky9)$ ]]; then
     echo "ERROR: Base OS not supported."
     exit 1
   fi
@@ -83,11 +83,12 @@ if [[ ! -f ${INSTALL_FINISHED_LOCK} ]]; then
     # Complete unfinished transactions
     /bin/bash  "${SCRIPT_DIR}/../../common/linux/complete_unfinished_transactions.sh" -o $BASE_OS -s "${SCRIPT_DIR}/.."
 
-    if [[ $BASE_OS =~ ^(ubuntu2204)$ ]]; then
+    if [[ $BASE_OS =~ ^(ubuntu2204|ubuntu2404)$ ]]; then
       apt update
     fi
 
     /bin/bash "${SCRIPT_DIR}/../../common/linux/install_common.sh" -s "${SCRIPT_DIR}/.." -i "false"
+    source /etc/environment
 
     # Begin: Install NFS Utils and dependency items
     /bin/bash "${SCRIPT_DIR}/../../common/linux/nfs_utils.sh" -o $BASE_OS -s "${SCRIPT_DIR}/.."
@@ -110,7 +111,7 @@ if [[ ! -f ${INSTALL_FINISHED_LOCK} ]]; then
     fi
 
     # Begin: Install vdi helper requirements
-    idea_pip install --user -r ${SCRIPT_DIR}/../../vdi-helper/requirements.txt
+    idea_pip install -r ${SCRIPT_DIR}/../../vdi-helper/requirements.txt
     # End: Install vdi helper requirements
 
     # Begin : Install Fsx Lustre client

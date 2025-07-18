@@ -119,7 +119,7 @@ def configure():
     env = os.environ
     base_os = get_base_os()
 
-    if base_os == 'ubuntu2204':
+    if base_os in ("ubuntu2204", "ubuntu2404"):
         _setup_pam_config_file_ubuntu()
     elif base_os in ['amzn2', "amzn2023", 'rhel8', 'rhel9', 'rocky9']:
         _setup_pam_config_file_redhat_distros()

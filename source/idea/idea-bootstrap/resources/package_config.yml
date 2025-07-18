@@ -36,11 +36,18 @@ package_config:
       - vim
       - wget
       - cronie
+      - python3
+      - python3-pip
+      - python3-devel
     debian:
       - policycoreutils
       - expect
       - nscd
       - libsasl2-dev
+      - python3
+      - python3-venv
+      - python3-pip
+      - python3-dev
 
   sssd:
     # SSSD and dependencies
@@ -171,7 +178,7 @@ package_config:
           - gdbm-libs
           - libnsl2
       debian:
-        ubuntu2204:
+        ubuntu:
           - build-essential
           - libssl-dev
           - zlib1g-dev
@@ -199,7 +206,7 @@ package_config:
     host:
       prerequisites:
         debian:
-          ubuntu2204:
+          ubuntu:
             - ubuntu-desktop
             - gdm3
         red_hat:
@@ -239,6 +246,9 @@ package_config:
           ubuntu2204:
             url: https://d1uj6qtbmh3dt5.cloudfront.net/nice-dcv-ubuntu2204-x86_64.tgz
             sha256sum: https://d1uj6qtbmh3dt5.cloudfront.net/nice-dcv-ubuntu2204-x86_64.tgz.sha256sum
+          ubuntu2404:
+            url: https://d1uj6qtbmh3dt5.cloudfront.net/nice-dcv-ubuntu2404-x86_64.tgz
+            sha256sum: https://d1uj6qtbmh3dt5.cloudfront.net/nice-dcv-ubuntu2404-x86_64.tgz.sha256sum
       aarch64:
         linux:
           al2:
@@ -272,6 +282,9 @@ package_config:
           ubuntu2204:
             url: https://d1uj6qtbmh3dt5.cloudfront.net/nice-dcv-session-manager-agent_amd64.ubuntu2204.deb
             sha256sum: https://d1uj6qtbmh3dt5.cloudfront.net/nice-dcv-session-manager-agent_amd64.ubuntu2204.deb.sha256sum
+          ubuntu2404:
+            url: https://d1uj6qtbmh3dt5.cloudfront.net/nice-dcv-session-manager-agent_amd64.ubuntu2404.deb
+            sha256sum: https://d1uj6qtbmh3dt5.cloudfront.net/nice-dcv-session-manager-agent_amd64.ubuntu2404.deb.sha256sum
       aarch64:
         linux:
           al2:

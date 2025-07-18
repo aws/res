@@ -96,6 +96,7 @@ class VirtualDesktopBaseOS(str, Enum):
     RHEL8 = constants.OS_RHEL8
     RHEL9 = constants.OS_RHEL9
     UBUNTU2204 = constants.OS_UBUNTU2204
+    UBUNTU2404 = constants.OS_UBUNTU2404
     ROCKY_LINUX9 = constants.OS_ROCKYLINUX9
     WINDOWS = constants.OS_WINDOWS
 
@@ -178,7 +179,7 @@ class VirtualDesktopSoftwareStack(SocaBaseModel):
         other_project_ids = [project.project_id for project in other.projects] if other.projects else []
         eq = eq and len(self_project_ids) == len(other_project_ids)
         eq = eq and all(project_id in self_project_ids for project_id in other_project_ids)
-        
+
         self_allowed_instance_types = self.allowed_instance_types if self.allowed_instance_types else []
         other_allowed_instance_types = other.allowed_instance_types if other.allowed_instance_types else []
         eq = eq and len(self_allowed_instance_types) == len(other_allowed_instance_types)

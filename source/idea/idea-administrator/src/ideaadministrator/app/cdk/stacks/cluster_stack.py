@@ -326,6 +326,15 @@ class ClusterStack(IdeaBaseStack):
                 policy_template_name='virtual-desktop-dcv-host.yml'
         )
 
+        self.dcv_host_role_scoped_down_managed_policy = ManagedPolicy(
+                context=self.context,
+                name='vdi-host-scoped-down-managed-policy',
+                description="Required policy for custom VDI scoped down instance profile",
+                managed_policy_name=f'{self.cluster_name}-{self.aws_region}-vdi-host-scoped-down-managed-policy',
+                scope=self.stack,
+                policy_template_name='virtual-desktop-dcv-host-scoped-down.yml'
+        )
+
         if self.is_metrics_provider_amazon_managed_prometheus():
             self.amazon_prometheus_remote_write_policy = ManagedPolicy(
                 self.context, 'amazon-prometheus-remote-write-access', self.stack,
@@ -1132,7 +1141,7 @@ class ClusterStack(IdeaBaseStack):
         # Policy Arns
         cluster_settings['iam.policies.amazon_ssm_managed_instance_core_arn'] = self.amazon_ssm_managed_instance_core_policy.managed_policy_arn
         cluster_settings['iam.policies.cloud_watch_agent_server_arn'] = self.cloud_watch_agent_server_policy.managed_policy_arn
-        cluster_settings['iam.policies.dcv_host_role_managed_policy_arn'] = self.dcv_host_role_managed_policy.managed_policy_arn
+        cluster_settings['iam.policies.dcv_host_role_managed_policy_arn'] = self.dcv_host_role_scoped_down_managed_policy.managed_policy_arn
         if self.amazon_prometheus_remote_write_policy is not None:
             cluster_settings['iam.policies.amazon_prometheus_remote_write_arn'] = self.amazon_prometheus_remote_write_policy.managed_policy_arn
 
