@@ -10,7 +10,7 @@ from res.resources import cluster_settings
 
 @pytest.mark.parametrize(
     "base_os, content_exists",
-    [("rhel8", False), ("ubuntu2204", True), ("invalid_os", False)],
+    [("rhel8", False), ("ubuntu2204", True), ("ubuntu2404", True), ("invalid_os", False)],
 )
 def test_ssh_keygen(monkeypatch, base_os, content_exists) -> None:
 

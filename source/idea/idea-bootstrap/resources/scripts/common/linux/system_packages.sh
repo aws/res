@@ -32,7 +32,7 @@ source "${SCRIPT_DIR}/../common/linux/bootstrap_common.sh"
 
 if [[ $BASE_OS =~ ^(amzn2|amzn2023|rhel8|rhel9|rocky9)$ ]]; then
   /bin/bash "${SCRIPT_DIR}/../common/linux/red_hat/system_packages.sh" -o $BASE_OS -s "${SCRIPT_DIR}"
-elif [[ $BASE_OS =~ ^(ubuntu2204)$ ]]; then
+elif [[ $BASE_OS =~ ^(ubuntu2204|ubuntu2404)$ ]]; then
   /bin/bash "${SCRIPT_DIR}/../common/linux/debian/system_packages.sh" -s "${SCRIPT_DIR}"
 else
   log_warning "Base OS not supported."

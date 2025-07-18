@@ -32,7 +32,7 @@ log_info "Disable SSM Agent"
 SUB_DIR=""
 if [[ $BASE_OS =~ ^(amzn2|amzn2023|rhel8|rhel9|rocky9)$ ]]; then
   SUB_DIR="red_hat"
-elif [[ $BASE_OS =~ ^(ubuntu2204)$ ]]; then
+elif [[ $BASE_OS =~ ^(ubuntu2204|ubuntu2404)$ ]]; then
   SUB_DIR="debian"
 else
   log_warning "Base OS not supported."

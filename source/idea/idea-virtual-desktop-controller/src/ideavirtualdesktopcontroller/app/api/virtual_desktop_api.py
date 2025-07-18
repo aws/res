@@ -537,7 +537,6 @@ class VirtualDesktopAPI(BaseAPI):
                     'virtual-desktop-controller.dcv_host_instance_profile_arn', required=True)
             else:
                 session.server.instance_profile_arn = self.arn_builder.get_vdi_iam_instance_profile_arn(project_name=session.project.name)
-
             # self.default_instance_profile_arn = self.context.app_config.virtual_desktop_dcv_host_profile_arn
             # self.default_security_group = self.context.app_config.virtual_desktop_dcv_host_security_group_id
 

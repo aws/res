@@ -728,6 +728,8 @@ class Utils {
                 return "RedHat Enterprise Linux 9";
             case "ubuntu2204":
                 return "Ubuntu 22.04";
+            case "ubuntu2404":
+                return "Ubuntu 24.04";
             case "rocky9":
                 return "Rocky Linux 9"
             case "windows":

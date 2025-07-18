@@ -4,7 +4,7 @@ Manage your Windows and Linux software stack. A stack is an EC2 AMI with pre-con
 
 ### Supported operating systems
 
-RES is compatible with Windows and Linux operating systems. For Linux, RES supports the following distributions: Amazon Linux 2, Red Hat Enterprise Linux 8, Red Hat Enterprise Linux 9, and Ubuntu 22.04. For Windows, RES supports Windows Server 2019 Datacenter Version 1809.
+RES is compatible with Windows and Linux operating systems. For Linux, RES supports the following distributions: Amazon Linux 2, Red Hat Enterprise Linux 8, Red Hat Enterprise Linux 9, Ubuntu 22.04, and Ubuntu 24.04. For Windows, RES supports Windows Server 2019 Datacenter Version 1809.
 
 ### Create a new software stack
 

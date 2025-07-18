@@ -125,7 +125,7 @@ function install_amd_gpu_drivers() {
   elif [[ $BASE_OS =~ ^(rhel8|rhel9|rocky9)$ ]]; then
     log_warning "The latest AMD driver hasn't supported the current Linux version yet"
     exit 0
-  elif [[ $BASE_OS =~ ^(ubuntu2204)$ ]]; then
+  elif [[ $BASE_OS =~ ^(ubuntu2204|ubuntu2404)$ ]]; then
     /bin/bash "$SCRIPT_DIR/../dcv/linux/debian/amd_gpu_driver.sh" -s "${SCRIPT_DIR}"
   else
     log_warning "Base OS not supported."

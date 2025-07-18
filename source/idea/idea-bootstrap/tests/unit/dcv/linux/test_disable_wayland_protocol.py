@@ -29,6 +29,7 @@ def test_configure_wayland() -> None:
         ("rocky9", constants.GDM_CONFIG_RHEL_PATH, "gdm"),
         ("rhel8", constants.GDM_CONFIG_RHEL_PATH, "gdm"),
         ("ubuntu2204", constants.GDM_CONFIG_DEBIAN_PATH, "gdm3"),
+        ("ubuntu2404", constants.GDM_CONFIG_DEBIAN_PATH, "gdm3"),
     ],
 )
 def test_configure_wayland_different_os(

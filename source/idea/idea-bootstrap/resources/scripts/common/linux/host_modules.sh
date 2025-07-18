@@ -33,7 +33,7 @@ source "${SCRIPT_DIR}/../common/linux/config_common.sh"
 
 # Set directories based on the OS
 case "$BASE_OS" in
-  ubuntu2204)
+  ubuntu2204|ubuntu2404)
     pam_lib_dir="/usr/lib/x86_64-linux-gnu/security"
     nss_lib_dir="/usr/lib/x86_64-linux-gnu"
     ;;

@@ -42,7 +42,7 @@ def configure() -> None:
             else:
                 logger.info(f"OS is {base_os}, no need to disable the wayland protocol")
 
-        elif base_os == "ubuntu2204":
+        elif base_os in ("ubuntu2204", "ubuntu2404"):
             _configure_wayland("WaylandEnable=false", constants.GDM_CONFIG_DEBIAN_PATH)
             # restart gdm3
             subprocess.run(["systemctl", "restart", "gdm3"], check=True)

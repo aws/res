@@ -156,7 +156,11 @@ default_shell = /bin/bash
 fallback_homedir = /home/%u"""
 )
 
-OPEN_LDAP_DIR = "/etc/openldap/"
+OPEN_LDAP_DIR = (
+    "/etc/ldap/"
+    if os.getenv("RES_BASE_OS", "").startswith("ubuntu")
+    else "/etc/openldap/"
+)
 TLS_CA_CERT_DIR = f"{OPEN_LDAP_DIR}cacerts/"
 TLS_CA_CERT_FILE_PATH = f"{TLS_CA_CERT_DIR}openldap-server.pem"
 
@@ -228,7 +232,7 @@ def restart_sssd(sssd_settings: Dict[str, str] = None) -> None:
     logger.info("Restarting SSSD service")
 
     subprocess.check_call(
-        "sudo systemctl restart sssd", shell=True, stdout=subprocess.PIPE
+        ["sudo", "systemctl", "restart", "sssd"], stdout=subprocess.PIPE
     )
 
     logger.info("Restarted SSSD service successfully")

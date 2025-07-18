@@ -53,6 +53,7 @@ nss_cache_path = /opt/cognito_auth/cache.json
     "base_os, setup_function",
     [
         ("ubuntu2204", "_setup_pam_config_file_ubuntu"),
+        ("ubuntu2404", "_setup_pam_config_file_ubuntu"),
         ("rhel8", "_setup_pam_config_file_redhat_distros"),
         ("amzn2", "_setup_pam_config_file_redhat_distros"),
     ],
@@ -95,7 +96,7 @@ def test_cognito_modules_configure(monkeypatch, base_os, setup_function, tmp_pat
 
     configure()
 
-    if base_os == "ubuntu2204":
+    if base_os == "ubuntu2204" or base_os == "ubuntu2404" :
         mock_setup_ubuntu.assert_called_once()
         mock_setup_redhat.assert_not_called()
     elif base_os in ['amzn2', 'amzn2023', 'rhel8', 'rhel9', 'rocky9']:

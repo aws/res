@@ -47,9 +47,9 @@ def configure() -> None:
 
     base_os = os.environ.get("RES_BASE_OS")
     username = os.environ.get("IDEA_SESSION_OWNER")
-        
+
     try:
-        if base_os == "ubuntu2204":
+        if base_os in ("ubuntu2204", "ubuntu2404"):
             _setup_pam(constants.UBUNTU_PAM_FILE_PATH)
         elif base_os in ("amzn2", "amzn2023", "rhel8", "rhel9", "rocky9"):
             for pam_file in constants.RED_HAT_PAM_FILES_PATH:
@@ -59,7 +59,7 @@ def configure() -> None:
             return
 
         subprocess.run(["su", "-", username, "-c", "exit"], check=True)
-        
+
         logger.info(f"PAM module triggered for user {username}")
     except Exception as e:
         logger.error(f"Failed to trigger PAM module for user {username}")

@@ -2,6 +2,7 @@
 #  SPDX-License-Identifier: Apache-2.0
 
 import logging
+import os
 import subprocess
 from typing import Any, Dict
 
@@ -43,6 +44,32 @@ def join_active_directory(auth_entry: Dict[str, Any], logger: logging.Logger) ->
 def is_in_active_directory(_logger: logging.Logger) -> bool:
     return sssd_utils.is_in_active_directory()
 
+def connect_to_active_directory(logger: logging.Logger):
+    configure_sssd(logger)
+
+    base_os = os.getenv("RES_BASE_OS")
+    if base_os in ["amzn2", "rhel8", "rhel9", "rocky9"]:
+        subprocess.check_call(
+            [
+                "sudo",
+                "authconfig",
+                "--enablemkhomedir",
+                "--enablesssdauth",
+                "--enablesssd",
+                "--updateall",
+            ],
+            stdout=subprocess.PIPE,
+        )
+    elif base_os == "amzn2023":
+        subprocess.check_call(
+            ["sudo", "authselect", "select", "sssd", "with-mkhomedir", "--force"],
+            stdout=subprocess.PIPE,
+        )
+    elif base_os.startswith("ubuntu"):
+        subprocess.check_call(
+            ["sudo", "pam-auth-update", "--enable", "sss", "--force"],
+            stdout=subprocess.PIPE,
+        )
 
 def configure_sssd(logger: logging.Logger):
     try:

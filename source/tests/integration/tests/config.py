@@ -69,6 +69,15 @@ LINUX_SOFTWARE_STACKS = [
         min_ram=MIN_RAM,
         gpu=VirtualDesktopGPU.NO_GPU,
     ),
+    VirtualDesktopSoftwareStack(
+        name=f"res-integ-test-stack-{VirtualDesktopBaseOS.UBUNTU2404}-{VirtualDesktopArchitecture.X86_64}",
+        description="RES integ test software stack",
+        base_os=VirtualDesktopBaseOS.UBUNTU2404,
+        architecture=VirtualDesktopArchitecture.X86_64,
+        min_storage=MIN_LINUX_STORAGE,
+        min_ram=MIN_RAM,
+        gpu=VirtualDesktopGPU.NO_GPU,
+    ),
 ]
 
 TEST_SOFTWARE_STACKS = LINUX_SOFTWARE_STACKS + [

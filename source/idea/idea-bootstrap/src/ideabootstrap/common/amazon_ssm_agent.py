@@ -63,10 +63,10 @@ def configure():
     module_id = env.get('IDEA_MODULE_ID')
 
     logger.info(f"Configuring SSM agent for module: {module_name} in cluster: {cluster_name}, region: {aws_region}, os: {base_os}")
-    
-    if base_os in ["amzn2", "amzn2023", "rhel8", "rhel9", "rocky9"]:
+
+    if base_os in ("amzn2", "amzn2023", "rhel8", "rhel9", "rocky9"):
         _configure_ssm_agent_red_hat()
-    elif base_os in ["ubuntu2204"]:
+    elif base_os in ("ubuntu2204", "ubuntu2404"):
         _configure_ssm_agent_ubuntu()
     else:
         logger.warning(f"Base OS: {base_os} is not supported for SSM agent configuration.")

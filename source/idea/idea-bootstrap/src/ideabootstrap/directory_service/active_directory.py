@@ -23,8 +23,8 @@ def configure(force_join=True):
         logger.info("AD configuration has not been provided. Skipping.")
         return
 
-    if cluster_settings.get_setting(sssd_utils.DISABLE_AD_JOIN_KEY) == "true":
-        active_directory_platform.configure_sssd(logger)
+    if cluster_settings.get_setting(sssd_utils.DISABLE_AD_JOIN_KEY) == "true" and BASE_OS != "windows":
+        active_directory_platform.connect_to_active_directory(logger)
         return
 
     if not force_join and active_directory_platform.is_in_active_directory(logger):

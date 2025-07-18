@@ -471,6 +471,7 @@ class ProjectsService:
                 )
                 policies_added.append(policy_arn)
             self.logger.debug(f'Attach RES required policies to VDI role {vdi_role_name}')
+
             vdi_required_policy_arns = self.arn_builder.dcv_host_required_policy_arns
             for vdi_required_policy_arn in vdi_required_policy_arns:
                 self.context.aws_util().attach_role_policy(

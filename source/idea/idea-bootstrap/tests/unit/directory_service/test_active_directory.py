@@ -85,6 +85,32 @@ def test_active_directory_enable_ad_join_join_active_directory(monkeypatch):
     mock_join_active_directory.assert_called_once()
 
 
+def test_active_directory_windows_always_join_active_directory(monkeypatch):
+    def _get_setting(key: str) -> Optional[str]:
+        if key == sssd_utils.DOMAIN_NAME_KEY:
+            return "domain"
+        elif key == sssd_utils.DISABLE_AD_JOIN_KEY:
+            return "true"
+        else:
+            return None
+
+    monkeypatch.setattr(
+        cluster_settings,
+        "get_setting",
+        _get_setting,
+    )
+    monkeypatch.setattr(active_directory, "BASE_OS", "windows")
+
+    monkeypatch.setattr(active_directory_platform, "is_in_active_directory", lambda: False)
+    mock_join_active_directory = Mock()
+    monkeypatch.setattr(active_directory_platform, "join_active_directory", mock_join_active_directory)
+    monkeypatch.setattr(ad_automation, "request_ad_authorization", lambda: True)
+    monkeypatch.setattr(ad_automation, "get_authorization", lambda: {"status": "success"})
+
+    active_directory.configure()
+    mock_join_active_directory.assert_called_once()
+
+
 def test_active_directory_is_in_active_directory_skip(monkeypatch):
     def _get_setting(key: str) -> Optional[str]:
         if key == sssd_utils.DOMAIN_NAME_KEY:

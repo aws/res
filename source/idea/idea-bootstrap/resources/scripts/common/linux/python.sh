@@ -31,71 +31,97 @@ source "${SCRIPT_DIR}/../common/linux/bootstrap_common.sh"
 source "${SCRIPT_DIR}/../common/linux/config_common.sh"
 
 function install_python () {
-  # Install Python via pyenv https://github.com/pyenv/pyenv
+  # Add RES Python to PATH
+  current_path=$(grep "^PATH=" /etc/environment | cut -d'"' -f2)
+  if [ -z "$current_path" ]; then
+      # If no PATH line exists, create new one
+      echo 'PATH="/opt/idea/python/latest/bin:/bin:/usr/bin:/sbin:/usr/sbin:/usr/local/bin"' >> /etc/environment
+  else
+      # Add new path to existing PATH
+      new_path="/opt/idea/python/latest/bin:$current_path"
+      sed -i 's|^PATH=.*|PATH="'"$new_path"'"|' /etc/environment
+  fi
+
+  source /etc/environment
+
   local ALIAS_PREFIX="idea"
   local INSTALL_DIR="/opt/idea/python"
-  local PYTHON3_BIN="${INSTALL_DIR}/latest/bin/python3"
-  local CURRENT_VERSION="$(${PYTHON3_BIN} --version | awk {'print $NF'})"
-  local PYTHON_VERSION=$(get_string 'package_config.python.version')
-  if [[ "${CURRENT_VERSION}" == "${PYTHON_VERSION}" ]]; then
-    log_info "Python already installed and at correct version."
-  else
-    case $BASE_OS in
-      amzn2)
-        local PYTHON_BUILD_DEPENDENCY=($(get_list 'package_config.python.build_dependencies.red_hat.al2'))
-        yum install -y ${PYTHON_BUILD_DEPENDENCY[*]} --skip-broken
-        ;;
-      amzn2023)
-        local PYTHON_BUILD_DEPENDENCY=($(get_list 'package_config.python.build_dependencies.red_hat.amzn2023'))
-        yum install -y ${PYTHON_BUILD_DEPENDENCY[*]} --skip-broken
-        ;;
-      rhel8|rhel9|rocky9)
-        PYTHON_BUILD_DEPENDENCY=($(get_list 'package_config.python.build_dependencies.red_hat.rhel'))
-        yum install -y ${PYTHON_BUILD_DEPENDENCY[*]} --skip-broken
-        ;;
-      ubuntu2204)
-        PYTHON_BUILD_DEPENDENCY=($(get_list 'package_config.python.build_dependencies.debian.ubuntu2204'))
-        apt install -y ${PYTHON_BUILD_DEPENDENCY[*]}
-        ;;
-      *)
-        echo "Invalid OS for installing Python."
-        exit 1;;
-    esac
+  local PYTHON_LATEST="${INSTALL_DIR}/latest"
 
-    export PYENV_ROOT="${INSTALL_DIR}"
-    curl https://pyenv.run | bash
+  if command -v python3 &> /dev/null; then
+    # Use the system Python if exists and meets the minimum version requirement
+    local PYTHON3_BIN=$(which python3)
+    local CURRENT_VERSION="$(${PYTHON3_BIN} --version | awk {'print $NF'})"
+    local PYTHON_VERSION=$(get_string 'package_config.python.version')
+    if [ "$(printf '%s\n' "$PYTHON_VERSION" "$CURRENT_VERSION" | sort -V | head -n1)" = "$PYTHON_VERSION" ]; then
+      log_info "Python ${CURRENT_VERSION} is already installed and meets the requirement."
 
-    echo "export PYENV_ROOT=\"${INSTALL_DIR}\"" >> ~/.bashrc
-    echo '[[ -d $PYENV_ROOT/bin ]] && export PATH="$PYENV_ROOT/bin:$PATH"' >> ~/.bashrc
-    echo 'eval "$(pyenv init - bash)"' >> ~/.bashrc
-    source ~/.bashrc
+      # Create a virtual environment to avoid modifying the system Python
+      python3 -m venv ${PYTHON_LATEST}
 
-    if [ -e ~/.bash_profile ]; then
-      echo "export PYENV_ROOT=\"${INSTALL_DIR}\"" >> ~/.bash_profile
-      echo '[[ -d $PYENV_ROOT/bin ]] && export PATH="$PYENV_ROOT/bin:$PATH"' >> ~/.bash_profile
-      echo 'eval "$(pyenv init - bash)"' >> ~/.bash_profile
-      source ~/.bash_profile
-    elif [ -e ~/.bash_login ]; then
-      echo "export PYENV_ROOT=\"${INSTALL_DIR}\"" >> ~/.bash_login
-      echo '[[ -d $PYENV_ROOT/bin ]] && export PATH="$PYENV_ROOT/bin:$PATH"' >> ~/.bash_login
-      echo 'eval "$(pyenv init - bash)"' >> ~/.bash_login
-      source ~/.bash_login
-    else
-      echo "export PYENV_ROOT=\"${INSTALL_DIR}\"" >> ~/.profile
-      echo '[[ -d $PYENV_ROOT/bin ]] && export PATH="$PYENV_ROOT/bin:$PATH"' >> ~/.profile
-      echo 'eval "$(pyenv init - bash)"' >> ~/.profile
-      source ~/.profile
+      # Create symlinks that point to the Python virtual environment
+      ln -sf ${PYTHON_LATEST}/bin/python "${PYTHON_LATEST}/bin/${ALIAS_PREFIX}_python"
+      ln -sf ${PYTHON_LATEST}/bin/pip "${PYTHON_LATEST}/bin/${ALIAS_PREFIX}_pip"
+
+      exit 0
     fi
-
-    pyenv install ${PYTHON_VERSION}
-
-    local PYTHON_DIR="${INSTALL_DIR}/versions/${PYTHON_VERSION}"
-    # create symlinks
-    local PYTHON_LATEST="${INSTALL_DIR}/latest"
-    ln -sf "${PYTHON_DIR}" "${PYTHON_LATEST}"
-    ln -sf "${PYTHON_LATEST}/bin/python3" "/usr/local/bin/${ALIAS_PREFIX}_python"
-    ln -sf "${PYTHON_LATEST}/bin/pip3" "/usr/local/bin/${ALIAS_PREFIX}_pip"
   fi
+
+  # Install Python via pyenv https://github.com/pyenv/pyenv
+  case $BASE_OS in
+    amzn2)
+      local PYTHON_BUILD_DEPENDENCY=($(get_list 'package_config.python.build_dependencies.red_hat.al2'))
+      yum install -y ${PYTHON_BUILD_DEPENDENCY[*]} --skip-broken
+      ;;
+    amzn2023)
+      local PYTHON_BUILD_DEPENDENCY=($(get_list 'package_config.python.build_dependencies.red_hat.amzn2023'))
+      yum install -y ${PYTHON_BUILD_DEPENDENCY[*]} --skip-broken
+      ;;
+    rhel8|rhel9|rocky9)
+      PYTHON_BUILD_DEPENDENCY=($(get_list 'package_config.python.build_dependencies.red_hat.rhel'))
+      yum install -y ${PYTHON_BUILD_DEPENDENCY[*]} --skip-broken
+      ;;
+    ubuntu2204|ubuntu2404)
+      PYTHON_BUILD_DEPENDENCY=($(get_list 'package_config.python.build_dependencies.debian.ubuntu'))
+      apt install -y ${PYTHON_BUILD_DEPENDENCY[*]}
+      ;;
+    *)
+      echo "Invalid OS for installing Python."
+      exit 1;;
+  esac
+
+  export PYENV_ROOT="${INSTALL_DIR}"
+  curl https://pyenv.run | bash
+
+  echo "export PYENV_ROOT=\"${INSTALL_DIR}\"" >> ~/.bashrc
+  echo '[[ -d $PYENV_ROOT/bin ]] && export PATH="$PYENV_ROOT/bin:$PATH"' >> ~/.bashrc
+  echo 'eval "$(pyenv init - bash)"' >> ~/.bashrc
+  source ~/.bashrc
+
+  if [ -e ~/.bash_profile ]; then
+    echo "export PYENV_ROOT=\"${INSTALL_DIR}\"" >> ~/.bash_profile
+    echo '[[ -d $PYENV_ROOT/bin ]] && export PATH="$PYENV_ROOT/bin:$PATH"' >> ~/.bash_profile
+    echo 'eval "$(pyenv init - bash)"' >> ~/.bash_profile
+    source ~/.bash_profile
+  elif [ -e ~/.bash_login ]; then
+    echo "export PYENV_ROOT=\"${INSTALL_DIR}\"" >> ~/.bash_login
+    echo '[[ -d $PYENV_ROOT/bin ]] && export PATH="$PYENV_ROOT/bin:$PATH"' >> ~/.bash_login
+    echo 'eval "$(pyenv init - bash)"' >> ~/.bash_login
+    source ~/.bash_login
+  else
+    echo "export PYENV_ROOT=\"${INSTALL_DIR}\"" >> ~/.profile
+    echo '[[ -d $PYENV_ROOT/bin ]] && export PATH="$PYENV_ROOT/bin:$PATH"' >> ~/.profile
+    echo 'eval "$(pyenv init - bash)"' >> ~/.profile
+    source ~/.profile
+  fi
+
+  pyenv install ${PYTHON_VERSION}
+
+  local PYTHON_DIR="${INSTALL_DIR}/versions/${PYTHON_VERSION}"
+  # create symlinks
+  ln -sf "${PYTHON_DIR}" "${PYTHON_LATEST}"
+  ln -sf "${PYTHON_LATEST}/bin/python3" "${PYTHON_LATEST}/bin/${ALIAS_PREFIX}_python"
+  ln -sf "${PYTHON_LATEST}/bin/pip3" "${PYTHON_LATEST}/bin/${ALIAS_PREFIX}_pip"
 }
 install_python
 # End Install Python

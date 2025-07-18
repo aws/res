@@ -48,7 +48,7 @@ elif [[ $BASE_OS == "rhel8" ]]; then
     machine=$(uname -m)
     unmatch=true
     log_info "Found kernel version: $kernel running on: $machine"
-    
+
     declare -A kernel_versions=(
       ["4.18.0-553"]=""
       ["4.18.0-513"]="8.9"
@@ -60,7 +60,7 @@ elif [[ $BASE_OS == "rhel8" ]]; then
       ["4.18.0-240"]="8.3"
       ["4.18.0-193"]="8.2"
     )
-    
+
     for kernel_base in "${!kernel_versions[@]}"; do
       if [[ $kernel == *"$kernel_base"*"$machine" ]]; then
         unmatch=false
@@ -71,16 +71,16 @@ elif [[ $BASE_OS == "rhel8" ]]; then
         curl  ${PUBLIC_KEY} -o /tmp/fsx-rpm-public-key.asc
         sudo rpm --import /tmp/fsx-rpm-public-key.asc
         sudo curl ${REPO} -o /etc/yum.repos.d/aws-fsx.repo
-        
+
         if [[ -n "${kernel_versions[$kernel_base]}" ]]; then
           sudo sed -i "s#8#${kernel_versions[$kernel_base]}#" /etc/yum.repos.d/aws-fsx.repo
         fi
-        
+
         sudo yum clean all
         sudo yum install -y ${LUSTRE_PKGS[*]}
       fi
     done
-    
+
     if [[ "$unmatch" == true ]]; then
       log_error "Can't install FSx for Lustre client as kernel version $kernel isn't matching expected versions: (x86_64: 4.18.0-193, -240, -305, -348, -372, -425, -477, -513)!"
     fi
@@ -109,11 +109,11 @@ elif [[ $BASE_OS == "rhel9" ]] || [[ $BASE_OS == "rocky9" ]]; then
         curl ${PUBLIC_KEY} -o /tmp/fsx-rpm-public-key.asc
         sudo rpm --import /tmp/fsx-rpm-public-key.asc
         sudo curl ${REPO} -o /etc/yum.repos.d/aws-fsx.repo
-        
+
         if [[ -n "${kernel_versions[$kernel_base]}" ]]; then
           sudo sed -i "s#9#${kernel_versions[$kernel_base]}#" /etc/yum.repos.d/aws-fsx.repo
         fi
-        
+
         sudo yum clean all
         sudo yum install -y ${LUSTRE_PKGS[*]}
       fi
@@ -123,7 +123,7 @@ elif [[ $BASE_OS == "rhel9" ]] || [[ $BASE_OS == "rocky9" ]]; then
       log_error "Can't install FSx for Lustre client as kernel version $kernel isn't matching expected versions: (x86_64: 5.14.0-362, -70)!"
     fi
   fi
-elif [[ $BASE_OS == "ubuntu2204" ]]; then
+elif [[ $BASE_OS =~ ^(ubuntu2204|ubuntu2404)$ ]]; then
   PUBLIC_KEY=($(get_string 'package_config.fsx_lustre_client.prerequisites.debian.public_key'))
   REPO=($(get_string 'package_config.fsx_lustre_client.prerequisites.debian.repo'))
   IFS=$'\n'

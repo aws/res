@@ -1,6 +1,20 @@
 # Change Log
 This file is used to list changes made in each release of Research and Engineering Studio (RES).
 
+2025.06.01
+------
+
+**ENHANCEMENTS**
+- Improved launch time of infra hosts and default VDIs by utilizing system default Python
+- Added support for Ubuntu 24.04 VDI
+
+**CHANGES**
+- Infra hosts and VDIs are utilizing system default Python now if the system Python is available and meets RES requirements (version higher than 3.9.16)
+
+**BUG FIXES**
+- Resolved Windows and Linux VDI login issues when disable_ad_join is true
+- Resolved an issue where custom IAM policies can be attached to project-specific roles  
+
 2025.06
 ------
 
