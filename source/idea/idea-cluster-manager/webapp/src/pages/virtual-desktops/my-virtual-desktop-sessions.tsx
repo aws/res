@@ -260,7 +260,7 @@ class MyVirtualDesktopSessions extends Component<MyVirtualDesktopSessionsProps, 
                     },
                     {
                         key: "owner",
-                        value: AppContext.get().auth().getUsername(),
+                        eq: AppContext.get().auth().getUsername(),
                     }
                 ],
                 paginator: {
@@ -272,7 +272,18 @@ class MyVirtualDesktopSessions extends Component<MyVirtualDesktopSessionsProps, 
             cursor = result.paginator?.cursor;
         } while (cursor);
 
-        return response;
+        const filteredResponse: ListSessionsResponse = {
+            paginator: { page_size: 100 },
+            listing: [],
+        }
+
+        response.listing?.forEach(function(element) {
+            if(element.owner === AppContext.get().auth().getUsername()) {
+                filteredResponse.listing?.push(element);
+            }
+        });
+
+        return filteredResponse;
     }
 
     setFlashMessage = (content: React.ReactNode, type: "success" | "info" | "error") => {
