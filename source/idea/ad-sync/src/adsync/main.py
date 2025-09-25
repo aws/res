@@ -14,6 +14,7 @@ from res.clients.ldap_client.active_directory_client import (  # type: ignore
 )
 from res.resources import accounts  # type: ignore
 from res.utils import (  # type: ignore
+    auth_utils,
     aws_utils,
     ldap_utils,
     logging_utils,
@@ -158,6 +159,26 @@ def _sync_users(
     ]
     res_user_mappings = {user["username"]: user for user in res_users}
     res_usernames = set(res_user_mappings.keys())
+
+    updated_email_users = {
+        username
+        for username in ldap_usernames.intersection(res_usernames)
+        if auth_utils.sanitize_email(ldap_user_mappings[username]["email"])
+        != res_user_mappings[username]["email"]
+    }
+
+    for username in updated_email_users:
+        try:
+            user = ldap_user_mappings[username]
+            accounts.update_user(
+                user={
+                    "username": user.get("sam_account_name", ""),
+                    "email": user["email"],
+                },
+                force=True,
+            )
+        except Exception as e:
+            logger.error(e)
 
     added_users = ldap_usernames - res_usernames
     for username in added_users:

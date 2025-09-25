@@ -22,7 +22,7 @@ INSTALL_FINISHED_LOCK="${SEMAPHORE_DIR}/install_finished.lock"
 PREBAKING_AMI="true"
 MODULE_ID="vdi-app"
 
-while getopts m:g:p:e:n:o:i:h:t:u:a: opt
+while getopts m:g:p:e:n:o:d:i:h:t:u:a: opt
 do
     case "${opt}" in
         m) MODULE_ID=${OPTARG};;
@@ -31,6 +31,7 @@ do
         e) ENVIRONMENT_NAME=${OPTARG};;
         n) PROJECT_NAME=${OPTARG};;
         o) SESSION_OWNER=${OPTARG};;
+        d) SESSION_TYPE=${OPTARG};;
         i) SESSION_ID=${OPTARG};;
         h) HIBERNATION_ENABLED=${OPTARG};;
         t) BOOTSTRAP_TOKEN=${OPTARG};;
@@ -125,6 +126,7 @@ if [[ ! -f ${INSTALL_FINISHED_LOCK} ]]; then
     if [[ "${PREBAKING_AMI}" == "true" ]] && [ -f ${SCRIPT_DIR}/../../../requirements.txt ]; then
       idea_pip install -r ${SCRIPT_DIR}/../../../requirements.txt
     fi
+    idea_pip install --upgrade setuptools
 
     if [[ $BASE_OS =~ ^(rhel8|rhel9|rocky9)$ ]] && [[ $HIBERNATION_ENABLED == True ]]; then
       # Begin: Install and enable hibernate agent
@@ -157,5 +159,5 @@ fi
 # Only chain to the next script when we are NOT baking on EC2 Image Builder
 # On EC2 Image Builder, the next script will be triggered by the Image Builder itself
 if [[ "${PREBAKING_AMI}" == "false" ]]; then
-  /bin/bash ${SCRIPT_DIR}/../../virtual-desktop-host/linux/install_post_reboot.sh -m "${MODULE_ID}" -g "${GPU_FAMILY}" -p "${PREBAKING_AMI}" -e "${ENVIRONMENT_NAME}" -n "${PROJECT_NAME}" -o "${SESSION_OWNER}" -i "${SESSION_ID}" -t "${CUSTOM_BROKER_URL}"
+  /bin/bash ${SCRIPT_DIR}/../../virtual-desktop-host/linux/install_post_reboot.sh -m "${MODULE_ID}" -g "${GPU_FAMILY}" -p "${PREBAKING_AMI}" -e "${ENVIRONMENT_NAME}" -n "${PROJECT_NAME}" -o "${SESSION_OWNER}" -d "${SESSION_TYPE}" -i "${SESSION_ID}" -t "${CUSTOM_BROKER_URL}"
 fi

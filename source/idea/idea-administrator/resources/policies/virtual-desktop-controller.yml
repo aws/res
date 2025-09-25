@@ -129,6 +129,7 @@ Statement:
       - sqs:SendMessage
     Resource:
       - '{{ context.arns.get_sqs_arn(context.config.get_module_id("cluster-manager") + "-notifications.fifo") }}'
+      - '{{ context.arns.get_sqs_arn("ad-automation.fifo") }}'
     Effect: Allow
     Sid: SendUserNotifications
 

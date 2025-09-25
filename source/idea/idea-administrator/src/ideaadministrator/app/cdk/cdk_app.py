@@ -12,15 +12,7 @@
 from ideadatamodel import constants
 from ideasdk.utils import Utils, EnvironmentUtils
 from ideaadministrator.app.cdk.stacks import (
-    SocaBootstrapStack,
-    ClusterStack,
-    IdentityProviderStack,
-    DirectoryServiceStack,
-    SharedStorageStack,
-    ClusterManagerStack,
     SchedulerStack,
-    BastionHostStack,
-    VirtualDesktopControllerStack
 )
 
 import aws_cdk as cdk
@@ -67,73 +59,6 @@ class CdkApp:
             region=aws_region
         )
 
-    def bootstrap_stack(self):
-        SocaBootstrapStack(
-            scope=self.cdk_app,
-            env=self.cdk_env,
-            stack_name=f'{self.cluster_name}-bootstrap'
-        )
-
-    def cluster_stack(self):
-        ClusterStack(
-            scope=self.cdk_app,
-            cluster_name=self.cluster_name,
-            aws_region=self.aws_region,
-            aws_profile=self.aws_profile,
-            module_id=self.module_id,
-            deployment_id=self.deployment_id,
-            termination_protection=self.termination_protection,
-            env=self.cdk_env
-        )
-
-    def identity_provider_stack(self):
-        IdentityProviderStack(
-            scope=self.cdk_app,
-            cluster_name=self.cluster_name,
-            aws_region=self.aws_region,
-            aws_profile=self.aws_profile,
-            module_id=self.module_id,
-            deployment_id=self.deployment_id,
-            termination_protection=self.termination_protection,
-            env=self.cdk_env
-        )
-
-    def directoryservice_stack(self):
-        DirectoryServiceStack(
-            scope=self.cdk_app,
-            cluster_name=self.cluster_name,
-            aws_region=self.aws_region,
-            aws_profile=self.aws_profile,
-            module_id=self.module_id,
-            deployment_id=self.deployment_id,
-            termination_protection=self.termination_protection,
-            env=self.cdk_env
-        )
-
-    def shared_storage_stack(self):
-        SharedStorageStack(
-            scope=self.cdk_app,
-            cluster_name=self.cluster_name,
-            aws_region=self.aws_region,
-            aws_profile=self.aws_profile,
-            module_id=self.module_id,
-            deployment_id=self.deployment_id,
-            termination_protection=self.termination_protection,
-            env=self.cdk_env
-        )
-
-    def cluster_manager_stack(self):
-        ClusterManagerStack(
-            scope=self.cdk_app,
-            cluster_name=self.cluster_name,
-            aws_region=self.aws_region,
-            aws_profile=self.aws_profile,
-            module_id=self.module_id,
-            deployment_id=self.deployment_id,
-            termination_protection=self.termination_protection,
-            env=self.cdk_env
-        )
-
     def scheduler_stack(self):
         SchedulerStack(
             scope=self.cdk_app,
@@ -146,49 +71,9 @@ class CdkApp:
             env=self.cdk_env
         )
 
-    def bastion_host_stack(self):
-        BastionHostStack(
-            scope=self.cdk_app,
-            cluster_name=self.cluster_name,
-            aws_region=self.aws_region,
-            aws_profile=self.aws_profile,
-            module_id=self.module_id,
-            deployment_id=self.deployment_id,
-            termination_protection=self.termination_protection,
-            env=self.cdk_env
-        )
-
-    def virtual_desktop_controller_stack(self):
-        VirtualDesktopControllerStack(
-            scope=self.cdk_app,
-            cluster_name=self.cluster_name,
-            aws_region=self.aws_region,
-            aws_profile=self.aws_profile,
-            module_id=self.module_id,
-            deployment_id=self.deployment_id,
-            termination_protection=self.termination_protection,
-            env=self.cdk_env
-        )
-
     def build_stack(self):
-        if self.module_name == constants.MODULE_BOOTSTRAP:
-            self.bootstrap_stack()
-        elif self.module_name == constants.MODULE_CLUSTER:
-            self.cluster_stack()
-        elif self.module_name == constants.MODULE_IDENTITY_PROVIDER:
-            self.identity_provider_stack()
-        elif self.module_name == constants.MODULE_DIRECTORYSERVICE:
-            self.directoryservice_stack()
-        elif self.module_name == constants.MODULE_SHARED_STORAGE:
-            self.shared_storage_stack()
-        elif self.module_name == constants.MODULE_CLUSTER_MANAGER:
-            self.cluster_manager_stack()
-        elif self.module_name == constants.MODULE_SCHEDULER:
+        if self.module_name == constants.MODULE_SCHEDULER:
             self.scheduler_stack()
-        elif self.module_name == constants.MODULE_BASTION_HOST:
-            self.bastion_host_stack()
-        elif self.module_name == constants.MODULE_VIRTUAL_DESKTOP_CONTROLLER:
-            self.virtual_desktop_controller_stack()
 
     def invoke(self):
         self.build_stack()

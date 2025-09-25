@@ -25,7 +25,7 @@ class VirtualDesktopDCVAPI(VirtualDesktopAPI):
         super().__init__(context)
         self.context = context
         self._logger = context.logger('virtual-desktop-dcv-api')
-        self.SCOPE_READ = f'{self.context.module_id()}/read'
+        self.SCOPE_READ = f'{self.context.cluster_name()}-{self.context.module_id()}/read'
         self.acl = {
             'VirtualDesktopDCV.DescribeServers': {
                 'scope': self.SCOPE_READ,

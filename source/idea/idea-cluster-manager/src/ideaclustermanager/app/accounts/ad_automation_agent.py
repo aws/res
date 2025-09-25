@@ -17,6 +17,7 @@ from ideadatamodel import exceptions, errorcodes
 
 from ideaclustermanager.app.accounts.db.ad_automation_dao import ADAutomationDAO
 from ideaclustermanager.app.accounts.helpers.preset_computer_helper import PresetComputeHelper
+from ideaclustermanager.app.accounts.helpers.delete_computer_helper import DeleteComputeHelper
 
 from typing import Dict
 from threading import Thread, Event
@@ -111,7 +112,12 @@ class ADAutomationAgent(SocaService):
                                     request=request
                                 ).invoke()
                             elif namespace == 'ADAutomation.DeleteComputer':
-                                self.logger.debug('Processing AD automation event: DeleteComputer')
+                                DeleteComputeHelper(
+                                    context=self.context,
+                                    ad_automation_dao=self.ad_automation_dao,
+                                    sender_id=sender_id,
+                                    request=request
+                                ).invoke()
                             elif namespace == 'ADAutomation.UpdateComputerDescription':
                                 self.logger.debug('Processing AD automation event: UpdateComputerDescription')
 
@@ -119,10 +125,10 @@ class ADAutomationAgent(SocaService):
                             add_to_delete(sqs_message)
 
                         except exceptions.SocaException as e:
-                            if e.error_code == errorcodes.AD_AUTOMATION_PRESET_COMPUTER_FAILED:
+                            if e.error_code in [errorcodes.AD_AUTOMATION_PRESET_COMPUTER_FAILED, errorcodes.AD_AUTOMATION_DELETE_COMPUTER_FAILED]:
                                 self.logger.error(f'{e}')
                                 add_to_delete(sqs_message)
-                            elif e.error_code == errorcodes.AD_AUTOMATION_PRESET_COMPUTER_RETRY:
+                            elif e.error_code in [errorcodes.AD_AUTOMATION_PRESET_COMPUTER_RETRY, errorcodes.AD_AUTOMATION_DELETE_COMPUTER_RETRY]:
                                 # do nothing. request will be retried after visibility timeout interval.
                                 self.logger.warning(f'{e} - request will be retried in {visibility_timeout} seconds')
                             else:

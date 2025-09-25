@@ -1,0 +1,8 @@
+#  Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+#  SPDX-License-Identifier: Apache-2.0
+
+from enum import Enum
+
+
+class VDIHelperActions(str, Enum):
+    VDI_AUTO_STOP = "vdi_auto_stop"

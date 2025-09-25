@@ -312,6 +312,21 @@ class LdapHelper:
         ]
         return self.ldap_client.add_s(dn, user_ldif)
 
+    def update_ldap_user(self, username, updates, ou=None):
+        "Update a existing user with given username in LDAP server under the provided or default OU"
+        ou = ou or self.ldap_client.options.users_ou
+        dn = f"cn={username},ou=users,ou=res,ou=corp,dc=corp,dc=res,dc=com"
+
+        # Prepare modifications list
+        mod_list = []
+        for attr, value in updates.items():
+            if not isinstance(value, list):
+                value = [value]
+            # Add to modification list
+            mod_list.append((ldap.MOD_REPLACE, attr, value))
+
+        return self.ldap_client.modify_s(dn, mod_list)
+
     def delete_ldap_user(self, username, ou=None):
         "Find the user by username and deletes it from the LDAP server"
         dn, _ = self.find_ldap_user(username, ou)

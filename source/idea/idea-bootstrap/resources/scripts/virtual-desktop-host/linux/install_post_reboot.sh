@@ -18,7 +18,7 @@ INSTALL_POST_REBOOT_FINISHED_LOCK="${SEMAPHORE_DIR}/install_post_reboot_finished
 PREBAKING_AMI="true"
 MODULE_ID="vdi-app"
 
-while getopts m:g:p:e:n:o:i:t: opt
+while getopts m:g:p:e:n:o:d:i:t: opt
 do
     case "${opt}" in
       m) MODULE_ID=${OPTARG};;
@@ -27,14 +27,13 @@ do
       e) ENVIRONMENT_NAME=${OPTARG};;
       n) PROJECT_NAME=${OPTARG};;
       o) SESSION_OWNER=${OPTARG};;
+      d) SESSION_TYPE=${OPTARG};;
       i) SESSION_ID=${OPTARG};;
       t) CUSTOM_BROKER_URL=${OPTARG};;
       ?) echo "Invalid option for install_post_reboot.sh script: -${opt}."
          exit 1;;
     esac
 done
-
-export AWS_DEFAULT_PROFILE="bootstrap_profile"
 
 
 if [[ ! $GPU_FAMILY =~ ^(NONE|NVIDIA|AMD)$ ]]; then
@@ -103,5 +102,5 @@ fi
 
 # Prebake running on EC2 Image Builder does not need to run the configure.sh script
 if [[ "${PREBAKING_AMI}" == "false" ]]; then
-  /bin/bash "${SCRIPT_DIR}/../../common/linux/install_app.sh" -s "${SCRIPT_DIR}/.." -c "virtual-desktop-app" -m "${MODULE_ID}" -e "${ENVIRONMENT_NAME}" -n "${PROJECT_NAME}" -o "${SESSION_OWNER}" -i "${SESSION_ID}" -t "${CUSTOM_BROKER_URL}"
+  /bin/bash "${SCRIPT_DIR}/../../common/linux/install_app.sh" -s "${SCRIPT_DIR}/.." -c "virtual-desktop-app" -m "${MODULE_ID}" -e "${ENVIRONMENT_NAME}" -n "${PROJECT_NAME}" -o "${SESSION_OWNER}" -d "${SESSION_TYPE}" -i "${SESSION_ID}" -t "${CUSTOM_BROKER_URL}"
 fi

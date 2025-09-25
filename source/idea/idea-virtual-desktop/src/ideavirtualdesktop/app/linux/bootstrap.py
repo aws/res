@@ -97,7 +97,8 @@ def run():
         with open(LINUX_VDI_CONFIG_FINISHED_LOCK, 'w') as f:
             f.write(str(int(time.time())))
 
-        bootstrap_common.check_reboot_required()
+        if not bootstrap_common.check_reboot_required():
+            post_reboot.run()
     else:
         logger.info(f"Configuration LINUX_VDI_CONFIG_FINISHED_LOCK file: {LINUX_VDI_CONFIG_FINISHED_LOCK} already exists")
 

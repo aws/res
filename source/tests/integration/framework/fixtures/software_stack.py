@@ -9,7 +9,10 @@
 #  OR CONDITIONS OF ANY KIND, express or implied. See the License for the specific language governing permissions
 #  and limitations under the License.
 
+import os
+
 import pytest
+import yaml
 
 from ideadatamodel import (  # type: ignore
     CreateSoftwareStackRequest,
@@ -48,45 +51,11 @@ def software_stack(
     ) and (software_stack.name not in TEST_SOFTWARE_STACKS_GOVCLOUD):
         pytest.skip(f"Software stack: {software_stack.name} not supported in GovCloud")
 
+    # If no AMI ID is provided, find AMI ID from VDI AMI config file
     if not software_stack.ami_id:
-        base_os = software_stack.base_os
-        architecture = software_stack.architecture
-        gpu = software_stack.gpu
-        assert (
-            base_os and architecture and gpu
-        ), f"Either provide an AMI ID or (base OS + architecture + GPU) of the software stack"
-
-        list_software_stacks_request = ListSoftwareStackRequest(
-            filters=[
-                SocaFilter(
-                    key="base_os",
-                    eq=base_os,
-                ),
-                SocaFilter(
-                    key="architecture",
-                    eq=architecture,
-                ),
-                SocaFilter(
-                    key="gpu",
-                    eq=gpu,
-                ),
-            ]
+        software_stack.ami_id = get_ami_id(
+            client, software_stack, res_environment.region
         )
-        list_software_stacks_response = client.list_software_stacks(
-            list_software_stacks_request
-        )
-        existing_software_stacks = (
-            list_software_stacks_response.listing
-            if list_software_stacks_response.listing
-            else []
-        )
-        if not len(existing_software_stacks):
-            pytest.skip(
-                f"Default software stack with base OS {base_os}, architecture {architecture} and GPU {gpu} doesn't exist in {res_environment.region}"
-            )
-
-        # If no AMI ID is provided, use the AMI ID of an existing software stack that has the same base OS, architecture and GPU.
-        software_stack.ami_id = existing_software_stacks[0].ami_id
 
     create_software_stack_request = CreateSoftwareStackRequest(
         software_stack=software_stack
@@ -104,3 +73,33 @@ def software_stack(
     request.addfinalizer(tear_down)
 
     return software_stack
+
+
+def get_ami_id(
+    client: ResClient, software_stack: VirtualDesktopSoftwareStack, region: str
+) -> str:
+    """
+    Retrieve AMI ID from base-software-stack-config.yaml
+    """
+    base_os = software_stack.base_os
+    architecture = "x86-64" if software_stack.architecture == "x86_64" else "arm64"
+    gpu = software_stack.gpu
+
+    source_dir_path = os.path.join(os.path.dirname(__file__), "../../../../")
+    ami_config_path = os.path.join(
+        source_dir_path,
+        "idea/infrastructure/resources/config/base-software-stack-config.yaml",
+    )
+
+    with open(ami_config_path, "r") as f:
+        config = yaml.safe_load(f)
+    try:
+        ami_list = config.get(base_os, {}).get(architecture, {}).get(region, [])
+        for ami_data in ami_list:
+            if ami_data.get("gpu-manufacturer", "NO_GPU") == gpu:
+                return str(ami_data["ami-id"])
+    except (KeyError, IndexError):
+        raise ValueError(f"AMI IDs not found for {base_os}/{architecture} in {region}")
+    pytest.skip(
+        f"AMI ID not found for {base_os}/{architecture}/{gpu} in {region}, skipping."
+    )

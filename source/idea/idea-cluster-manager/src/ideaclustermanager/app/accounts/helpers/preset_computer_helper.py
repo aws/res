@@ -11,20 +11,18 @@
 
 from ideasdk.context import SocaContext
 from ideasdk.utils import Utils
-from ideasdk.shell import ShellInvoker
 from ideadatamodel import exceptions, errorcodes, EC2Instance
 
-from res.clients.ldap_client.active_directory_client import ActiveDirectoryClient
 from ideaclustermanager.app.accounts.db.ad_automation_dao import ADAutomationDAO
+from ideaclustermanager.app.accounts.helpers.ad_computer_helper_base import ADComputerHelperBase
 
-from typing import Dict, List, Optional
+from typing import Dict, Optional
 import botocore.exceptions
 import secrets
 import string
 
 
-
-class PresetComputeHelper:
+class PresetComputeHelper(ADComputerHelperBase):
     """
     Helper to manage creating preset Computer Accounts in AD using adcli.
 
@@ -41,47 +39,42 @@ class PresetComputeHelper:
         :param sender_id: SenderId attribute from SQS Message
         :param request: the original request payload envelope
         """
-        self.context = context
-        self.ldap_client = ActiveDirectoryClient(self.context.logger())
-        self.service_account_username, self.service_account_password = (
-            self.ldap_client.fetch_service_account_credentials()
-        )
-        self.ad_automation_dao = ad_automation_dao
-        self.sender_id = sender_id
-        self.request = request
-
         self.logger = context.logger('preset-computer')
-
-        self.nonce: Optional[str] = None
-        self.instance_id: Optional[str] = None
+        super().__init__(context, self.logger, ad_automation_dao, sender_id, request)
+        
         self.ec2_instance: Optional[EC2Instance] = None
-        self.hostname: Optional[str] = None
 
         # Metadata for AD joins
         self.aws_account = self.context.config().get_string('cluster.aws.account_id', required=True)
         self.cluster_name = self.context.config().get_string('cluster.cluster_name', required=True)
         self.aws_region = self.context.config().get_string('cluster.aws.region', required=True)
-        # parse and validate sender_id and request
-        payload = Utils.get_value_as_dict('payload', request, {})
+        
+        self._initialize_preset_data()
+
+    @property
+    def log_tag(self) -> str:
+        return f'(Host: {self.hostname}, InstanceId: {self.instance_id})'
+
+    def get_retry_error_code(self):
+        return errorcodes.AD_AUTOMATION_PRESET_COMPUTER_RETRY
+
+    def get_failed_error_code(self):
+        return errorcodes.AD_AUTOMATION_PRESET_COMPUTER_FAILED
+
+    def _initialize_preset_data(self):
+
+        payload = self.request.get("payload", {})
 
         # SenderId attribute from SQS message to protect against spoofing.
-        if Utils.is_empty(sender_id):
+        if not self.sender_id:
             raise exceptions.soca_exception(
                 error_code=errorcodes.AD_AUTOMATION_PRESET_COMPUTER_FAILED,
                 message='Unable to verify cluster node identity: SenderId is required'
             )
 
-        # enforce a nonce for an additional layer of protection against spoofing and help tracing
-        nonce = Utils.get_value_as_string('nonce', payload)
-        if Utils.is_empty(nonce):
-            raise exceptions.soca_exception(
-                error_code=errorcodes.AD_AUTOMATION_PRESET_COMPUTER_FAILED,
-                message='nonce is required'
-            )
-        self.nonce = nonce
         # when sent from an EC2 Instance with an IAM Role attached, SenderId is of below format (IAM role ID):
         # AROAZKN2GIY65I74VE5YH:i-035b89c7f49714a3e
-        sender_id_tokens = sender_id.split(':')
+        sender_id_tokens = self.sender_id.split(':')
         if len(sender_id_tokens) != 2:
             raise exceptions.soca_exception(
                 error_code=errorcodes.AD_AUTOMATION_PRESET_COMPUTER_FAILED,
@@ -122,13 +115,12 @@ class PresetComputeHelper:
             )
 
         self.instance_id = instance_id
-
         self.ec2_instance = ec2_instances[0]
 
         # for Windows instances, there is no way to fetch the hostname from describe instances API.
         # request payload from windows instances will contain hostname. eg. EC2AMAZ-6S29U5P
-        hostname = Utils.get_value_as_string('hostname', payload)
-        if Utils.is_empty(hostname):
+        hostname = payload.get("hostname", "")
+        if not hostname:
             # Generate and make use of an IDEA hostname
             hostname_data = f"{self.aws_region}|{self.aws_account}|{self.cluster_name}|{self.instance_id}"
             hostname_prefix = self.context.config().get_string('directoryservice.ad_automation.hostname_prefix', default='IDEA-')
@@ -151,183 +143,6 @@ class PresetComputeHelper:
 
         self.hostname = hostname
         self.logger.info(f'Using hostname for AD join: {self.hostname}')
-
-        self._shell = ShellInvoker(logger=self.logger)
-
-        # verify if adcli is installed and available on the system.
-        which_adcli = self._shell.invoke('command -v adcli', shell=True)
-        if which_adcli.returncode != 0:
-            raise exceptions.general_exception('unable to locate adcli on system to initialize PresetComputerHelper')
-        self.ADCLI = which_adcli.stdout
-
-        # Currently adcli uses the GSSAPI SASL mechanism for LDAP authentication and to establish encryption.
-        # This should satisfy all requirements set on the server side and LDAPS should only be used if the LDAP
-        # port is not accessible due to firewalls or other reasons. Note that connection to the domain controller
-        # with LDAPS requires the latest version of adcli (>=0.9.1), which is not available in the Amazon Linux Core x86_64 repo.
-        # Only uncomment the lines below to force the LDAPS connection if required:
-        # ldap_connection_uri = self.context.config().get_string('directoryservice.ldap_connection_uri', required=True)
-        # self.use_ldaps = ldap_connection_uri.startswith('ldaps:')
-
-        self.use_ldaps = False
-
-        # initialize domain controller IP addresses
-        self._domain_controller_ips = self.get_domain_controller_ip_addresses()
-
-    @property
-    def log_tag(self) -> str:
-        return f'(Host: {self.hostname}, InstanceId: {self.instance_id}, Nonce: {self.nonce})'
-
-    def get_ldap_computers_base(self) -> str:
-        ou_computers = self.context.config().get_string('directoryservice.computers.ou', required=True)
-        if '=' in ou_computers:
-            return ou_computers
-        return f'ou={ou_computers},ou={self.ldap_client.options.ldap_base}'
-
-    @staticmethod
-    def get_ldap_computer_filterstr(hostname: str) -> str:
-        return f'(&(objectClass=computer)(cn={hostname}))'
-
-    def is_existing_computer_account(self, trace=False) -> bool:
-        search_result = self.ldap_client.search_s(
-            base=self.get_ldap_computers_base(),
-            filterstr=self.get_ldap_computer_filterstr(self.hostname),
-            attrlist=['dn'],
-            trace=trace,
-        )
-        return len(search_result) > 0
-
-    def get_domain_controller_ip_addresses(self) -> List[str]:
-        """
-        perform adcli discovery on the AD domain name and return all the domain controller hostnames.
-        :return: hostnames all available domain controllers
-        """
-        cmd = [
-            self.ADCLI,
-            'info',
-        ]
-        if self.use_ldaps:
-            cmd.append("--use-ldaps")
-        cmd.append(self.ldap_client.options.domain_name.upper())
-
-        result = self._shell.invoke(
-            cmd=cmd,
-        )
-        if result.returncode != 0:
-            raise exceptions.soca_exception(
-                error_code=errorcodes.AD_AUTOMATION_PRESET_COMPUTER_RETRY,
-                message=f'{self.log_tag} failed to perform adcli information discovery on AD domain: {self.ldap_client.options.domain_name}'
-            )
-
-        # self.logger.debug(f'ADCLI Domain info: {result.stdout}')
-        # Example output for a domain with 6 domain controllers:
-        # [domain]
-        # domain-name = idea.local
-        # domain-short = IDEA
-        # domain-forest = idea.local
-        # domain-controller = IP-C6130254.idea.local
-        # domain-controller-site = us-east-1
-        # domain-controller-flags = gc ldap ds kdc timeserv closest writable full-secret ads-web
-        # domain-controller-usable = yes
-        # domain-controllers = IP-C6130254.idea.local IP-C6120243.idea.local ip-c61301a7.idea.local ip-c61202c6.idea.local ip-c6120053.idea.local ip-c612008c.idea.local
-        # [computer]
-        # computer-site = us-east-1
-
-        # store the output in domain_query for quick review of params
-        domain_query = {}
-        lines = str(result.stdout).splitlines()
-        for line in lines:
-            line = line.strip()
-            if line.startswith('['):
-                continue
-            try:
-                result_key = line.split(' =')[0]
-                result_value = line.split('= ')[1]
-            except IndexError as e:
-                self.logger.warning(f'Error parsing AD discovery output: {e}.  Line skipped: {line}')
-                continue
-
-            self.logger.debug(f'Key: [{result_key:25}]   Value: [{result_value:25}]')
-
-            if (
-                not Utils.get_as_string(result_key, default='') or
-                not Utils.get_as_string(result_value, default='')
-            ):
-                self.logger.warning(f'Error parsing AD discovery output. Unable to parse Key/Value Pair. Check adcli version/output. Line skipped: {line}')
-                continue
-
-            # Save for later
-            domain_query[result_key] = result_value
-
-        # Sanity check our query results
-        # todo - should domain-controller-flags be evaluated for writeable or other health flags?
-
-        # domain-name must be present and match our configuration
-        domain_name = Utils.get_value_as_string('domain-name', domain_query, default=None)
-        if domain_name is None:
-            raise exceptions.soca_exception(
-                error_code=errorcodes.AD_AUTOMATION_PRESET_COMPUTER_RETRY,
-                message=f'{self.log_tag} Unable to validate AD domain discovery for domain-name: {self.ldap_client.options.domain_name}'
-            )
-
-        if domain_name.upper() != self.ldap_client.options.domain_name.upper():
-            raise exceptions.soca_exception(
-                error_code=errorcodes.AD_AUTOMATION_PRESET_COMPUTER_RETRY,
-                message=f"{self.log_tag} AD domain discovery mismatch for domain-name: Got: {domain_name.upper()} Expected: {self.ldap_client.options.domain_name.upper()}"
-            )
-
-        # domain_controllers must be a list of domain controllers
-        # split() vs. split(' ') - we don't want empty entries in the list
-        # else our len() check would be incorrect
-        domain_controllers = domain_query.get('domain-controllers', '').strip().split()
-        if len(domain_controllers) == 0:
-            raise exceptions.soca_exception(
-                error_code=errorcodes.AD_AUTOMATION_PRESET_COMPUTER_RETRY,
-                message=f'{self.log_tag} no domain controllers found for AD domain: {self.ldap_client.options.domain_name}. check your firewall settings and verify if traffic is allowed on port 53.'
-            )
-
-        return domain_controllers
-
-    def get_any_domain_controller_ip(self) -> str:
-        """
-        Return the next domain controller in the list as discovered from adcli
-        :return: Domain Controller IP Address
-        """
-        if len(self._domain_controller_ips) == 0:
-            raise exceptions.soca_exception(
-                error_code=errorcodes.AD_AUTOMATION_PRESET_COMPUTER_RETRY,
-                message=f'{self.log_tag} all existing AD domain controllers have been tried to create computer account, but failed. request will be retried.'
-            )
-
-        # We just take the first remaining domain controller as adcli discovery organizes the list for us
-        # .pop(0) should be safe as we just checked for len()
-        selected_dc = self._domain_controller_ips.pop(0)
-        self.logger.info(f'Selecting AD domain controller for operation: {selected_dc}')
-
-        return selected_dc
-
-    def delete_computer(self, domain_controller_ip: str):
-        cmd = [
-            self.ADCLI,
-            'delete-computer',
-            f'--domain-controller={domain_controller_ip}',
-            f'--login-user={self.service_account_username}',
-            '--stdin-password',
-            f'--domain={self.ldap_client.options.domain_name}',
-            f'--domain-realm={self.ldap_client.options.domain_name.upper()}',
-        ]
-        if self.use_ldaps:
-            cmd.append("--use-ldaps")
-        cmd.append(self.hostname)
-
-        delete_computer_result = self._shell.invoke(
-            cmd_input=self.service_account_password,
-            cmd=cmd,
-        )
-        if delete_computer_result.returncode != 0:
-            raise exceptions.soca_exception(
-                error_code=errorcodes.AD_AUTOMATION_PRESET_COMPUTER_FAILED,
-                message=f'{self.log_tag} failed to delete existing computer account: {delete_computer_result}'
-            )
 
     def preset_computer(self, domain_controller_ip: str) -> str:
 
@@ -429,7 +244,6 @@ class PresetComputeHelper:
 
             self.ad_automation_dao.create_ad_automation_entry(entry={
                 'instance_id': self.instance_id,
-                'nonce': self.nonce,
                 'hostname': self.hostname,
                 'otp': one_time_password,
                 'domain_controller': domain_controller_ip,
@@ -444,7 +258,6 @@ class PresetComputeHelper:
                 # add feedback entry for the host indicating failure status, and stop polling ddb
                 self.ad_automation_dao.create_ad_automation_entry(entry={
                     'instance_id': self.instance_id,
-                    'nonce': self.nonce,
                     'hostname': self.hostname,
                     'status': 'fail',
                     'error_code': e.error_code,

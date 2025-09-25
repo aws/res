@@ -14,7 +14,7 @@ from constructs import Construct
 
 from idea.infrastructure.install.constants import RES_COMMON_LAMBDA_RUNTIME
 from idea.infrastructure.install.ddb_tables.list import RESDDBTable
-from idea.infrastructure.install.utils import InfraUtils
+from idea.infrastructure.install.infra_utils.utils import InfraUtils
 from idea.infrastructure.resources.lambda_functions.table_stream_subscription_lambda import (
     table_stream_subscription_handler,
 )

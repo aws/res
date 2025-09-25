@@ -95,6 +95,8 @@ def _update_custom_certificates(input_parameters: Dict[str, Any]) -> None:
         input_parameters[
             "dcv_connection_gateway_custom_certificate_private_key_secret_arn"
         ] = input_parameters["private_key_secret_arn"]
+    else:
+        input_parameters["alb_custom_certificate_provided"] = False
 
 
 def _add_directory_service_params(input_parameters: Dict[str, Any]) -> None:

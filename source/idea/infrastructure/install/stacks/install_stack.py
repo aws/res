@@ -21,22 +21,27 @@ from idea.infrastructure.install import installer
 from idea.infrastructure.install.backend import BastionHostCleanup
 from idea.infrastructure.install.constants import (
     API_PROXY_LAMBDA_LAYER_NAME,
-    RES_ADMINISTRATOR_LAMBDA_RUNTIME,
-    RES_BACKEND_LAMBDA_RUNTIME,
     RES_COMMON_LAMBDA_RUNTIME,
     RES_ECR_REPO_NAME_SUFFIX,
     SHARED_RES_LIBRARY_LAMBDA_LAYER_NAME,
 )
 from idea.infrastructure.install.handlers import ecr_images_handler
+from idea.infrastructure.install.infra_utils.utils import InfraUtils
 from idea.infrastructure.install.parameters.common import CommonKey
 from idea.infrastructure.install.parameters.parameters import (
     AllRESParameterGroups,
     RESParameters,
 )
-from idea.infrastructure.install.stacks.ad_sync_stack import ADSyncStack
+from idea.infrastructure.install.stacks.bastion_host_stack import BastionHostStack
+from idea.infrastructure.install.stacks.cluster_manager_stack import ClusterManagerStack
+from idea.infrastructure.install.stacks.cluster_stack import ClusterStack
+from idea.infrastructure.install.stacks.identity_stack import IdentityStack
 from idea.infrastructure.install.stacks.res_base_stack import ResBaseStack
 from idea.infrastructure.install.stacks.res_finalizer_stack import ResFinalizerStack
-from idea.infrastructure.install.utils import InfraUtils
+from idea.infrastructure.install.stacks.shared_storage_stack import SharedStorageStack
+from idea.infrastructure.install.stacks.virtual_desktop_controller_stack import (
+    VirtualDesktopControllerStack,
+)
 
 PUBLIC_REGISTRY_NAME = (
     "public.ecr.aws/i4h1n0f0/idea-administrator:v3.0.0-pre-alpha-feature"
@@ -90,7 +95,7 @@ class InstallStack(Stack):
                     command=[
                         "bash",
                         "-c",
-                        "pip install -r requirements.txt -t /asset-output",
+                        "pip install -r requirements.txt --platform manylinux2014_x86_64 --only-binary=:all: --target /asset-output --upgrade",
                     ],
                     image=RES_COMMON_LAMBDA_RUNTIME.bundling_image,
                     output_type=aws_cdk.BundlingOutput.AUTO_DISCOVER,
@@ -159,16 +164,78 @@ class InstallStack(Stack):
         ecr_images_handler_lambda = self.create_ecr_images_handler()
         dependency_group.add(ecr_images_handler_lambda)
 
-        self.ad_sync_stack = ADSyncStack(
+        self.cluster_stack = ClusterStack(
             self,
             lambda_layer=self.lambda_layers[SHARED_RES_LIBRARY_LAMBDA_LAYER_NAME],
             parameters=parameters,
-            registry_name=self.get_private_registry_name(self.ad_sync_registry_name),
         )
-        self.ad_sync_stack.nested_stack.node.add_dependency(ecr_images_handler_lambda)
-        self.ad_sync_stack.nested_stack.node.add_dependency(
+        self.cluster_stack.nested_stack.node.add_dependency(
             self.res_base_stack.nested_stack
         )
+        dependency_group.add(self.cluster_stack.nested_stack)
+
+        self.identity_stack = IdentityStack(
+            self,
+            lambda_layer=self.lambda_layers[SHARED_RES_LIBRARY_LAMBDA_LAYER_NAME],
+            parameters=parameters,
+            cluster_stack=self.cluster_stack,
+            registry_name=self.get_private_registry_name(self.ad_sync_registry_name),
+            external_alb_dns_name=self.cluster_stack.external_alb.attr_dns_name,  # type: ignore[union-attr]
+        )
+        self.identity_stack.nested_stack.node.add_dependency(ecr_images_handler_lambda)
+        self.identity_stack.nested_stack.node.add_dependency(
+            self.cluster_stack.nested_stack
+        )
+        self.shared_storage_stack = SharedStorageStack(
+            self,
+            lambda_layer=self.lambda_layers[SHARED_RES_LIBRARY_LAMBDA_LAYER_NAME],
+            parameters=parameters,
+        )
+        self.shared_storage_stack.nested_stack.node.add_dependency(
+            self.cluster_stack.nested_stack
+        )
+        dependency_group.add(self.shared_storage_stack.nested_stack)
+
+        self.cluster_manager_stack = ClusterManagerStack(
+            self,
+            lambda_layer=self.lambda_layers[SHARED_RES_LIBRARY_LAMBDA_LAYER_NAME],
+            cluster_stack=self.cluster_stack,
+            identity_stack=self.identity_stack,
+            parameters=parameters,
+        )
+
+        self.cluster_manager_stack.nested_stack.node.add_dependency(
+            self.cluster_stack.nested_stack
+        )
+
+        self.cluster_manager_stack.nested_stack.node.add_dependency(
+            self.identity_stack.nested_stack
+        )
+
+        self.bastion_host_stack = BastionHostStack(
+            self,
+            self.lambda_layers[SHARED_RES_LIBRARY_LAMBDA_LAYER_NAME],
+            self.cluster_stack,
+            parameters=parameters,
+        )
+        self.bastion_host_stack.nested_stack.node.add_dependency(
+            self.cluster_stack.nested_stack
+        )
+        self.bastion_host_stack.nested_stack.node.add_dependency(
+            self.identity_stack.nested_stack
+        )
+
+        self.vdc_stack = VirtualDesktopControllerStack(
+            self,
+            lambda_layer=self.lambda_layers[SHARED_RES_LIBRARY_LAMBDA_LAYER_NAME],
+            cluster_stack=self.cluster_stack,
+            identity_stack=self.identity_stack,
+            parameters=parameters,
+        )
+
+        self.vdc_stack.nested_stack.node.add_dependency(self.cluster_stack.nested_stack)
+
+        dependency_group.add(self.cluster_manager_stack.nested_stack)
 
         self.bastionHostCleanup = BastionHostCleanup(
             self,
@@ -185,6 +252,7 @@ class InstallStack(Stack):
             dependency_group=dependency_group,
             lambda_layers=self.lambda_layers,
         )
+        self.installer.node.add_dependency(self.cluster_manager_stack)
 
         self.res_finalizer_stack = ResFinalizerStack(
             self,
@@ -193,6 +261,13 @@ class InstallStack(Stack):
         )
 
         self.res_finalizer_stack.nested_stack.node.add_dependency(self.installer)
+        self.res_finalizer_stack.nested_stack.node.add_dependency(
+            self.vdc_stack.nested_stack
+        )
+
+        self.vdc_stack.nested_stack.node.add_dependency(
+            self.cluster_manager_stack.nested_stack
+        )
         self.attach_permission_boundaries()
 
         self.apply_iam_resource_prefix = InfraUtils.create_iam_resource_prefix_applier(
@@ -240,9 +315,7 @@ class InstallStack(Stack):
                 },
             ),
             compatible_runtimes=[
-                RES_ADMINISTRATOR_LAMBDA_RUNTIME,
                 RES_COMMON_LAMBDA_RUNTIME,
-                RES_BACKEND_LAMBDA_RUNTIME,
             ],
             description="Shared RES library for Lambda functions",
         )

@@ -29,7 +29,7 @@ from ideadatamodel import exceptions
 from ideasdk.utils import Utils, ApiUtils
 
 '''
-This class is used to manage both roles and role assignments. Since both services lead to defining user authorization, 
+This class is used to manage both roles and role assignments. Since both services lead to defining user authorization,
 they are logged within the same context for easier debugging if needed.
 '''
 class AuthzAPI(BaseAPI):
@@ -37,8 +37,8 @@ class AuthzAPI(BaseAPI):
     def __init__(self, context: ideaclustermanager.AppContext):
         self.context = context
         self.logger = context.logger('authz')
-        self.SCOPE_WRITE = f'{self.context.module_id()}/write'
-        self.SCOPE_READ = f'{self.context.module_id()}/read'
+        self.SCOPE_WRITE = f'{self.context.cluster_name()}-{self.context.module_id()}/write'
+        self.SCOPE_READ = f'{self.context.cluster_name()}-{self.context.module_id()}/read'
 
         self.acl = {
             # ======== Role APIs ========
@@ -97,22 +97,22 @@ class AuthzAPI(BaseAPI):
         request = context.get_request_payload_as(ListRolesRequest)
         result = self.context.roles.list_roles(request)
         context.success(result)
-    
+
     def get_role(self, context: ApiInvocationContext):
         request = context.get_request_payload_as(GetRoleRequest)
         result = self.context.roles.get_role(request)
         context.success(result)
-    
+
     def create_role(self, context: ApiInvocationContext):
         request = context.get_request_payload_as(CreateRoleRequest)
         result = self.context.roles.create_role(request)
         context.success(result)
-    
+
     def delete_role(self, context: ApiInvocationContext):
         request = context.get_request_payload_as(DeleteRoleRequest)
         result = self.context.roles.delete_role(request)
         context.success(result)
-    
+
     def update_role(self, context: ApiInvocationContext):
         request = context.get_request_payload_as(UpdateRoleRequest)
         result = self.context.roles.update_role(request)
@@ -124,7 +124,7 @@ class AuthzAPI(BaseAPI):
         acl_entry = Utils.get_value_as_dict(namespace, self.acl)
         if acl_entry is None:
             raise exceptions.unauthorized_access()
-        
+
         acl_entry_scope = Utils.get_value_as_string('scope', acl_entry)
         is_authorized = context.is_authorized(elevated_access=True, scopes=[acl_entry_scope])
 
@@ -168,5 +168,5 @@ class AuthzAPI(BaseAPI):
             if not Utils.is_empty(projects_assigned.projects):
                 acl_entry['method'](context)
                 return
-        
+
         raise exceptions.unauthorized_access()

@@ -20,7 +20,6 @@ class ADAutomationDAO:
 
     def __init__(self, context: SocaContext):
         self.context = context
-        self.ad_automation_entry_ttl_seconds = context.config().get_int('directoryservice.ad_automation.entry_ttl_seconds', default=30 * 60)
         self.table = None
 
     def get_table_name(self) -> str:
@@ -29,15 +28,11 @@ class ADAutomationDAO:
     def initialize(self):
         self.table = self.context.aws().dynamodb_table().Table(self.get_table_name())
 
-    def create_ad_automation_entry(self, entry: Dict, ttl=None) -> Dict:
+    def create_ad_automation_entry(self, entry: Dict) -> Dict:
 
         instance_id = Utils.get_value_as_string('instance_id', entry)
         if Utils.is_empty(instance_id):
             raise exceptions.invalid_params('instance_id is required')
-
-        nonce = Utils.get_value_as_string('nonce', entry)
-        if Utils.is_empty(nonce):
-            raise exceptions.invalid_params('nonce is required')
 
         status = Utils.get_value_as_string('status', entry)
         if Utils.is_empty(status):
@@ -46,12 +41,8 @@ class ADAutomationDAO:
         if status not in ('success', 'fail'):
             raise exceptions.invalid_params('status must be one of [success, fail]')
 
-        if ttl is None:
-            ttl = Utils.current_time_ms() + (self.ad_automation_entry_ttl_seconds * 60 * 1000)
-
         created_entry = {
             **entry,
-            'ttl': ttl,
             'created_on': Utils.current_time_ms(),
             'updated_on': Utils.current_time_ms()
         }

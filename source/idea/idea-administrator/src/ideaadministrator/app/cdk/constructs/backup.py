@@ -39,7 +39,7 @@ class BackupPlan(SocaBaseConstruct):
         self.backup_plan_config = backup_plan_config
         self.backup_role = backup_role
 
-        super().__init__(context, name)
+        super().__init__(context, name, scope)
 
         self.backup_plan: Optional[backup.BackupPlan] = None
         self.backup_selection: Optional[backup.BackupSelection] = None

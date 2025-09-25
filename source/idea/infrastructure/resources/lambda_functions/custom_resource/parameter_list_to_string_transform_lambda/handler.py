@@ -51,9 +51,11 @@ def handler(event: Dict[str, Any], context: Dict[str, Any]) -> None:
             VDI_SUBNETS: vdi_subnets,
         }
     except Exception as e:
+        error_message = f"Failed to transform params from list to string: {str(e)}"
         response["Status"] = "FAILED"
-        response["Reason"] = "FAILED"
-        logger.error(f"Failed to transform params from list to string: {str(e)}")
+        response["Reason"] = error_message
+
+        logger.error(error_message)
     finally:
         _send_response(url=event["ResponseURL"], response=response)
 

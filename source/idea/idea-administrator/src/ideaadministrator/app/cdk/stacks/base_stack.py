@@ -9,10 +9,11 @@
 #  OR CONDITIONS OF ANY KIND, express or implied. See the License for the specific language governing permissions
 #  and limitations under the License.
 
+import ideaadministrator
 from ideaadministrator.app.cdk.constructs import (
-    SocaBaseConstruct,
     IAMResourcePrefixAspect,
-    IAMResourcePathAspect
+    IAMResourcePathAspect,
+    IdeaNagSuppression,
 )
 from ideadatamodel import constants, exceptions
 from ideaadministrator.app_context import AdministratorContext
@@ -27,9 +28,11 @@ from aws_cdk import (
 )
 
 from typing import Optional, Dict, List
+from cdk_nag import NagSuppressions
 
 
-class IdeaBaseStack(SocaBaseConstruct):
+# TODO: This class will be taken down after finishing moving stacks out of installer.
+class IdeaBaseStack(constructs.Construct):
 
     def __init__(self,
                  scope: constructs.Construct,
@@ -54,10 +57,14 @@ class IdeaBaseStack(SocaBaseConstruct):
         self.stack_name = self.context.get_stack_name(module_id)
         self.module_id = module_id
         self.aws_region = aws_region
+        self.cluster_name = cluster_name
         self.deployment_id = deployment_id
         self.account_id = env.account
+        self.release_version = ideaadministrator.__version__
+        self.iam_resource_prefix = self.context.config().get_string('cluster.iam.iam_resource_prefix', default="")
+        self.iam_resource_path = self.context.config().get_string('cluster.iam.iam_resource_path', default="/")
 
-        super().__init__(self.context, module_id)
+        super().__init__(scope, module_id)
 
         if tags is None:
             tags = {}
@@ -133,11 +140,6 @@ class IdeaBaseStack(SocaBaseConstruct):
             resource_type='Custom::ClusterSettings'
         )
 
-    def is_metrics_provider_amazon_managed_prometheus(self) -> bool:
-        metrics_provider = self.context.config().get_string('metrics.provider')
-        if Utils.is_empty(metrics_provider):
-            return False
-        return metrics_provider == constants.METRICS_PROVIDER_AMAZON_MANAGED_PROMETHEUS
 
     def get_ec2_instance_managed_policies(self) -> List[str]:
         ec2_managed_policies = [
@@ -146,9 +148,6 @@ class IdeaBaseStack(SocaBaseConstruct):
             # additionally, some modules and services might not support prometheus metrics and in that case, metrics will be available via cloudwatch
             self.context.config().get_string('cluster.iam.policies.cloud_watch_agent_server_arn', required=True),
         ]
-
-        if self.is_metrics_provider_amazon_managed_prometheus():
-            ec2_managed_policies.append(self.context.config().get_string('cluster.iam.policies.amazon_prometheus_remote_write_arn', required=True))
 
         ec2_managed_policy_arns = self.context.config().get_list('cluster.iam.ec2_managed_policy_arns', [])
         ec2_managed_policies += ec2_managed_policy_arns
@@ -164,3 +163,42 @@ class IdeaBaseStack(SocaBaseConstruct):
     def get_cdk_role_arn(self, role_name) -> str:
         return f"arn:{self.partition}:iam::{self.account_id}:role{self.iam_resource_path}{self.iam_resource_prefix}cdk-{self.cdk_toolkit_qualifier}-{role_name}-role-{self.aws_region}"
 
+    def add_common_tags(
+        self, construct: Optional[constructs.IConstruct] = None
+    ) -> None:
+        if construct is None:
+            construct = self
+        cdk.Tags.of(construct).add(constants.IDEA_TAG_NAME, f"{self.cluster_name}-{self.module_id}")
+        cdk.Tags.of(construct).add(
+            constants.IDEA_TAG_ENVIRONMENT_NAME, self.cluster_name
+        )
+
+    def add_nag_suppression(self, suppressions: List[IdeaNagSuppression], construct: constructs.IConstruct = None, apply_to_children: bool = False):
+        if construct is None:
+            construct = self
+        cdk_nag_suppressions = []
+        for suppression in suppressions:
+            cdk_nag_suppressions.append({
+                'id': suppression.rule_id,
+                'reason': suppression.reason
+            })
+        if isinstance(construct, cdk.Stack):
+            NagSuppressions.add_stack_suppressions(
+                stack=construct,
+                suppressions=cdk_nag_suppressions,
+                apply_to_nested_stacks=apply_to_children
+            )
+        else:
+            NagSuppressions.add_resource_suppressions(
+                construct=construct,
+                suppressions=cdk_nag_suppressions,
+                apply_to_children=apply_to_children
+        )
+
+    def build_instance_profile_arn(self, instance_profile_ref: str):
+        return f'arn:{self.partition}:iam::{self.account_id}:instance-profile{self.iam_resource_path}{instance_profile_ref}'
+
+    def get_kms_key_arn(self, key_id: str) -> str:
+        if key_id.startswith('arn:'):
+            return key_id
+        return f'arn:{self.partition}:kms:{self.aws_region}:{self.account_id}:key/{key_id}'

@@ -37,3 +37,8 @@ def run():
     current_time = str(int(time.time()))
     with open(WINDOWS_VDI_CONFIG_HOST_READY_LOCK, 'w') as f:
         f.write(current_time)
+    
+    logger.info("Finished running Post Reboot Configuration")
+    send_sqs_host_messages("DCV_HOST_READY_EVENT")
+    logger.info("Host ready event sent")
+    

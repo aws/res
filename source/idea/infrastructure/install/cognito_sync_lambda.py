@@ -14,11 +14,12 @@ from aws_cdk import custom_resources as cr
 from constructs import Construct
 
 from idea.batteries_included.parameters.parameters import BIParameters
-from idea.infrastructure.install import cognito_sync_handler, utils
+from idea.infrastructure.install import cognito_sync_handler
+from idea.infrastructure.install.constants import RES_COMMON_LAMBDA_RUNTIME
+from idea.infrastructure.install.infra_utils.utils import InfraUtils
 from idea.infrastructure.install.parameters.common import CommonKey
 from idea.infrastructure.install.parameters.internet_proxy import InternetProxyKey
 from idea.infrastructure.install.parameters.parameters import RESParameters
-from idea.infrastructure.install.utils import InfraUtils
 from ideadatamodel import SocaBaseModel, constants  # type: ignore
 
 cognito_sync_lambda_security_group_name = "cognito-sync-lambda-security-group"
@@ -131,7 +132,7 @@ class CognitoSyncLambda(Construct):
         cognito_sync_lambda = lambda_.Function(
             self,
             "cognito-sync",
-            runtime=lambda_.Runtime.PYTHON_3_11,
+            runtime=RES_COMMON_LAMBDA_RUNTIME,
             function_name=f"{cluster_name}_{cognito_sync_lambda_name}",
             role=execution_role,
             timeout=Duration.minutes(15),

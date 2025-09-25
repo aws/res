@@ -745,43 +745,9 @@ class EnabledModulesPrompt(DefaultPrompt[str]):
                 disabled=True
             ),
             SocaUserInputChoice(
-                title='Cluster (required)',
-                value=constants.MODULE_CLUSTER,
-                checked=True,
-                disabled=True
-            ),
-            SocaUserInputChoice(
-                title='Identity Provider (required)',
-                value=constants.MODULE_IDENTITY_PROVIDER,
-                checked=True,
-                disabled=True
-            ),
-            SocaUserInputChoice(
-                title='Directory Service (required)',
-                value=constants.MODULE_DIRECTORYSERVICE,
-                checked=True,
-                disabled=True
-            ),
-            SocaUserInputChoice(
-                title='Shared Storage (required)',
-                value=constants.MODULE_SHARED_STORAGE,
-                checked=True,
-                disabled=True
-            ),
-            SocaUserInputChoice(
-                title='Cluster Manager (required)',
-                value=constants.MODULE_CLUSTER_MANAGER,
-                checked=True,
-                disabled=True
-            ),
-            SocaUserInputChoice(
                 title='Enterprise Virtual Desktop Infrastructure (eVDI)',
                 value=constants.MODULE_VIRTUAL_DESKTOP_CONTROLLER
             ),
-            SocaUserInputChoice(
-                title='Bastion Host',
-                value=constants.MODULE_BASTION_HOST
-            )
         ]
         return result
 

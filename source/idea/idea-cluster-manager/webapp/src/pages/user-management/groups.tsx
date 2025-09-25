@@ -247,6 +247,7 @@ class Groups extends Component<GroupsProps, GroupsState> {
                         .client()
                         .accounts()
                         .listGroups({
+                            filters: this.getListing().getFilters(),
                             paginator: this.getListing().getPaginator(),
                         });
                 }}

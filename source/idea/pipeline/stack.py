@@ -53,7 +53,7 @@ COVERAGEREPORTS = ["coverage"]
 COMPONENT_INTEG_TESTS = ["integ-tests.cluster-manager"]
 SCANS = ["npm_audit", "bandit", "viperlight_scan"]
 PUBLICECRRepository = "public.ecr.aws/l6g7n3r5/research-engineering-studio"
-ONBOARDED_REGIONS = "ap-northeast-1,ap-northeast-2,ap-south-1,ap-southeast-1,ap-southeast-2,ca-central-1,eu-central-1,eu-north-1,eu-south-1,eu-west-1,eu-west-2,eu-west-3,us-east-1,us-east-2,us-west-1,us-west-2"
+ONBOARDED_REGIONS = "ap-northeast-1,ap-northeast-2,ap-northeast-3,ap-south-1,ap-southeast-1,ap-southeast-2,ca-central-1,eu-central-1,eu-north-1,eu-south-1,eu-west-1,eu-west-2,eu-west-3,sa-east-1,us-east-1,us-east-2,us-west-1,us-west-2"
 ONBOARDED_REGIONS_GOVCLOUD = "us-gov-west-1,us-gov-east-1"
 
 
@@ -265,7 +265,6 @@ class PipelineStack(Stack):
         audit_wave.add_post(*self.get_steps_from_tox(SCANS))
         unittest_wave = self._pipeline.add_wave("UnitTests")
         unittest_wave.add_post(*self.get_steps_for_unit_tests(UNIT_TESTS))
-
         coverage_wave = self._pipeline.add_wave("Coverage")
         coverage_wave.add_post(*self.get_steps_for_unit_tests(COVERAGEREPORTS))
 
@@ -496,11 +495,6 @@ class PipelineStack(Stack):
             IntegTestStepBuilder(
                 "integ-tests.smoke", self.params.cluster_name, self.region
             )
-            .test_specific_install_command(
-                *get_commands_for_scripts(
-                    ["source/idea/pipeline/scripts/chrome/install_commands.sh"]
-                )
-            )
             .test_specific_role_policy_statement(
                 iam.PolicyStatement.from_json(
                     {
@@ -593,6 +587,15 @@ class PipelineStack(Stack):
                             f"arn:{self.partition}:dynamodb:{self.region}:{self.account}:table/{self.params.cluster_name}.ad-sync.status",
                         ],
                     }
+                ),
+                iam.PolicyStatement.from_json(
+                    {
+                        "Effect": "Allow",
+                        "Action": [
+                            "lambda:InvokeFunction",
+                        ],
+                        "Resource": f"arn:{self.partition}:lambda:{self.region}:{self.account}:function:{self.params.cluster_name}_cognito-sync-lambda",
+                    },
                 ),
                 iam.PolicyStatement.from_json(
                     {

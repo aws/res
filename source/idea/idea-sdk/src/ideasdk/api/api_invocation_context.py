@@ -182,8 +182,8 @@ class ApiInvocationContext(ApiInvocationContextProtocol):
 
         # if any scope is granted to perform read/write operations for the module, return True
         # in the future, this can be refined further to create scopes per API, eg. <MODULE_ID>/<COMPONENT>-read
-        module_read_scope = f'{self._context.module_id()}/read'
-        module_write_scope = f'{self._context.module_id()}/write'
+        module_read_scope = f'{self._context.cluster_name()}-{self._context.module_id()}/read'
+        module_write_scope = f'{self._context.cluster_name()}-{self._context.module_id()}/write'
         for scope in authorization.scopes:
             if scope in (module_read_scope, module_write_scope):
                 return True
@@ -233,7 +233,7 @@ class ApiInvocationContext(ApiInvocationContextProtocol):
             return None
         authorization = self.get_authorization()
         return authorization.username
-    
+
     def get_user(self) -> Optional[User]:
         """
         get user using username from the JWT access token
@@ -325,7 +325,7 @@ class ApiInvocationContext(ApiInvocationContextProtocol):
     @property
     def request_id(self) -> str:
         return Utils.get_value_as_string('request_id', self.header)
-    
+
     @property
     def request_payload(self) -> Dict:
         return Utils.get_value_as_dict('payload', self.request, default={})

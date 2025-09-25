@@ -10,6 +10,8 @@ import sys
 from unittest.mock import Mock, mock_open, call
 import re
 
+from typing import Any
+
 from res.resources import cluster_settings
 import res.constants as res_constants
 
@@ -94,6 +96,13 @@ def test_cognito_modules_configure(monkeypatch, base_os, setup_function, tmp_pat
     monkeypatch.setattr("ideabootstrap.common.cognito_modules.set_reboot_required", mock_set_reboot_required)
     monkeypatch.setattr("subprocess.run", mock_subprocess_run)
 
+    def mock_get_setting(setting: str) -> Any:
+        if setting == "identity-provider.cognito.enable_native_user_login":
+            return True
+        else:
+            return ""
+    monkeypatch.setattr(cluster_settings, "get_setting", mock_get_setting)
+
     configure()
 
     if base_os == "ubuntu2204" or base_os == "ubuntu2404" :
@@ -106,7 +115,36 @@ def test_cognito_modules_configure(monkeypatch, base_os, setup_function, tmp_pat
     mock_setup_config.assert_called_once()
     mock_setup_nss.assert_called_once()
     mock_start_nscd.assert_called_once()
-    mock_set_reboot_required.assert_called_once_with("Reboot required for DCV connection to Cognito")
+
+
+@pytest.mark.parametrize(
+    "base_os, setup_function",
+    [
+        ("ubuntu2204", "_setup_pam_config_file_ubuntu"),
+        ("amzn2", "_setup_pam_config_file_redhat_distros"),
+    ],
+)
+def test_cognito_modules_native_user_login_disabled_skip_configure(monkeypatch, base_os, setup_function, tmp_path):
+    from ideabootstrap.common.cognito_modules import configure
+
+    monkeypatch.setenv('RES_BASE_OS', base_os)
+
+    mock_setup_ubuntu = Mock()
+    mock_setup_redhat = Mock()
+    monkeypatch.setattr("ideabootstrap.common.cognito_modules._setup_pam_config_file_ubuntu", mock_setup_ubuntu)
+    monkeypatch.setattr("ideabootstrap.common.cognito_modules._setup_pam_config_file_redhat_distros", mock_setup_redhat)
+
+    def mock_get_setting(setting: str) -> Any:
+        if setting == "identity-provider.cognito.enable_native_user_login":
+            return False
+        else:
+            return ""
+    monkeypatch.setattr(cluster_settings, "get_setting", mock_get_setting)
+
+    configure()
+
+    mock_setup_ubuntu.assert_not_called()
+    mock_setup_redhat.assert_not_called()
 
 
 def test_modify_pam_file_line_already_exists(monkeypatch) -> None:

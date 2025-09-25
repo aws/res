@@ -2,10 +2,6 @@ module_sets:
   default:
     cluster:
       module_id: cluster
-    identity-provider:
-      module_id: identity-provider
-    directoryservice:
-      module_id: directoryservice
     shared-storage:
       module_id: shared-storage
     cluster-manager:
@@ -600,6 +596,7 @@ gpu_settings:
     g5g: *production_version
     g6: *production_version
     g6e: *production_version
+    g6f: *production_version
     gr6: *production_version
     p3: *production_version
     p4d: *production_version

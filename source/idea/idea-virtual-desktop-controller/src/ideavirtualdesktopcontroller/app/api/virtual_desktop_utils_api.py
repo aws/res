@@ -39,7 +39,7 @@ class VirtualDesktopUtilsAPI(VirtualDesktopAPI):
         super().__init__(context)
         self.context = context
         self._logger = context.logger('virtual-desktop-utils-api')
-        self.SCOPE_READ = f'{self.context.module_id()}/read'
+        self.SCOPE_READ = f'{self.context.cluster_name()}-{self.context.module_id()}/read'
 
         self.acl = {
             'VirtualDesktopUtils.ListSupportedOS': {
@@ -173,7 +173,7 @@ class VirtualDesktopUtilsAPI(VirtualDesktopAPI):
             return
 
         image_description = self.controller_utils.describe_image_id(request.software_stack.ami_id)
-        if image_description is None or image_description.get('ImageId') != request.software_stack.ami_id:
+        if not image_description:
             context.fail(
                 message=f'Invalid software_stack.ami_id: {request.software_stack.ami_id}',
                 payload=ListAllowedInstanceTypesResponse(listing=[]),

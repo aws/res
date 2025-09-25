@@ -1,13 +1,14 @@
 #  Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 #  SPDX-License-Identifier: Apache-2.0
 
+import random
 from typing import Any, Dict, List, Tuple
 
 import boto3
 import res.exceptions as exceptions
 from res.clients.dcv_broker import dcv_broker_client
 from res.clients.events import events_client
-from res.resources import schedules
+from res.resources import ad_automation, schedules
 from res.resources import servers as server_db
 from res.resources import session_permissions
 from res.resources import sessions as user_sessions
@@ -205,6 +206,10 @@ def terminate_sessions(sessions: List[Dict[str, Any]]):
         servers_to_delete.append(session.get("server"))
 
     terminate_servers(servers_to_delete)
+
+    ad_automation.remove_ad_authorization(
+        [server["instance_id"] for server in servers_to_delete]
+    )
 
     for session in session_db_entries_to_delete:
         delete_schedule_for_session(session)

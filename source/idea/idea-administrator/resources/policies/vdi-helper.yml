@@ -45,6 +45,7 @@ Statement:
       - sqs:SendMessage
     Resource:
       - '{{ context.arns.get_sqs_arn("vdc") + "-events.fifo" }}'
+      - '{{ context.arns.get_sqs_arn("ad-automation.fifo") }}'
     Effect: Allow
 
   - Action:

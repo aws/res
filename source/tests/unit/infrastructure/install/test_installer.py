@@ -3,6 +3,7 @@
 
 from aws_cdk.assertions import Match, Template
 
+from idea.infrastructure.install.constants import RES_COMMON_LAMBDA_RUNTIME
 from idea.infrastructure.install.handlers import installer_handlers
 from idea.infrastructure.install.parameters.common import CommonKey
 from idea.infrastructure.install.stacks.install_stack import InstallStack
@@ -21,7 +22,7 @@ def test_installer_event_handler_lambda_creation(
         props={
             "Properties": {
                 "Description": "Lambda to handle the CFN custom resource events",
-                "Runtime": "python3.11",
+                "Runtime": RES_COMMON_LAMBDA_RUNTIME.name,
                 "Handler": "installer_handlers.handle_custom_resource_lifecycle_event",
                 "Environment": {
                     "Variables": {
@@ -49,7 +50,7 @@ def test_installer_wait_condition_lambda_creation(
         props={
             "Properties": {
                 "Description": "Lambda to send response using the wait condition callback",
-                "Runtime": "python3.11",
+                "Runtime": RES_COMMON_LAMBDA_RUNTIME.name,
                 "Handler": "installer_handlers.send_wait_condition_response",
             }
         },

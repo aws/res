@@ -18,6 +18,7 @@ REGIONAL_TIMEZONE_CONFIG = os.path.join(
 DEFAULT_EMAIL_TEMPLATES_CONFIG_PATH = os.path.join(
     RESOURCE_DIR, "config", "email_templates.yml"
 )
+DEFAULT_ROLES_CONFIG_PATH = os.path.join(RESOURCE_DIR, "config", "roles.yml")
 REGIONAL_AMI_CONFIG = os.path.join(RESOURCE_DIR, "config", "region_ami_config.yml")
 REGION_ELB_ACCOUNT_ID_CONFIG = os.path.join(
     RESOURCE_DIR, "config", "region_elb_account_id.yml"

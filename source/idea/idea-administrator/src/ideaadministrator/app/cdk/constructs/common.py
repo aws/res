@@ -66,7 +66,7 @@ class LambdaFunction(SocaBaseConstruct, lambda_.Function):
                  handler: str = None,
                  description: str = None,
                  memory_size: int = 128,
-                 runtime: lambda_.Runtime = lambda_.Runtime.PYTHON_3_9,
+                 runtime: lambda_.Runtime = lambda_.Runtime.PYTHON_3_12,
                  timeout_seconds: int = 60,
                  vpc: Optional[IVpc] = None,
                  security_groups: Optional[List[ISecurityGroup]] = None,
@@ -264,7 +264,6 @@ class InstanceProfile(SocaBaseConstruct, iam.CfnInstanceProfile):
     def __init__(self, context: AdministratorContext, name: str, scope: constructs.Construct,
                  roles: List[iam.Role]):
         self.context = context
-        # path = self.context.config().get_string('cluster.iam.iam_resource_path', default="/")
         instance_profile_name = self.build_resource_name(name, region_suffix=False)
 
         role_names = []
@@ -282,11 +281,11 @@ class CustomResource(SocaBaseConstruct):
                  policy_template_name: Optional[str] = None,
                  removal_policy: Optional[cdk.RemovalPolicy] = None,
                  resource_type: Optional[str] = None,
-                 runtime: lambda_.Runtime = lambda_.Runtime.PYTHON_3_9,
+                 runtime: lambda_.Runtime = lambda_.Runtime.PYTHON_3_12,
                  lambda_timeout_seconds: int = 60,
                  lambda_log_retention_role: Optional[iam.IRole] = None):
 
-        super().__init__(context, name)
+        super().__init__(context, name, scope)
         self.scope = scope
         self.idea_code_asset = idea_code_asset
         self.policy_template_name = policy_template_name
@@ -589,7 +588,7 @@ class Output(SocaBaseConstruct):
 
     def __init__(self, context: AdministratorContext, name: str, scope: constructs.Construct,
                  value_ref: Any, description: str = None, export_name=None):
-        super().__init__(context, name)
+        super().__init__(context, name, scope)
         self.output = cdk.CfnOutput(
             scope,
             name,

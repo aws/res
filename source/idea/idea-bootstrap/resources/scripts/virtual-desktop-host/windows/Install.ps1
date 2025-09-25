@@ -28,13 +28,13 @@ function Install-Python {
   $PythonInstalled = Check-Python-Installed
 
   if(!$PythonInstalled){
-    Start-Job -Name PythonWebReq -ScriptBlock { Invoke-WebRequest -uri https://www.python.org/ftp/python/3.11.0/python-3.11.0-amd64.exe -OutFile C:\Windows\Temp\Python3.11.0.exe }
+    Start-Job -Name PythonWebReq -ScriptBlock { Invoke-WebRequest -uri https://www.python.org/ftp/python/3.12.10/python-3.12.10-amd64.exe -OutFile C:\Windows\Temp\Python3.12.10.exe }
     Wait-Job -Name PythonWebReq
 
-    Invoke-Command -ScriptBlock {Start-Process "C:\Windows\Temp\Python3.11.0.exe" -ArgumentList "/quiet InstallAllUsers=1 PrependPath=1" -Wait}
+    Invoke-Command -ScriptBlock {Start-Process "C:\Windows\Temp\Python3.12.10.exe" -ArgumentList "/quiet InstallAllUsers=1 PrependPath=1" -Wait}
 
     $oldPath = [Environment]::GetEnvironmentVariable("Path")
-    $newPythonPath = "C:\Program Files\Python311\Scripts\;C:\Program Files\Python311"
+    $newPythonPath = "C:\Program Files\Python312\Scripts\;C:\Program Files\Python312"
     $newPath = "$newPythonPath;$oldPath"
 
     [Environment]::SetEnvironmentVariable("Path", $newPath)
@@ -51,6 +51,7 @@ function Install-Python-Requirements {
   {
     pip install -r $env:SystemDrive\Users\Administrator\RES\Bootstrap\requirements.txt
   }
+  pip install --upgrade setuptools
 }
 
 function Install-NiceDCV {
@@ -133,6 +134,7 @@ function Install-CloudwatchAgent {
 function Install-NVIDIAGPUDriver {
   Param(
     [string]$OSVersion,
+    [string]$InstanceFamily,
     [switch]$Update
   )
   $ExistingDriver = Get-WmiObject Win32_VideoController | Where-Object { $_.Name -like "*NVIDIA*" } | Select-Object Name, DriverVersion, Status
@@ -151,8 +153,14 @@ function Install-NVIDIAGPUDriver {
       $Key = ($Objects | where { $_.Key -like 'grid-16*' } | Sort-Object -Property LastModified -Descending)[0].Key
     }
     elseif($OSVersion -eq "2022") {
-      Write-Host "NVIDIA GPU detected. Pulling latest GRID version."
-      $Key = ($Objects | where { $_.Key -like 'latest*' } | Sort-Object -Property LastModified -Descending)[0].Key
+      if ($InstanceFamily -eq "g6f") {
+        Write-Host "NVIDIA GPU detected. Pulling GRID version < v19"
+        $Key = ($Objects | where { $_.Key -like 'grid-18*' } | Sort-Object -Property LastModified -Descending)[0].Key
+      }
+      else {
+        Write-Host "NVIDIA GPU detected. Pulling latest GRID version."
+        $Key = ($Objects | where { $_.Key -like 'latest*' } | Sort-Object -Property LastModified -Descending)[0].Key
+      }
     }
     else {
       Write-Host "NVIDIA drivers not found for your OS version. Skipping.."
@@ -222,8 +230,8 @@ function Install-GPUDriver {
   # refer to: https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/install-nvidia-driver.html
   # Available drivers by instance type for Grid mapping.
   switch ($InstanceFamily) {
-    { "g6", "gr6", "g6e", "g5", "g4dn", "g3", "g3s" -contains $_ } {
-      Install-NVIDIAGPUDriver -OSVersion $OSVersion -Update:$Update
+    { "g6", "gr6", "g6e", "g6f", "g5", "g4dn", "g3", "g3s" -contains $_ } {
+      Install-NVIDIAGPUDriver -InstanceFamily $InstanceFamily -OSVersion $OSVersion -Update:$Update
     }
     "g4ad" {
       Install-AMDGPUDriver -OSVersion $OSVersion -Update:$Update

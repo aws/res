@@ -7,6 +7,7 @@ from unittest.mock import MagicMock, Mock
 
 import boto3
 import pytest
+from botocore.exceptions import ClientError
 from moto import mock_aws
 from requests import patch
 from res.constants import (  # type: ignore
@@ -45,7 +46,7 @@ class TestDDBFinalValuesPoplulatorLambda(TestCase):
 
     def mock_dependencies(self, mock_cfn_response_send, mock_cognito_client):
 
-        self.monkeypatch.setattr(handler, "_send_response", mock_cfn_response_send)
+        self.monkeypatch.setattr(handler, "send_response", mock_cfn_response_send)
 
         self.monkeypatch.setattr(
             boto3, "client", MagicMock(return_value=mock_cognito_client)
@@ -73,6 +74,13 @@ class TestDDBFinalValuesPoplulatorLambda(TestCase):
         mock_cognito_client.admin_create_user.return_value = {
             "User": {"UserStatus": "status"}
         }
+        error_response = {
+            "Error": {
+                "Code": "UserNotFoundException",
+            }
+        }
+        mock_error = ClientError(error_response, "AdminGetUser")
+        mock_cognito_client.admin_get_user.side_effect = mock_error
         self.mock_dependencies(mock_cfn_response_send, mock_cognito_client)
         handler.handler(event, {})
         response = handler.CustomResourceResponse(
@@ -82,6 +90,7 @@ class TestDDBFinalValuesPoplulatorLambda(TestCase):
             StackId="",
             RequestId="",
             LogicalResourceId="",
+            Data={},
         )
         mock_cognito_client.admin_create_user.assert_called_once_with(
             **{

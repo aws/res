@@ -15,6 +15,8 @@ from ideadatamodel import exceptions, errorcodes, constants, CustomFileLoggerPar
 from ideasdk.utils import Utils, EnvironmentUtils
 from ideasdk.protocols import SocaLoggingProtocol
 
+from res.utils.logging_utils import LOGGING_HANDLER_LOCK
+
 import logging
 import logging.handlers
 import os
@@ -146,18 +148,19 @@ class SocaLogging(SocaLoggingProtocol):
             log_dir = self.get_log_dir()
             logfile = os.path.join(log_dir, filename)
 
-            if logfile in self._file_handlers:
-                return self._file_handlers[logfile]
-            else:
-                file_handler = logging.handlers.TimedRotatingFileHandler(
-                    filename=logfile,
-                    encoding=constants.DEFAULT_ENCODING,
-                    when=handler_config['when'],
-                    interval=int(handler_config['interval']),
-                    backupCount=int(handler_config['backupCount'])
-                )
-                self._file_handlers[logfile] = file_handler
-                return file_handler
+            with LOGGING_HANDLER_LOCK:
+                if logfile in self._file_handlers:
+                    return self._file_handlers[logfile]
+                else:
+                    file_handler = logging.handlers.TimedRotatingFileHandler(
+                        filename=logfile,
+                        encoding=constants.DEFAULT_ENCODING,
+                        when=handler_config['when'],
+                        interval=int(handler_config['interval']),
+                        backupCount=int(handler_config['backupCount'])
+                    )
+                    self._file_handlers[logfile] = file_handler
+                    return file_handler
         else:
             raise exceptions.SocaException(
                 error_code=errorcodes.CONFIG_ERROR,
@@ -264,17 +267,18 @@ class SocaLogging(SocaLoggingProtocol):
             os.makedirs(log_dir)
         logfile = os.path.join(log_dir, params.log_file_name)
 
-        if logfile in self._file_handlers:
-            file_handler = self._file_handlers[logfile]
-        else:
-            file_handler = logging.handlers.TimedRotatingFileHandler(
-                filename=logfile,
-                encoding=constants.DEFAULT_ENCODING,
-                when=params.when,
-                interval=params.interval,
-                backupCount=params.backupCount
-            )
-            self._file_handlers[logfile] = file_handler
+        with LOGGING_HANDLER_LOCK:
+            if logfile in self._file_handlers:
+                file_handler = self._file_handlers[logfile]
+            else:
+                file_handler = logging.handlers.TimedRotatingFileHandler(
+                    filename=logfile,
+                    encoding=constants.DEFAULT_ENCODING,
+                    when=params.when,
+                    interval=params.interval,
+                    backupCount=params.backupCount
+                )
+                self._file_handlers[logfile] = file_handler
 
         file_handler.setLevel(log_level)
         file_handler.setFormatter(logging.Formatter(fmt=fmt))

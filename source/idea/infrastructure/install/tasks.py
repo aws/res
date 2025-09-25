@@ -7,7 +7,6 @@ import aws_cdk
 from aws_cdk import aws_ec2 as ec2
 from aws_cdk import aws_ecs as ecs
 from aws_cdk import aws_iam as iam
-from aws_cdk import aws_lambda as lambda_
 from aws_cdk import aws_stepfunctions as sfn
 from aws_cdk import aws_stepfunctions_tasks as sfn_tasks
 from constructs import Construct, DependencyGroup
@@ -16,10 +15,10 @@ from idea.batteries_included.parameters.parameters import BIParameters
 from idea.infrastructure.install.commands import create
 from idea.infrastructure.install.constants import RES_COMMON_LAMBDA_RUNTIME
 from idea.infrastructure.install.handlers import installer_handlers
+from idea.infrastructure.install.infra_utils.utils import InfraUtils
 from idea.infrastructure.install.parameters.common import CommonKey
 from idea.infrastructure.install.parameters.parameters import RESParameters
 from idea.infrastructure.install.permissions import Permissions
-from idea.infrastructure.install.utils import InfraUtils
 
 
 class TaskEnvironment(TypedDict):
@@ -160,54 +159,6 @@ class Tasks(Construct):
                 ":repository/",
                 repository_name,
             ],
-        )
-
-    def get_cognito_user_pool_unprotect_task(self) -> sfn_tasks.LambdaInvoke:
-        unprotect_cognito_user_pool_lambda_task = lambda_.Function(
-            self,
-            "UnprotectCognitoUserPoolLambda",
-            runtime=RES_COMMON_LAMBDA_RUNTIME,
-            timeout=aws_cdk.Duration.minutes(2),
-            description="Lambda to unprotect Cognito user pool",
-            **InfraUtils.get_handler_and_code_for_function(
-                installer_handlers.unprotect_cognito_user_pool
-            ),
-        )
-        unprotect_cognito_user_pool_lambda_task.add_to_role_policy(
-            iam.PolicyStatement(
-                effect=iam.Effect.ALLOW,
-                actions=["cognito-idp:ListUserPools"],
-                resources=["*"],
-            )
-        )
-        user_pool_arn_pattern = aws_cdk.Fn.join(
-            "",
-            [
-                "arn:",
-                aws_cdk.Aws.PARTITION,
-                ":cognito-idp:",
-                aws_cdk.Aws.REGION,
-                ":",
-                aws_cdk.Aws.ACCOUNT_ID,
-                ":userpool/*",
-            ],
-        )
-        unprotect_cognito_user_pool_lambda_task.add_to_role_policy(
-            iam.PolicyStatement(
-                effect=iam.Effect.ALLOW,
-                actions=[
-                    "cognito-idp:DescribeUserPool",
-                    "cognito-idp:UpdateUserPool",
-                ],
-                resources=[user_pool_arn_pattern],
-            )
-        )
-        return sfn_tasks.LambdaInvoke(
-            self,
-            "UnprotectCognitoUserPool",
-            lambda_function=unprotect_cognito_user_pool_lambda_task,
-            payload_response_only=True,
-            result_path=f"$.{installer_handlers.EnvKeys.RESULT}",
         )
 
     def get_task(

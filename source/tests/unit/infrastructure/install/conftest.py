@@ -10,7 +10,7 @@ from aws_cdk.assertions import Template
 
 from idea.infrastructure.install.installer import Installer
 from idea.infrastructure.install.parameters.parameters import RESParameters
-from idea.infrastructure.install.stacks.ad_sync_stack import ADSyncStack
+from idea.infrastructure.install.stacks.identity_stack import IdentityStack
 from idea.infrastructure.install.stacks.install_stack import InstallStack
 from idea.infrastructure.install.stacks.res_base_stack import ResBaseStack
 from idea.infrastructure.install.stacks.res_finalizer_stack import ResFinalizerStack
@@ -80,13 +80,13 @@ def res_base_template(res_base_stack: ResBaseStack) -> Template:
 
 
 @pytest.fixture(scope="session")
-def ad_sync_stack(stack: InstallStack) -> ADSyncStack:
-    return stack.ad_sync_stack
+def identity_stack(stack: InstallStack) -> IdentityStack:
+    return stack.identity_stack
 
 
 @pytest.fixture(scope="session")
-def ad_sync_template(ad_sync_stack: ADSyncStack) -> Template:
-    return assertions.Template.from_stack(ad_sync_stack.nested_stack)
+def identity_template(identity_stack: IdentityStack) -> Template:
+    return assertions.Template.from_stack(identity_stack.nested_stack)
 
 
 @pytest.fixture(scope="session")

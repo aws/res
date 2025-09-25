@@ -62,4 +62,4 @@ def configure() -> None:
 
         logger.info(f"PAM module triggered for user {username}")
     except Exception as e:
-        logger.error(f"Failed to trigger PAM module for user {username}")
+        logger.error(f"Failed to trigger PAM module for user {username}: {e}")

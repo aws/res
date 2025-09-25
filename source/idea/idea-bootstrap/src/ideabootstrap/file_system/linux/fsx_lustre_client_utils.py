@@ -45,7 +45,7 @@ def tune_fsx_lustre_pre_reboot() -> None:
         _append_to_modprobe("options ptlrpc ptlrpcd_per_cpt_max=32")
         _append_to_modprobe("options ksocklnd credits=2560")
 
-    bootstrap_common.set_reboot_required("Lustre client tuning applied pre reboot")
+        bootstrap_common.set_reboot_required("Lustre client tuning applied pre reboot")
 
 
 def _lctl_set_param(param: str, value: str) -> None:

@@ -130,6 +130,7 @@ def cdk_nag_scan(c, cluster_name, aws_region, aws_profile=None, module_name=None
 
     ignore_modules = [
         constants.MODULE_BOOTSTRAP,
+        constants.MODULE_CLUSTER,
         constants.MODULE_GLOBAL_SETTINGS
     ]
 
@@ -158,7 +159,7 @@ def cdk_nag_scan(c, cluster_name, aws_region, aws_profile=None, module_name=None
             if current_module_name != module_name:
                 continue
 
-        if current_module_name != constants.MODULE_CLUSTER and not cluster_deployed:
+        if not cluster_deployed:
             continue
 
         module_id = cluster_config.get_module_id(current_module_name)

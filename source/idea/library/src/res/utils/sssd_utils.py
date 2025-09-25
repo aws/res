@@ -48,6 +48,7 @@ RESERVED_SSSD_KEYS = [
     "ldap_uri",
     "ldap_search_base",
     "ldap_default_bind_dn",
+    "ldap_default_authtok",
 ]
 
 LDAP_CONFIG_TEMPLATE = Template(
@@ -164,6 +165,9 @@ OPEN_LDAP_DIR = (
 TLS_CA_CERT_DIR = f"{OPEN_LDAP_DIR}cacerts/"
 TLS_CA_CERT_FILE_PATH = f"{TLS_CA_CERT_DIR}openldap-server.pem"
 
+SSSD_DIR = "/etc/sssd"
+SSSD_FILE_PATH = f"{SSSD_DIR}/sssd.conf"
+
 logger = logging_utils.get_logger("sssd")
 
 
@@ -251,8 +255,6 @@ def _configure_sssd(sssd_settings: Dict[str, str]) -> None:
 def _construct_sssd_configs(
     sssd_settings: Dict[str, str],
 ) -> None:
-    sssd_dir = "/etc/sssd"
-    sssd_file_path = f"{sssd_dir}/sssd.conf"
     disable_ad_join = (
         cluster_settings.get_setting(DISABLE_AD_JOIN_KEY) == "true"
         or os.environ.get("IDEA_MODULE_NAME") != MODULE_NAME_VIRTUAL_DESKTOP_APP
@@ -261,10 +263,10 @@ def _construct_sssd_configs(
 
     sasl_authid_key = "ldap_sasl_authid"
     if not disable_ad_join:
-        if is_in_active_directory() and os.path.exists(sssd_file_path):
+        if is_in_active_directory() and os.path.exists(SSSD_FILE_PATH):
             # Keep the special dynamic field ldap_sasl_authid from the old SSSD config if current host is joining AD
             config_origin = configparser.ConfigParser()
-            config_origin.read(sssd_file_path)
+            config_origin.read(SSSD_FILE_PATH)
             sssd_settings[sasl_authid_key] = config_origin[domain_section].get(
                 sasl_authid_key
             )
@@ -289,12 +291,12 @@ def _construct_sssd_configs(
     for key, value in additional_sssd_configs.items():
         config_override[domain_section][key] = value
 
-    Path(sssd_dir).mkdir(parents=True, exist_ok=True)
-    with open(sssd_file_path, "w") as configfile:
+    Path(SSSD_DIR).mkdir(parents=True, exist_ok=True)
+    with open(SSSD_FILE_PATH, "w") as configfile:
 
         config_override.write(configfile)
 
-    os.chmod(sssd_file_path, 0o600)
+    os.chmod(SSSD_FILE_PATH, 0o600)
 
     if disable_ad_join:
         service_account_credentials_secret = json.loads(

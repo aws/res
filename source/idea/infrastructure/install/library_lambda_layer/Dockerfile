@@ -18,6 +18,8 @@ RUN cd ${HOME}/.pyenv && src/configure && make -C src
 
 ENV PYENV_ROOT="${HOME}/.pyenv"
 ENV PATH="${PYENV_ROOT}/shims:${PYENV_ROOT}/bin:${PATH}"
+RUN eval "$(pyenv init --path)"
+RUN eval "$(pyenv init -)"
 
 # Python path for lambda layer as specified in the docs
 # https://docs.aws.amazon.com/lambda/latest/dg/python-layers.html#python-layer-paths
@@ -29,22 +31,22 @@ ENV PYTHON_VERSION=3.9
 RUN pyenv install ${PYTHON_VERSION}
 RUN pyenv global ${PYTHON_VERSION}
 
-RUN pip install -r ${LIBRARY_REQUIREMENTS_FILE} --prefix=/asset/python
-RUN pip install ${LIBRARY_TAR_FILE} --prefix=/asset/python
+RUN pip install -r ${LIBRARY_REQUIREMENTS_FILE} --platform manylinux2014_x86_64 --only-binary=:all: --target /asset/python --upgrade
+RUN pip install ${LIBRARY_TAR_FILE} --target /asset/python
 RUN rm -rf /asset/python/bin || true
 
 ENV PYTHON_VERSION=3.11
 RUN pyenv install ${PYTHON_VERSION}
 RUN pyenv global ${PYTHON_VERSION}
 
-RUN pip install -r ${LIBRARY_REQUIREMENTS_FILE} --prefix=/asset/python
-RUN pip install ${LIBRARY_TAR_FILE} --prefix=/asset/python
+RUN pip install -r ${LIBRARY_REQUIREMENTS_FILE} --platform manylinux2014_x86_64 --only-binary=:all: --target /asset/python --upgrade
+RUN pip install ${LIBRARY_TAR_FILE} --target /asset/python
 RUN rm -rf /asset/python/bin || true
 
 ENV PYTHON_VERSION=3.12
 RUN pyenv install ${PYTHON_VERSION}
 RUN pyenv global ${PYTHON_VERSION}
 
-RUN pip install -r ${LIBRARY_REQUIREMENTS_FILE} --prefix=/asset/python
-RUN pip install ${LIBRARY_TAR_FILE} --prefix=/asset/python
+RUN pip install -r ${LIBRARY_REQUIREMENTS_FILE} --platform manylinux2014_x86_64 --only-binary=:all: --target /asset/python --upgrade
+RUN pip install ${LIBRARY_TAR_FILE} --target /asset/python
 RUN rm -rf /asset/python/bin || true

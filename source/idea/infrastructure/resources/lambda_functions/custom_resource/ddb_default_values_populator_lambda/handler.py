@@ -1,25 +1,30 @@
 #  Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 #  SPDX-License-Identifier: Apache-2.0
 
-import json
 import logging
 import os
-from typing import Any, Dict, List, Optional, Tuple, TypedDict
-from urllib.request import Request, urlopen
+import uuid
+from typing import Any, Dict, List, Optional, Tuple
 
 import yaml
 from res.constants import DEFAULT_REGION_KEY  # type: ignore
 from res.resources import cluster_settings  # type: ignore
 from res.resources import email_templates  # type: ignore
 from res.resources import permission_profiles  # type: ignore
+from res.resources import roles  # type: ignore
 from res.resources import software_stacks  # type: ignore
 from res.resources import modules as modules_db
 from res.utils import jinja2_utils  # type: ignore
+from res.utils.custom_resource_utils import (  # type: ignore
+    CustomResourceResponse,
+    send_response,
+)
 
 from .constants import (
     BASE_PERMISSION_PROFILE_CONFIG_PATH,
     BASE_SOFTWARE_STACK_CONFIG_PATH,
     DEFAULT_EMAIL_TEMPLATES_CONFIG_PATH,
+    DEFAULT_ROLES_CONFIG_PATH,
     REGION_ELB_ACCOUNT_ID_CONFIG,
     TEMPLATES_DIR,
 )
@@ -27,16 +32,6 @@ from .utils import get_parameters_for_templates
 
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
-
-
-class CustomResourceResponse(TypedDict):
-    # https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/crpg-ref-responses.html
-    Status: str
-    Reason: str
-    PhysicalResourceId: str
-    StackId: str
-    RequestId: str
-    LogicalResourceId: str
 
 
 def handler(event: Dict[str, Any], context: Dict[str, Any]) -> None:
@@ -48,6 +43,7 @@ def handler(event: Dict[str, Any], context: Dict[str, Any]) -> None:
         StackId=event.get("StackId", ""),
         RequestId=event.get("RequestId", ""),
         LogicalResourceId=event.get("LogicalResourceId", ""),
+        Data={},
     )
     aws_region = os.environ.get(DEFAULT_REGION_KEY)
     aws_partition = os.environ.get("aws_partition")
@@ -59,6 +55,7 @@ def handler(event: Dict[str, Any], context: Dict[str, Any]) -> None:
             _populate_default_software_stacks()
             _populate_default_permission_profiles()
             _populate_default_email_templates()
+            _populate_default_roles()
         elif event["RequestType"] == "Update":
             _initialize_dynamic_settings()
         with open(REGION_ELB_ACCOUNT_ID_CONFIG, "r") as f:
@@ -75,20 +72,13 @@ def handler(event: Dict[str, Any], context: Dict[str, Any]) -> None:
             "elb_principal_value": elb_principal_value,
         }
     except Exception as e:
+        error_message = f"Failed to populate default values: {str(e)}"
         response["Status"] = "FAILED"
-        response["Reason"] = "FAILED"
-        logger.error(f"Failed to populate default values: {str(e)}")
+        response["Reason"] = error_message
+
+        logger.error(error_message)
     finally:
-        _send_response(url=event["ResponseURL"], response=response)
-
-
-def _send_response(url: str, response: CustomResourceResponse) -> None:
-    request = Request(
-        method="PUT",
-        url=url,
-        data=json.dumps(response).encode("utf-8"),
-    )
-    urlopen(request)
+        send_response(url=event["ResponseURL"], response=response)
 
 
 def _get_modules_cluster_settings() -> (
@@ -143,6 +133,9 @@ def _initialize_modules_cluster_settings() -> None:
     # Get base cluster settings
     settings, modules = _get_modules_cluster_settings()
     settings = {entries["key"]: entries["value"] for entries in settings}  # type: ignore
+    # Note: Add random-uuid record to be used for cognito domain prefix
+    # Cannot be generated within CDK code since it needs to be unique per environment
+    settings["cluster.random-uuid"] = str(uuid.uuid4())
 
     # Add base cluster settings to table
     _, failed_list = cluster_settings.create_settings(settings=settings)
@@ -152,6 +145,8 @@ def _initialize_modules_cluster_settings() -> None:
     # Add to modules table
     try:
         for module in modules:
+            if module["name"] in ("directoryservice", "identity-provider"):
+                continue
             modules_db.create_module(
                 {
                     modules_db.MODULES_TABLE_HASH_KEY: module["id"],
@@ -183,6 +178,27 @@ def _get_dynamic_settings() -> Dict[str, Optional[str]]:
     return {"shared_library_arn": os.environ.get("shared_library_arn")}
 
 
+def _populate_default_roles() -> None:
+    if roles.is_roles_table_empty():
+        logger.info("Empty authz roles table. Creating base roles")
+        base_roles = _load_base_roles()
+        if base_roles:
+            for role in base_roles:
+                logger.info(f"Start populating {role[roles.ROLES_DB_HASH_KEY]}")
+                roles.create_role(role)
+    else:
+        logger.warning("Roles table is not empty. Skip popluating default roles...")
+
+
+def _load_base_roles() -> Optional[List[Dict[str, Any]]]:
+    with open(DEFAULT_ROLES_CONFIG_PATH, "r") as f:
+        default_roles_config = yaml.safe_load(f)
+
+    if not default_roles_config:
+        raise Exception(f"{DEFAULT_ROLES_CONFIG_PATH} file is empty.")
+    return default_roles_config.get("roles", [])
+
+
 def _populate_default_permission_profiles() -> None:
     if permission_profiles.is_permission_profiles_table_empty():
         logger.info("Empty permission profile table. Creating base permission profiles")
@@ -193,6 +209,10 @@ def _populate_default_permission_profiles() -> None:
                     f"Start populating {profile[permission_profiles.PERMISSION_PROFILE_DB_HASH_KEY]}"
                 )
                 permission_profiles.create_permission_profile(profile)
+    else:
+        logger.warning(
+            "Permission profile table is not empty. Skip popluating default permission profiles..."
+        )
 
 
 def _load_base_permission_profiles() -> Optional[List[Dict[str, Any]]]:
@@ -231,6 +251,10 @@ def _populate_default_software_stacks() -> None:
                     f"Start populating {stack[software_stacks.SOFTWARE_STACK_DB_HASH_KEY]} {stack[software_stacks.SOFTWARE_STACK_DB_RANGE_KEY]}"
                 )
                 software_stacks.create_software_stack(stack)
+    else:
+        logger.warning(
+            "Software stack table is not empty. Skip popluating default software stacks..."
+        )
 
 
 def _load_base_software_stacks() -> Optional[List[Dict[str, Any]]]:
@@ -414,6 +438,10 @@ def _populate_default_email_templates() -> None:
             for template in base_email_templates:
                 logger.info(f"Start populating {template['name']}")
                 email_templates.create_email_template(template)
+    else:
+        logger.warning(
+            "Email template table is not empty. Skip popluating default email templates..."
+        )
 
 
 def _load_base_email_templates() -> Optional[List[Dict[str, Any]]]:

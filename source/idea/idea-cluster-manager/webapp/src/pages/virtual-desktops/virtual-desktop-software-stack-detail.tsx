@@ -152,7 +152,7 @@ class VirtualDesktopSoftwareStackDetail extends Component<VirtualDesktopSoftware
                 <Container header={<Header variant={"h2"}>General Information</Header>}>
                     <ColumnLayout variant={"text-grid"} columns={3}>
                         <KeyValue title="Name" value={this.state.softwareStack.name} />
-                        <KeyValue title="AMI ID" value={this.state.softwareStack.ami_id} clipboard={true} />
+                        <KeyValue title="AMI ID / Systems Manager Parameter ARN" value={this.state.softwareStack.ami_id} clipboard={true} />
                         <KeyValue title="Base OS" value={Utils.getOsTitle(this.state.softwareStack.base_os)} />
                     </ColumnLayout>
                 </Container>

@@ -49,6 +49,28 @@ class BootstrapUserDataBuilder:
         userdata = f'''
 <powershell>
  $BootstrapDir = "C`:\\Users\\Administrator\\RES\\Bootstrap"
+ function Install-AWSCLI {{
+    $AWSCLIInstalled = $false
+    try {{
+        $AWSCLIVersion = aws --version 2>$null
+        if ($AWSCLIVersion -and $AWSCLIVersion -match "aws-cli/2") {{
+        $AWSCLIInstalled = $true
+        }}
+    }} catch {{
+        $AWSCLIInstalled = $false
+    }}
+
+    if (!$AWSCLIInstalled) {{
+        Write-Host "Installing AWS CLI v2..."
+        Start-Job -Name AWSCLIWebReq -ScriptBlock {{ Invoke-WebRequest -uri https://awscli.amazonaws.com/AWSCLIV2.msi -OutFile C:\Windows\Temp\AWSCLIV2.msi }}
+        Wait-Job -Name AWSCLIWebReq
+        Invoke-Command -ScriptBlock {{Start-Process "msiexec.exe" -ArgumentList "/I C:\Windows\Temp\AWSCLIV2.msi /quiet /norestart" -Wait}}
+        $env:Path += ";C:\Program Files\Amazon\AWSCLIV2"
+        Write-Host "AWS CLI v2 installed."
+    }} else {{
+        Write-Host "AWS CLI v2 is already installed."
+    }}
+ }}
  function Download-RES-Package {{
      Param(
      [ValidateNotNullOrEmpty()]
@@ -78,6 +100,7 @@ class BootstrapUserDataBuilder:
      Install-PackageProvider NuGet -Force
      Install-Module -Name AWSPowerShell -Force
  }}
+ Install-AWSCLI
  Download-RES-Package {self.bootstrap_package_uri}
 '''
         for install_command in self.install_commands:

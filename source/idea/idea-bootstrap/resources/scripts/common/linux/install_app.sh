@@ -12,7 +12,7 @@ if [ -f ${APP_INSTALLED_LOCK} ]; then
   exit 0
 fi
 
-while getopts s:m:c:e:n:o:i:t: opt
+while getopts s:m:c:e:n:o:d:i:t: opt
 do
   case "${opt}" in
     s) SCRIPT_DIR=${OPTARG};;
@@ -21,6 +21,7 @@ do
     e) ENVIRONMENT_NAME=${OPTARG};;
     n) PROJECT_NAME=${OPTARG};;
     o) SESSION_OWNER=${OPTARG};;
+    d) SESSION_TYPE=${OPTARG};;
     i) SESSION_ID=${OPTARG};;
     t) CUSTOM_BROKER_URL=${OPTARG};;
     ?) echo "Invalid option for install_app.sh script: -${opt}."
@@ -87,7 +88,7 @@ PACKAGE_DIR="${BOOTSTRAP_DIR}/${PACKAGE_NAME}"
 mkdir -p ${PACKAGE_DIR}
 tar -xvf ${BOOTSTRAP_DIR}/${PACKAGE_ARCHIVE} -C ${PACKAGE_DIR}
 idea_pip install -r ${PACKAGE_DIR}/requirements.txt
-idea_pip install $(ls ${PACKAGE_DIR}/*-lib.tar.gz)
+idea_pip install --no-build-isolation $(ls ${PACKAGE_DIR}/*-lib.tar.gz)
 mkdir -p ${APP_DEPLOY_DIR}/${COMPONENT}
 mkdir -p ${APP_DEPLOY_DIR}/logs
 
@@ -131,6 +132,10 @@ if [[ ! -z "${SESSION_OWNER}" ]]; then
     IDEA_SESSION_OWNER=\"$SESSION_OWNER\""
     ENVIRONMENT+=",
     AWS_DEFAULT_PROFILE=\"bootstrap_profile\""
+fi
+if [[ ! -z "${SESSION_TYPE}" ]]; then
+    ENVIRONMENT+=",
+    SESSION_TYPE=\"$SESSION_TYPE\""
 fi
 if [[ ! -z "${SESSION_ID}" ]]; then
     ENVIRONMENT+=",

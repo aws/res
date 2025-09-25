@@ -118,30 +118,32 @@ def _remove_dcv_session_management_registry() -> None:
 
 def configure() -> None:
     logger.info("Configuring dcv host ...")
+
+    # Do not throw exception when the console session doesn't exit
+    # This could happen if the AMI was baked from a previous VDI session
+    subprocess.run(
+        [
+            constants.WINDOWS_DCV_EXECUTABLE_PATH,
+            "close-session",
+            "console",
+        ],
+    )
+    # Stop DCV services
+    # Do not throw exception when DCV services are not running
+    # This could happen if the AMI was baked from a previous VDI session
+    subprocess.run(
+        ["powershell.exe", "-Command", "Stop-Service dcvserver"],
+    )
+    subprocess.run(
+        [
+            "powershell.exe",
+            "-Command",
+            "Stop-Service DcvSessionManagerAgentService",
+        ],
+    )
+    logger.info("Successfully stopped DCV services")
+
     try:
-        subprocess.run(
-            [
-                constants.WINDOWS_DCV_EXECUTABLE_PATH,
-                "close-session",
-                "console",
-            ],
-            check=True,
-        )
-
-        # Stop DCV services
-        subprocess.run(
-            ["powershell.exe", "-Command", "Stop-Service dcvserver"], check=True
-        )
-        subprocess.run(
-            [
-                "powershell.exe",
-                "-Command",
-                "Stop-Service DcvSessionManagerAgentService",
-            ],
-            check=True,
-        )
-        logger.info("Succesffully stopped DCV services")
-
         # Configure DCV Registry
         _configure_dcv_connectivity_registry()
         _configure_dcv_security_registry()

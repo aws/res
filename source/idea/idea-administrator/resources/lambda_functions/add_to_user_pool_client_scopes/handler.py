@@ -15,7 +15,6 @@ import logging
 
 PHYSICAL_RESOURCE_ID = 'user-pool-client'
 
-
 def handler(event: dict, context):
     """
     Add OAuth scopes to an existing user pool client.
@@ -25,7 +24,7 @@ def handler(event: dict, context):
     cluster_name = resource_properties.get('cluster_name')
     module_id = resource_properties.get('module_id')
     stack_name = f'{cluster_name}-{module_id}'
-    client_id_secrete_name = f'{stack_name}-client-id'
+    client_id_secret_name = f'{stack_name}-client-id'
     user_pool_id = resource_properties.get('user_pool_id')
     o_auth_scopes_to_add = resource_properties.get('o_auth_scopes_to_add')
     client = HttpClient()
@@ -43,7 +42,7 @@ def handler(event: dict, context):
     try:
         # Retrieve the client ID from Secrets Manager
         secretsmanager = boto3.client('secretsmanager')
-        res = secretsmanager.get_secret_value(SecretId=client_id_secrete_name)
+        res = secretsmanager.get_secret_value(SecretId=client_id_secret_name)
         client_id = res.get('SecretString', '')
 
         # Read the current configuration of the user pool client

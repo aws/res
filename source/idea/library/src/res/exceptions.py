@@ -42,6 +42,10 @@ class EmailTemplateNotFound(Exception):
     pass
 
 
+class RoleNotFound(Exception):
+    pass
+
+
 class UnauthorizedAccess(Exception):
     def __init__(self, message: str = None):
         self._message = message

@@ -88,13 +88,13 @@ class VirtualDesktopSoftwareStackEditForm extends Component<VirtualDesktopSoftwa
                 unit: "gb",
             }
         };
-        
+
         const instanceTypes = await Utils.getAllowedInstanceTypesOptionsForSelectedSoftwareStack(software_stack);
         const instanceTypeChoices: SocaUserInputChoice[] = instanceTypes.map(type => ({
             title: type,
             value: type,
         }));
-        
+
         this.setState({ instanceTypeChoices }, () => {
             this.getForm()?.getFormField("allowed_instance_types")?.setOptions({
                 listing: instanceTypeChoices,
@@ -309,9 +309,9 @@ class VirtualDesktopSoftwareStackEditForm extends Component<VirtualDesktopSoftwa
                         },
                         {
                             name: "ami_id",
-                            title: "AMI ID",
-                            description: "Enter the AMI ID",
-                            help_text: "AMI ID must start with ami-xxx",
+                            title: "AMI ID / Systems Manager Parameter ARN",
+                            description: "Enter the AMI ID or Systems Manager Parameter ARN",
+                            help_text: "AMI ID must start with ami-xxx. Systems Manager Parameter ARN must follow the ARN format",
                             data_type: "str",
                             param_type: "text",
                             default: this.state.selectedAmiId,

@@ -120,7 +120,7 @@ class SingleSignOnHelper:
             custom_dns_name = self.config.get_item('cluster.load_balancers.external_alb.custom_dns_name')
 
         cluster_manager_web_context_path = self.config.get_item('cluster-manager.server.web_resources_context_path')
-        
+
         if cluster_manager_web_context_path == '/':
             sso_auth_callback_path = '/sso/oauth2/callback'
         else:
@@ -166,7 +166,7 @@ class SingleSignOnHelper:
         callback_urls, logout_urls = self.get_callback_logout_urls()
         user_pool_client_request = {
             'UserPoolId': user_pool_id,
-            'ClientName': DEFAULT_USER_POOL_CLIENT_NAME,
+            'ClientName': f"{self.cluster_name}-{DEFAULT_USER_POOL_CLIENT_NAME}",
             'AccessTokenValidity': 1,
             'IdTokenValidity': 1,
             'RefreshTokenValidity': refresh_token_validity_hours,
@@ -303,7 +303,7 @@ class SingleSignOnHelper:
         decoded_value = base64.b64decode(encoded_value)
         return str(decoded_value, DEFAULT_ENCODING)
 
-        
+
     def get_oidc_provider_details(self, request) -> Dict:
         """
         build the OIDC provider details based on user input.
@@ -384,7 +384,7 @@ class SingleSignOnHelper:
 
         if not request.get('provider_name'):
             raise Exception('provider_name is required')
-        
+
         if not re.match(SSO_SOURCE_PROVIDER_NAME_REGEX, request.get('provider_name')):
             raise Exception(SSO_SOURCE_PROVIDER_NAME_ERROR_MESSAGE)
         if not request.get('provider_type'):

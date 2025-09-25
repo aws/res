@@ -463,7 +463,7 @@ def _get_bastion_host_config_from_ddb() -> Dict[str, Any]:
         ),
         "instance_profile": result_dict.get(BASTION_HOST_INSTANCE_PROFILE_NAME),
         "user_data": base64.b64decode(result_dict.get(BASTION_HOST_USER_DATA, "")),
-        "is_public": result_dict.get(BASTION_HOST_IS_PUBLIC, "") == "true",
+        "is_public": result_dict.get(BASTION_HOST_IS_PUBLIC, True),
     }
 
     return config

@@ -74,6 +74,7 @@ if [[ ! -f ${INSTALL_FINISHED_LOCK} ]]; then
   if [[ "${PREBAKING_AMI}" == "true" ]] && [ -f ${SCRIPT_DIR}/../../requirements.txt ]; then
     idea_pip install -r ${SCRIPT_DIR}/../../requirements.txt
   fi
+  idea_pip install --upgrade setuptools
 
   mkdir -p ${SEMAPHORE_DIR}
   echo $(date +%s) > ${INSTALL_FINISHED_LOCK}

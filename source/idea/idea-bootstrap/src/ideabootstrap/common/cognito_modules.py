@@ -31,7 +31,7 @@ def _modify_pam_file(file_path, pattern, insert_line):
     with open(file_path, 'w') as f:
         f.write(temp)
 
-    logger.info(f"Updated to file: {file_path} was succesfull")
+    logger.info(f"Updated to file: {file_path} was successfully")
 
 def _setup_pam_config_file_redhat_distros():
     """Configure PAM for Red Hat based distributions."""
@@ -75,7 +75,7 @@ def _setup_cognito_config_file():
         file.write(text)
 
     os.chmod(config_file, 0o644)
-    logger.info(f"Setup to Cognito conf: {config_file} was succesfull")
+    logger.info(f"Setup to Cognito conf: {config_file} was successfully")
 
 def _start_nscd():
     logger.info(f"Starting NSCD")
@@ -112,9 +112,12 @@ def _setup_nss():
 
     os.makedirs('/opt/cognito_auth/', exist_ok=True)
     os.chmod('/opt/cognito_auth', 0o777) # nosec
-    logger.info(f"Setup to NSS Switch file: {nsswitch_file} was succesfull")
+    logger.info(f"Setup to NSS Switch file: {nsswitch_file} was successfully")
 
 def configure():
+    if not cluster_settings.get_setting("identity-provider.cognito.enable_native_user_login"):
+        return
+
     logger.info("Starting Cognito Configuration")
     env = os.environ
     base_os = get_base_os()
@@ -133,7 +136,9 @@ def configure():
     if env.get("IDEA_SESSION_OWNER"):
         subprocess.run(['su', '-', env.get("IDEA_SESSION_OWNER"), '-c', 'exit'])
 
-    logger.info("Cognito setup was succesfull")
-    set_reboot_required("Reboot required for DCV connection to Cognito")
+    logger.info("Cognito setup was successfully")
+
+    if env.get("IDEA_SESSION_OWNER"):
+        set_reboot_required("Reboot required for DCV connection to Cognito")
 
 

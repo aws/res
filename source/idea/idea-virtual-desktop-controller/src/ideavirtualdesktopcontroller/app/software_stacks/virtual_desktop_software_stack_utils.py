@@ -67,7 +67,7 @@ class VirtualDesktopSoftwareStackUtils:
             software_stack = VirtualDesktopSoftwareStack()
             software_stack.failure_reason = 'software_stack missing'
             return software_stack, False
-        
+
         fields = {
             'name': 'software_stack.name missing',
             'description': 'software_stack.description missing',
@@ -77,7 +77,7 @@ class VirtualDesktopSoftwareStackUtils:
             'min_ram': 'software_stack.min_ram missing',
             'min_storage': 'software_stack.min_storage missing'
         }
-        
+
         for field, error_message in fields.items():
             if getattr(software_stack, field) is None:
                 software_stack.failure_reason = error_message
@@ -89,7 +89,7 @@ class VirtualDesktopSoftwareStackUtils:
                 return software_stack, False
 
         image_description = self._controller_utils.describe_image_id(software_stack.ami_id)
-        if image_description is None or image_description.get('ImageId') != software_stack.ami_id:
+        if not image_description:
             software_stack.failure_reason = f'Invalid software_stack.ami_id: {software_stack.ami_id}'
             return software_stack, False
 

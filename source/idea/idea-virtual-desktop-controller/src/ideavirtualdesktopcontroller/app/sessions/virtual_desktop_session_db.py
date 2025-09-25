@@ -302,7 +302,7 @@ class VirtualDesktopSessionDB(VirtualDesktopNotifiableDB):
             
         request.filters.append(SocaFilter(
             key=sessions_constants.USER_SESSION_DB_FILTER_OWNER_KEY,
-            value=username
+            eq=username
         ))
         return self.list_all_from_db(request)
 

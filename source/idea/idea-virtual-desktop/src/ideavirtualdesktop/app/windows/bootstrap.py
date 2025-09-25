@@ -104,9 +104,7 @@ def run():
 
         logger.info(f"Configure File Written: {WINDOWS_VDI_CONFIG_FINISHED_LOCK}")
 
-        logger.info("Finished Bootstrap Windows")
-        send_sqs_host_messages("DCV_HOST_READY_EVENT")
-
+        logger.info("Finished Bootstrap Configuration")
         subprocess.run(["powershell", "-Command", "Restart-Computer -Force"], capture_output=True)
     else:
         logger.info(f"Configuration WINDOWS_VDI_CONFIG_FINISHED_LOCK file: {WINDOWS_VDI_CONFIG_FINISHED_LOCK} already exists")

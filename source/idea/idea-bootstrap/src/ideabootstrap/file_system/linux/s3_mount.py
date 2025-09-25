@@ -60,7 +60,7 @@ def _configure_aws_credentials(
             "configure",
             "set",
             "credential_process",
-            f"idea_python {custom_credential_broker_script_location} --filesystem-name {fs_name} --api-url {api_url}",
+            f"/opt/idea/python/latest/bin/idea_python {custom_credential_broker_script_location} --filesystem-name {fs_name} --api-url {api_url}",
             "--profile",
             profile_name,
         ],

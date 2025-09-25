@@ -16,10 +16,11 @@ from aws_cdk.aws_lambda import Function
 from aws_cdk.custom_resources import AwsCustomResource, AwsCustomResourcePolicy
 from constructs import Construct
 
-from idea.infrastructure.install import proxy_handler, utils
+from idea.infrastructure.install import proxy_handler
 from idea.infrastructure.install.constants import RES_COMMON_LAMBDA_RUNTIME
 from idea.infrastructure.install.handlers import installer_handlers
-from idea.infrastructure.install.utils import InfraUtils
+from idea.infrastructure.install.infra_utils import utils
+from idea.infrastructure.install.infra_utils.utils import InfraUtils
 
 
 class LambdaCodeParams(TypedDict):
@@ -399,7 +400,7 @@ class LambdaAndSecurityGroupCleanup(Construct):
             self,
             "cr-to-remove-leftover-security-groups",
             description="Lambda to remove left over security groups.",
-            runtime=lambda_.Runtime.PYTHON_3_9,
+            runtime=RES_COMMON_LAMBDA_RUNTIME,
             **utils.InfraUtils.get_handler_and_code_for_function(
                 installer_handlers.handle_security_group_delete
             ),

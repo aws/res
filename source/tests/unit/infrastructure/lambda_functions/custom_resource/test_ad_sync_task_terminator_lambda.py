@@ -23,7 +23,7 @@ def monkeypatch_for_class(request):
 @pytest.mark.usefixtures("monkeypatch_for_class")
 class TestADSyncTaskTerminatorLambda(TestCase):
     def mock_dependencies(self, mock_cfn_response_send, mock_terminate_ad_sync):
-        self.monkeypatch.setattr(handler, "_send_response", mock_cfn_response_send)
+        self.monkeypatch.setattr(handler, "send_response", mock_cfn_response_send)
         self.monkeypatch.setattr(handler, "_terminate_ad_sync", mock_terminate_ad_sync)
 
     def test_handler_send_cfn_response(self):
@@ -43,6 +43,7 @@ class TestADSyncTaskTerminatorLambda(TestCase):
             StackId="",
             RequestId="",
             LogicalResourceId="",
+            Data={},
         )
 
         mock_terminate_ad_sync.assert_called_once()

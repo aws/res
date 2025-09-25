@@ -33,8 +33,8 @@ class FileSystemAPI(BaseAPI):
         self.config = self.context.config()
         self.logger = self.context.logger("shared-filesystem")
 
-        self.SCOPE_WRITE = f"{self.context.module_id()}/write"
-        self.SCOPE_READ = f"{self.context.module_id()}/read"
+        self.SCOPE_WRITE = f"{self.context.cluster_name()}-{self.context.module_id()}/write"
+        self.SCOPE_READ = f"{self.context.cluster_name()}-{self.context.module_id()}/read"
 
         self.acl = {
             "FileSystem.AddFileSystemToProject": {

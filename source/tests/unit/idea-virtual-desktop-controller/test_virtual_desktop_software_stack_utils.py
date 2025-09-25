@@ -122,6 +122,29 @@ def test_validate_software_stack_fields_invalid_ami():
     assert result_stack.failure_reason == "Invalid software_stack.ami_id: ami-123"
 
 
+def test_validate_software_stack_fields_systems_manager_parameter_ami_alias():
+    utils = VirtualDesktopSoftwareStackUtils(Mock(), Mock())
+    utils._controller_utils.ec2_client.describe_images = Mock(
+        return_value={"Images": [{"ImageId": "ami-123", "Architecture": "x86_64"}]}
+    )
+    utils._controller_utils.get_systems_manager_parameter = Mock(
+        return_value={"Value": "ami-123"}
+    )
+
+    software_stack = VirtualDesktopSoftwareStack(
+        name="test",
+        description="test",
+        ami_id="arn:aws:ssm:us-east-1::parameter/aws/service/ami-amazon-linux-latest/al2023-ami",
+        base_os=VirtualDesktopBaseOS.AMAZON_LINUX2023,
+        gpu=VirtualDesktopGPU.NO_GPU,
+        min_ram=SocaMemory(value=10, unit="gb"),
+        min_storage=SocaMemory(value=50, unit="gb"),
+    )
+
+    _, is_valid = utils.validate_software_stack_fields(software_stack)
+    assert is_valid
+
+
 def test_validate_software_stack_fields_success():
     utils = VirtualDesktopSoftwareStackUtils(Mock(), Mock())
     utils._controller_utils.describe_image_id = Mock(
