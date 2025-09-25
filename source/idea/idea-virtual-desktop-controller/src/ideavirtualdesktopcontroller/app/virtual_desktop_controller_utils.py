@@ -14,7 +14,7 @@ import os
 import logging
 import random
 from threading import RLock
-from typing import List, Dict, Optional
+from typing import Any, List, Dict, Optional
 
 from ideasdk.metrics import CloudWatchAgentLogFileOptions
 import ideavirtualdesktopcontroller
@@ -145,7 +145,7 @@ class VirtualDesktopControllerUtils:
             logger.info(f"Error retriving secret from secret manager {str(e)}")
 
         install_commands = custom_script_commands + [
-            f'/bin/bash scripts/virtual-desktop-host/linux/install.sh -m {res_constants.MODULE_ID_VIRTUAL_DESKTOP_APP} -g {gpu_family} -u {custome_broker_api_url} -t {jwt_token} -p false -e {self.context.config().cluster_name} -n {session.project.name} -o {session.owner} -i {session.idea_session_id} -a {region} -h {session.hibernation_enabled}'
+            f'/bin/bash scripts/virtual-desktop-host/linux/install.sh -m {res_constants.MODULE_ID_VIRTUAL_DESKTOP_APP} -g {gpu_family} -u {custome_broker_api_url} -t {jwt_token} -p false -e {self.context.config().cluster_name} -n {session.project.name} -o {session.owner} -d {session.type.name} -i {session.idea_session_id} -a {region} -h {session.hibernation_enabled}'
         ]
 
         if session.software_stack.base_os == BaseOS.WINDOWS:
@@ -159,7 +159,7 @@ class VirtualDesktopControllerUtils:
             on_vdi_start_script_commands = ['& .\\$env:ON_VDI_START_COMMANDS']
             install_commands = change_directory_command + export_env_variables_commands + on_vdi_start_script_store + on_vdi_configured_script_store + on_vdi_start_script_commands + [
                 'Import-Module .\\Install.ps1',
-                f'Install-WindowsEC2Instance -ConfigureForRESVDI -AWSRegion "{self.context.config().aws_region}" -ENVName "{self.context.config().cluster_name}" -ModuleID "{res_constants.MODULE_ID_VIRTUAL_DESKTOP_APP}" -$ProjectName {session.project.name} -SessionOwner "{session.owner}" -SessionId "{session.idea_session_id}" -BootstrapToken "{jwt_token}" -CustomBrokerApi "{custome_broker_api_url}" -OnVDIConfiguredCommands "{ScriptEventType.ON_VDI_CONFIGURED}.ps1"'
+                f'Install-WindowsEC2Instance -ConfigureForRESVDI -AWSRegion "{self.context.config().aws_region}" -ENVName "{self.context.config().cluster_name}" -ModuleID "{res_constants.MODULE_ID_VIRTUAL_DESKTOP_APP}" -ProjectName {session.project.name} -SessionOwner "{session.owner}" -SessionId "{session.idea_session_id}" -BootstrapToken "{jwt_token}" -CustomBrokerApi "{custome_broker_api_url}" -OnVDIConfiguredCommands "{ScriptEventType.ON_VDI_CONFIGURED}.ps1"'
             ]
 
         https_proxy = self.context.config().get_string('cluster.network.https_proxy', required=False, default='')
@@ -315,7 +315,7 @@ class VirtualDesktopControllerUtils:
             self._logger.debug(f"Found configured VDI subnets: {', '.join(configured_vdi_subnets)}")
             _attempt_subnets = configured_vdi_subnets
         else:
-            
+
             # fallback to a list of cluster private_subnets
             self._logger.debug(f"Fallback to cluster private_subnets: {', '.join(cluster_private_subnets)}")
             _attempt_subnets = cluster_private_subnets
@@ -358,12 +358,16 @@ class VirtualDesktopControllerUtils:
             else:
                 _attempt_provision = True
 
+            ami_id = session.software_stack.ami_id
+            if ami_id.startswith("arn:"):
+                ami_id = f'resolve:ssm:{self.get_systems_manager_parameter(ami_id).get("Name")}'
+
             response = None
 
             try:
                 response = self.ec2_client.run_instances(
                     UserData=self._build_userdata(session),
-                    ImageId=session.software_stack.ami_id,
+                    ImageId=ami_id,
                     InstanceType=session.server.instance_type,
                     TagSpecifications=[
                         {
@@ -638,7 +642,23 @@ class VirtualDesktopControllerUtils:
         self._logger.debug(f"Returning valid_instance_types for software_stack: {valid_instance_types_names}")
         return valid_instance_types
 
+    def get_systems_manager_parameter(self, parameter_arn: str) -> Dict[str, Any]:
+        try:
+            return self.ssm_client.get_parameter(
+                Name=parameter_arn,
+            ).get("Parameter", {})
+        except ClientError as e:
+            self._logger.error(e)
+            return {}
+
     def describe_image_id(self, ami_id: str) -> dict:
+        if not ami_id:
+            return {}
+
+        if ami_id.startswith("arn:"):
+            parameter = self.get_systems_manager_parameter(ami_id)
+            ami_id = parameter.get("Value", "")
+
         try:
             response = Utils.to_dict(self.ec2_client.describe_images(
                 ImageIds=[

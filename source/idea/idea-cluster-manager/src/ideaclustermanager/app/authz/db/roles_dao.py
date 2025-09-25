@@ -31,25 +31,6 @@ class RolesDAO:
         return f'{self.context.cluster_name()}.authz.roles'
 
     def initialize(self):
-        self.context.aws_util().dynamodb_create_table(
-            create_table_request={
-                'TableName': self.get_roles_table_name(),
-                'AttributeDefinitions': [
-                    {
-                        'AttributeName': 'role_id',
-                        'AttributeType': 'S'
-                    }
-                ],
-                'KeySchema': [
-                    {
-                        'AttributeName': 'role_id',
-                        'KeyType': 'HASH'
-                    }
-                ],
-                'BillingMode': 'PAY_PER_REQUEST'
-            },
-            wait=True
-        )
         self.roles_table = self.context.aws().dynamodb_table().Table(self.get_roles_table_name())
     
     @staticmethod

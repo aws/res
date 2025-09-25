@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from idea.infrastructure.install.parameters import (
+    cognito_user_pool,
     common,
     customdomain,
     directoryservice,
@@ -19,6 +20,7 @@ class RESParameters(
     directoryservice.DirectoryServiceParameters,
     shared_storage.SharedStorageParameters,
     internet_proxy.InternetProxyParameters,
+    cognito_user_pool.CognitoUserPoolParameters,
 ):
     """
     This is where all the different categories of parameters are combined
@@ -34,6 +36,7 @@ class AllRESParameterGroups(
     directoryservice.DirectoryServiceParameterGroups,
     shared_storage.SharedStorageParameterGroups,
     internet_proxy.InternetProxyParameterGroups,
+    cognito_user_pool.CognitoUserPoolParameterGroups,
 ):
     """
     All the parameter groups are collated here
@@ -50,12 +53,14 @@ class AllRESParameterGroups(
                     directoryservice.DirectoryServiceParameterGroups.parameter_group_for_directory_service,
                     customdomain.CustomDomainParameterGroups.parameter_group_for_custom_domain,
                     internet_proxy.InternetProxyParameterGroups.parameter_group_for_internet_proxy,
+                    cognito_user_pool.CognitoUserPoolParameterGroups.parameter_group_for_cognito_user_pool,
                 ],
                 "ParameterLabels": {
                     **common.CommonParameterLabels.parameter_labels_for_environment_and_installer_details,
                     **customdomain.CustomDomainParameterLabels.parameter_labels_for_custom_domain,
                     **directoryservice.DirectoryServiceParameterLabels.parameter_labels_for_directory_service,
                     **internet_proxy.InternetProxyParameterLabels.parameter_labels_for_internet_proxy,
+                    **cognito_user_pool.CognitoUserPoolParameterLabels.parameter_labels_for_cognito_user_pool,
                 },
             },
         }

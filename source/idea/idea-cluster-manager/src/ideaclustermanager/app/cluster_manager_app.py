@@ -180,8 +180,8 @@ class ClusterManagerApp(ideasdk.app.SocaApp):
                 client_id=client_id,
                 client_secret=client_secret,
                 client_credentials_scope=[
-                    f'{vdc_module_id}/read',
-                    f'{vdc_module_id}/write',
+                    f'{os.environ.get("IDEA_CLUSTER_NAME", "")}-{vdc_module_id}/read',
+                    f'{os.environ.get("IDEA_CLUSTER_NAME", "")}-{vdc_module_id}/write',
                 ],
                 administrators_group_name=administrators_group_name,
                 managers_group_name=managers_group_name
@@ -281,7 +281,6 @@ class ClusterManagerApp(ideasdk.app.SocaApp):
 
         try:
             self.context.distributed_lock().acquire(key='initialize-defaults')
-            self.context.roles.create_defaults()
 
             ad_sync_client.start_ad_sync()
         except (exceptions.ADSyncConfigurationNotFound, exceptions.ADSyncInProcess):

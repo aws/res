@@ -138,7 +138,7 @@ class ClusterSettingsService {
         if (moduleSet!= null && name in moduleSet) {
             return moduleSet[name].module_id;
         }
-        return null;
+        return name;
     }
 
     getModuleSettings(name: string, cached: boolean = true): Promise<any> {
@@ -152,8 +152,6 @@ class ClusterSettingsService {
 
         const moduleId = this.getModuleId(name);
         if (moduleId != null) {
-            const moduleSet = this.getModuleSet();
-            let moduleId = moduleSet[name].module_id;
             return this.props.clusterSettings
                 .getModuleSettings({
                     module_id: moduleId,

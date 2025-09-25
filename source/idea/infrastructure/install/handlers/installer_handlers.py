@@ -2,8 +2,6 @@
 #  SPDX-License-Identifier: Apache-2.0
 import json
 import os
-import urllib.error
-import urllib.parse
 import urllib.request
 import uuid
 from enum import Enum
@@ -60,46 +58,6 @@ class WaitConditionResponse(TypedDict):
 class WaitConditionResponseStatus(str, Enum):
     SUCCESS = "SUCCESS"
     FAILURE = "FAILURE"
-
-
-def unprotect_cognito_user_pool(event: Dict[str, Any], _: Any) -> None:
-    cognito_client = boto3.client("cognito-idp")
-
-    describe_user_pool_paginator = cognito_client.get_paginator("list_user_pools")
-    user_pool_iter = describe_user_pool_paginator.paginate(MaxResults=50)
-
-    env_name = event["ResourceProperties"][EnvKeys.ENVIRONMENT_NAME]
-
-    # Walk the list of user pools in the account looking for our matching pool
-    # The pool must match the expected name, as well as having the proper
-    # res:EnvironmentName tag for us to consider it as valid.
-    for page in user_pool_iter:
-        user_pools = page.get("UserPools", [])
-        for pool in user_pools:
-            pool_name = pool.get("Name", "")
-            pool_id = pool.get("Id", None)
-            if pool_name != f"{env_name}-user-pool" or not pool_id:
-                continue
-            print(f"Processing cognito pool: {pool_name}")
-            describe_user_pool_result = cognito_client.describe_user_pool(
-                UserPoolId=pool_id
-            )
-            pool_tags = describe_user_pool_result.get("UserPool", {}).get(
-                "UserPoolTags", {}
-            )
-            pool_deletion_protection = describe_user_pool_result.get(
-                "UserPool", {}
-            ).get("DeletionProtection", "ACTIVE")
-            for tag_name, tag_value in pool_tags.items():
-                if (
-                    tag_name == TAG_NAME
-                    and tag_value == env_name
-                    and pool_deletion_protection == "ACTIVE"
-                ):
-                    print("Removing active status for user pool")
-                    cognito_client.update_user_pool(
-                        UserPoolId=pool_id, DeletionProtection="INACTIVE"
-                    )
 
 
 def handle_custom_resource_lifecycle_event(event: Dict[str, Any], _: Any) -> None:

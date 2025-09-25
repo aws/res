@@ -13,6 +13,7 @@ import logging
 import time
 from typing import Type
 
+import selenium
 from selenium import webdriver
 from selenium.webdriver.chrome.webdriver import WebDriver
 
@@ -347,10 +348,19 @@ class ResClient:
 
         # Open the session connection URL from a Chrome browser and keep the connection active.
         options = webdriver.ChromeOptions()
-        options.add_argument("--headless")
+        options.add_argument("--headless=new")
         options.add_argument("--ignore-certificate-errors")
         options.add_argument("--no-sandbox")
-        options.binary_location = "/usr/local/bin/chrome"
+        options.add_argument("--disable-dev-shm-usage")
+        options.add_argument("--disable-gpu")
+        options.add_argument("--window-size=1920,1080")
+        options.add_argument("--disable-software-rasterizer")
+        options.add_argument("--disable-extensions")
+        options.add_argument("--disable-infobars")
+        options.add_argument("--memory-pressure-off")
+        options.add_argument("--disable-background-networking")
+        options.add_argument("--disk-cache-size=1")
+
         driver = webdriver.Chrome(options=options)
 
         connection_url = f"{connection_info.endpoint}{connection_info.web_url_path}?authToken={connection_info.access_token}#{connection_info.dcv_session_id}"

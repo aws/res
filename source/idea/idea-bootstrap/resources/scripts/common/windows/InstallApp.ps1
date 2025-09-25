@@ -76,7 +76,7 @@ function Install-Virtual-Desktop-App
   # Install the Virtual Desktop Application and its dependencies
   pip install -r "$PackageDir\\requirements.txt"
 
-  pip install $( ls "$PackageDir\*-lib.tar.gz" )
+  pip install --no-build-isolation $( ls "$PackageDir\*-lib.tar.gz" )
 
   # Launch the Virtual Desktop Application and create the scheduled task to restart the application upon reboot
   $AppDeployDir = "C`:\\Program Files\\RES\\app"
@@ -112,7 +112,8 @@ resserver > "$RESVDIAppLog" 2>&1
 "@
 
   $IdeaScriptsDirectory = "C:\IDEA\LocalScripts"
-  New-Item -Path $IdeaScriptsDirectory -Name "VDIAppRestartNotification.ps1" -ItemType File -Force -Value "$VDIAppRestartNotificationContent"
+  mkdir $IdeaScriptsDirectory -Force
+  Set-Content -Path "$IdeaScriptsDirectory\VDIAppRestartNotification.ps1" -Value "$VDIAppRestartNotificationContent" -Force
   schtasks /create /sc onstart /tn VDIAppRestartNotification /tr "powershell -ExecutionPolicy Bypass -File $IdeaScriptsDirectory\VDIAppRestartNotification.ps1" /ru system /f
   Start-Process powershell -ArgumentList "-ExecutionPolicy Bypass -File $IdeaScriptsDirectory\VDIAppRestartNotification.ps1" -WindowStyle Hidden
 

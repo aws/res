@@ -35,6 +35,7 @@ from idea.infrastructure.install.constants import (
     SHARED_RES_LIBRARY_LAMBDA_LAYER_NAME,
 )
 from idea.infrastructure.install.handlers import installer_handlers
+from idea.infrastructure.install.infra_utils.utils import InfraUtils
 from idea.infrastructure.install.parameters.common import CommonKey
 from idea.infrastructure.install.parameters.internet_proxy import InternetProxyKey
 from idea.infrastructure.install.parameters.parameters import RESParameters
@@ -44,9 +45,6 @@ from idea.infrastructure.install.proxy import (
     proxy_lambda_name,
     proxy_lambda_security_group_name,
 )
-from idea.infrastructure.install.utils import InfraUtils
-
-LAMBDA_RUNTIME = lambda_.Runtime.PYTHON_3_11
 
 
 class LambdaCodeParams(TypedDict):
@@ -241,13 +239,11 @@ class Installer(Construct):
         create_task = self.tasks.get_create_task()
         update_task = self.tasks.get_update_task()
         delete_task = self.tasks.get_delete_task()
-        cognito_unprotect_task = self.tasks.get_cognito_user_pool_unprotect_task()
 
         for task in (
             create_task,
             update_task,
             delete_task,
-            cognito_unprotect_task,
         ):
             task.add_catch(
                 handler=send_cfn_response_task,
@@ -258,7 +254,7 @@ class Installer(Construct):
             sfn.Condition.string_equals(
                 "$.RequestType", installer_handlers.RequestType.DELETE
             ),
-            cognito_unprotect_task,
+            delete_task,
         ).when(
             sfn.Condition.string_equals(
                 "$.RequestType", installer_handlers.RequestType.CREATE
@@ -272,7 +268,6 @@ class Installer(Construct):
         ).otherwise(
             sfn.Fail(self, "UnknownRequestType")
         )
-        cognito_unprotect_task.next(delete_task)
 
         create_task.next(send_cfn_response_task)
         update_task.next(send_cfn_response_task)

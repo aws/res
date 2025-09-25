@@ -52,8 +52,9 @@ function install_python () {
     # Use the system Python if exists and meets the minimum version requirement
     local PYTHON3_BIN=$(which python3)
     local CURRENT_VERSION="$(${PYTHON3_BIN} --version | awk {'print $NF'})"
+    local MINIMUM_VERSION="3.9.16"
     local PYTHON_VERSION=$(get_string 'package_config.python.version')
-    if [ "$(printf '%s\n' "$PYTHON_VERSION" "$CURRENT_VERSION" | sort -V | head -n1)" = "$PYTHON_VERSION" ]; then
+    if [ "$(printf '%s\n' "$MINIMUM_VERSION" "$CURRENT_VERSION" | sort -V | head -n1)" = "$MINIMUM_VERSION" ]; then
       log_info "Python ${CURRENT_VERSION} is already installed and meets the requirement."
 
       # Create a virtual environment to avoid modifying the system Python
@@ -92,34 +93,17 @@ function install_python () {
 
   export PYENV_ROOT="${INSTALL_DIR}"
   curl https://pyenv.run | bash
-
-  echo "export PYENV_ROOT=\"${INSTALL_DIR}\"" >> ~/.bashrc
-  echo '[[ -d $PYENV_ROOT/bin ]] && export PATH="$PYENV_ROOT/bin:$PATH"' >> ~/.bashrc
-  echo 'eval "$(pyenv init - bash)"' >> ~/.bashrc
-  source ~/.bashrc
-
-  if [ -e ~/.bash_profile ]; then
-    echo "export PYENV_ROOT=\"${INSTALL_DIR}\"" >> ~/.bash_profile
-    echo '[[ -d $PYENV_ROOT/bin ]] && export PATH="$PYENV_ROOT/bin:$PATH"' >> ~/.bash_profile
-    echo 'eval "$(pyenv init - bash)"' >> ~/.bash_profile
-    source ~/.bash_profile
-  elif [ -e ~/.bash_login ]; then
-    echo "export PYENV_ROOT=\"${INSTALL_DIR}\"" >> ~/.bash_login
-    echo '[[ -d $PYENV_ROOT/bin ]] && export PATH="$PYENV_ROOT/bin:$PATH"' >> ~/.bash_login
-    echo 'eval "$(pyenv init - bash)"' >> ~/.bash_login
-    source ~/.bash_login
-  else
-    echo "export PYENV_ROOT=\"${INSTALL_DIR}\"" >> ~/.profile
-    echo '[[ -d $PYENV_ROOT/bin ]] && export PATH="$PYENV_ROOT/bin:$PATH"' >> ~/.profile
-    echo 'eval "$(pyenv init - bash)"' >> ~/.profile
-    source ~/.profile
-  fi
+  [[ -d $PYENV_ROOT/bin ]] && export PATH="$PYENV_ROOT/bin:$PATH"
+  eval "$(pyenv init - bash)"
 
   pyenv install ${PYTHON_VERSION}
 
   local PYTHON_DIR="${INSTALL_DIR}/versions/${PYTHON_VERSION}"
-  # create symlinks
-  ln -sf "${PYTHON_DIR}" "${PYTHON_LATEST}"
+
+  # Create a virtual environment to avoid modifying the system Python
+  ${PYTHON_DIR}/bin/python3 -m venv ${PYTHON_LATEST}
+
+  # Create symlinks that point to the Python virtual environment
   ln -sf "${PYTHON_LATEST}/bin/python3" "${PYTHON_LATEST}/bin/${ALIAS_PREFIX}_python"
   ln -sf "${PYTHON_LATEST}/bin/pip3" "${PYTHON_LATEST}/bin/${ALIAS_PREFIX}_pip"
 }

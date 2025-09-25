@@ -36,7 +36,7 @@ class DNSResolverEndpoint(SocaBaseConstruct):
                  security_group_ids: List[str],
                  subnet_ids: Optional[List[str]],
                  direction: str = 'OUTBOUND'):
-        super().__init__(context, name)
+        super().__init__(context, name, scope)
         self.scope = scope
         self.vpc = vpc
         self.subnet_ids = subnet_ids
@@ -72,7 +72,7 @@ class DNSResolverRule(SocaBaseConstruct):
                  ip_addresses: List[str],
                  rule_type: str = 'FORWARD',
                  port: str = None):
-        super().__init__(context, name)
+        super().__init__(context, name, scope)
         self.scope = scope
         self.domain_name = domain_name
         self.vpc = vpc

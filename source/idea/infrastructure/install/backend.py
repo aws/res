@@ -17,10 +17,10 @@ from aws_cdk.custom_resources import AwsCustomResource
 from constructs import Construct
 
 import idea
-from idea.infrastructure.install import utils
-from idea.infrastructure.install.constants import RES_BACKEND_LAMBDA_RUNTIME
+from idea.infrastructure.install.constants import RES_COMMON_LAMBDA_RUNTIME
 from idea.infrastructure.install.handlers import installer_handlers
-from idea.infrastructure.install.utils import InfraUtils
+from idea.infrastructure.install.infra_utils import utils
+from idea.infrastructure.install.infra_utils.utils import InfraUtils
 
 
 class LambdaCodeParams(TypedDict):
@@ -235,7 +235,7 @@ class BackendLambda(Construct):
         backend_lambda = lambda_.Function(
             self,
             "backendLambda",
-            runtime=RES_BACKEND_LAMBDA_RUNTIME,
+            runtime=RES_COMMON_LAMBDA_RUNTIME,
             role=execution_role,
             timeout=aws_cdk.Duration.minutes(15),
             function_name=f'{self.params["cluster_name"]}_{backend_lambda_name}',
@@ -397,7 +397,7 @@ class BastionHostCleanup(Construct):
             self,
             "cr-to-cleanup-bastion-host-and-route53",
             description="Lambda to remove the bastion host instance and Route53 record.",
-            runtime=lambda_.Runtime.PYTHON_3_9,
+            runtime=RES_COMMON_LAMBDA_RUNTIME,
             **utils.InfraUtils.get_handler_and_code_for_function(
                 installer_handlers.handle_bastion_host_delete
             ),

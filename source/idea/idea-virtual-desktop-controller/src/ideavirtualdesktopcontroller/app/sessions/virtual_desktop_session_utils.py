@@ -48,6 +48,7 @@ class VirtualDesktopSessionUtils:
             session.server = self._server_utils.provision_host_for_session(session)
         except Exception as e:
             session.failure_reason = f'{e}'
+            self._logger.error(f"Failed to provision host for session {session.idea_session_id}: {session.failure_reason}")
             return session
 
         session = self._schedule_utils.update_schedule_for_session(default_schedule, session)

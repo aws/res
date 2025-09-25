@@ -60,7 +60,7 @@ const VIRTUAL_DESKTOP_SOFTWARE_STACKS_TABLE_COLUMN_DEFINITIONS: TableProps.Colum
     },
     {
         id: "ami_id",
-        header: "AMI ID",
+        header: "AMI ID / Systems Manager Parameter ARN",
         cell: (e) => e.ami_id,
         sortingField: "ami_id",
     },
@@ -315,9 +315,9 @@ class VirtualDesktopSoftwareStacks extends Component<VirtualDesktopSoftwareStack
                     },
                     {
                         name: "ami_id",
-                        title: "AMI ID",
-                        description: "Enter the AMI ID",
-                        help_text: "AMI ID must start with ami-xxx",
+                        title: "AMI ID / Systems Manager Parameter ARN",
+                        description: "Enter the AMI ID or Systems Manager Parameter ARN",
+                        help_text: "AMI ID must start with ami-xxx. Systems Manager Parameter ARN must follow the ARN format",
                         data_type: "str",
                         param_type: "text",
                         validate: {

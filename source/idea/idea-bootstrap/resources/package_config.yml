@@ -194,7 +194,7 @@ package_config:
           - libxmlsec1-dev
           - libffi-dev
           - liblzma-dev
-    version: 3.9.16
+    version: 3.12.11
 
   epel_repo:
     rhel8: https://dl.fedoraproject.org/pub/epel/epel-release-latest-8.noarch.rpm
@@ -231,8 +231,8 @@ package_config:
       x86_64:
         linux:
           al2:
-            url: https://d1uj6qtbmh3dt5.cloudfront.net/nice-dcv-el7-x86_64.tgz
-            sha256sum: https://d1uj6qtbmh3dt5.cloudfront.net/nice-dcv-el7-x86_64.tgz.sha256sum
+            url: https://d1uj6qtbmh3dt5.cloudfront.net/nice-dcv-amzn2-x86_64.tgz
+            sha256sum: https://d1uj6qtbmh3dt5.cloudfront.net/nice-dcv-amzn2-x86_64.tgz.sha256sum
           al2023:
             url: https://d1uj6qtbmh3dt5.cloudfront.net/nice-dcv-amzn2023-x86_64.tgz
             sha256sum: https://d1uj6qtbmh3dt5.cloudfront.net/nice-dcv-amzn2023-x86_64.tgz.sha256sum
@@ -252,8 +252,8 @@ package_config:
       aarch64:
         linux:
           al2:
-            url: https://d1uj6qtbmh3dt5.cloudfront.net/nice-dcv-el7-aarch64.tgz
-            sha256sum: https://d1uj6qtbmh3dt5.cloudfront.net/nice-dcv-el7-aarch64.tgz.sha256sum
+            url: https://d1uj6qtbmh3dt5.cloudfront.net/nice-dcv-amzn2-aarch64.tgz
+            sha256sum: https://d1uj6qtbmh3dt5.cloudfront.net/nice-dcv-amzn2-aarch64.tgz.sha256sum
           al2023:
             url: https://d1uj6qtbmh3dt5.cloudfront.net/nice-dcv-amzn2023-aarch64.tgz
             sha256sum: https://d1uj6qtbmh3dt5.cloudfront.net/nice-dcv-amzn2023-aarch64.tgz.sha256sum
@@ -348,6 +348,8 @@ package_config:
       red_hat:
         - gcc
         - make
+        - glx-utils
+        - xdpyinfo
         - kernel-headers-$(uname -r)
         - kernel-modules-extra-$(uname -r)
         - kernel-devel-$(uname -r)

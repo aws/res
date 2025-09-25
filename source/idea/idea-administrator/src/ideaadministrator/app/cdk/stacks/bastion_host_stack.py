@@ -20,7 +20,6 @@ import res.constants as res_constants
 import ideaadministrator
 from ideaadministrator.app.cdk.stacks import IdeaBaseStack
 from ideaadministrator.app.cdk.constructs import (
-    ExistingSocaCluster,
     InstanceProfile,
     Role,
     Policy
@@ -30,7 +29,6 @@ from typing import Optional
 import aws_cdk as cdk
 from aws_cdk import (
     aws_ec2 as ec2,
-    aws_route53 as route53,
     aws_kms as kms
 )
 import constructs
@@ -69,11 +67,8 @@ class BastionHostStack(IdeaBaseStack):
 
         self.bootstrap_package_uri = self.stack.node.try_get_context('bootstrap_package_uri')
 
-        self.cluster = ExistingSocaCluster(self.context, self.stack)
         self.bastion_host_role: Optional[Role] = None
         self.bastion_host_instance_profile: Optional[InstanceProfile] = None
-        self.ec2_instance: Optional[ec2.Instance] = None
-        self.cluster_dns_record_set: Optional[route53.RecordSet] = None
 
         self.build_iam_roles()
         self.build_cluster_settings()
@@ -120,10 +115,10 @@ class BastionHostStack(IdeaBaseStack):
 
         kms_key_id = self.context.config().get_string('cluster.ebs.kms_key_id', required=False, default=None)
         if kms_key_id is not None:
-             kms_key_arn = self.get_kms_key_arn(kms_key_id)
-             ebs_kms_key = kms.Key.from_key_arn(scope=self.stack, id=f'ebs-kms-key', key_arn=kms_key_arn)
+            kms_key_arn = self.get_kms_key_arn(kms_key_id)
+            ebs_kms_key = kms.Key.from_key_arn(scope=self.stack, id=f'ebs-kms-key', key_arn=kms_key_arn)
         else:
-             ebs_kms_key = kms.Alias.from_alias_name(scope=self.stack, id=f'ebs-kms-key-default', alias_name='alias/aws/ebs')
+            ebs_kms_key = kms.Alias.from_alias_name(scope=self.stack, id=f'ebs-kms-key-default', alias_name='alias/aws/ebs')
         cluster_settings['kms_key_id'] = ebs_kms_key.key_id
 
         https_proxy = self.context.config().get_string('cluster.network.https_proxy', required=False, default='')
@@ -133,7 +128,7 @@ class BastionHostStack(IdeaBaseStack):
                     'http_proxy': https_proxy,
                     'https_proxy': https_proxy,
                     'no_proxy': self.context.config().get_string('cluster.network.no_proxy', required=False, default='')
-                    }
+                }
 
         user_data = BootstrapUserDataBuilder(
             aws_region=self.aws_region,

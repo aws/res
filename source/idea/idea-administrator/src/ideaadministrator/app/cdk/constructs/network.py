@@ -609,7 +609,7 @@ class VpcGatewayEndpoint(SocaBaseConstruct):
                  service: str,
                  vpc: ec2.IVpc,
                  create_tags: CreateTagsCustomResource):
-        super().__init__(context, f'{service}-gateway-endpoint')
+        super().__init__(context, f'{service}-gateway-endpoint', scope)
         self.scope = scope
 
         self.endpoint = vpc.add_gateway_endpoint(
@@ -640,7 +640,7 @@ class VpcInterfaceEndpoint(SocaBaseConstruct):
                  subnets: ec2.SubnetSelection = None,
                  private_dns_enabled = True,
                  ):
-        super().__init__(context, f'{service}-vpc-endpoint')
+        super().__init__(context, f'{service}-vpc-endpoint', scope)
         self.scope = scope
 
         # this is a change from 2.x behaviour, where access to VPC endpoints was restricted by security group.
@@ -659,7 +659,7 @@ class VpcInterfaceEndpoint(SocaBaseConstruct):
                                                    )
 
         create_tags.apply(
-            name=self.name,
+            name=self.build_resource_name(self.name),
             resource_id=self.endpoint.vpc_endpoint_id,
             tags={
                 constants.IDEA_TAG_NAME: self.name,

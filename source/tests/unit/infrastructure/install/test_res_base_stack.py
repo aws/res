@@ -262,6 +262,30 @@ def test_role_assignment_table_creation(
     )
 
 
+def test_roles_table_creation(
+    res_base_stack: ResBaseStack,
+    res_base_template: Template,
+    cluster_manager_tags: List[Dict[str, Any]],
+) -> None:
+    util.assert_resource_name_has_correct_type_and_props(
+        res_base_stack.nested_stack,
+        res_base_template,
+        resources=["authz-roles-table"],
+        cfn_type=DB_CFN_TYPE,
+        props={
+            "Properties": {
+                "KeySchema": [
+                    {"AttributeName": "role_id", "KeyType": "HASH"},
+                ],
+                "AttributeDefinitions": [
+                    {"AttributeName": "role_id", "AttributeType": "S"},
+                ],
+                "Tags": cluster_manager_tags,
+            },
+        },
+    )
+
+
 def test_ad_automation_table_creation(
     res_base_stack: ResBaseStack,
     res_base_template: Template,
@@ -276,14 +300,11 @@ def test_ad_automation_table_creation(
             "Properties": {
                 "KeySchema": [
                     {"AttributeName": "instance_id", "KeyType": "HASH"},
-                    {"AttributeName": "nonce", "KeyType": "RANGE"},
                 ],
                 "AttributeDefinitions": [
                     {"AttributeName": "instance_id", "AttributeType": "S"},
-                    {"AttributeName": "nonce", "AttributeType": "S"},
                 ],
                 "Tags": cluster_manager_tags,
-                "TimeToLiveSpecification": {"AttributeName": "ttl", "Enabled": True},
             },
         },
     )
@@ -654,6 +675,7 @@ def test_vdc_distributed_local_table_creation(
 
 def test_res_base_stack_has_custom_resource(res_base_template: Template) -> None:
     res_base_template.resource_count_is(type="Custom::RESDdbPopulator", count=1)
+    res_base_template.resource_count_is(type="Custom::DeleteTargetGroups", count=1)
 
 
 def test_settings_table_creation(
@@ -1054,5 +1076,236 @@ def test_modules_table_creation(
                 ],
                 "Tags": cluster_manager_tags,
             },
+        },
+    )
+
+
+def test_delete_target_groups_role_policy_creation(
+    res_base_stack: ResBaseStack,
+    res_base_template: Template,
+) -> None:
+    util.assert_resource_name_has_correct_type_and_props(
+        res_base_stack.nested_stack,
+        res_base_template,
+        resources=["delete-target-groups-policy"],
+        cfn_type="AWS::IAM::Policy",
+        props={
+            "Properties": {
+                "PolicyDocument": {
+                    "Statement": [
+                        {
+                            "Action": "logs:CreateLogGroup",
+                            "Effect": "Allow",
+                            "Resource": "*",
+                            "Sid": "CloudWatchLogsPermissions",
+                        },
+                        {
+                            "Action": [
+                                "logs:CreateLogStream",
+                                "logs:PutLogEvents",
+                                "logs:DeleteLogStream",
+                            ],
+                            "Effect": "Allow",
+                            "Resource": "*",
+                            "Sid": "CloudWatchLogStreamPermissions",
+                        },
+                        {
+                            "Action": [
+                                "elasticloadbalancing:DescribeTargetGroups",
+                                "elasticloadbalancing:DescribeTags",
+                            ],
+                            "Effect": "Allow",
+                            "Resource": "*",
+                        },
+                        {
+                            "Action": "elasticloadbalancing:DeleteTargetGroup",
+                            "Effect": "Allow",
+                            "Resource": {
+                                "Fn::Join": [
+                                    "",
+                                    [
+                                        "arn:",
+                                        {"Ref": "AWS::Partition"},
+                                        ":elasticloadbalancing:",
+                                        {"Ref": "AWS::Region"},
+                                        ":",
+                                        {"Ref": "AWS::AccountId"},
+                                        ":targetgroup/",
+                                        res_base_stack.nested_stack.resolve(
+                                            res_base_stack.cluster_name
+                                        ),
+                                        "-*/*",
+                                    ],
+                                ]
+                            },
+                            "Condition": {
+                                "StringEquals": {
+                                    "aws:ResourceTag/res:EnvironmentName": [
+                                        res_base_stack.nested_stack.resolve(
+                                            res_base_stack.cluster_name
+                                        )
+                                    ]
+                                }
+                            },
+                        },
+                    ],
+                },
+                "PolicyName": {
+                    "Fn::Join": [
+                        "",
+                        [
+                            res_base_stack.nested_stack.resolve(
+                                res_base_stack.parameters.iam_resource_prefix_string
+                            ),
+                            res_base_stack.nested_stack.resolve(
+                                res_base_stack.cluster_name
+                            ),
+                            "-delete-target-groups-policy",
+                        ],
+                    ]
+                },
+                "Roles": [
+                    {
+                        "Ref": util.get_logical_id(
+                            res_base_stack.nested_stack, ["delete-target-groups-role"]
+                        )
+                    }
+                ],
+            }
+        },
+    )
+
+
+def test_delete_target_groups_lambda_role_creation(
+    res_base_stack: ResBaseStack,
+    res_base_template: Template,
+) -> None:
+    util.assert_resource_name_has_correct_type_and_props(
+        res_base_stack.nested_stack,
+        res_base_template,
+        resources=["delete-target-groups-role"],
+        cfn_type="AWS::IAM::Role",
+        props={
+            "Properties": {
+                "AssumeRolePolicyDocument": {
+                    "Statement": [
+                        {
+                            "Action": "sts:AssumeRole",
+                            "Effect": "Allow",
+                            "Principal": {"Service": "lambda.amazonaws.com"},
+                        }
+                    ],
+                },
+                "PermissionsBoundary": {
+                    "Fn::If": [
+                        "PermissionBoundaryProvided",
+                        res_base_stack.nested_stack.resolve(
+                            res_base_stack.parameters.get_str(
+                                CommonKey.IAM_PERMISSION_BOUNDARY
+                            )
+                        ),
+                        {"Ref": "AWS::NoValue"},
+                    ]
+                },
+                "Path": res_base_stack.nested_stack.resolve(
+                    res_base_stack.parameters.iam_resource_path_string
+                ),
+                "RoleName": {
+                    "Fn::Join": [
+                        "",
+                        [
+                            res_base_stack.nested_stack.resolve(
+                                res_base_stack.parameters.iam_resource_prefix_string
+                            ),
+                            res_base_stack.nested_stack.resolve(
+                                res_base_stack.cluster_name
+                            ),
+                            "-delete-target-groups-role",
+                        ],
+                    ]
+                },
+                "Tags": [
+                    {
+                        "Key": "Name",
+                        "Value": {
+                            "Fn::Join": [
+                                "",
+                                [
+                                    res_base_stack.nested_stack.resolve(
+                                        res_base_stack.cluster_name
+                                    ),
+                                    "-res-base",
+                                ],
+                            ]
+                        },
+                    },
+                    {
+                        "Key": "res:EnvironmentName",
+                        "Value": res_base_stack.nested_stack.resolve(
+                            res_base_stack.cluster_name
+                        ),
+                    },
+                ],
+            }
+        },
+    )
+
+
+def test_delete_target_groups_lambda_creation(
+    res_base_stack: ResBaseStack,
+    res_base_template: Template,
+) -> None:
+    util.assert_resource_name_has_correct_type_and_props(
+        res_base_stack.nested_stack,
+        res_base_template,
+        resources=["delete-target-groups"],
+        cfn_type="AWS::Lambda::Function",
+        props={
+            "Properties": {
+                "FunctionName": {
+                    "Fn::Join": [
+                        "",
+                        [
+                            res_base_stack.nested_stack.resolve(
+                                res_base_stack.cluster_name
+                            ),
+                            "-delete-target-groups",
+                        ],
+                    ]
+                },
+                "Handler": "handler.handler",
+                "Role": {
+                    "Fn::GetAtt": [
+                        util.get_logical_id(
+                            res_base_stack.nested_stack,
+                            ["delete-target-groups-role"],
+                        ),
+                        "Arn",
+                    ]
+                },
+                "Runtime": RES_COMMON_LAMBDA_RUNTIME.to_string(),
+                "Tags": [
+                    {
+                        "Key": "Name",
+                        "Value": {
+                            "Fn::Join": [
+                                "",
+                                [
+                                    res_base_stack.nested_stack.resolve(
+                                        res_base_stack.cluster_name
+                                    ),
+                                    "-res-base",
+                                ],
+                            ]
+                        },
+                    },
+                    {
+                        "Key": "res:EnvironmentName",
+                        "Value": res_base_stack.nested_stack.resolve(
+                            res_base_stack.cluster_name
+                        ),
+                    },
+                ],
+            }
         },
     )

@@ -33,7 +33,7 @@ def configure() -> None:
     base_os = os.environ.get("RES_BASE_OS")
     try:
         if base_os in ("amzn2", "amzn2023", "rhel8", "rhel9", "rocky9"):
-            if base_os == "rhel9" or base_os == "rocky9":
+            if base_os == "amzn2023" or base_os == "rhel9" or base_os == "rocky9":
                 _configure_wayland(
                     "WaylandEnable=false", constants.GDM_CONFIG_RHEL_PATH
                 )

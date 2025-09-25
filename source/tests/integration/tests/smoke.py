@@ -19,7 +19,6 @@ from typing import Optional
 
 import pytest
 from res.constants import CLUSTER_ADMIN_USERNAME  # type: ignore
-from res.resources import software_stacks  # type: ignore
 from res.utils import auth_utils  # type: ignore
 
 from ideadatamodel import (  # type: ignore
@@ -83,7 +82,8 @@ from tests.integration.framework.utils.session_utils import (
 )
 from tests.integration.framework.utils.sssd_utils import check_sssd_config_field
 from tests.integration.tests.config import (
-    AL2_SOFTWARE_STACK,
+    AL2023_SOFTWARE_STACK,
+    BASE_OS,
     LINUX_SOFTWARE_STACKS,
     TEST_SOFTWARE_STACKS,
 )
@@ -452,7 +452,7 @@ class TestsSmoke(object):
 
         assert stacks is not None
         for stack in stacks:
-            assert stack.base_os in software_stacks.BASE_OS
+            assert stack.base_os in BASE_OS
             assert stack.stack_id is not None
             assert stack.ami_id is not None
             stack_name = stack.name
@@ -557,7 +557,7 @@ class TestsSmoke(object):
     )
     @pytest.mark.parametrize(
         "software_stack",
-        [(AL2_SOFTWARE_STACK, "project", "admin")],
+        [(AL2023_SOFTWARE_STACK, "project", "admin")],
         indirect=True,
     )
     @pytest.mark.parametrize(
@@ -680,7 +680,7 @@ class TestsSmoke(object):
     )
     @pytest.mark.parametrize(
         "software_stack",
-        [(AL2_SOFTWARE_STACK, "project", "admin")],
+        [(AL2023_SOFTWARE_STACK, "project", "admin")],
         indirect=True,
     )
     @pytest.mark.parametrize(
@@ -744,6 +744,7 @@ class TestsSmoke(object):
         )
         logger.info(f"Software stack create response {software_stack_create_response}")
         new_software_stack = software_stack_create_response.software_stack
+        new_session = None
         try:
             wait_for_software_stack_to_be_active(
                 client=client,
@@ -779,10 +780,11 @@ class TestsSmoke(object):
             web_driver.quit()
             wait_for_session_connection_count(region, new_session, 0)
         finally:
-            delete_session(
-                client=client,
-                session=new_session,
-            )
+            if new_session:
+                delete_session(
+                    client=client,
+                    session=new_session,
+                )
             client.delete_software_stack(
                 request=DeleteSoftwareStackRequest(software_stack=created_stack)
             )

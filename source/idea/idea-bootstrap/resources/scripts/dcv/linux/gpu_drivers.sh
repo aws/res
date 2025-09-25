@@ -238,6 +238,11 @@ function install_gpu_drivers () {
       # Tesla driver: Yes, GRID driver: Yes
       install_nvidia_grid_drivers
       ;;
+    g6f)
+      log_info "Intel / NVIDIA L4 Tensor Core"
+      # Tesla driver: No, GRID driver: Yes
+      install_nvidia_grid_drivers
+      ;;
     g5)
       log_info "AMD / NVIDIA A10G"
       # Tesla driver: Yes, GRID driver: Yes

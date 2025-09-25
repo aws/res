@@ -5,12 +5,15 @@ import logging
 import logging.handlers
 import os
 import sys
+import threading
 from functools import lru_cache
 from typing import Optional
 
 import res.constants as constants
 from pyhocon import ConfigFactory, ConfigTree
 from res.utils.cluster_settings_utils import build_config_from_db
+
+LOGGING_HANDLER_LOCK = threading.Lock()
 
 
 def get_default_logging_config(profile: str = "default") -> ConfigTree:
@@ -128,18 +131,19 @@ class ResLogging:
             log_dir = self.get_log_dir()
             logfile = os.path.join(log_dir, filename)
 
-            if logfile in self._file_handlers:
-                return self._file_handlers[logfile]
-            else:
-                file_handler = logging.handlers.TimedRotatingFileHandler(
-                    filename=logfile,
-                    encoding=constants.DEFAULT_ENCODING,
-                    when=handler_config["when"],
-                    interval=int(handler_config["interval"]),
-                    backupCount=int(handler_config["backupCount"]),
-                )
-                self._file_handlers[logfile] = file_handler
-                return file_handler
+            with LOGGING_HANDLER_LOCK:
+                if logfile in self._file_handlers:
+                    return self._file_handlers[logfile]
+                else:
+                    file_handler = logging.handlers.TimedRotatingFileHandler(
+                        filename=logfile,
+                        encoding=constants.DEFAULT_ENCODING,
+                        when=handler_config["when"],
+                        interval=int(handler_config["interval"]),
+                        backupCount=int(handler_config["backupCount"]),
+                    )
+                    self._file_handlers[logfile] = file_handler
+                    return file_handler
         else:
             raise Exception(f"logging handler: {handler_cls} not supported")
 

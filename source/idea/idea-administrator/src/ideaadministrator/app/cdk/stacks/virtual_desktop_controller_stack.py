@@ -27,8 +27,10 @@ from ideaadministrator.app.cdk.constructs import (
     LambdaFunction,
     SecurityGroup,
     IdeaNagSuppression,
-    BackupPlan,
-    APIGatewayRestApi, VpcInterfaceEndpoint, VpcEndpointSecurityGroup, CreateTagsCustomResource
+    APIGatewayRestApi,
+    VpcInterfaceEndpoint,
+    VpcEndpointSecurityGroup,
+    CreateTagsCustomResource
 )
 from ideaadministrator import app_constants
 from ideaadministrator.app.cdk.stacks import IdeaBaseStack
@@ -60,7 +62,6 @@ from aws_cdk import (
     aws_elasticloadbalancingv2 as elbv2,
     aws_events_targets as events_targets,
     aws_s3 as s3,
-    aws_backup as backup,
     aws_iam as iam,
     aws_kms as kms,
     aws_apigateway as apigateway,
@@ -72,9 +73,6 @@ from aws_cdk import (
 
 from aws_cdk.aws_events import Schedule
 from typing import Optional, List
-
-import secrets
-import string
 
 
 class VirtualDesktopControllerStack(IdeaBaseStack):
@@ -180,8 +178,6 @@ class VirtualDesktopControllerStack(IdeaBaseStack):
         self.dcv_connection_gateway_autoscaling_group: Optional[asg.AutoScalingGroup] = None
         self.client_target_group: Optional[elbv2.ApplicationTargetGroup] = None
 
-        self.backup_plan: Optional[BackupPlan] = None
-
         self.user_pool = self.lookup_user_pool()
 
         self.resource_server = None
@@ -204,7 +200,6 @@ class VirtualDesktopControllerStack(IdeaBaseStack):
         self.build_dcv_host_infra()
 
         self.build_controller_ssm_commands_notification_infra()
-        self.build_backups()
 
         self.setup_egress_rules_for_quic()
         self.build_cluster_settings()
@@ -412,7 +407,7 @@ class VirtualDesktopControllerStack(IdeaBaseStack):
         # add resource server
         self.resource_server = self.user_pool.add_resource_server(
             id='resource-server',
-            identifier=self.module_id,
+            identifier=f"{self.cluster_name}-{self.module_id}",
             scopes=[
                 cognito.ResourceServerScope(scope_name='read', scope_description='Allow Read Access'),
                 cognito.ResourceServerScope(scope_name='write', scope_description='Allow Write Access')
@@ -425,7 +420,7 @@ class VirtualDesktopControllerStack(IdeaBaseStack):
         #  this is to cover cases for blue/green deployments when an additional instance of eVDI module is deployed
         session_manager_resource_server = self.user_pool.add_resource_server(
             id='dcv-session-manager-resource-server',
-            identifier='dcv-session-manager',
+            identifier=f"{self.cluster_name}-dcv-session-manager",
             scopes=[
                 cognito.ResourceServerScope(scope_name='sm_scope', scope_description='sm_scope')
             ]
@@ -440,14 +435,14 @@ class VirtualDesktopControllerStack(IdeaBaseStack):
             o_auth=cognito.OAuthSettings(
                 flows=cognito.OAuthFlows(client_credentials=True),
                 scopes=[
-                    cognito.OAuthScope.custom(f'{self.module_id}/read'),
-                    cognito.OAuthScope.custom(f'{self.module_id}/write'),
-                    cognito.OAuthScope.custom(f'{self.context.config().get_module_id(constants.MODULE_CLUSTER_MANAGER)}/read'),
-                    cognito.OAuthScope.custom('dcv-session-manager/sm_scope')
+                    cognito.OAuthScope.custom(f'{self.cluster_name}-{self.module_id}/read'),
+                    cognito.OAuthScope.custom(f'{self.cluster_name}-{self.module_id}/write'),
+                    cognito.OAuthScope.custom(f'{self.cluster_name}-{self.context.config().get_module_id(constants.MODULE_CLUSTER_MANAGER)}/read'),
+                    cognito.OAuthScope.custom(f'{self.cluster_name}-dcv-session-manager/sm_scope')
                 ]
             ),
             refresh_token_validity=cdk.Duration.days(30),
-            user_pool_client_name=self.module_id
+            user_pool_client_name=f"{self.cluster_name}-{self.module_id}"
         )
         client.node.add_dependency(session_manager_resource_server)
         client.node.add_dependency(self.resource_server)
@@ -495,6 +490,7 @@ class VirtualDesktopControllerStack(IdeaBaseStack):
             scope=self.stack,
             policy_template_name='add-to-user-pool-client-scopes.yml'
         ))
+                
         update_cluster_manager_client_scope_lambda = LambdaFunction(
             context=self.context,
             name=lambda_name,
@@ -518,13 +514,13 @@ class VirtualDesktopControllerStack(IdeaBaseStack):
                 'module_id': self.context.config().get_module_id(constants.MODULE_CLUSTER_MANAGER),
                 'user_pool_id': self.user_pool.user_pool_id,
                 'o_auth_scopes_to_add': [
-                    f'{self.context.config().get_module_id(constants.MODULE_VIRTUAL_DESKTOP_CONTROLLER)}/read',
-                    f'{self.context.config().get_module_id(constants.MODULE_VIRTUAL_DESKTOP_CONTROLLER)}/write',
+                    f'{self.cluster_name}-{self.context.config().get_module_id(constants.MODULE_VIRTUAL_DESKTOP_CONTROLLER)}/read',
+                    f'{self.cluster_name}-{self.context.config().get_module_id(constants.MODULE_VIRTUAL_DESKTOP_CONTROLLER)}/write',
                 ]
             },
             resource_type='Custom::UpdateClusterManagerClient'
         )
-
+        
     def build_api_gateway_vpc_endpoint(self):
         api_gateway_vpc_endpoint_security_group = VpcEndpointSecurityGroup(
             context=self.context,
@@ -1573,30 +1569,6 @@ class VirtualDesktopControllerStack(IdeaBaseStack):
         self._build_dcv_connection_gateway_instance_infrastructure()
         self._build_dcv_connection_gateway_network_infrastructure()
 
-    def build_backups(self):
-        cluster_backups_enabled = self.context.config().get_string('cluster.backups.enabled', default=False)
-        if not cluster_backups_enabled:
-            return
-
-        vdi_host_backup_enabled = self.context.config().get_bool('virtual-desktop-controller.vdi_host_backup.enabled', default=False)
-        if not vdi_host_backup_enabled:
-            return
-
-        backup_vault_arn = self.context.config().get_string('cluster.backups.backup_vault.arn', required=True)
-        backup_role_arn = self.context.config().get_string('cluster.backups.role_arn', required=True)
-
-        backup_role = iam.Role.from_role_arn(self.stack, 'backup-role', backup_role_arn)
-        backup_vault = backup.BackupVault.from_backup_vault_arn(self.stack, 'cluster-backup-vault', backup_vault_arn)
-
-        backup_plan_config = self.context.config().get_config('virtual-desktop-controller.vdi_host_backup.backup_plan')
-
-        self.backup_plan = BackupPlan(
-            self.context, 'vdi-host-backup-plan', self.stack,
-            backup_plan_name=f'{self.cluster_name}-{self.module_id}',
-            backup_plan_config=backup_plan_config,
-            backup_vault=backup_vault,
-            backup_role=backup_role
-        )
 
     def build_cluster_settings(self):
         cluster_settings = {
@@ -1662,8 +1634,5 @@ class VirtualDesktopControllerStack(IdeaBaseStack):
             cluster_settings['dcv_connection_gateway.certificate.certificate_secret_arn'] = self.context.config().get_string('virtual-desktop-controller.dcv_connection_gateway.certificate.certificate_secret_arn', required=True)
             cluster_settings['dcv_connection_gateway.certificate.private_key_secret_arn'] = self.context.config().get_string('virtual-desktop-controller.dcv_connection_gateway.certificate.private_key_secret_arn', required=True)
             cluster_settings['dcv_connection_gateway.certificate.custom_dns_name'] = self.context.config().get_string('virtual-desktop-controller.dcv_connection_gateway.certificate.custom_dns_name', required=True)
-
-        if self.backup_plan is not None:
-            cluster_settings['vdi_host_backup.backup_plan.arn'] = self.backup_plan.get_backup_plan_arn()
 
         self.update_cluster_settings(cluster_settings)

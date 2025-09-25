@@ -36,8 +36,8 @@ class ProjectsAPI(BaseAPI):
     def __init__(self, context: ideaclustermanager.AppContext):
         self.context = context
         self.logger = context.logger('projects')
-        self.SCOPE_WRITE = f'{self.context.module_id()}/write'
-        self.SCOPE_READ = f'{self.context.module_id()}/read'
+        self.SCOPE_WRITE = f'{self.context.cluster_name()}-{self.context.module_id()}/write'
+        self.SCOPE_READ = f'{self.context.cluster_name()}-{self.context.module_id()}/read'
 
         self.acl = {
             'Projects.CreateProject': {

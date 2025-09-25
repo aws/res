@@ -10,6 +10,7 @@ from res import exceptions
 from res.clients.dcv_broker import dcv_broker_client
 from res.clients.events import events_client
 from res.resources import (
+    cluster_settings,
     schedules,
     servers,
     session_permissions,
@@ -225,7 +226,9 @@ class TestVDIManagement(unittest.TestCase):
             "_terminate_hosts",
             lambda server: {"TerminatingInstances": [{"InstanceId": TEST_INSTANCE_ID}]},
         )
-
+        self.monkeypatch.setattr(
+            cluster_settings, "get_setting", lambda setting: "test_url"
+        )
         current_session = self.SESSION
         current_session[sessions.SESSION_DB_DCV_SESSION_ID_KEY] = ""
         sessions.update_session(current_session)

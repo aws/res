@@ -76,7 +76,7 @@ Statement:
   - Action:
       - execute-api:Invoke
     Resource:
-      - '{{ context.arns.custom_credential_broker_api_gateway_execute_api_arn() }}'
+      - '{{ context.arns.custom_credential_broker_api_gateway_execute_get_api_arn() }}'
       - '{{ context.arns.vdi_helper_api_gateway_execute_api_arn() }}'
     Effect: Allow
 

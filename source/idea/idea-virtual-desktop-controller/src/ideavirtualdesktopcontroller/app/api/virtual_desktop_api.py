@@ -380,11 +380,6 @@ class VirtualDesktopAPI(BaseAPI):
             session.failure_reason = f'Instance type: {session.server.instance_type} does not support Dedicated Hosts tenancy'
             return session, False
 
-        architecture = self.controller_utils.get_architecture(session.server.instance_type)
-        if session.type is VirtualDesktopSessionType.CONSOLE and architecture is VirtualDesktopArchitecture.ARM64:
-            session.failure_reason = f'Instance type: {session.server.instance_type} does not support Console Sessions'
-            return session, False
-
         # Validate Root Volume Size
         if Utils.is_empty(session.server) or Utils.is_empty(session.server.root_volume_size):
             session.failure_reason = 'missing session.server.root_volume_size'
@@ -514,13 +509,10 @@ class VirtualDesktopAPI(BaseAPI):
 
         gpu_manufacturer = self.controller_utils.get_gpu_manufacturer(session.server.instance_type)
         if Utils.is_empty(session.type):
-            architecture = self.controller_utils.get_architecture(session.server.instance_type)
             if session.software_stack.base_os is VirtualDesktopBaseOS.WINDOWS or gpu_manufacturer is VirtualDesktopGPU.AMD:
                 session.type = VirtualDesktopSessionType.CONSOLE
-            elif architecture == VirtualDesktopArchitecture.ARM64:
-                session.type = VirtualDesktopSessionType.VIRTUAL
             else:
-                session.type = self.context.config().get_string('vdc.dcv_session.default_dcv_session_type', required=True)
+                session.type = VirtualDesktopSessionType[self.context.config().get_string('vdc.dcv_session.default_dcv_session_type', required=True)]
 
         if Utils.is_empty(session.owner):
             session.owner = context.get_username()
@@ -711,14 +703,14 @@ class VirtualDesktopAPI(BaseAPI):
         new_software_stack = self._create_software_stack(new_software_stack)
 
         if session.base_os == VirtualDesktopBaseOS.WINDOWS:
-            _ = self.ssm_commands_utils.submit_ssm_command_to_enable_userdata_execution_on_windows(
+            _ = self.ssm_commands_utils.submit_ssm_command_to_clean_up_on_windows(
                 instance_id=session.server.instance_id,
                 idea_session_id=session.idea_session_id,
                 idea_session_owner=session.owner,
                 software_stack_id=new_software_stack.stack_id
             )
         else:
-            self.ssm_commands_utils.submit_ssm_command_to_delete_lock_files_linux(
+            self.ssm_commands_utils.submit_ssm_command_to_clean_up_linux(
                 instance_id=session.server.instance_id,
                 idea_session_id=session.idea_session_id,
                 idea_session_owner=session.owner,
@@ -727,6 +719,8 @@ class VirtualDesktopAPI(BaseAPI):
 
         session.locked = True
         session.server.locked = True
+        # Set the session state to PROVISIONING so that RES will re-create the DCV session after reboot.
+        session.state = VirtualDesktopSessionState.PROVISIONING
         _ = self.server_db.update(session.server)
         _ = self.session_db.update(session)
 

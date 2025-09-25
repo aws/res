@@ -1,0 +1,20 @@
+roles:
+  - role_id: "project_owner"
+    name: "Project Owner"
+    description: "Default Permission Profile for Project Owner"
+    projects:
+      update_personnel: true
+      update_status: true
+    vdis:
+      create_sessions: true
+      create_terminate_others_sessions: true
+  - role_id: "project_member"
+    name: "Project Member"
+    description: "Default Permission Profile for Project Member"
+    projects:
+      update_personnel: false
+      update_status: false
+    vdis:
+      create_sessions: true
+      create_terminate_others_sessions: false
+  

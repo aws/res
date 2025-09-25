@@ -2,6 +2,7 @@
 #  SPDX-License-Identifier: Apache-2.0
 
 ENVIRONMENT_NAME_TAG_KEY = "res:EnvironmentName"
+INSTANCE_NODE_TYPE_TAG_KEY = "res:NodeType"
 
 ADMIN_ROLE = "admin"
 USER_ROLE = "user"
@@ -54,6 +55,15 @@ AD_SYNC_LOCK_KEY = "ad-sync-lock"
 AD_SYNC_TASK_DEFINITION_KEY = "ad-sync.task_definition"
 AD_SYNC_TASK_CLUSTER_KEY = "ad-sync.task_cluster"
 AD_SYNC_SECURITY_GROUP_ID_KEY = "ad-sync.security_group_id"
+DIRECTORYSERVICE_SQS_QUEUE_URL_KEY = "directoryservice.ad_automation.sqs_queue_url"
+DIRECTORYSERVICE_SQS_QUEUE_ARN_KEY = "directoryservice.ad_automation.sqs_queue_arn"
+IDENTITY_PROVIDER_USERPOOL_ID = "identity-provider.cognito.user_pool_id"
+IDENTITY_PROVIDER_VDI_CLIENT_ID = "identity-provider.cognito.vdi_client_id"
+IDENTITY_PROVIDER_PROVIDER_URL = "identity-provider.cognito.provider_url"
+IDENTITY_PROVIDER_DOMAIN_URL = "identity-provider.cognito.domain_url"
+IDENTITY_PROVIDER_OAUTH_LAMBDA_ARN = (
+    "identity-provider.cognito.oauth_credentials_lambda_arn"
+)
 VPC_ID_KEY = "cluster.network.vpc_id"
 
 MODULE_DIRECTORY_SERVICE = "directoryservice"
@@ -135,7 +145,6 @@ AD_SYNC_STATUS_RECORD_EXPIRE_TIME_IN_SEC = 90 * 24 * 60 * 60
 
 AD_AUTOMATION_TABLE_NAME = "ad-automation"
 AD_AUTOMATION_DB_HASH_KEY = "instance_id"
-AD_AUTOMATION_DB_RANGE_KEY = "nonce"
 SNAPSHOT_TABLE_NAME = "snapshots"
 SNAPSHOT_DB_HASH_KEY = "s3_bucket_name"
 SNAPSHOT_DB_RANGE_KEY = "snapshot_path"

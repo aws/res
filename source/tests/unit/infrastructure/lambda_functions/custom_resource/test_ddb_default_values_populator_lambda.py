@@ -10,7 +10,7 @@ import pytest
 from moto import mock_aws
 from requests import patch
 from res.constants import ENVIRONMENT_NAME_KEY
-from res.resources import email_templates, permission_profiles, software_stacks
+from res.resources import email_templates, permission_profiles, roles, software_stacks
 
 from idea.infrastructure.resources.lambda_functions.custom_resource.ddb_default_values_populator_lambda import (
     handler,
@@ -27,6 +27,10 @@ DUMMY_SOFTWARE_STACK = {
 DUMMY_EMAIL_TEMPLATE = {
     email_templates.EMAIL_TEMPLATE_DB_NAME_KEY: "dummy_name",
     email_templates.EMAIL_TEMPLATE_DB_TEMPLATE_TYPE_KEY: "dummy_type",
+}
+
+DUMMY_ROLE = {
+    roles.ROLES_DB_HASH_KEY: "dummy_id",
 }
 
 
@@ -47,7 +51,7 @@ class TestDDBDeaultValuesPoplulatorLambda(TestCase):
         event = {"RequestType": "Create", "ResponseURL": DUMMY_URL}
         mock_cfn_response_send = MagicMock()
         mock_cfn_response_send.return_value = None
-        self.monkeypatch.setattr(handler, "_send_response", mock_cfn_response_send)
+        self.monkeypatch.setattr(handler, "send_response", mock_cfn_response_send)
         self.monkeypatch.setattr(
             permission_profiles,
             "is_permission_profiles_table_empty",
@@ -103,6 +107,17 @@ class TestDDBDeaultValuesPoplulatorLambda(TestCase):
         self.monkeypatch.setattr(
             email_templates, "create_email_template", MagicMock(return_value=None)
         )
+        self.monkeypatch.setattr(
+            roles,
+            "is_roles_table_empty",
+            MagicMock(return_value=True),
+        )
+        self.monkeypatch.setattr(
+            handler,
+            "_load_base_roles",
+            MagicMock(return_value=[DUMMY_ROLE]),
+        )
+        self.monkeypatch.setattr(roles, "create_role", MagicMock(return_value=None))
 
         handler.handler(event, {})
         response = handler.CustomResourceResponse(
@@ -123,4 +138,5 @@ class TestDDBDeaultValuesPoplulatorLambda(TestCase):
         email_templates.create_email_template.assert_called_once_with(
             DUMMY_EMAIL_TEMPLATE
         )
+        roles.create_role.assert_called_once_with(DUMMY_ROLE)
         mock_cfn_response_send.assert_called_once_with(url=DUMMY_URL, response=response)

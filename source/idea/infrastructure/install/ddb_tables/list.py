@@ -21,6 +21,7 @@ from res.resources import (  # type: ignore
     permission_profiles,
     projects,
     role_assignments,
+    roles,
     schedules,
     servers,
     session_permissions,
@@ -152,6 +153,17 @@ sso_state_table: RESDDBTable = RESDDBTable(
     ),
 )
 
+role_table: RESDDBTable = RESDDBTable(
+    id=roles.ROLES_TABLE_NAME,
+    module_id=constants.MODULE_ID_CLUSTER_MANAGER,
+    table_props=TableProps(
+        partition_key=Attribute(
+            name=roles.ROLES_DB_HASH_KEY,
+            type=AttributeType.STRING,
+        ),
+    ),
+)
+
 role_assignment_table: RESDDBTable = RESDDBTable(
     id=role_assignments.ROLE_ASSIGNMENTS_TABLE_NAME,
     module_id=constants.MODULE_ID_CLUSTER_MANAGER,
@@ -188,10 +200,6 @@ ad_automation_table: RESDDBTable = RESDDBTable(
         partition_key=Attribute(
             name=constants.AD_AUTOMATION_DB_HASH_KEY, type=AttributeType.STRING
         ),
-        sort_key=Attribute(
-            name=constants.AD_AUTOMATION_DB_RANGE_KEY, type=AttributeType.STRING
-        ),
-        time_to_live_attribute="ttl",
     ),
 )
 
@@ -360,6 +368,7 @@ ddb_tables_list: List[RESDDBTable] = [
     group_table,
     group_members_table,
     sso_state_table,
+    role_table,
     role_assignment_table,
     ad_automation_table,
     snapshot_table,

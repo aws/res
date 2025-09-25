@@ -8,6 +8,8 @@ import pytest
 from _pytest.monkeypatch import MonkeyPatch
 from ideatestutils.dynamodb.dynamodb_local import DynamoDBLocal
 from res.constants import (
+    AD_AUTOMATION_DB_HASH_KEY,
+    AD_AUTOMATION_TABLE_NAME,
     AD_SYNC_LOCK_TABLE,
     AD_SYNC_STATUS_SUBMISSION_TIME_KEY,
     AD_SYNC_STATUS_TABLE,
@@ -255,6 +257,16 @@ def context(ddb_local):
         BillingMode="PAY_PER_REQUEST",
     )
 
+    # Create ad automation table
+    dynamodb_client.create_table(
+        TableName=f"{ENVIRONMENT_NAME}.{AD_AUTOMATION_TABLE_NAME}",
+        KeySchema=[{"AttributeName": AD_AUTOMATION_DB_HASH_KEY, "KeyType": "HASH"}],
+        AttributeDefinitions=[
+            {"AttributeName": AD_AUTOMATION_DB_HASH_KEY, "AttributeType": "S"}
+        ],
+        BillingMode="PAY_PER_REQUEST",
+    )
+
     # Create AD sync status table
     dynamodb_client.create_table(
         TableName=f"{ENVIRONMENT_NAME}.{AD_SYNC_STATUS_TABLE}",
@@ -366,6 +378,9 @@ def context(ddb_local):
         TableName=f"{ENVIRONMENT_NAME}.{cluster_settings.CLUSTER_SETTINGS_TABLE_NAME}"
     )
     dynamodb_client.delete_table(TableName=f"{ENVIRONMENT_NAME}.{AD_SYNC_LOCK_TABLE}")
+    dynamodb_client.delete_table(
+        TableName=f"{ENVIRONMENT_NAME}.{AD_AUTOMATION_TABLE_NAME}"
+    )
     dynamodb_client.delete_table(TableName=f"{ENVIRONMENT_NAME}.{AD_SYNC_STATUS_TABLE}")
     dynamodb_client.delete_table(
         TableName=f"{ENVIRONMENT_NAME}.{permission_profiles.PERMISSION_PROFILE_TABLE_NAME}"

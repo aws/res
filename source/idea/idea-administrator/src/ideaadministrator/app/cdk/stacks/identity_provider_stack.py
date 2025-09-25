@@ -120,7 +120,7 @@ class IdentityProviderStack(IdeaBaseStack):
 
         self.user_pool = UserPool(
             context=self.context,
-            name=f'{self.cluster_name}-user-pool',
+            name='cognito-user-pool',
             scope=self.stack,
             props=cognito.UserPoolProps(
                 removal_policy=removal_policy,

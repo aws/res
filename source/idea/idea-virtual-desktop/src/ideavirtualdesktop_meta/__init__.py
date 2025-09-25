@@ -10,4 +10,4 @@
 #  and limitations under the License.
 
 __name__ = 'idea-virtual-desktop'
-__version__ = '2025.06.01'
+__version__ = '2025.09'

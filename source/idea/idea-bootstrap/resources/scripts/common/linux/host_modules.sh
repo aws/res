@@ -70,7 +70,7 @@ function install_modules () {
     fi
 
     echo "Downloading $module from $module_s3_uri..."
-    aws s3 cp "$module_s3_uri" "$target_location"
+    aws s3 cp "$module_s3_uri" "$target_location" --region "$AWS_REGION"
 
     # Change permissions to 555 and set ownership to root
     chmod 555 "$target_location"

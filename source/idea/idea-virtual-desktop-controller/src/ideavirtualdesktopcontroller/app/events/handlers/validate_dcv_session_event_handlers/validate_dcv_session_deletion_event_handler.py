@@ -20,6 +20,7 @@ from ideavirtualdesktopcontroller.app.clients.events_client.events_client import
 from ideavirtualdesktopcontroller.app.events.handlers.base_event_handler import BaseVirtualDesktopControllerEventHandler
 from res.resources import vdi_management, session_permissions
 from res.resources import sessions as user_sessions
+from res.resources import ad_automation
 
 class ValidateDCVSessionDeletionEventHandler(BaseVirtualDesktopControllerEventHandler):
 
@@ -41,7 +42,9 @@ class ValidateDCVSessionDeletionEventHandler(BaseVirtualDesktopControllerEventHa
         session_permissions.delete_session_permission_by_id(session_id=session.idea_session_id)
         # delete session entry
         user_sessions.delete_session(session=session.dict())
-        vdi_management.terminate_servers([session.server.dict()])
+        servers_to_delete = [session.server.dict()]
+        vdi_management.terminate_servers(servers_to_delete)
+        ad_automation.remove_ad_authorization([server["instance_id"] for server in servers_to_delete])
 
     def handle_event(self, message_id: str, sender_id: str, event: VirtualDesktopEvent):
         if not self.is_sender_controller_role(sender_id) and not self.is_sender_vdi_helper_lambda(sender_id):

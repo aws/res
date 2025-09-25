@@ -127,14 +127,19 @@ def overwrite_file(value: str, file_path_str: str) -> None:
     except Exception as e:
         logger.error(f"Error overwriting file {file_path_str}: {e}")
 
-def check_reboot_required():
+def check_reboot_required() -> bool:
     try:
         with open(REBOOT_REQUIRED_FILE_PATH, 'r') as f:
             reboot_required = f.read().strip()
 
-        if reboot_required != "no":
+        if reboot_required == "no":
+            return False
+        else:
             subprocess.run(["reboot"], check=True)
+            return True
     except FileNotFoundError as e:
         logger.error(f"Error: reading file {REBOOT_REQUIRED_FILE_PATH}: {e}")
+        return False
     except Exception as e:
         logger.error(f"Error checking reboot status: {e}")
+        return False

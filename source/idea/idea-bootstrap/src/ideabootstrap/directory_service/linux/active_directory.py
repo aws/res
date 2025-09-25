@@ -4,12 +4,17 @@
 import logging
 import os
 import subprocess
+import time
 from typing import Any, Dict
 
 from res.utils import sssd_utils
 
 
 def join_active_directory(auth_entry: Dict[str, Any], logger: logging.Logger) -> None:
+    # Rename the existing SSSD config before joining AD.
+    # Otherwise, the process could fail if the previous VDI session has already joined AD.
+    back_up_sssd(logger)
+
     otp = auth_entry["otp"]
     domain_controller = auth_entry["domain_controller"]
     hostname = auth_entry["hostname"]
@@ -70,6 +75,12 @@ def connect_to_active_directory(logger: logging.Logger):
             ["sudo", "pam-auth-update", "--enable", "sss", "--force"],
             stdout=subprocess.PIPE,
         )
+
+def back_up_sssd(logger: logging.Logger) -> None:
+    if os.path.exists(sssd_utils.SSSD_FILE_PATH):
+        logger.info(f"Back up existing SSSD config file: {sssd_utils.SSSD_FILE_PATH}")
+
+        os.rename(sssd_utils.SSSD_FILE_PATH, f"{sssd_utils.SSSD_FILE_PATH}.{time.time()}")
 
 def configure_sssd(logger: logging.Logger):
     try:

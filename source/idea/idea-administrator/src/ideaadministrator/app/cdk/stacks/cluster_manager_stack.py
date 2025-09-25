@@ -38,15 +38,12 @@ from ideadatamodel.constants import (
 import aws_cdk as cdk
 from aws_cdk import (
     aws_ec2 as ec2,
-    aws_events as events,
-    aws_events_targets as events_targets,
     aws_cognito as cognito,
     aws_sqs as sqs,
     aws_elasticloadbalancingv2 as elbv2,
     aws_autoscaling as asg,
     aws_kms as kms
 )
-from aws_cdk.aws_events import Schedule
 import constructs
 
 
@@ -109,7 +106,7 @@ class ClusterManagerStack(IdeaBaseStack):
         # add resource server
         resource_server = self.user_pool.add_resource_server(
             id='resource-server',
-            identifier=self.module_id,
+            identifier=f"{self.cluster_name}-{self.module_id}",
             scopes=[
                 cognito.ResourceServerScope(scope_name='read', scope_description='Allow Read Access'),
                 cognito.ResourceServerScope(scope_name='write', scope_description='Allow Write Access')
@@ -129,12 +126,12 @@ class ClusterManagerStack(IdeaBaseStack):
             o_auth=cognito.OAuthSettings(
                 flows=cognito.OAuthFlows(client_credentials=True),
                 scopes=[
-                    cognito.OAuthScope.custom(f'{self.module_id}/read'),
-                    cognito.OAuthScope.custom(f'{self.module_id}/write')
+                    cognito.OAuthScope.custom(f'{self.cluster_name}-{self.module_id}/read'),
+                    cognito.OAuthScope.custom(f'{self.cluster_name}-{self.module_id}/write')
                 ]
             ),
             refresh_token_validity=cdk.Duration.hours(refresh_token_validity_hours),
-            user_pool_client_name=self.module_id
+            user_pool_client_name=f"{self.cluster_name}-{self.module_id}"
         )
         client.node.add_dependency(resource_server)
 
@@ -174,8 +171,6 @@ class ClusterManagerStack(IdeaBaseStack):
         )
         variables = SocaAnyPayload()
         variables.vdi_host_policy_resource_tag = constants.VDI_HOST_POLICY_RESOURCE_TAG
-        variables.vdi_security_group_resource_tag = constants.VDI_SECURITY_GROUP_RESOURCE_TAG
-
         variables.s3_bucket_iam_role_resource_tag_value = constants.S3_BUCKET_IAM_ROLE_RESOURCE_TAG_VALUE
         self.cluster_manager_role.attach_inline_policy(
             Policy(
@@ -251,13 +246,13 @@ class ClusterManagerStack(IdeaBaseStack):
                     'http_proxy': https_proxy,
                     'https_proxy': https_proxy,
                     'no_proxy': no_proxy
-                    }
+                }
         kms_key_id = self.context.config().get_string('cluster.ebs.kms_key_id', required=False, default=None)
         if kms_key_id is not None:
-             kms_key_arn = self.get_kms_key_arn(kms_key_id)
-             ebs_kms_key = kms.Key.from_key_arn(scope=self.stack, id=f'ebs-kms-key', key_arn=kms_key_arn)
+            kms_key_arn = self.get_kms_key_arn(kms_key_id)
+            ebs_kms_key = kms.Key.from_key_arn(scope=self.stack, id=f'ebs-kms-key', key_arn=kms_key_arn)
         else:
-             ebs_kms_key = kms.Alias.from_alias_name(scope=self.stack, id=f'ebs-kms-key-default', alias_name='alias/aws/ebs')
+            ebs_kms_key = kms.Alias.from_alias_name(scope=self.stack, id=f'ebs-kms-key-default', alias_name='alias/aws/ebs')
 
         if is_public:
             vpc_subnets = ec2.SubnetSelection(
@@ -280,7 +275,6 @@ class ClusterManagerStack(IdeaBaseStack):
             base_os=base_os,
             bootstrap_source_dir_path=ideaadministrator.props.bootstrap_source_dir
         ).build()
-
 
         instance_profile = InstanceProfile(
             context=self.context,
@@ -312,7 +306,7 @@ class ClusterManagerStack(IdeaBaseStack):
             version_description=self.deployment_id
         )
 
-        
+
         cfn_launch_template: ec2.CfnLaunchTemplate = launch_template.node.default_child
         cfn_launch_template.add_property_override(
             "LaunchTemplateData.IamInstanceProfile", {

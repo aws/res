@@ -215,9 +215,9 @@ class ArnBuilder:
         required_policies = [
             'amazon_ssm_managed_instance_core_arn',
             'cloud_watch_agent_server_arn',
-            'dcv_host_role_managed_policy_arn'
         ]
         required_policy_arns = [self.config.get_string(f'cluster.iam.policies.{policy}') for policy in required_policies]
+        required_policy_arns.append(self.config.get_string('vdc.dcv_host_role_managed_policy_arn'))
 
         return required_policy_arns
 
@@ -283,8 +283,7 @@ class ArnBuilder:
         return self.get_ddb_table_arn('ad-automation')
 
     def get_ad_automation_sqs_queue_arn(self) -> str:
-        module_id = self.config.get_module_id(constants.MODULE_DIRECTORYSERVICE)
-        return self.get_sqs_arn(f'{module_id}-ad-automation.fifo')
+        return self.get_sqs_arn(f'ad-automation.fifo')
 
     def get_kinesis_arn(self) -> str:
         return self.get_arn(service='kinesis',
@@ -403,7 +402,7 @@ class ArnBuilder:
     def api_gateway_execute_api_arn(self, api_id: str, stage: str, http_verb: str, resource: str):
         return self.get_arn(service="execute-api", aws_region=self.config.get_string("cluster.aws.region"), resource=f'{api_id}/{stage}/{http_verb}/{resource}')
 
-    def custom_credential_broker_api_gateway_execute_api_arn(self):
+    def custom_credential_broker_api_gateway_execute_get_api_arn(self):
         return self.api_gateway_execute_api_arn("*", constants.API_GATEWAY_CUSTOM_CREDENTIAL_BROKER_STAGE, "GET", constants.API_GATEWAY_CUSTOM_CREDENTIAL_BROKER_RESOURCE)
 
     def vdi_helper_api_gateway_execute_api_arn(self):

@@ -27,17 +27,8 @@ class Create:
     def get_commands(self) -> list[str]:
         return [
             f"{EXE} --version",
-            *self._bootstrap(),
             *self._deploy(),
         ]
-
-    def _bootstrap(self) -> list[str]:
-        """
-        Bootstrap the environment
-
-        This creates a bucket and the bootstrap stack
-        """
-        return [f"{EXE} bootstrap {self._get_suffix()}"]
 
     def _deploy(self) -> list[str]:
         """

@@ -10,33 +10,28 @@
 #  and limitations under the License.
 
 import ideaadministrator
-from ideaadministrator.app.cdk.idea_code_asset import IdeaCodeAsset, SupportedLambdaPlatforms
-from ideaadministrator.app.cdk.stacks import IdeaBaseStack
-from ideadatamodel import (
-    constants
+from ideaadministrator.app.cdk.idea_code_asset import (
+    IdeaCodeAsset,
+    SupportedLambdaPlatforms,
 )
+from ideaadministrator.app.cdk.stacks import IdeaBaseStack
+from ideadatamodel import constants
 from ideasdk.utils import Utils
 
 from ideaadministrator.app.cdk.constructs import (
-    Vpc,
     ExistingVpc,
     SubnetFilterKeys,
-    VpcGatewayEndpoint,
-    VpcInterfaceEndpoint,
     PrivateHostedZone,
     SecurityGroup,
     DefaultClusterSecurityGroup,
     BastionHostSecurityGroup,
     ExternalLoadBalancerSecurityGroup,
     InternalLoadBalancerSecurityGroup,
-    VpcEndpointSecurityGroup,
-    CreateTagsCustomResource,
     Policy,
     ManagedPolicy,
     Role,
     LambdaFunction,
     SNSTopic,
-    BackupPlan
 )
 from ideaadministrator import app_constants
 
@@ -52,8 +47,6 @@ from aws_cdk import (
     aws_route53_targets as route53_targets,
     aws_events_targets as events_targets,
     aws_s3 as s3,
-    aws_backup as backup,
-    aws_kms as kms
 )
 
 
@@ -62,14 +55,12 @@ class ClusterStack(IdeaBaseStack):
     Cluster Stack
 
     Provisions base infrastructure components for RES Environment:
-    * VPC, VPC Endpoints (if applicable)
     * Internal and External Load Balancers
     * Common IAM Roles and Security Groups
     * Self-signed Certificates (if applicable)
     * Route53 Private Hosted Zone
     * Common custom resource Lambda Functions
     * Cluster Prefix List
-    * AWS Backup Vault and Backup Plan
     * Cluster Settings
     """
 
@@ -97,24 +88,12 @@ class ClusterStack(IdeaBaseStack):
                          },
                          env=env)
 
-        # if user wants to use an existing VPC, user may provide and existing VPC ID.
-        # in that case, lookup the VPC and optionally, VpcInterface endpoints if specified, using ExistingVpc construct.
-        # else, create a new Vpc
-        self._vpc: Optional[Vpc] = None
-        self._existing_vpc: Optional[ExistingVpc] = None
 
-        # provisioned only for new VPC
-        self.vpc_gateway_endpoints: Optional[Dict[str, VpcGatewayEndpoint]] = None
-        self.vpc_interface_endpoints: Optional[Dict[str, VpcInterfaceEndpoint]] = None
+        self._existing_vpc: Optional[ExistingVpc] = None
 
         self.self_signed_certificate_lambda: Optional[LambdaFunction] = None
         self.external_certificate: Optional[cdk.CustomResource] = None
         self.internal_certificate: Optional[cdk.CustomResource] = None
-
-        self.backup_policies: Optional[Dict[str, ManagedPolicy]] = None
-        self.backup_role: Optional[Role] = None
-        self.backup_vault: Optional[backup.BackupVault] = None
-        self.backup_plan: Optional[BackupPlan] = None
 
         self.cluster_endpoints_lambda: Optional[LambdaFunction] = None
         self.external_alb: Optional[elbv2.ApplicationLoadBalancer] = None
@@ -126,7 +105,6 @@ class ClusterStack(IdeaBaseStack):
         self.internal_alb_dcv_broker_agent_listener: Optional[elbv2.CfnListener] = None
         self.internal_alb_dcv_broker_gateway_listener: Optional[elbv2.CfnListener] = None
 
-        self.dcv_host_role_managed_policy: Optional[ManagedPolicy] = None
 
         self.private_hosted_zone: Optional[PrivateHostedZone] = None
         self.cluster_prefix_list: Optional[ec2.CfnPrefixList] = None
@@ -134,18 +112,14 @@ class ClusterStack(IdeaBaseStack):
         self.roles: Dict[str, Role] = {}
         self.amazon_ssm_managed_instance_core_policy: Optional[ManagedPolicy] = None
         self.cloud_watch_agent_server_policy: Optional[ManagedPolicy] = None
-        self.amazon_prometheus_remote_write_policy: Optional[ManagedPolicy] = None
+        self.dcv_host_role_scoped_down_managed_policy: Optional[ManagedPolicy] = None
 
-        self.oauth_credentials_lambda: Optional[LambdaFunction] = None
         self.solution_metrics_lambda: Optional[LambdaFunction] = None
         self.solution_metrics_lambda_policy: Optional[Policy] = None
         self.cluster_settings_lambda: Optional[LambdaFunction] = None
         self.cluster_settings_lambda_policy: Optional[Policy] = None
 
         self.ec2_events_sns_topic: Optional[SNSTopic] = None
-
-        # build backups
-        self.build_backups()
 
         # build common policies
         # these policies are essential available in form of managed policies, but AWS managed policies are too broad
@@ -182,9 +156,6 @@ class ClusterStack(IdeaBaseStack):
         # cluster endpoints
         self.build_cluster_endpoints()
 
-        # vpc endpoints
-        self.build_vpc_endpoints()
-
         # solution metrics lambda function
         self.build_solution_metrics_lambda()
 
@@ -193,114 +164,15 @@ class ClusterStack(IdeaBaseStack):
 
     @property
     def vpc(self) -> ec2.IVpc:
-        if self.context.config().get_bool('cluster.network.use_existing_vpc', False):
-            return self._existing_vpc.vpc
-        else:
-            return self._vpc
+        return self._existing_vpc.vpc
 
     def private_subnets(self, subnet_filter_key: Optional[SubnetFilterKeys] = None) -> List[ec2.ISubnet]:
-        if self.context.config().get_bool('cluster.network.use_existing_vpc', False):
-            return self._existing_vpc.get_private_subnets(subnet_filter_key)
-        else:
-            return self.vpc.private_subnets
+        return self._existing_vpc.get_private_subnets(subnet_filter_key)
+
 
     def public_subnets(self, subnet_filter_key: Optional[SubnetFilterKeys] = None) -> List[ec2.ISubnet]:
-        if self.context.config().get_bool('cluster.network.use_existing_vpc', False):
-            return self._existing_vpc.get_public_subnets(subnet_filter_key)
-        else:
-            return self.vpc.public_subnets
+        return self._existing_vpc.get_public_subnets(subnet_filter_key)
 
-    def build_backups(self):
-
-        enable_backup = self.context.config().get_bool('cluster.backups.enabled', default=False)
-        if not enable_backup:
-            return
-
-        enable_restore = self.context.config().get_bool('cluster.backups.enable_restore', default=True)
-
-        # role and policies
-        # all backup polices must be managed policies and not inline policies.
-        # if added as inline policies - the maximum policy size of 10240 bytes exceeded error is raised.
-        backup_create_policy = ManagedPolicy(
-            self.context, 'backup-create-policy', self.stack,
-            managed_policy_name=f'{self.cluster_name}-{self.aws_region}-backup-create',
-            description='Provides AWS Backup permission to create backups on your behalf across AWS services',
-            policy_template_name='backup-create.yml'
-        )
-        backup_s3_create_policy = ManagedPolicy(
-            self.context, 'backup-s3-create-policy', self.stack,
-            managed_policy_name=f'{self.cluster_name}-{self.aws_region}-backup-s3-create',
-            description='Policy containing permissions necessary for AWS Backup to backup data in any S3 bucket. '
-                        'This includes read access to all S3 objects and any decrypt access for all KMS keys.',
-            policy_template_name='backup-s3-create.yml'
-        )
-
-        backup_restore_policy = None
-        backup_s3_restore_policy = None
-        if enable_restore:
-            backup_restore_policy = ManagedPolicy(
-                self.context, 'backup-restore-policy', self.stack,
-                managed_policy_name=f'{self.cluster_name}-{self.aws_region}-backup-restore',
-                description='Provides AWS Backup permission to perform restores on your behalf across AWS services. '
-                            'This policy includes permissions to create and delete AWS resources, such as EBS volumes, RDS instances, and EFS file systems, which are part of the restore process.',
-                policy_template_name='backup-restore.yml'
-            )
-            backup_s3_restore_policy = ManagedPolicy(
-                self.context, 'backup-s3-restore-policy', self.stack,
-                managed_policy_name=f'{self.cluster_name}-{self.aws_region}-backup-s3-restore',
-                description='Policy containing permissions necessary for AWS Backup to restore a S3 backup to a bucket. '
-                            'This includes read/write permissions to all S3 buckets, and permissions to GenerateDataKey and DescribeKey for all KMS keys.',
-                policy_template_name='backup-s3-restore.yml'
-            )
-
-        backup_role = Role(
-            context=self.context,
-            name=f'{self.module_id}-backup-role',
-            scope=self.stack,
-            description='Role used by AWS Backup to authenticate when backing or restoring the resources',
-            assumed_by=['backup']
-        )
-        backup_role.add_managed_policy(backup_create_policy)
-        backup_role.add_managed_policy(backup_s3_create_policy)
-        if enable_restore:
-            backup_role.add_managed_policy(backup_restore_policy)
-            backup_role.add_managed_policy(backup_s3_restore_policy)
-
-        # backup vault
-        backup_vault_removal_policy = self.context.config().get_string('cluster.backups.backup_vault.removal_policy', default='RETAIN')
-        backup_vault_kms_key_id = self.context.config().get_string('cluster.backups.backup_vault.kms_key_id', default=None)
-        backup_vault_encryption_key = None
-        if Utils.is_not_empty(backup_vault_kms_key_id):
-            backup_vault_encryption_key = kms.Key.from_key_arn(self.stack, 'backup-vault-kms-key', self.get_kms_key_arn(key_id=backup_vault_kms_key_id))
-        backup_vault = backup.BackupVault(
-            self.stack, 'backup-vault',
-            backup_vault_name=f'{self.cluster_name}-{self.module_id}-backup-vault',
-            encryption_key=backup_vault_encryption_key,
-            removal_policy=cdk.RemovalPolicy(backup_vault_removal_policy)
-        )
-
-        # backup plan
-        backup_plan_config = self.context.config().get_config('cluster.backups.backup_plan')
-        # create immutable reference to prevent BackupSelection from automatically adding the AWS Backup related managed policies to the role.
-        immutable_backup_role = backup_role.without_policy_updates()
-        backup_plan = BackupPlan(
-            self.context, 'cluster-backup-plan', self.stack,
-            backup_plan_name=f'{self.cluster_name}-{self.module_id}',
-            backup_plan_config=backup_plan_config,
-            backup_vault=backup_vault,
-            backup_role=immutable_backup_role
-        )
-
-        backup_plan.backup_selection.node.add_dependency(backup_create_policy)
-        backup_plan.backup_selection.node.add_dependency(backup_s3_create_policy)
-        if enable_restore:
-            backup_plan.backup_selection.node.add_dependency(backup_restore_policy)
-            backup_plan.backup_selection.node.add_dependency(backup_s3_restore_policy)
-        backup_plan.backup_selection.node.add_dependency(backup_role)
-
-        self.backup_role = backup_role
-        self.backup_vault = backup_vault
-        self.backup_plan = backup_plan
 
     def build_policies(self):
         self.amazon_ssm_managed_instance_core_policy = ManagedPolicy(
@@ -317,15 +189,6 @@ class ClusterStack(IdeaBaseStack):
             policy_template_name='cloud-watch-agent-server-policy.yml'
         )
 
-        self.dcv_host_role_managed_policy = ManagedPolicy(
-                context=self.context,
-                name='vdi-host-managed-policy',
-                description="Required policy for custom VDI instance profiles",
-                managed_policy_name=f'{self.cluster_name}-{self.aws_region}-vdi-host-managed-policy',
-                scope=self.stack,
-                policy_template_name='virtual-desktop-dcv-host.yml'
-        )
-
         self.dcv_host_role_scoped_down_managed_policy = ManagedPolicy(
                 context=self.context,
                 name='vdi-host-scoped-down-managed-policy',
@@ -335,13 +198,6 @@ class ClusterStack(IdeaBaseStack):
                 policy_template_name='virtual-desktop-dcv-host-scoped-down.yml'
         )
 
-        if self.is_metrics_provider_amazon_managed_prometheus():
-            self.amazon_prometheus_remote_write_policy = ManagedPolicy(
-                self.context, 'amazon-prometheus-remote-write-access', self.stack,
-                managed_policy_name=f'{self.cluster_name}-{self.aws_region}-amazon-prometheus-remote-write-access',
-                description='Grants write only access to AWS Managed Prometheus workspaces',
-                policy_template_name='amazon-prometheus-remote-write-access.yml'
-            )
 
     def build_roles(self):
         lambda_log_retention_role = Role(
@@ -361,19 +217,14 @@ class ClusterStack(IdeaBaseStack):
         )
         self.roles[app_constants.LOG_RETENTION_ROLE_NAME] = lambda_log_retention_role
 
-    def build_vpc(self):
-        # if the user specifies an existing vpc id in the user config, then do not create any vpc resources
-        # it is upto the administrator to manage the user config file for future upgrades and provide the same configuration file
-        # each time
 
-        if self.context.config().get_bool('cluster.network.use_existing_vpc', False):
-            self._existing_vpc = ExistingVpc(
+    def build_vpc(self):
+        self._existing_vpc = ExistingVpc(
                 context=self.context,
                 name='existing-vpc',
                 scope=self.stack
             )
-        else:
-            self._vpc = Vpc(self.context, 'vpc', self.stack)
+
 
     def build_private_hosted_zone(self):
         self.private_hosted_zone = PrivateHostedZone(
@@ -521,62 +372,6 @@ class ClusterStack(IdeaBaseStack):
         if len(nat_eips) > 0:
             external_loadbalancer_security_group.add_nat_gateway_ips_ingress_rule(nat_eips)
 
-        # vpc endpoint
-        use_existing_vpc = self.context.config().get_bool('cluster.network.use_existing_vpc')
-        use_vpc_endpoints = self.context.config().get_bool('cluster.network.use_vpc_endpoints')
-        if not use_existing_vpc and use_vpc_endpoints:
-            vpc_endpoint_security_group = VpcEndpointSecurityGroup(
-                context=self.context,
-                name='vpc-endpoint-security-group',
-                scope=self.stack,
-                vpc=self.vpc
-            )
-            self.security_groups['vpc-endpoint'] = vpc_endpoint_security_group
-
-    def build_vpc_endpoints(self):
-        use_vpc_endpoints = self.context.config().get_bool('cluster.network.use_vpc_endpoints', False)
-        if not use_vpc_endpoints:
-            return
-
-        use_existing_vpc = self.context.config().get_bool('cluster.network.use_existing_vpc', False)
-        if use_existing_vpc:
-            return
-
-        vpc_gateway_endpoints = {}
-        vpc_interface_endpoints = {}
-
-        create_tags = CreateTagsCustomResource(
-            context=self.context,
-            scope=self.stack,
-            lambda_log_retention_role=self.roles[app_constants.LOG_RETENTION_ROLE_NAME]
-        )
-
-        gateway_endpoints = self.context.config().get_list('cluster.network.vpc_gateway_endpoints', [])
-        for service in gateway_endpoints:
-            vpc_gateway_endpoints[service] = VpcGatewayEndpoint(
-                context=self.context,
-                scope=self.stack,
-                service=service,
-                vpc=self.vpc,
-                create_tags=create_tags
-            )
-
-        interface_endpoints = self.context.config().get_config('cluster.network.vpc_interface_endpoints', default={})
-        for service in interface_endpoints:
-            enabled = Utils.get_value_as_bool('enabled', interface_endpoints[service], default=False)
-            if not enabled:
-                continue
-            vpc_interface_endpoints[service] = VpcInterfaceEndpoint(
-                context=self.context,
-                scope=self.stack,
-                service=service,
-                vpc=self.vpc,
-                vpc_endpoint_security_group=self.security_groups['vpc-endpoint'],
-                create_tags=create_tags
-            )
-
-        self.vpc_gateway_endpoints = vpc_gateway_endpoints
-        self.vpc_interface_endpoints = vpc_interface_endpoints
 
     def build_cluster_settings_lambda(self):
         lambda_name = 'cluster-settings'
@@ -1022,79 +817,78 @@ class ClusterStack(IdeaBaseStack):
                 zone=self.private_hosted_zone
             )
 
-        if self.context.config().is_module_enabled(constants.MODULE_VIRTUAL_DESKTOP_CONTROLLER):
-            dcv_broker_client_listener_arn = self.context.config().get_string('cluster.external_alb.dcv_broker_client_listener_arn')
-            dcv_broker_client_listener_default_actions = self.get_alb_listener_default_actions(dcv_broker_client_listener_arn)
-            dcv_broker_client_communication_port = self.context.config().get_int('virtual-desktop-controller.dcv_broker.client_communication_port', required=True)
-            self.internal_alb_dcv_broker_client_listener = elbv2.CfnListener(
-                self.internal_alb,
-                'dcv-broker-client-listener',
-                port=dcv_broker_client_communication_port,
-                ssl_policy=self.context.config().get_string('virtual-desktop-controller.dcv_broker.ssl_policy', default='ELBSecurityPolicy-TLS13-1-2-2021-06'),
-                load_balancer_arn=self.internal_alb.load_balancer_arn,
-                protocol='HTTPS',
-                certificates=[
-                    elbv2.CfnListener.CertificateProperty(
-                        certificate_arn=internal_acm_certificate_arn
-                    )
-                ],
-                default_actions=dcv_broker_client_listener_default_actions
-            )
-            self.internal_alb_dcv_broker_client_listener.node.add_dependency(self.internal_certificate)
-            self.security_groups['internal-load-balancer'].add_ingress_rule(
-                ec2.Peer.ipv4(self.vpc.vpc_cidr_block),
-                ec2.Port.tcp(dcv_broker_client_communication_port),
-                description='Allow HTTPS traffic from DCV Clients to DCV Broker'
-            )
+        dcv_broker_client_listener_arn = self.context.config().get_string('cluster.external_alb.dcv_broker_client_listener_arn')
+        dcv_broker_client_listener_default_actions = self.get_alb_listener_default_actions(dcv_broker_client_listener_arn)
+        dcv_broker_client_communication_port = self.context.config().get_int('virtual-desktop-controller.dcv_broker.client_communication_port', required=True)
+        self.internal_alb_dcv_broker_client_listener = elbv2.CfnListener(
+            self.internal_alb,
+            'dcv-broker-client-listener',
+            port=dcv_broker_client_communication_port,
+            ssl_policy=self.context.config().get_string('virtual-desktop-controller.dcv_broker.ssl_policy', default='ELBSecurityPolicy-TLS13-1-2-2021-06'),
+            load_balancer_arn=self.internal_alb.load_balancer_arn,
+            protocol='HTTPS',
+            certificates=[
+                elbv2.CfnListener.CertificateProperty(
+                    certificate_arn=internal_acm_certificate_arn
+                )
+            ],
+            default_actions=dcv_broker_client_listener_default_actions
+        )
+        self.internal_alb_dcv_broker_client_listener.node.add_dependency(self.internal_certificate)
+        self.security_groups['internal-load-balancer'].add_ingress_rule(
+            ec2.Peer.ipv4(self.vpc.vpc_cidr_block),
+            ec2.Port.tcp(dcv_broker_client_communication_port),
+            description='Allow HTTPS traffic from DCV Clients to DCV Broker'
+        )
 
-            dcv_broker_agent_listener_arn = self.context.config().get_string('cluster.external_alb.dcv_broker_agent_listener_arn')
-            dcv_broker_agent_listener_default_actions = self.get_alb_listener_default_actions(dcv_broker_agent_listener_arn)
-            dcv_broker_agent_communication_port = self.context.config().get_int('virtual-desktop-controller.dcv_broker.agent_communication_port', required=True)
-            self.internal_alb_dcv_broker_agent_listener = elbv2.CfnListener(
-                self.internal_alb,
-                'dcv-broker-agent-listener',
-                port=dcv_broker_agent_communication_port,
-                ssl_policy=self.context.config().get_string('virtual-desktop-controller.dcv_broker.ssl_policy', default='ELBSecurityPolicy-TLS13-1-2-2021-06'),
-                load_balancer_arn=self.internal_alb.load_balancer_arn,
-                protocol='HTTPS',
-                certificates=[
-                    elbv2.CfnListener.CertificateProperty(
-                        certificate_arn=internal_acm_certificate_arn
-                    )
-                ],
-                default_actions=dcv_broker_agent_listener_default_actions
-            )
-            self.internal_alb_dcv_broker_agent_listener.node.add_dependency(self.internal_certificate)
-            self.security_groups['internal-load-balancer'].add_ingress_rule(
-                ec2.Peer.ipv4(self.vpc.vpc_cidr_block),
-                ec2.Port.tcp(dcv_broker_agent_communication_port),
-                description='Allow HTTPS traffic from DCV Agents to DCV Broker'
-            )
+        dcv_broker_agent_listener_arn = self.context.config().get_string('cluster.external_alb.dcv_broker_agent_listener_arn')
+        dcv_broker_agent_listener_default_actions = self.get_alb_listener_default_actions(dcv_broker_agent_listener_arn)
+        dcv_broker_agent_communication_port = self.context.config().get_int('virtual-desktop-controller.dcv_broker.agent_communication_port', required=True)
+        self.internal_alb_dcv_broker_agent_listener = elbv2.CfnListener(
+            self.internal_alb,
+            'dcv-broker-agent-listener',
+            port=dcv_broker_agent_communication_port,
+            ssl_policy=self.context.config().get_string('virtual-desktop-controller.dcv_broker.ssl_policy', default='ELBSecurityPolicy-TLS13-1-2-2021-06'),
+            load_balancer_arn=self.internal_alb.load_balancer_arn,
+            protocol='HTTPS',
+            certificates=[
+                elbv2.CfnListener.CertificateProperty(
+                    certificate_arn=internal_acm_certificate_arn
+                )
+            ],
+            default_actions=dcv_broker_agent_listener_default_actions
+        )
+        self.internal_alb_dcv_broker_agent_listener.node.add_dependency(self.internal_certificate)
+        self.security_groups['internal-load-balancer'].add_ingress_rule(
+            ec2.Peer.ipv4(self.vpc.vpc_cidr_block),
+            ec2.Port.tcp(dcv_broker_agent_communication_port),
+            description='Allow HTTPS traffic from DCV Agents to DCV Broker'
+        )
 
-            dcv_broker_gateway_listener_arn = self.context.config().get_string('cluster.external_alb.dcv_broker_gateway_listener_arn')
-            dcv_broker_gateway_listener_default_actions = self.get_alb_listener_default_actions(dcv_broker_gateway_listener_arn)
-            dcv_broker_gateway_communication_port = self.context.config().get_int('virtual-desktop-controller.dcv_broker.gateway_communication_port', required=True)
-            self.internal_alb_dcv_broker_gateway_listener = elbv2.CfnListener(
-                self.internal_alb,
-                'dcv-broker-gateway-listener',
-                port=dcv_broker_gateway_communication_port,
-                ssl_policy=self.context.config().get_string('virtual-desktop-controller.dcv_broker.ssl_policy', default='ELBSecurityPolicy-TLS13-1-2-2021-06'),
-                load_balancer_arn=self.internal_alb.load_balancer_arn,
-                protocol='HTTPS',
-                certificates=[
-                    elbv2.CfnListener.CertificateProperty(
-                        certificate_arn=internal_acm_certificate_arn
-                    )
-                ],
+        dcv_broker_gateway_listener_arn = self.context.config().get_string('cluster.external_alb.dcv_broker_gateway_listener_arn')
+        dcv_broker_gateway_listener_default_actions = self.get_alb_listener_default_actions(dcv_broker_gateway_listener_arn)
+        dcv_broker_gateway_communication_port = self.context.config().get_int('virtual-desktop-controller.dcv_broker.gateway_communication_port', required=True)
+        self.internal_alb_dcv_broker_gateway_listener = elbv2.CfnListener(
+            self.internal_alb,
+            'dcv-broker-gateway-listener',
+            port=dcv_broker_gateway_communication_port,
+            ssl_policy=self.context.config().get_string('virtual-desktop-controller.dcv_broker.ssl_policy', default='ELBSecurityPolicy-TLS13-1-2-2021-06'),
+            load_balancer_arn=self.internal_alb.load_balancer_arn,
+            protocol='HTTPS',
+            certificates=[
+                elbv2.CfnListener.CertificateProperty(
+                    certificate_arn=internal_acm_certificate_arn
+                )
+            ],
 
-                default_actions=dcv_broker_gateway_listener_default_actions
-            )
-            self.internal_alb_dcv_broker_gateway_listener.node.add_dependency(self.internal_certificate)
-            self.security_groups['internal-load-balancer'].add_ingress_rule(
-                ec2.Peer.ipv4(self.vpc.vpc_cidr_block),
-                ec2.Port.tcp(dcv_broker_gateway_communication_port),
-                description='Allow HTTPS traffic from DCV Connection Gateway to DCV Broker'
-            )
+            default_actions=dcv_broker_gateway_listener_default_actions
+        )
+        self.internal_alb_dcv_broker_gateway_listener.node.add_dependency(self.internal_certificate)
+        self.security_groups['internal-load-balancer'].add_ingress_rule(
+            ec2.Peer.ipv4(self.vpc.vpc_cidr_block),
+            ec2.Port.tcp(dcv_broker_gateway_communication_port),
+            description='Allow HTTPS traffic from DCV Connection Gateway to DCV Broker'
+        )
 
     def build_cluster_settings(self):
         # cluster settings are applied in the current module_id scope. module_id should not be provided in the key for settings.
@@ -1126,10 +920,6 @@ class ClusterStack(IdeaBaseStack):
                 private_subnets.append(subnet.subnet_id)
         cluster_settings['network.private_subnets'] = private_subnets
 
-        if not self.context.config().get_bool('cluster.network.use_existing_vpc', False):
-            cluster_settings['network.nat_gateway_ips'] = []
-            for eip in self.vpc.nat_gateway_ips:
-                cluster_settings['network.nat_gateway_ips'].append(f'{eip.ref}')
 
         # SecurityGroupIds
         for name, security_group in self.security_groups.items():
@@ -1142,8 +932,6 @@ class ClusterStack(IdeaBaseStack):
         cluster_settings['iam.policies.amazon_ssm_managed_instance_core_arn'] = self.amazon_ssm_managed_instance_core_policy.managed_policy_arn
         cluster_settings['iam.policies.cloud_watch_agent_server_arn'] = self.cloud_watch_agent_server_policy.managed_policy_arn
         cluster_settings['iam.policies.dcv_host_role_managed_policy_arn'] = self.dcv_host_role_scoped_down_managed_policy.managed_policy_arn
-        if self.amazon_prometheus_remote_write_policy is not None:
-            cluster_settings['iam.policies.amazon_prometheus_remote_write_arn'] = self.amazon_prometheus_remote_write_policy.managed_policy_arn
 
         cluster_settings['solution.solution_metrics_lambda_arn'] = self.solution_metrics_lambda.function_arn
         cluster_settings['cluster_settings_lambda_arn'] = self.cluster_settings_lambda.function_arn
@@ -1187,25 +975,6 @@ class ClusterStack(IdeaBaseStack):
         if self.internal_alb_dcv_broker_gateway_listener:
             cluster_settings['load_balancers.internal_alb.dcv_broker_gateway_listener_arn'] = self.internal_alb_dcv_broker_gateway_listener.attr_listener_arn
 
-        # vpc interface endpoints endpoint_url configuration
-        # vpc interface endpoint url will be updated only once during provisioning.
-        # if admin has updated the configuration, the endpoint_url for the endpoint will not be updated.
-        # gateway endpoints do not need any additional configuration as traffic to applicable services will be routed automatically once provisioned
-        if self.vpc_interface_endpoints is not None:
-            for service in self.vpc_interface_endpoints:
-                endpoint_config_key = f'network.vpc_interface_endpoints.{service}.endpoint_url'
-                existing_endpoint_url = self.context.config().get_string(f'cluster.{endpoint_config_key}')
-                if Utils.is_empty(existing_endpoint_url):
-                    endpoint = self.vpc_interface_endpoints[service]
-                    cluster_settings[endpoint_config_key] = endpoint.get_endpoint_url()
-                else:
-                    cluster_settings[endpoint_config_key] = existing_endpoint_url
-
-        # backups
-        if self.context.config().get_bool('cluster.backups.enabled', default=False):
-            cluster_settings['backups.role_arn'] = self.backup_role.role_arn
-            cluster_settings['backups.backup_vault.arn'] = self.backup_vault.backup_vault_arn
-            cluster_settings['backups.backup_plan.arn'] = self.backup_plan.get_backup_plan_arn()
 
         cdk.CustomResource(
             self.stack,

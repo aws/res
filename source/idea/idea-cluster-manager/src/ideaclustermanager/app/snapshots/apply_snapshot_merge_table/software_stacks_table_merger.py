@@ -77,7 +77,7 @@ class SoftwareStacksTableMerger(MergeTable):
                     record_deltas.append(record_delta)
             except exceptions.SocaException as e:
                 if e.error_code == errorcodes.INVALID_PARAMS and e.message.startswith("Invalid software_stack.ami_id"):
-                    logger.debug(TABLE_NAME, stack_name, ApplyResourceStatus.SKIPPED, f"AMI ID of the software stack is not available in the current region: {str(e)}")
+                    logger.debug(TABLE_NAME, stack_name, ApplyResourceStatus.SKIPPED, f"AMI ID or Systems Manager parameter of the software stack is not available in the current region: {str(e)}")
                     continue
                 raise e
             except Exception as e:

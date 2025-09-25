@@ -22,9 +22,10 @@ from idea.infrastructure.install import (
     cognito_trigger_workflow_post_auth_handler,
     cognito_trigger_workflow_uid_handler,
 )
+from idea.infrastructure.install.constants import RES_COMMON_LAMBDA_RUNTIME
+from idea.infrastructure.install.infra_utils.utils import InfraUtils
 from idea.infrastructure.install.parameters.internet_proxy import InternetProxyKey
 from idea.infrastructure.install.parameters.parameters import RESParameters
-from idea.infrastructure.install.utils import InfraUtils
 from ideadatamodel import (  # type: ignore
     CognitoConstructParams,
     SocaBaseModel,
@@ -208,7 +209,7 @@ class CognitoTriggerWorkflow(Construct):
         uid_lambda = lambda_.Function(
             self,
             "generate-uid",
-            runtime=lambda_.Runtime.PYTHON_3_11,
+            runtime=RES_COMMON_LAMBDA_RUNTIME,
             timeout=sqs_visibility_timeout,  # SQS lambda trigger timeout must be the same as SQS visibility timeout
             function_name=f"{cluster_name}_uid_{cognito_trigger_workflow_lambda_name}",
             role=execution_role,
@@ -271,7 +272,7 @@ class CognitoTriggerWorkflow(Construct):
         cognito_post_auth_lambda = lambda_.Function(
             self,
             "cognito-post-auth",
-            runtime=lambda_.Runtime.PYTHON_3_11,
+            runtime=RES_COMMON_LAMBDA_RUNTIME,
             function_name=f"{cluster_name}_post_auth_{cognito_trigger_workflow_lambda_name}",
             timeout=Duration.seconds(5),
             role=execution_role,

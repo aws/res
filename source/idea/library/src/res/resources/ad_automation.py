@@ -5,8 +5,9 @@ import os
 import random
 import time
 from functools import lru_cache
-from typing import Any, Dict
+from typing import Any, Dict, List
 
+from res.constants import AD_AUTOMATION_DB_HASH_KEY, AD_AUTOMATION_TABLE_NAME
 from res.resources import cluster_settings
 from res.utils import aws_utils, instance_metadata_utils, logging_utils, table_utils
 
@@ -27,12 +28,10 @@ def ad_authorization_instance_id() -> str:
 
 def get_authorization() -> Dict[str, Any]:
     try:
-        nonce = ad_authorization_nonce()
         authorization = table_utils.get_item(
-            "ad-automation",
-            {
-                "instance_id": ad_authorization_instance_id(),
-                "nonce": nonce,
+            AD_AUTOMATION_TABLE_NAME,
+            key={
+                AD_AUTOMATION_DB_HASH_KEY: ad_authorization_instance_id(),
             },
         )
         return authorization
@@ -58,6 +57,34 @@ def request_ad_authorization() -> bool:
     return False
 
 
+def remove_ad_authorization(instance_ids: List[str]) -> None:
+    ad_automation_queue_url = cluster_settings.get_setting(
+        "directoryservice.ad_automation.sqs_queue_url"
+    )
+
+    try:
+        for instance_id in instance_ids:
+            logger.info(f"Request Delete Computer Account for instance {instance_id}")
+            payload = {
+                "header": {"namespace": "ADAutomation.DeleteComputer"},
+                "payload": {
+                    "instance_id": instance_id,
+                },
+            }
+
+            aws_utils.sqs_send_message(
+                payload,
+                ad_automation_queue_url,
+                instance_id,
+                f"ADAutomation.DeleteComputer.{instance_id}",
+            )
+
+    except Exception as e:
+        error_msg = f"Error sending AD Delete Computer message: {str(e)}"
+        logger.error(error_msg)
+        raise Exception(error_msg)
+
+
 def _send_authorization_message() -> bool:
     logger.info(
         f"Request AD authorization for instance {ad_authorization_instance_id()}"
@@ -67,7 +94,6 @@ def _send_authorization_message() -> bool:
         payload = {
             "header": {"namespace": "ADAutomation.PresetComputer"},
             "payload": {
-                "nonce": ad_authorization_nonce(),
                 "instance_id": ad_authorization_instance_id(),
                 "hostname": os.environ.get("COMPUTERNAME", ""),
             },
@@ -79,7 +105,7 @@ def _send_authorization_message() -> bool:
                 "directoryservice.ad_automation.sqs_queue_url"
             ),
             ad_authorization_instance_id(),
-            f"ADAutomation.PresetComputer.{ad_authorization_instance_id()}.{ad_authorization_nonce()}",
+            f"ADAutomation.PresetComputer.{ad_authorization_instance_id()}",
         )
 
         return True

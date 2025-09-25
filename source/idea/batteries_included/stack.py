@@ -30,6 +30,7 @@ class BiStack(Stack):
                 "ClientIpCidr": str(parameters.client_ip),
                 "ClientPrefixList": str(parameters.client_prefix_list),
                 "RetainStorageResources": str(parameters.retain_storage_resources),
+                "CreateActiveDirectory": "True",
             },
             template_url=template_url,
         )

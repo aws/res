@@ -76,9 +76,8 @@ def test_restart_x_server(monkeypatch) -> None:
 
     mock_run.call_args_list == expected_calls
 
-def test_configure_aarch64(monkeypatch) -> None:
-    machine = "aarch64"
-    monkeypatch.setenv("MACHINE", machine)
+def test_configure_virtual_session_type(monkeypatch) -> None:
+    monkeypatch.setenv("SESSION_TYPE", "VIRTUAL")
     mock_run = Mock()
     mock_start_x_server = Mock()
     monkeypatch.setattr("subprocess.run", mock_run)
@@ -88,10 +87,10 @@ def test_configure_aarch64(monkeypatch) -> None:
 
     mock_run.assert_not_called()
 
-def test_configure_x86_64(monkeypatch) -> None:
-    monkeypatch.setenv("MACHINE", "x86_64")  
-    monkeypatch.setenv("RES_BASE_OS", "amzn2")  
-    
+def test_configure_console_session_type(monkeypatch) -> None:
+    monkeypatch.setenv("SESSION_TYPE", "CONSOLE")
+    monkeypatch.setenv("RES_BASE_OS", "amzn2")
+
     mock_run = Mock()
     mock_start_x_server = Mock()
     monkeypatch.setattr("subprocess.run", mock_run)

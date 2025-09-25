@@ -37,6 +37,32 @@ def test_request_ad_authorization_message_sent(monkeypatch):
     assert len(messages) == 1
 
 
+@mock_aws
+def test_remove_ad_authorization_message_sent(monkeypatch):
+    client = boto3.client("sqs")
+    response = client.create_queue(
+        QueueName="test.fifo",
+        Attributes={
+            "FifoQueue": "true",
+            "ContentBasedDeduplication": "true",
+        },
+    )
+    queue_url = response.get("QueueUrl")
+
+    monkeypatch.setattr(cluster_settings, "get_setting", lambda _: queue_url)
+
+    ad_automation.remove_ad_authorization(["instance_id"])
+
+    response = client.receive_message(
+        QueueUrl=queue_url,
+        WaitTimeSeconds=1,
+    )
+    messages = response.get("Messages", [])
+    assert len(messages) == 1
+
+    ad_automation
+
+
 def test_get_authorization_query_ad_automation_table(monkeypatch):
     monkeypatch.setattr(ad_automation, "ad_authorization_nonce", lambda: 1)
     monkeypatch.setattr(
@@ -48,8 +74,7 @@ def test_get_authorization_query_ad_automation_table(monkeypatch):
     ad_automation.get_authorization()
     get_item_mock.assert_called_once_with(
         "ad-automation",
-        {
+        key={
             "instance_id": "instance_id",
-            "nonce": 1,
         },
     )

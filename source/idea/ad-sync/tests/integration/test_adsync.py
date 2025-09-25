@@ -55,6 +55,51 @@ def test_adsync_user(context, ldap_helper, monkeypatch):
         accounts.get_user(username)
 
 
+def test_adsync_update_user_email(context, ldap_helper, monkeypatch):
+    "Run update user email tests on the AD Sync process."
+
+    new_email = "new@example.com"
+    # Add a new user to the directory
+    username = f"user{random.randint(200,2000000)}"
+    ldap_helper.add_ldap_user(username)
+
+    # Ensure that the LDAP add worked
+    _dn, ldap_user = ldap_helper.find_ldap_user(username)
+    print(ldap_user)
+    assert_that(ldap_user["sAMAccountName"]).is_equal_to(username)
+    assert_that(ldap_user["mail"]).is_equal_to(f"{username}@corp.res.com")
+
+    # Do AD sync and ensure that the user is in the DDB
+    do_adsync()
+
+    res_user = accounts.get_user(username)
+    assert_that(res_user["username"]).is_equal_to(username)
+
+    # Update the user email in AD
+    updates = {"mail": new_email.encode("utf-8")}
+    ldap_helper.update_ldap_user(username, updates)
+    _dn, ldap_user = ldap_helper.find_ldap_user(username)
+    assert_that(ldap_user).is_not_none()
+    assert_that(ldap_user["sAMAccountName"]).is_equal_to(username)
+    assert_that(ldap_user["mail"]).is_equal_to(new_email)
+
+    # Do AD sync and ensure that the user email is updated in DDB
+    do_adsync()
+
+    res_user = accounts.get_user(username)
+    assert_that(res_user["username"]).is_equal_to(username)
+    assert_that(res_user["email"]).is_equal_to(new_email)
+
+    # Delete the user from AD
+    ldap_helper.delete_ldap_user(username)
+    assert_that(ldap_helper.find_ldap_user(username)).is_none()
+
+    # Do AD sync and ensure that the user is deleted in the DDB
+    do_adsync()
+    with pytest.raises(exceptions.UserNotFound):
+        accounts.get_user(username)
+
+
 def test_adsync_group(context, ldap_helper, monkeypatch):
     "Run group crud tests on the AD Sync process."
     # Add a new group to the directory

@@ -1,15 +1,17 @@
 #  Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 #  SPDX-License-Identifier: Apache-2.0
 
-import json
 import logging
 import time
-from typing import Any, Dict, TypedDict
-from urllib.request import Request, urlopen
+from typing import Any, Dict
 
 from res.clients.ad_sync.ad_sync_client import (  # type: ignore
     is_task_terminated,
     stop_ad_sync,
+)
+from res.utils.custom_resource_utils import (  # type: ignore
+    CustomResourceResponse,
+    send_response,
 )
 
 logger = logging.getLogger()
@@ -17,16 +19,6 @@ logger.setLevel(logging.INFO)
 
 MAX_ATTEMPT = 10
 WAIT_TIME = 10  # seconds
-
-
-class CustomResourceResponse(TypedDict):
-    # https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/crpg-ref-responses.html
-    Status: str
-    Reason: str
-    PhysicalResourceId: str
-    StackId: str
-    RequestId: str
-    LogicalResourceId: str
 
 
 def handler(event: Dict[str, Any], context: Dict[str, Any]) -> None:
@@ -37,27 +29,20 @@ def handler(event: Dict[str, Any], context: Dict[str, Any]) -> None:
         StackId=event.get("StackId", ""),
         RequestId=event.get("RequestId", ""),
         LogicalResourceId=event.get("LogicalResourceId", ""),
+        Data={},
     )
     try:
         if event["RequestType"] == "Delete":
             _terminate_ad_sync()
 
     except Exception as e:
+        error_message = f"Failed to terminate AD sync ECS task: {str(e)}"
         response["Status"] = "FAILED"
-        response["Reason"] = "FAILED"
-        logger.error(f"Failed to terminate AD sync ECS task: {str(e)}")
+        response["Reason"] = error_message
+
+        logger.error(error_message)
     finally:
-        _send_response(url=event["ResponseURL"], response=response)
-
-
-def _send_response(url: str, response: CustomResourceResponse) -> None:
-    request = Request(
-        method="PUT",
-        url=url,
-        data=json.dumps(response).encode("utf-8"),
-    )
-
-    urlopen(request)
+        send_response(url=event["ResponseURL"], response=response)
 
 
 def _terminate_ad_sync() -> None:

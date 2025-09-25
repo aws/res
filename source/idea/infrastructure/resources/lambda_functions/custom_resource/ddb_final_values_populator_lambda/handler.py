@@ -1,13 +1,12 @@
 #  Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 #  SPDX-License-Identifier: Apache-2.0
 
-import json
 import logging
 import os
-from typing import Any, Dict, TypedDict
-from urllib.request import Request, urlopen
+from typing import Any, Dict
 
 import boto3
+from botocore.exceptions import ClientError
 from res.constants import (  # type: ignore
     ADMIN_ROLE,
     CLUSTER_ADMIN_USERNAME,
@@ -19,19 +18,13 @@ from res.constants import (  # type: ignore
 from res.exceptions import UserNotFound  # type: ignore
 from res.resources import accounts, cluster_settings  # type: ignore
 from res.utils import auth_utils  # type: ignore
+from res.utils.custom_resource_utils import (  # type: ignore
+    CustomResourceResponse,
+    send_response,
+)
 
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
-
-
-class CustomResourceResponse(TypedDict):
-    # https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/crpg-ref-responses.html
-    Status: str
-    Reason: str
-    PhysicalResourceId: str
-    StackId: str
-    RequestId: str
-    LogicalResourceId: str
 
 
 def handler(event: Dict[str, Any], context: Dict[str, Any]) -> None:
@@ -43,27 +36,20 @@ def handler(event: Dict[str, Any], context: Dict[str, Any]) -> None:
         StackId=event.get("StackId", ""),
         RequestId=event.get("RequestId", ""),
         LogicalResourceId=event.get("LogicalResourceId", ""),
+        Data={},
     )
     try:
         if event["RequestType"] == "Create" or event["RequestType"] == "Update":
             _populate_clusteradmin_user()
 
     except Exception as e:
+        error_message = f"Failed to populate final values: {str(e)}"
         response["Status"] = "FAILED"
-        response["Reason"] = "FAILED"
-        logger.error(f"Failed to populate final values: {str(e)}")
+        response["Reason"] = error_message
+
+        logger.error(error_message)
     finally:
-        _send_response(url=event["ResponseURL"], response=response)
-
-
-def _send_response(url: str, response: CustomResourceResponse) -> None:
-    request = Request(
-        method="PUT",
-        url=url,
-        data=json.dumps(response).encode("utf-8"),
-    )
-
-    urlopen(request)
+        send_response(url=event["ResponseURL"], response=response)
 
 
 def _populate_clusteradmin_user() -> None:
@@ -104,9 +90,22 @@ def _populate_clusteradmin_user() -> None:
         ],
         "DesiredDeliveryMediums": ["EMAIL"],
     }
+    try:
+        # Clusteradmin user may exist when installing RES with an external Cognito user pool
+        # Skip the user creation in this case.
+        _created_cognito_user = cognito_client.admin_get_user(
+            UserPoolId=cognito_pool_id,
+            Username=CLUSTER_ADMIN_USERNAME,
+        )
+    except ClientError as e:
+        if e.response["Error"]["Code"] == "UserNotFoundException":
+            cognito_result = cognito_client.admin_create_user(
+                **cognito_admin_user_params
+            )
+            _created_cognito_user = cognito_result.get("User", None)
+        else:
+            raise e
 
-    cognito_result = cognito_client.admin_create_user(**cognito_admin_user_params)
-    _created_cognito_user = cognito_result.get("User", None)
     status = _created_cognito_user.get("UserStatus", "")
     logger.info(f"CreateUser: clusteradmin, Status: {status}, EmailVerified: False")
 

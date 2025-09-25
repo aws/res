@@ -48,7 +48,7 @@ def get_instance_id() -> str:
         if result.status_code == 200:
             return result.text.strip()
         else:
-            raise f"Failed to get instance ID: {result.text}"
+            raise Exception(f"Failed to get instance ID: {result.text}")
     except Exception as e:
         raise Exception(f"Failed to get instance ID: {e}")
 

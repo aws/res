@@ -161,7 +161,7 @@ class VirtualDesktopCreateSessionForm extends Component<VirtualDesktopCreateSess
             .getVirtualDesktopSettings()
             .then((settings) => {
                 this.setState({
-                    advEnabled: settings?.server.enable_adv_options_non_admin,                    
+                    advEnabled: settings?.server.enable_adv_options_non_admin,
                     dcvSessionTypeChoice: {
                     choices: Utils.getDCVSessionTypes(),
                     defaultChoice: settings?.dcv_session.default_dcv_session_type,
@@ -254,7 +254,7 @@ class VirtualDesktopCreateSessionForm extends Component<VirtualDesktopCreateSess
         softwareStacks?.forEach((stack) => {
             softwareStackChoices.push({
                 title: stack.description,
-                description: `AMI ID: ${stack.ami_id}, OS: ${stack.base_os}, GPU: ${Utils.getFormattedGPUManufacturer(stack.gpu)}`,
+                description: `AMI ID / Systems Manager Parameter ARN: ${stack.ami_id}, OS: ${stack.base_os}, GPU: ${Utils.getFormattedGPUManufacturer(stack.gpu)}`,
                 value: stack.stack_id,
             });
         });
@@ -414,7 +414,6 @@ class VirtualDesktopCreateSessionForm extends Component<VirtualDesktopCreateSess
         const base_os = this.state.softwareStacks[this.getForm()?.getValue("software_stack")].base_os;
         let instanceTypeName = this.getForm()?.getValue("instance_type");
         let gpu = this.getInstanceGPU(instanceTypeName);
-        let arch = this.getInstanceArch(instanceTypeName);
         let currentDCVSessionTypeChoice = this.getForm()?.getValue("dcv_session_type")
         let dcvSessionTypeDefaultChoice = ((currentDCVSessionTypeChoice == undefined) || stateChange == "software_stack") ? await Utils.getDefaultDCVSessionType() : currentDCVSessionTypeChoice;
         let disableSessionTypeChoice = false;
@@ -427,11 +426,7 @@ class VirtualDesktopCreateSessionForm extends Component<VirtualDesktopCreateSess
             title: "Virtual",
             value: "VIRTUAL",
         };
-        if (arch === "arm64") {
-            dcvSessionTypeDefaultChoice = "VIRTUAL";
-            dcvSessionTypeChoices.push(virtual_choice);
-            disableSessionTypeChoice = true;
-        } else if (base_os === "windows" || gpu === "AMD") {
+        if (base_os === "windows" || gpu === "AMD") {
             // https://docs.aws.amazon.com/dcv/latest/adminguide/servers.html - AMD GPU, Windows support Console sessions only
             dcvSessionTypeDefaultChoice = "CONSOLE";
             dcvSessionTypeChoices.push(console_choice);

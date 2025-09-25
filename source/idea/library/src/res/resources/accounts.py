@@ -329,6 +329,8 @@ def update_user(user: Dict[str, Any], force: bool = False) -> Dict[str, Any]:
     existing_user = get_user(username)
     user["username"] = username
 
+    logger.info(f"Updating user {username}")
+
     if not force and not existing_user.get("enabled"):
         raise Exception(
             "User is disabled and cannot be modified.",
@@ -345,6 +347,8 @@ def update_user(user: Dict[str, Any], force: bool = False) -> Dict[str, Any]:
     updated_user: Dict[str, Any] = table_utils.update_item(
         USERS_TABLE_NAME, {"username": username}, user
     )
+
+    logger.info(f"Updated user {username} successfully")
 
     return updated_user
 

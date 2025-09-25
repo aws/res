@@ -83,46 +83,6 @@ class DeleteCluster:
     def get_bootstrap_stack_name(self) -> str:
         return f'{self.cluster_name}-bootstrap'
 
-    def find_ec2_instances(self):
-        self.context.info('Searching for EC2 instances to be terminated ...')
-        ec2_instances_to_delete = []
-        termination_protected_instances = []
-        ec2_instances = self.context.aws_util().ec2_describe_instances(
-            filters=[
-                {
-                    'Name': f'tag:{constants.IDEA_TAG_ENVIRONMENT_NAME}',
-                    'Values': [self.cluster_name]
-                }
-            ]
-        )
-        for ec2_instance in ec2_instances:
-            if ec2_instance.state == 'terminated':
-                continue
-
-            if ec2_instance.get_tag(constants.BI_TAG_DEPLOYMENT) == "true":
-                continue
-
-            # check termination protection instances
-            describe_instance_attribute_result = self.context.aws().ec2().describe_instance_attribute(
-                Attribute='disableApiTermination',
-                InstanceId=ec2_instance.instance_id
-            )
-            disable_api_termination = Utils.get_value_as_dict('DisableApiTermination', describe_instance_attribute_result)
-            disable_api_termination_enabled = Utils.get_value_as_bool('Value', disable_api_termination, False)
-            if disable_api_termination_enabled:
-                termination_protected_instances.append(ec2_instance)
-            time.sleep(0.1)  # 10 tps - might need to be adjusted in-future. allowed 100 TPS - https://docs.aws.amazon.com/AWSEC2/latest/APIReference/throttling.html
-
-            # app and infra node type instances will be terminated by their respective cloudformation stacks
-            # we are primarily interested in the instances launched without CloudFormation stack
-            node_type = ec2_instance.soca_node_type
-            if node_type in (constants.NODE_TYPE_APP, constants.NODE_TYPE_INFRA):
-                continue
-            ec2_instances_to_delete.append(ec2_instance)
-
-        self.termination_protected_ec2_instances = termination_protected_instances
-        self.ec2_instances = ec2_instances_to_delete
-
     @staticmethod
     def print_ec2_instances(ec2_instances: List[EC2Instance]):
         instance_table = PrettyTable(['Name', 'Instance Id', 'Private IP', 'Instance Type', 'Status'])
@@ -136,28 +96,6 @@ class DeleteCluster:
                 ec2_instance.state
             ])
         print(instance_table)
-
-    def delete_ec2_instances(self):
-        if len(self.termination_protected_ec2_instances) > 0:
-            for ec2_instance in self.termination_protected_ec2_instances:
-                self.context.info(f'disabling termination protection for EC2 instance: {ec2_instance.instance_id} ...')
-                self.context.aws().ec2().modify_instance_attribute(
-                    InstanceId=ec2_instance.instance_id,
-                    DisableApiTermination={
-                        'Value': False
-                    }
-                )
-                self.context.success(f'termination protection disabled for EC2 instance: {ec2_instance.instance_id}')
-                time.sleep(1)
-
-        if len(self.ec2_instances) > 0:
-            for ec2_instance in self.ec2_instances:
-                self.context.info(f'terminating EC2 instance: {ec2_instance.instance_id}')
-                self.context.aws().ec2().terminate_instances(
-                    InstanceIds=[ec2_instance.instance_id]
-                )
-                self.context.success(f'terminated EC2 instance: {ec2_instance.instance_id}')
-                time.sleep(1)
 
     def _get_app_instance(self, module_id: str) -> Optional[EC2Instance]:
         describe_instances_result = self.context.aws().ec2().describe_instances(
@@ -248,20 +186,20 @@ class DeleteCluster:
         identity_provider_stacks = []
         paginator = self.context.aws().cloudformation().get_paginator('list_stacks')
         page_iterator = paginator.paginate()
-        # TODO: Use S3 select instead of looping on all the stacks for more efficient tag based querying 
+        # TODO: Use S3 select instead of looping on all the stacks for more efficient tag based querying
         for page in page_iterator:
             for stacks in page.get('StackSummaries', []):
                 stack_name = stacks.get('StackName')
 
                 if not stack_name:
                     continue
-                
+
                 if not stack_name.strip().startswith(self.cluster_name):
                     continue
-                
+
                 stack_id = stacks.get('StackId')
                 stack = self.describe_cloud_formation_stack(stack_id)
-                
+
                 if stack['StackStatus'] == 'DELETE_COMPLETE':
                     continue
 
@@ -280,17 +218,12 @@ class DeleteCluster:
 
                 if self.is_batteries_included_stack(stack):
                     continue
-                
-                if self.is_cluster_stack(stack_name):
-                    cluster_stacks.append(stack)
-                elif self.is_identity_provider_stack(stack_name):
-                    identity_provider_stacks.append(stack)
-                else:
-                    stacks_to_delete.append(stack)
-                
+
+                stacks_to_delete.append(stack)
+
                 # sleep for a while to ensure we don't flood describe_stack() API
                 time.sleep(0.5)
-        self.cloud_formation_stacks = stacks_to_delete
+        self.cloud_formation_stacks = []
         self.cluster_stacks = cluster_stacks
         self.identity_provider_stacks = identity_provider_stacks
 
@@ -345,14 +278,6 @@ class DeleteCluster:
             StackName=stack_name
         )
 
-    def delete_dynamo_table(self, table_name: str):
-        try:
-            print(f'deleting table: {table_name} ...')
-            self.context.aws().dynamodb().delete_table(TableName=table_name)
-            self.context.success(f'deleted dynamodb table: {table_name}')
-        except botocore.exceptions.BotoCoreError as e:
-            raise e
-
     def is_bootstrap_stack(self, stack_name: str) -> bool:
         return stack_name == self.get_bootstrap_stack_name()
 
@@ -362,17 +287,6 @@ class DeleteCluster:
             tag_dict = Utils.get_as_dict(tag, default={})
             if tag_dict["Key"] == constants.BI_TAG_DEPLOYMENT and tag_dict["Value"] == "true":
                 return True
-        return False
-
-    def is_cluster_stack(self, stack_name: str) -> bool:
-        for module in self.cluster_modules:
-            module_name = module['name']
-            if module_name == constants.MODULE_CLUSTER:
-                cluster_stack_name = module['stack_name']
-                if cluster_stack_name == stack_name:
-                    return True
-        if stack_name == f'{self.cluster_name}-cluster':
-            return True
         return False
 
     def is_identity_provider_stack(self, stack_name: str) -> bool:
@@ -415,57 +329,6 @@ class DeleteCluster:
                 self.context.aws().ec2().delete_network_interface(
                     NetworkInterfaceId=network_interface_id
                 )
-
-    def detach_vpc_from_lambda_functions(self):
-        # List all functions with a VPC configuration
-        response = self.context.aws().lambda_().list_functions()
-        vpc_functions = []
-        # Filter functions based on tags
-        for func in response['Functions']:
-            if 'VpcConfig' in func:
-                function_arn = func['FunctionArn']
-                try:
-                    tags = self.context.aws().lambda_().list_tags(Resource=function_arn)['Tags']
-                    if tags.get(constants.IDEA_TAG_ENVIRONMENT_NAME) == self.cluster_name:
-                        vpc_functions.append(func)
-                except Exception as e:
-                    self.context.error(f"Error retrieving tags for function {function_arn}: {e}")
-
-        # Handle pagination if there are more functions
-        while 'NextMarker' in response:
-            response = self.context.aws().lambda_().list_functions(Marker=response['NextMarker'])
-            for func in response['Functions']:
-                if 'VpcConfig' in func:
-                    function_arn = func['FunctionArn']
-                    try:
-                        tags = self.context.aws().lambda_().list_tags(Resource=function_arn)['Tags']
-                        if tags.get(constants.IDEA_TAG_ENVIRONMENT_NAME) == self.cluster_name:
-                            vpc_functions.append(func)
-                    except Exception as e:
-                        self.context.error(f"Error retrieving tags for function {function_arn}: {e}")
-
-        # Remove the VPC configuration from each function
-        for function in vpc_functions:
-            function_name = function['FunctionName']
-            self.context.info(f"Removing VPC configuration from function: {function_name}")
-            
-            try:
-                self.context.aws().lambda_().update_function_configuration(
-                    FunctionName=function_name,
-                    VpcConfig={
-                        'SubnetIds': [],
-                        'SecurityGroupIds': []
-                    }
-                )
-                self.context.info(f"VPC configuration removed from function: {function_name}")
-            except Exception as e:
-                self.context.error(f"Error removing VPC configuration from function {function_name}: {e}")
-        
-        if vpc_functions:
-            # If there were any Lambda functions connected to a RES VPC,
-            # then the ENIs will take approximately ~15 minutes to delete.
-            self.context.info("Waiting at least 15 minutes for Lambda functions previously attached to VPC to clean up any of their leftover ENIs...")
-            time.sleep(900)
 
     def check_stack_deletion_status(self, stack_names: List[str]) -> bool:
         delete_failed = 0
@@ -542,37 +405,7 @@ class DeleteCluster:
             self.context.error('failed to delete CloudFormation stacks. abort!')
             raise SystemExit(1)
 
-    def find_dynamodb_tables(self):
-        last_evaluated_table_name = None
-        while True:
-            if Utils.is_empty(last_evaluated_table_name):
-                list_tables_result = self.context.aws().dynamodb().list_tables()
-            else:
-                list_tables_result = self.context.aws().dynamodb().list_tables(ExclusiveStartTableName=last_evaluated_table_name)
-            tables = Utils.get_value_as_list('TableNames', list_tables_result, [])
-            for table_name in tables:
-                if table_name.startswith(f'{self.cluster_name}.'):
-                    self.dynamodb_tables.append(table_name)
-
-            last_evaluated_table_name = Utils.get_value_as_string('LastEvaluatedTableName', list_tables_result, None)
-            if Utils.is_empty(last_evaluated_table_name):
-                break
-
-    def print_dynamodb_tables(self):
-        dynamodb_table = PrettyTable(['Table Name'])
-        dynamodb_table.align = 'l'
-        tables = self.dynamodb_tables
-        for table in tables:
-            dynamodb_table.add_row([table])
-
-        if len(tables) > 0:
-            print(dynamodb_table)
-        print(f'{len(tables)} tables will be deleted.')
-
-    def delete_dynamodb_tables(self):
-        for table in self.dynamodb_tables:
-            self.delete_dynamo_table(table)
-
+    def delete_dynamodb_table_alarms(self):
         # Cleanup Cloudwatch Alarms for all tables
         self.delete_cloudwatch_alarms()
 
@@ -783,47 +616,7 @@ class DeleteCluster:
             else:
                 raise e
 
-    def validate_target_group(self, tg_arn: str) -> bool:
-        if not tg_arn:
-            return False
-        tag_description = self.context.aws().elbv2().describe_tags(ResourceArns=[tg_arn]).get('TagDescriptions', [None])[0]
-
-        if not tag_description:
-            return False
-
-        tags = tag_description.get('Tags', [])
-        for tag in tags:
-            if tag.get('Key') == constants.IDEA_TAG_ENVIRONMENT_NAME and tag.get('Value') == self.cluster_name:
-                return True
-        return False
-
-    def delete_target_groups(self):
-        self.context.info(
-            f'Searching for target groups to be deleted...')
-
-        try:
-            target_group_arns = []
-            tg_paginator = self.context.aws().elbv2().get_paginator('describe_target_groups')
-            tg_iterator = tg_paginator.paginate()
-
-            for page in tg_iterator:
-                for tg in page.get('TargetGroups', []):
-                    tg_name = tg.get('TargetGroupName', '')
-                    tg_arn = tg.get('TargetGroupArn', '')
-                    if tg_name.startswith(self.cluster_name) and self.validate_target_group(tg_arn):
-                        self.context.info(f'Target group : {tg_name}')
-                        target_group_arns.append(tg_arn)
-
-            for target_group_arn in target_group_arns:
-                self.context.aws().elbv2().delete_target_group(TargetGroupArn=target_group_arn)
-
-        except Exception as e:
-            self.context.error(f'Error deleting target groups: {e}')
-
     def invoke(self):
-
-        # Finding ec2 instances
-        self.find_ec2_instances()
 
         if Utils.is_not_empty(self.ec2_instances):
             self.print_ec2_instances(self.ec2_instances)
@@ -848,9 +641,6 @@ class DeleteCluster:
                 if not confirm:
                     return
 
-        self.detach_vpc_from_lambda_functions()
-
-        self.delete_ec2_instances()
         self.delete_cloud_formation_stacks()
 
         # Delete identity-provider stack - removing UserPool protection
@@ -875,22 +665,13 @@ class DeleteCluster:
             if confirm_delete_bootstrap:
                 self.delete_bootstrap_and_s3_bucket()
 
-        #Required here because QUIC support modifies the target groups which cloudformation cannot recognize
-        #At this point load balancers and listeners have been deleted
-        self.context.info(f'Deleting target groups...')
-        self.delete_target_groups()
-        
         if self.delete_databases or self.delete_all:
-            self.find_dynamodb_tables()
-            if Utils.is_not_empty(self.dynamodb_tables):
-                self.print_dynamodb_tables()
-
                 confirm_delete_databases = self.force
                 if not self.force:
                     confirm_delete_databases = self.context.prompt(f'Are you sure you want to delete all dynamodb tables associated with the cluster: 'f'{self.cluster_name}?')
 
                 if confirm_delete_databases:
-                    self.delete_dynamodb_tables()
+                    self.delete_dynamodb_table_alarms()
 
         if self.delete_cloudwatch_logs or self.delete_all:
             self.find_cloudwatch_logs()
@@ -904,4 +685,4 @@ class DeleteCluster:
                 if confirm_delete_cloudwatch_logs:
                     self.delete_cloudwatch_log_groups()
 
-        
+

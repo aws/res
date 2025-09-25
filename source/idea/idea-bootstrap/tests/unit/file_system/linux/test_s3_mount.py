@@ -107,7 +107,7 @@ def test_configure_aws_credentials_succeed(monkeypatch):
                     "configure",
                     "set",
                     "credential_process",
-                    "idea_python script_location --filesystem-name fs_name --api-url api_url",
+                    "/opt/idea/python/latest/bin/idea_python script_location --filesystem-name fs_name --api-url api_url",
                     "--profile",
                     "fs_name-profile",
                 ],

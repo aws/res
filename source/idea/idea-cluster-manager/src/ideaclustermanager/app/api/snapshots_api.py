@@ -29,8 +29,8 @@ class SnapshotsAPI(BaseAPI):
     def __init__(self, context: ideaclustermanager.AppContext):
         self.context = context
 
-        self.SCOPE_WRITE = f'{self.context.module_id()}/write'
-        self.SCOPE_READ = f'{self.context.module_id()}/read'
+        self.SCOPE_WRITE = f'{self.context.cluster_name()}-{self.context.module_id()}/write'
+        self.SCOPE_READ = f'{self.context.cluster_name()}-{self.context.module_id()}/read'
 
         self.acl = {
             'Snapshots.CreateSnapshot': {
@@ -75,7 +75,7 @@ class SnapshotsAPI(BaseAPI):
         context.success(ApplySnapshotResult(
             message='Successfully submitted Apply Snapshot request.'
         ))
-        
+
     def list_applied_snapshots(self, context: ApiInvocationContext):
         request = context.get_request_payload_as(ListApplySnapshotRecordsRequest)
         result = self.context.snapshots.list_applied_snapshots(request)

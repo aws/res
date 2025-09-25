@@ -27,23 +27,27 @@ from res.resources import (  # type: ignore
     email_templates,
     modules,
     permission_profiles,
+    roles,
     software_stacks,
 )
 
 from idea.batteries_included.parameters.parameters import BIParameters
-from idea.infrastructure.install import utils
 from idea.infrastructure.install.constants import RES_COMMON_LAMBDA_RUNTIME
 from idea.infrastructure.install.constructs.base import ResBaseConstruct
 from idea.infrastructure.install.ddb_tables.base import RESDDBTableBase
 from idea.infrastructure.install.ddb_tables.list import ddb_tables_list
 from idea.infrastructure.install.handlers import installer_handlers
+from idea.infrastructure.install.infra_utils import utils
+from idea.infrastructure.install.infra_utils.utils import InfraUtils
 from idea.infrastructure.install.parameters.common import CommonKey
 from idea.infrastructure.install.parameters.customdomain import CustomDomainKey
 from idea.infrastructure.install.parameters.directoryservice import DirectoryServiceKey
 from idea.infrastructure.install.parameters.internet_proxy import InternetProxyKey
 from idea.infrastructure.install.parameters.parameters import RESParameters
 from idea.infrastructure.install.parameters.shared_storage import SharedStorageKey
-from idea.infrastructure.install.utils import InfraUtils
+from idea.infrastructure.resources.lambda_functions.custom_resource.delete_target_groups_lambda import (
+    handler,
+)
 
 
 class ResBaseStack(ResBaseConstruct):
@@ -62,10 +66,9 @@ class ResBaseStack(ResBaseConstruct):
         self.shared_library_arn = shared_library_lambda_layer.layer_version_arn
         self.staging_bucket_name = staging_bucket_name
         super().__init__(
-            self.cluster_name,
-            cdk.Aws.REGION,
-            "res-base",
             scope,
+            "res-base",
+            self.cluster_name,
             self.parameters,
         )
 
@@ -118,7 +121,7 @@ class ResBaseStack(ResBaseConstruct):
         )
         brokerDeletionLambdaName = "dcvBrokerTableDeletionLambda"
         dcvBrokerTableDeletionRole = iam.Role(
-            self,
+            self.nested_stack,
             f"{brokerDeletionLambdaName}Role",
             assumed_by=iam.ServicePrincipal("lambda.amazonaws.com"),
             managed_policies=[
@@ -131,9 +134,10 @@ class ResBaseStack(ResBaseConstruct):
         )
 
         dcvBrokerTableDeletionLambda = lambda_.Function(
-            baseStack,
+            self.nested_stack,
             brokerDeletionLambdaName,
             runtime=RES_COMMON_LAMBDA_RUNTIME,
+            timeout=cdk.Duration.seconds(300),
             description="Lambda to handle deletion of the NICE DCV Broker tables",
             role=dcvBrokerTableDeletionRole,
             **utils.InfraUtils.get_handler_and_code_for_function(
@@ -159,6 +163,7 @@ class ResBaseStack(ResBaseConstruct):
         self.create_bucket()
         self.apply_permission_boundary(self.nested_stack)
         self.modify_provider_roles()
+        self.delete_target_groups()
 
     def get_directory_service_secret_arn(self, key: DirectoryServiceKey) -> str:
         scope = self.nested_stack
@@ -245,6 +250,10 @@ class ResBaseStack(ResBaseConstruct):
                         InfraUtils.get_ddb_table_arn(
                             self.cluster_name,
                             email_templates.EMAIL_TEMPLATE_TABLE_NAME,
+                        ),
+                        InfraUtils.get_ddb_table_arn(
+                            self.cluster_name,
+                            roles.ROLES_TABLE_NAME,
                         ),
                     ],
                 ),
@@ -369,17 +378,9 @@ class ResBaseStack(ResBaseConstruct):
             "https_proxy_value": self.parameters.get_str(InternetProxyKey.HTTPS_PROXY),
             "no_proxy_value": self.parameters.get_str(InternetProxyKey.NO_PROXY),
             "staging_bucket_name": self.staging_bucket_name,
-            "version": self._get_res_release_version(),
+            "version": self.get_res_release_version(),
         }
         return environment_variables
-
-    @staticmethod
-    def _get_res_release_version() -> str:
-        # Cannot retrieve version number from importlib.metadata.version directly since setuptools
-        # strips leading zeros in date based releases: https://github.com/pypa/setuptools/issues/302
-        project_dir = Path(__file__).parent.parent.parent.parent.parent.parent.resolve()
-        with project_dir.joinpath("RES_VERSION.txt").open("r") as f:
-            return f.read().strip()
 
     def create_bucket(self) -> None:
         scope = self.nested_stack
@@ -604,3 +605,86 @@ class ResBaseStack(ResBaseConstruct):
                 f"{self.parameters.iam_resource_prefix_string}{self.cluster_name}-{role_name}",
             )
             role.add_property_override("Path", self.parameters.iam_resource_path_string)
+
+    def delete_target_groups(self) -> None:
+        id_prefix = "delete-target-groups"
+        lambda_name = f"{self.cluster_name}-{id_prefix}"
+        delete_target_groups_role = iam.Role(
+            self.nested_stack,
+            id=f"{id_prefix}-role",
+            role_name=f"{lambda_name}-role",
+            assumed_by=iam.ServicePrincipal("lambda.amazonaws.com"),
+            description=f"{lambda_name}-role",
+        )
+
+        delete_target_groups_policy = iam.Policy(
+            self.nested_stack,
+            id=f"{id_prefix}-policy",
+            policy_name=f"{lambda_name}-policy",
+            statements=[
+                iam.PolicyStatement(
+                    actions=["logs:CreateLogGroup"],
+                    sid="CloudWatchLogsPermissions",
+                    resources=["*"],
+                ),
+                iam.PolicyStatement(
+                    actions=[
+                        "logs:CreateLogStream",
+                        "logs:PutLogEvents",
+                        "logs:DeleteLogStream",
+                    ],
+                    sid="CloudWatchLogStreamPermissions",
+                    resources=["*"],
+                ),
+                iam.PolicyStatement(
+                    actions=[
+                        "elasticloadbalancing:DescribeTargetGroups",
+                        "elasticloadbalancing:DescribeTags",
+                    ],
+                    resources=["*"],
+                ),
+                iam.PolicyStatement(
+                    actions=[
+                        "elasticloadbalancing:DeleteTargetGroup",
+                    ],
+                    resources=[
+                        f"arn:{cdk.Aws.PARTITION}:elasticloadbalancing:{cdk.Aws.REGION}:{cdk.Aws.ACCOUNT_ID}:targetgroup/{self.cluster_name}-*/*",
+                    ],
+                    conditions={
+                        "StringEquals": {
+                            "aws:ResourceTag/res:EnvironmentName": [self.cluster_name],
+                        },
+                    },
+                ),
+            ],
+        )
+        delete_target_groups_role.attach_inline_policy(delete_target_groups_policy)
+        self.add_common_tags(delete_target_groups_role)
+
+        delete_target_groups_lambda = lambda_.Function(
+            self.nested_stack,
+            id=id_prefix,
+            function_name=lambda_name,
+            description=f"Custom lambda to delete target groups when deleting RES environment",
+            environment={
+                ENVIRONMENT_NAME_KEY: self.cluster_name,
+            },
+            timeout=cdk.Duration.seconds(300),
+            role=delete_target_groups_role,
+            runtime=RES_COMMON_LAMBDA_RUNTIME,
+            **InfraUtils.get_handler_and_code_for_function(handler.handler),
+            layers=[self.shared_library_lambda_layer],
+        )
+        self.add_common_tags(delete_target_groups_lambda)
+
+        delete_target_groups_custom_resource = cdk.CustomResource(
+            self.nested_stack,
+            id=f"{id_prefix}-custom-resource",
+            service_token=delete_target_groups_lambda.function_arn,
+            removal_policy=cdk.RemovalPolicy.DESTROY,
+            resource_type="Custom::DeleteTargetGroups",
+        )
+
+        delete_target_groups_custom_resource.node.add_dependency(
+            delete_target_groups_policy
+        )

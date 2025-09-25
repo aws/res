@@ -392,6 +392,18 @@ def context(ddb_local):
         BillingMode="PAY_PER_REQUEST",
     )
 
+    # Create authz.roles table
+    dynamodb_client.create_table(
+        TableName=f"{os.environ['environment_name']}.authz.roles",
+        KeySchema=[
+            {"AttributeName": "role_id", "KeyType": "HASH"},
+        ],
+        AttributeDefinitions=[
+            {"AttributeName": "role_id", "AttributeType": "S"},
+        ],
+        BillingMode="PAY_PER_REQUEST",
+    )
+
     cluster_settings.get_setting = MagicMock(
         side_effect=lambda x: (
             5

@@ -46,7 +46,7 @@ class ExistingVpc(SocaBaseConstruct):
     """
 
     def __init__(self, context: AdministratorContext, name: str, scope: constructs.Construct):
-        super().__init__(context, name)
+        super().__init__(context, name, scope)
         self.scope = scope
         self.vpc_id = self.context.config().get_string('cluster.network.vpc_id', required=True)
         self.vpc = ec2.Vpc.from_lookup(self.scope, 'vpc', vpc_id=self.vpc_id)
@@ -142,7 +142,7 @@ class ExistingVpc(SocaBaseConstruct):
 class ExistingSocaCluster(SocaBaseConstruct):
 
     def __init__(self, context: AdministratorContext, scope: constructs.Construct):
-        super().__init__(context, 'existing-cluster')
+        super().__init__(context, 'existing-cluster', scope)
 
         self.scope = scope
 

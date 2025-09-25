@@ -48,7 +48,7 @@ class DirectoryServiceCredentials(SocaBaseConstruct):
     def __init__(self, context: AdministratorContext, name: str, scope: constructs.Construct,
                  admin_username: str,
                  admin_password: Optional[str] = None):
-        super().__init__(context, name)
+        super().__init__(context, name, scope)
 
         self.credentials_provided = self.context.config().get_bool('directoryservice.service_account_credentials_provided', default=False)
 
@@ -95,11 +95,15 @@ class OAuthClientIdAndSecret(SocaBaseConstruct):
     Create ClientId and ClientSecret in Secrets Manager
     """
 
-    def __init__(self, context: AdministratorContext,
-                 secret_name_prefix: str,
-                 module_name: str,
-                 scope: constructs.Construct,
-                 client_id: str, client_secret: str):
+    def __init__(
+            self, 
+            context: AdministratorContext,
+            secret_name_prefix: str,
+            module_name: str,
+            scope: constructs.Construct,
+            client_id: str, 
+            client_secret: str
+            ):
         """
         :param context:
         :param secret_name_prefix is used to create the secret name.
@@ -111,7 +115,7 @@ class OAuthClientIdAndSecret(SocaBaseConstruct):
         :param client_id: the client_id
         :param client_secret: the client secret
         """
-        super().__init__(context, secret_name_prefix)
+        super().__init__(context, secret_name_prefix, scope)
 
         kms_key_id = self.context.config().get_string('cluster.secretsmanager.kms_key_id')
 
@@ -152,7 +156,7 @@ class ActiveDirectory(SocaBaseConstruct):
                  cluster: ExistingSocaCluster,
                  subnets: Optional[List[ec2.ISubnet]] = None,
                  enable_sso: Optional[bool] = False):
-        super().__init__(context, name)
+        super().__init__(context, name, scope)
 
         self.scope = scope
         self.cluster = cluster
@@ -198,7 +202,7 @@ class ActiveDirectory(SocaBaseConstruct):
         password_value = secret_dict[list(secret_dict.keys())[0]]
         ad = ds.CfnMicrosoftAD(
             self.scope,
-            self.construct_id,
+            self.build_resource_name(self.name),
             name=self.ad_name,
             password=password_value,
             vpc_settings=vpc_settings,
@@ -256,7 +260,7 @@ class UserPool(SocaBaseConstruct):
 
     def __init__(self, context: AdministratorContext, name: str, scope: constructs.Construct,
                  props: cognito.UserPoolProps = None):
-        super().__init__(context, name)
+        super().__init__(context, name, scope)
         self.scope = scope
 
         self.user_pool: Optional[cognito.UserPool] = None

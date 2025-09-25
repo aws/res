@@ -47,7 +47,7 @@ class VirtualDesktopScheduleDB(VirtualDesktopNotifiableDB):
     @staticmethod
     def convert_schedule_object_to_db_dict(schedule: VirtualDesktopSchedule) -> Dict:
         schedule_dict = {
-            schedules_constants.SCHEDULE_DB_HASH_KEY: f'{schedule.day_of_week}',
+            schedules_constants.SCHEDULE_DB_HASH_KEY: schedule.day_of_week.value if schedule.day_of_week else "None",
             schedules_constants.SCHEDULE_DB_RANGE_KEY: schedule.schedule_id,
             schedules_constants.SCHEDULE_DB_IDEA_SESSION_ID_KEY: schedule.idea_session_id,
             schedules_constants.SCHEDULE_DB_IDEA_SESSION_OWNER_KEY: schedule.idea_session_owner,

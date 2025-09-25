@@ -10,14 +10,13 @@
 #  and limitations under the License.
 
 
-import ideaadministrator
+from ideaadministrator.app.upload_helper import UploadHelper
 from ideadatamodel import exceptions, constants, EC2Instance
 from ideasdk.utils import Utils
 
 from ideasdk.context import SocaCliContext, SocaContextOptions
 
 from typing import List
-import os
 import time
 from prettytable import PrettyTable
 
@@ -48,6 +47,13 @@ class PatchHelper:
         self.user_package_uri = package_uri
         self.force = force
         self.patch_command = patch_command
+        self.upload_helper = UploadHelper(
+            cluster_name=cluster_name,
+            aws_region=aws_region,
+            aws_profile=aws_profile,
+            module_id=module_id,
+            package_uri=package_uri
+        )
 
         self.context = SocaCliContext(options=SocaContextOptions(
             cluster_name=cluster_name,
@@ -68,58 +74,19 @@ class PatchHelper:
         if status != 'deployed':
             raise exceptions.general_exception(f'cannot patch module. module: {module_id} is not yet deployed.')
 
-    def try_get_s3_package_uri(self) -> str:
-        """
-        if package uri is provided by the user, check if the package uri is local or s3 path.
-            if package is local, upload to cluster's s3 bucket and return uri
-
-        if package uri is not provided, find the local package uri for current release, upload to s3 and return the s3 path.
-            if running in dev mode from sources, package uri is: <PROJECT_ROOT>/dist/<package>.tar.gz
-            if running in docker container, package uri is: /root/.idea/downloads/<package>.tar.gz
-
-        :return: s3 path
-        """
-        if Utils.is_not_empty(self.user_package_uri):
-            package_uri = self.user_package_uri
-        else:
-
-            if ideaadministrator.props.is_dev_mode():
-                package_dist_dir = ideaadministrator.props.dev_mode_project_dist_dir
-            else:
-                package_dist_dir = ideaadministrator.props.soca_downloads_dir
-
-            package_uri = os.path.join(package_dist_dir,
-                                       f'idea-{self.module_name}-{ideaadministrator.props.current_release_version}.tar.gz')
-
-        if package_uri.startswith('s3://'):
-            return package_uri
-
-        if not Utils.is_file(package_uri):
-            raise exceptions.file_not_found(f'release package not found: {package_uri}')
-
-        cluster_s3_bucket = self.context.config().get_string('cluster.staging_bucket_name', required=True)
-
-        s3_release_path = f'releases/{ideaadministrator.props.current_release_version}/{os.path.basename(package_uri)}'
-        s3_package_uri = f's3://{cluster_s3_bucket}/{s3_release_path}'
-        self.context.info(f'uploading package: {package_uri} to {s3_package_uri} ...')
-        self.context.aws().s3().upload_file(
-            Bucket=cluster_s3_bucket,
-            Filename=package_uri,
-            Key=s3_release_path
-        )
+    def upload_package_to_s3(self) -> str:
+        self.upload_helper.apply()
 
         # Upload vdi-app zip file when patching virtual-desktop-controller
         if self.module_name == constants.MODULE_VIRTUAL_DESKTOP_CONTROLLER:
-            vdi_app_package_uri = os.path.join(package_dist_dir,
-                                       f'idea-virtual-desktop-{ideaadministrator.props.current_release_version}.tar.gz')
-            vdi_app_s3_release_path = f'releases/{ideaadministrator.props.current_release_version}/{os.path.basename(vdi_app_package_uri)}'
-            self.context.info(f'uploading vdi-app package: {vdi_app_package_uri} to s3://{cluster_s3_bucket}/{vdi_app_s3_release_path}')
-            self.context.aws().s3().upload_file(
-                Bucket=cluster_s3_bucket,
-                Filename=vdi_app_package_uri,
-                Key=vdi_app_s3_release_path
+            vdi_app_upload_helper = UploadHelper(
+                cluster_name=self.cluster_name,
+                aws_region=self.aws_region,
+                aws_profile=self.aws_profile,
+                module_id='vdi-app',
+                package_uri=self.user_package_uri
             )
-
+            vdi_app_upload_helper.apply()
 
     def get_patch_run_command(self) -> str:
         if self.module_name in (
@@ -201,7 +168,7 @@ class PatchHelper:
         with self.context.spinner('patching ec2 instances via AWS Systems Manager (Run Command) ... '):
 
             if Utils.is_empty(self.patch_command):
-                self.try_get_s3_package_uri()
+                self.upload_package_to_s3()
                 patch_command = self.get_patch_run_command()
             else:
                 patch_command = self.patch_command

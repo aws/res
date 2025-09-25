@@ -54,8 +54,8 @@ class VirtualDesktopUserAPI(VirtualDesktopAPI):
         super().__init__(context)
         self.context = context
         self._logger = context.logger('virtual-desktop-user-api')
-        self.SCOPE_WRITE = f'{self.context.module_id()}/write'
-        self.SCOPE_READ = f'{self.context.module_id()}/read'
+        self.SCOPE_WRITE = f'{self.context.cluster_name()}-{self.context.module_id()}/write'
+        self.SCOPE_READ = f'{self.context.cluster_name()}-{self.context.module_id()}/read'
 
         self.acl = {
             'VirtualDesktop.CreateSession': {

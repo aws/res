@@ -23,6 +23,7 @@ from tests.integration.framework.utils.ad_sync import ad_sync
 from tests.integration.framework.utils.alb_utils import (
     update_alb_invalid_header_drop_flag,
 )
+from tests.integration.framework.utils.cognito_sync import cognito_sync
 from tests.integration.framework.utils.ec2_utils import (
     cluster_manager_instances,
     vdc_instances,
@@ -101,6 +102,7 @@ def pytest_sessionstart(session: pytest.Session) -> None:
     environment_name = session.config.getoption("--environment-name")
     os.environ["environment_name"] = environment_name
     ad_sync()
+    cognito_sync()
 
     # Disable ALB attribute for dropping invalid headers
     logger.info(

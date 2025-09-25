@@ -5,11 +5,7 @@ import importlib.metadata
 from aws_cdk.assertions import Match, Template
 
 import idea
-from idea.infrastructure.install.constants import (
-    RES_ADMINISTRATOR_LAMBDA_RUNTIME,
-    RES_BACKEND_LAMBDA_RUNTIME,
-    RES_COMMON_LAMBDA_RUNTIME,
-)
+from idea.infrastructure.install.constants import RES_COMMON_LAMBDA_RUNTIME
 from idea.infrastructure.install.parameters.common import CommonKey
 from idea.infrastructure.install.stacks.install_stack import InstallStack
 from ideadatamodel import constants  # type: ignore
@@ -34,9 +30,7 @@ def test_shared_res_library_lambda_layer_creation(
         props={
             "Properties": {
                 "CompatibleRuntimes": [
-                    RES_ADMINISTRATOR_LAMBDA_RUNTIME.name,
                     RES_COMMON_LAMBDA_RUNTIME.name,
-                    RES_BACKEND_LAMBDA_RUNTIME.name,
                 ],
                 "Content": {
                     "S3Bucket": Match.any_value(),
@@ -167,7 +161,7 @@ def test_ecr_images_handler_creation(
                         "Arn",
                     ]
                 },
-                "Runtime": "python3.11",
+                "Runtime": RES_COMMON_LAMBDA_RUNTIME.name,
                 "Timeout": 300,
             }
         },
@@ -341,7 +335,7 @@ def test_params_transformer_handler_creation(
                         "Arn",
                     ]
                 },
-                "Runtime": "python3.11",
+                "Runtime": RES_COMMON_LAMBDA_RUNTIME.name,
                 "Timeout": 300,
             }
         },

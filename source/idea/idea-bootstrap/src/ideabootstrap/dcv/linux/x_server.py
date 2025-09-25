@@ -26,14 +26,14 @@ def _x_server_validated():
         xhost_output = subprocess.check_output(["xhost"], env=env, text=True)
 
         return "SI:localuser:dcv" in xhost_output
-    except Exception:
-        logger.error("Error in validating x server")
+    except Exception as e:
+        logger.error(f"Error in validating x server: {e}")
         return False
 
 
 def _verify_x_server_is_up():
     start_time = time.time()
-    logger.info("# validating if x server is running ...")
+    logger.info("Validating if x server is running ...")
     time.sleep(10)
     validated = _x_server_validated()
     count = 0
@@ -77,13 +77,13 @@ def _start_x_server():
             subprocess.run(
                 ["sudo", "systemctl", "isolate", "graphical.target"], check=True
             )
-            logger.info("# wait for x server to start ...")
+            logger.info("Wait for x server to start ...")
         except Exception as e:
             logger.error(f"Error starting X server: {e}")
 
 
 def _restart_x_server():
-    logger.info("# restart x server ...")
+    logger.info("Restart x server ...")
     try:
         subprocess.run(
             ["sudo", "systemctl", "isolate", "multi-user.target"], check=True
@@ -100,14 +100,14 @@ def _start_and_validate_x_server():
 
 
 def configure():
-    machine = os.environ.get("MACHINE", "")
-    
-    if machine != "x86_64":
-        logger.info(f"{machine} machine, skipping x server configuration...")
+    session_type = os.getenv("SESSION_TYPE")
+
+    if session_type == "VIRTUAL":
+        logger.info(f"{session_type} session type, skipping x server configuration...")
         return
-    
+
     logger.info("Configuring X Server")
-    
+
     try:
         subprocess.run(
             ["sudo", "systemctl", "set-default", "graphical.target"], check=True

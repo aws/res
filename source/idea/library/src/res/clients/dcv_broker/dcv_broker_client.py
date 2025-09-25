@@ -2,6 +2,7 @@
 #  SPDX-License-Identifier: Apache-2.0
 
 import logging
+import os
 from typing import Any, Dict, List, Tuple
 
 from res.clients import dcv_swagger_client
@@ -20,8 +21,6 @@ logger = logging_utils.get_logger("dcv-broker-client")
 DCV_SESSION_DELETE_ERROR_SESSION_DOESNT_EXIST = (
     "The requested dcvSession does not exist"
 )
-
-VDC_SCOPE = ["dcv-session-manager/sm_scope", "cluster-manager/read"]
 
 
 def delete_sessions(sessions: List[Dict[str, Any]]) -> Tuple[List, List]:
@@ -202,6 +201,11 @@ def _get_vdc_client_id_secret() -> Tuple[str, str]:
 
 
 def _set_request_headers(api_client) -> None:
+    VDC_SCOPE = [
+        f"{os.getenv('environment_name')}-dcv-session-manager/sm_scope",
+        f"{os.getenv('environment_name')}-cluster-manager/read",
+    ]
+
     client_id, client_secret = _get_vdc_client_id_secret()
     access_token = token.get_access_token_using_client_credentials(
         client_id,

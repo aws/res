@@ -1,6 +1,29 @@
 # Change Log
 This file is used to list changes made in each release of Research and Engineering Studio (RES).
 
+2025.09
+------
+
+**ENHANCEMENTS**
+
+- Region support expansion for ap-northeast-3 , ap-southeast-3, me-central-3 , sa-east-1
+- Deletion of computer account from AD domain on VDI termination
+- Systems Manager Parameter Alias support for AMI IDs to simplify the management of project-specific images
+- Integration with pre-existing Cognito pool for streamlined authentication setup during deployment
+- Customization of CIDR ranges in the AWS CloudFormation external resources template during deployment for enhanced network planning and integration with existing resources
+- Addition of AD email sync functionality after initialization
+- Support for Amazon EC2 g6f instances
+
+**CHANGES**
+
+- Moving infrastructure deployment out of ECS installer task to simplify installation process
+
+**BUG FIXES**
+
+- Resolved persistent instance resume failures
+- Resolved users being able to see other users desktops sessions
+- Resolved IAM user role name uniqueness issue in multi-region single account deployments.
+
 2025.06.01
 ------
 
@@ -13,7 +36,7 @@ This file is used to list changes made in each release of Research and Engineeri
 
 **BUG FIXES**
 - Resolved Windows and Linux VDI login issues when disable_ad_join is true
-- Resolved an issue where custom IAM policies can be attached to project-specific roles  
+- Resolved an issue where custom IAM policies can be attached to project-specific roles
 
 2025.06
 ------

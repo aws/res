@@ -183,7 +183,7 @@ Statement:
       - sqs:ReceiveMessage
     Resource:
       - '{{ context.arns.get_sqs_arn(context.module_id + "-notifications.fifo") }}'
-      - '{{ context.arns.get_sqs_arn(context.config.get_module_id("directoryservice") + "-ad-automation.fifo") }}'
+      - '{{ context.arns.get_sqs_arn("ad-automation.fifo") }}'
     Effect: Allow
     Sid: ClusterManagerSQSQueues
 

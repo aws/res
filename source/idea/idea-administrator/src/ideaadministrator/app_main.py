@@ -39,6 +39,7 @@ from ideaadministrator.app.cdk.cdk_invoker import CdkInvoker
 from ideaadministrator.app.config_generator import ConfigGenerator
 from ideaadministrator.app.delete_cluster import DeleteCluster
 from ideaadministrator.app.patch_helper import PatchHelper
+from ideaadministrator.app.upload_helper import UploadHelper
 from ideaadministrator.app.deployment_helper import DeploymentHelper
 from ideaadministrator.integration_tests.test_context import TestContext
 from ideaadministrator.integration_tests.test_invoker import TestInvoker
@@ -785,37 +786,6 @@ def delete_config(cluster_name: str, aws_profile: str, aws_region: str, config_k
         db.delete_config_entries(config_key_prefix)
 
 
-@click.command('bootstrap')
-@click.option('--cluster-name', required=True, help='Cluster Name')
-@click.option('--aws-profile', help='AWS Profile Name')
-@click.option('--aws-region', required=True, help='AWS Region')
-@click.option('--termination-protection', default=True, help='Set termination protection to true or false. Default: true')
-@click.option('--module-set', help='Name of the ModuleSet. Default: default')
-def bootstrap_cluster(cluster_name: str, aws_profile: str, aws_region: str, termination_protection: bool, module_set: str):
-    """
-    bootstrap cluster
-    """
-
-    context = SocaCliContext()
-
-    db = ClusterConfigDB(
-        cluster_name=cluster_name,
-        aws_region=aws_region,
-        aws_profile=aws_profile
-    )
-
-    cluster_s3_bucket = db.get_cluster_s3_bucket()
-    with context.spinner(f'bootstrapping cluster CDK stack and S3 bucket: {cluster_s3_bucket} ...'):
-        CdkInvoker(
-            module_id='bootstrap',
-            module_set=module_set,
-            cluster_name=cluster_name,
-            aws_region=aws_region,
-            aws_profile=aws_profile,
-            termination_protection=termination_protection
-        ).bootstrap_cluster(cluster_bucket=cluster_s3_bucket)
-
-
 @click.command()
 @click.option('--cluster-name', required=True, help='Cluster Name')
 @click.option('--aws-region', required=True, help='AWS Region')
@@ -994,6 +964,25 @@ def patch_module(cluster_name: str, aws_region: str, aws_profile: str, package_u
         module_id=module,
         force=force,
         patch_command=patch_command
+    ).apply()
+
+@click.command('upload')
+@click.option('--cluster-name', required=True, help='Cluster Name')
+@click.option('--aws-region', required=True, help='AWS Region')
+@click.option('--aws-profile', help='AWS Profile Name')
+@click.option('--package-uri', help='S3 package URI or package file path on local file system')
+@click.argument('module', required=True)
+def upload_package(cluster_name: str, aws_region: str, aws_profile: str, package_uri: str, module: str):
+    """
+    upload application package to staging buckeet
+    """
+
+    UploadHelper(
+        cluster_name=cluster_name,
+        aws_region=aws_region,
+        aws_profile=aws_profile,
+        package_uri=package_uri,
+        module_id=module,
     ).apply()
 
 
@@ -1308,10 +1297,6 @@ def quick_setup(ctx, values_file: str, existing_resources: bool, termination_pro
             raise SystemExit
 
     # todo - check required services using AwsServiceAvailabilityHelper before proceeding ahead with deployment
-
-    # bootstrap cluster
-    ctx.invoke(bootstrap_cluster, cluster_name=cluster_name, aws_region=aws_region, aws_profile=aws_profile,
-               termination_protection=termination_protection)
 
     # deploy stacks
     deployment_helper = DeploymentHelper(
@@ -1760,7 +1745,6 @@ def attach_file_system(cluster_name: str, aws_region: str, aws_profile: str, kms
 main.add_command(deploy)
 main.add_command(cdk)
 main.add_command(config)
-main.add_command(bootstrap_cluster)
 main.add_command(upload_packages)
 main.add_command(list_modules)
 main.add_command(build_bootstrap_package)
@@ -1769,6 +1753,7 @@ main.add_command(quick_setup_help)
 main.add_command(quick_setup)
 main.add_command(delete_cluster)
 main.add_command(patch_module)
+main.add_command(upload_package)
 main.add_command(check_cluster_status)
 main.add_command(about)
 main.add_command(run_integration_tests)
