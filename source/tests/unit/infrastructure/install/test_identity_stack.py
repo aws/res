@@ -75,6 +75,9 @@ def test_ad_sync_lock_table_creation(
                     {"AttributeName": "lock_key", "KeyType": "HASH"},
                     {"AttributeName": "sort_key", "KeyType": "RANGE"},
                 ],
+                "PointInTimeRecoverySpecification": {
+                    "PointInTimeRecoveryEnabled": True
+                },
             },
         },
     )
@@ -111,6 +114,9 @@ def test_ad_sync_status_table_creation(
                         "KeyType": "RANGE",
                     },
                 ],
+                "PointInTimeRecoverySpecification": {
+                    "PointInTimeRecoveryEnabled": True
+                },
             },
         },
     )

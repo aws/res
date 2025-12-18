@@ -13,7 +13,7 @@
 
 import { JwtTokenClaims, JwtTokenClaimsProvider, JwtTokenUtils } from "./token-utils";
 import { AUTH_TOKEN_EXPIRED, NETWORK_ERROR, REQUEST_TIMEOUT, SERVER_ERROR, THROTTLE_ERROR } from "./error-codes";
-import { LocalStorageService } from "../service";
+import { SessionStorageService } from "../service";
 import IdeaException from "./exceptions";
 import Utils from "./utils";
 import AppLogger from "./app-logger";
@@ -21,12 +21,6 @@ import { HTTPMethod } from "./constants";
 
 export interface IdeaAuthenticationContextProps {
     authEndpoint?: string;
-    sessionManagement: "local-storage" | "in-memory";
-}
-
-export interface InitializeAppOptions {
-    authEndpoint: string;
-    defaultLogLevel: number;
 }
 
 const KEY_REFRESH_TOKEN = "refresh-token";
@@ -41,26 +35,7 @@ const NETWORK_TIMEOUT = 30000;
 
 /**
  * IDEA Authentication Context
- * provides functionality authentication and managing "session" at client side. session can be managed via 2 modes:
- * 1. LocalStorage
- * 2. ServiceWorker (with tokens saved in-memory)
- *
- * ServiceWorker based session management is the ideal mechanism for production applications.
- * LocalStorage mode, is an unsecure fallback mechanism when ServiceWorker cannot be initialized.
- *
- * ServiceWorker cannot be initialized in below scenarios:
- * 1. Insecure SSL/TLS Context
- * For service workers to be initialized, the origin must be served over HTTPS with valid certificates.
- * Self-signed certificates do not work with Service Worker.
- * Refer to: https://www.chromium.org/blink/serviceworker/service-worker-faq/ for additional details.
- *
- * 2. Not supported or disabled by browsers
- * At the time of this writing, Service Workers are supported by most modern Web Browsers including Edge and Safari on iOS (11.3+)
- * Refer to https://developer.mozilla.org/en-US/docs/Web/API/ServiceWorker for Browser Compatibility for Service Workers.
- *
- * ServiceWorkers can be disabled by browsers, for eg. FireFox automatically disables ServiceWorkers in incognito mode.
- * Additionally, a user may disable service worker via browser preferences. In such scenarios, implementation will
- * automatically fall back to local storage for session management. This behavior can be customized based on server side configuration.
+ * provides functionality authentication and managing "session" at client side. session is managed via SessionStorage.
  *
  */
 
@@ -69,7 +44,7 @@ export class IdeaAuthenticationContext {
 
     private authEndpoint: string | null;
     private ssoAuth: boolean;
-    private readonly localStorage: LocalStorageService | null;
+    private readonly sessionStorage: SessionStorageService | null;
 
     private refreshToken: string | null;
     private accessToken: string | null;
@@ -79,22 +54,18 @@ export class IdeaAuthenticationContext {
     private role: string | null;
     private logger: AppLogger;
 
-    private authContextInitialized: boolean;
     private renewalInProgress: any;
-    //Service worker initialized flag to know if service worker was killed in between or not
-    private isServiceworkerInitialized: boolean;
 
     constructor(props: IdeaAuthenticationContextProps) {
         this.logger = new AppLogger({
             name: "authentication-context",
         });
 
-        this.authContextInitialized = false;
         this.renewalInProgress = null;
 
         this.authEndpoint = null;
         this.ssoAuth = false;
-        this.localStorage = null;
+        this.sessionStorage = null;
 
         this.refreshToken = null;
         this.accessToken = null;
@@ -103,33 +74,28 @@ export class IdeaAuthenticationContext {
         this.dbUsername = null;
         this.role = null;
         this.props = props;
-        this.isServiceworkerInitialized = false;
 
-        // used in fallback mode when service-worker cannot be initialized
         if (typeof this.props.authEndpoint !== "undefined") {
             this.authEndpoint = this.props.authEndpoint;
         }
 
-        // session management will never be local-storage, when AuthenticationContext is initialized from ServiceWorker.
-        if (this.props.sessionManagement === "local-storage") {
-            this.localStorage = new LocalStorageService({
-                prefix: "idea.auth",
-            });
-            this.initializeFromLocalStorage();
-        }
+        this.sessionStorage = new SessionStorageService({
+            prefix: "idea.auth",
+        });
+        this.initializeFromSessionStorage();
     }
 
-    private initializeFromLocalStorage() {
-        if (this.localStorage == null) {
+    private initializeFromSessionStorage() {
+        if (this.sessionStorage == null) {
             return;
         }
 
-        this.accessToken = this.localStorage.getItem(KEY_ACCESS_TOKEN);
-        this.idToken = this.localStorage.getItem(KEY_ID_TOKEN);
-        this.refreshToken = this.localStorage.getItem(KEY_REFRESH_TOKEN);
-        this.dbUsername = this.localStorage.getItem(KEY_DB_USERNAME);
-        this.role = this.localStorage.getItem(KEY_ROLE);
-        let ssoAuth = this.localStorage.getItem(KEY_SSO_AUTH);
+        this.accessToken = this.sessionStorage.getItem(KEY_ACCESS_TOKEN);
+        this.idToken = this.sessionStorage.getItem(KEY_ID_TOKEN);
+        this.refreshToken = this.sessionStorage.getItem(KEY_REFRESH_TOKEN);
+        this.dbUsername = this.sessionStorage.getItem(KEY_DB_USERNAME);
+        this.role = this.sessionStorage.getItem(KEY_ROLE);
+        let ssoAuth = this.sessionStorage.getItem(KEY_SSO_AUTH);
         if (ssoAuth != null) {
             this.ssoAuth = Utils.asBoolean(ssoAuth);
         }
@@ -137,32 +103,6 @@ export class IdeaAuthenticationContext {
         if (this.accessToken != null && this.idToken != null && this.dbUsername != null && this.role != null) {
             this.claimsProvider = new JwtTokenClaimsProvider(this.accessToken, this.idToken, this.dbUsername, this.role);
         }
-    }
-
-    initializeSW() {
-        this.isServiceworkerInitialized = true;
-    }
-
-    getSWInitialized(): boolean {
-        return this.isServiceworkerInitialized;
-    }
-
-    /**
-     * Initialize app authentication context
-     * this is exposed primarily for the ServiceWorker flow, where the AuthenticationContext instance resides in ServiceWorker, and
-     * authEndpoint and ssoAuth must be initialized after the app is initialized.
-     * @param {string} options.authEndpoint
-     * @param {boolean} options.ssoAuth
-     */
-    initializeAuthContext(options: InitializeAppOptions): Promise<boolean> {
-        this.logger = new AppLogger({
-            name: "authentication-context",
-            default_log_level: options.defaultLogLevel,
-        });
-        return new Promise((resolve, _) => {
-            this.authEndpoint = options.authEndpoint;
-            resolve(true);
-        });
     }
 
     private getAuthTokenExpiredError = () => {
@@ -175,9 +115,8 @@ export class IdeaAuthenticationContext {
     };
 
     /**
-     * save the authentication result in-memory
-     * if session_management == 'local-storage', local storage is initialized and tokens are saved in local storage.
-     * @param authResult
+     * save the authentication result in session storage
+     * @param initiateAuthResult
      * @param ssoAuth
      * @private
      */
@@ -192,15 +131,15 @@ export class IdeaAuthenticationContext {
         this.claimsProvider = new JwtTokenClaimsProvider(this.accessToken!, this.idToken!, this.dbUsername!, this.role!);
         this.ssoAuth = ssoAuth;
 
-        if (this.localStorage != null) {
+        if (this.sessionStorage != null) {
             if (initiateAuthResult.auth.refresh_token) {
-                this.localStorage.setItem(KEY_REFRESH_TOKEN, initiateAuthResult.auth.refresh_token!);
+                this.sessionStorage.setItem(KEY_REFRESH_TOKEN, initiateAuthResult.auth.refresh_token!);
             }
-            this.localStorage.setItem(KEY_SSO_AUTH, ssoAuth ? "true" : "false");
-            this.localStorage.setItem(KEY_ACCESS_TOKEN, initiateAuthResult.auth.access_token!);
-            this.localStorage.setItem(KEY_ID_TOKEN, initiateAuthResult.auth.id_token!);
-            this.localStorage.setItem(KEY_DB_USERNAME, initiateAuthResult.db_username!);
-            this.localStorage.setItem(KEY_ROLE, initiateAuthResult.role!);
+            this.sessionStorage.setItem(KEY_SSO_AUTH, ssoAuth ? "true" : "false");
+            this.sessionStorage.setItem(KEY_ACCESS_TOKEN, initiateAuthResult.auth.access_token!);
+            this.sessionStorage.setItem(KEY_ID_TOKEN, initiateAuthResult.auth.id_token!);
+            this.sessionStorage.setItem(KEY_DB_USERNAME, initiateAuthResult.db_username!);
+            this.sessionStorage.setItem(KEY_ROLE, initiateAuthResult.role!);
         }
     }
 
@@ -221,7 +160,7 @@ export class IdeaAuthenticationContext {
     }
 
     isLoggedIn(): Promise<boolean> {
-        if (this.localStorage != null) {
+        if (this.sessionStorage != null) {
             // this is primarily to allow force token renewal in local storage mode for testing, by deleting the access token from local storage
             return this.renewAccessToken().then(() => {
                 if (this.accessToken != null && this.idToken != null && this.dbUsername != null && this.role != null) {
@@ -269,13 +208,13 @@ export class IdeaAuthenticationContext {
                 this.claimsProvider = null;
                 this.dbUsername = null;
                 this.role = null;
-                if (this.localStorage != null) {
-                    this.localStorage.removeItem(KEY_ACCESS_TOKEN);
-                    this.localStorage.removeItem(KEY_REFRESH_TOKEN);
-                    this.localStorage.removeItem(KEY_SSO_AUTH);
-                    this.localStorage.removeItem(KEY_ID_TOKEN);
-                    this.localStorage.removeItem(KEY_DB_USERNAME);
-                    this.localStorage.removeItem(KEY_ROLE);
+                if (this.sessionStorage != null) {
+                    this.sessionStorage.removeItem(KEY_ACCESS_TOKEN);
+                    this.sessionStorage.removeItem(KEY_REFRESH_TOKEN);
+                    this.sessionStorage.removeItem(KEY_SSO_AUTH);
+                    this.sessionStorage.removeItem(KEY_ID_TOKEN);
+                    this.sessionStorage.removeItem(KEY_DB_USERNAME);
+                    this.sessionStorage.removeItem(KEY_ROLE);
                 }
                 return true;
             });
@@ -370,12 +309,12 @@ export class IdeaAuthenticationContext {
     private renewAccessToken(): Promise<boolean> {
         // before renewing, check if the current in-memory tokens are stale.
         // this can only happen when using local storage, as another tab may renew the access token and update local storage.
-        if (this.localStorage != null) {
+        if (this.sessionStorage != null) {
             // this may need some sort of lock in future as there will be concurrent renewal scenario when multiple tabs are active.
             // since local storage is not recommended for production, this is safe to ignore.
-            let accessToken = this.localStorage.getItem(KEY_ACCESS_TOKEN);
+            let accessToken = this.sessionStorage.getItem(KEY_ACCESS_TOKEN);
             if (accessToken !== this.accessToken) {
-                this.initializeFromLocalStorage();
+                this.initializeFromSessionStorage();
                 if (!this.isAccessTokenExpired()) {
                     this.logger.info("✓ refreshed stale access token");
                     return Promise.resolve(true);
@@ -540,7 +479,6 @@ export class IdeaAuthenticationContext {
 
     /**
      * print debug info using in-memory state.
-     * helpful to debug service worker implementation and check the in-memory state via browser console.
      */
     printDebugInfo() {
         this.isLoggedIn().then((status) => {

@@ -284,16 +284,8 @@ def _construct_sssd_configs(
     config_override = configparser.ConfigParser()
     config_override.read_string(sssd_conf_content)
 
-    additional_sssd_configs = json.loads(
-        sssd_settings.get("additional_sssd_configs", "{}")
-    )
-    # Additional SSSD configs will be merged to the AD domain specific section by default
-    for key, value in additional_sssd_configs.items():
-        config_override[domain_section][key] = value
-
     Path(SSSD_DIR).mkdir(parents=True, exist_ok=True)
     with open(SSSD_FILE_PATH, "w") as configfile:
-
         config_override.write(configfile)
 
     os.chmod(SSSD_FILE_PATH, 0o600)
@@ -314,6 +306,31 @@ def _construct_sssd_configs(
             raise Exception(
                 f"Failed to obfuscate service account password: stderr: {process.stderr}, stdout: {process.stdout}"
             )
+
+    # Make sure to add additional SSSD configs are after running the sss_obfuscate command.
+    # Otherwise the additional SSSD configs will be overridden.
+    _add_additional_sssd_configs(sssd_settings)
+
+
+def _add_additional_sssd_configs(sssd_settings: Dict[str, str]) -> None:
+    domain_section = f'domain/{sssd_settings["domain_name"]}'
+    additional_sssd_configs = json.loads(
+        sssd_settings.get("additional_sssd_configs", "{}")
+    )
+    if not additional_sssd_configs:
+        return
+
+    logger.info(f"Adding additional SSSD configs")
+
+    sssd_config = configparser.ConfigParser()
+    sssd_config.read(SSSD_FILE_PATH)
+
+    # Additional SSSD configs will be merged to the AD domain specific section by default
+    for key, value in additional_sssd_configs.items():
+        sssd_config[domain_section][key] = value
+
+    with open(SSSD_FILE_PATH, "w") as configfile:
+        sssd_config.write(configfile)
 
 
 def is_in_active_directory() -> bool:

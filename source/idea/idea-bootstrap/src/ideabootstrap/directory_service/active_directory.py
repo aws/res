@@ -22,6 +22,10 @@ def configure(force_join=True):
     if not cluster_settings.get_setting(sssd_utils.DOMAIN_NAME_KEY):
         logger.info("AD configuration has not been provided. Skipping.")
         return
+    
+    if cluster_settings.get_setting(sssd_utils.DISABLE_AD_JOIN_KEY) == "true" and BASE_OS == "windows":
+        logger.warning("Active Directory auto-join is disabled. Windows VDIs need domain joining - enable auto-join or configure custom launch scripts on them.")
+        return
 
     if cluster_settings.get_setting(sssd_utils.DISABLE_AD_JOIN_KEY) == "true" and BASE_OS != "windows":
         active_directory_platform.connect_to_active_directory(logger)

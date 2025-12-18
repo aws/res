@@ -23,6 +23,7 @@ from jinja2 import Environment, FileSystemLoader
 
 from idea.batteries_included.parameters.parameters import BIParameters
 from idea.infrastructure.install import constants
+from idea.infrastructure.install.parameters.cognito_user_pool import CognitoUserPoolKey
 from idea.infrastructure.install.parameters.common import CommonKey
 from idea.infrastructure.install.parameters.parameters import RESParameters
 
@@ -152,6 +153,34 @@ class InfraUtils:
             ).to_string(),
         )
         iam.PermissionsBoundary.of(scope).apply(permission_boundary_policy)
+
+    @staticmethod
+    def get_cognito_user_pool_id_not_provided_condition(
+        scope: constructs.Construct,
+        parameters: Union[RESParameters, BIParameters] = RESParameters(),
+    ) -> cdk.CfnCondition:
+        return CfnCondition(
+            scope,
+            "cognito-user-pool-id-not-provided",
+            expression=Fn.condition_equals(
+                parameters.get_str(CognitoUserPoolKey.COGNITO_USER_POOL_ID), ""
+            ),
+        )
+
+    @staticmethod
+    def get_fips_condition(scope: constructs.Construct) -> cdk.CfnCondition:
+        return CfnCondition(
+            scope,
+            "fips-condition",
+            expression=Fn.condition_or(
+                *[
+                    Fn.condition_equals(cdk.Aws.REGION, region)
+                    for region in constants.CAVEATS.get(
+                        "COGNITO_REQUIRE_FIPS_ENDPOINT_REGION_LIST", []
+                    )
+                ]
+            ),
+        )
 
     @staticmethod
     def create_iam_resource_prefix_applier(
@@ -375,73 +404,7 @@ class InfraUtils:
             ],
             vpc_id=vpc_id,
         )
-        security_group.apply_removal_policy(RemovalPolicy.RETAIN)
         return security_group.attr_group_id
-
-    @staticmethod
-    def add_vpc_config_to_lambda(
-        scope: constructs.Construct,
-        lambda_function: aws_lambda.Function,
-        security_group_ids: List[str],
-        subnet_ids: List[str],
-        custom_id: Optional[str] = None,
-    ) -> None:
-        function_name = lambda_function.function_name
-        lambda_id = custom_id if custom_id else "add-vpc-config-to-lambda"
-        policy = cr.AwsCustomResourcePolicy.from_statements(
-            [
-                iam.PolicyStatement(
-                    actions=["lambda:UpdateFunctionConfiguration"],
-                    resources=["*"],
-                ),
-                # These three actions only takes * as resource
-                iam.PolicyStatement(
-                    actions=[
-                        "ec2:DescribeSecurityGroups",
-                        "ec2:DescribeSubnets",
-                        "ec2:DescribeVpcs",
-                    ],
-                    resources=["*"],
-                ),
-            ]
-        )
-        vpc_setting_cr = cr.AwsCustomResource(
-            scope,
-            lambda_id,
-            on_update=cr.AwsSdkCall(  # will also be called for a CREATE event
-                service="@aws-sdk/client-lambda",
-                action="UpdateFunctionConfigurationCommand",
-                parameters={
-                    "FunctionName": function_name,
-                    "VpcConfig": {
-                        "SubnetIds": subnet_ids,
-                        "SecurityGroupIds": security_group_ids,
-                    },
-                },
-                physical_resource_id=cr.PhysicalResourceId.of(
-                    f"add-vpc-{function_name}"
-                ),
-            ),
-            policy=policy,
-        )
-        vpc_setting_cr.node.add_dependency(lambda_function)
-        vpc_removing_cr = cr.AwsCustomResource(
-            scope,
-            f"remove-vpc-{lambda_id}",
-            on_delete=cr.AwsSdkCall(
-                service="@aws-sdk/client-lambda",
-                action="UpdateFunctionConfigurationCommand",
-                parameters={
-                    "FunctionName": function_name,
-                    "VpcConfig": {"SubnetIds": [], "SecurityGroupIds": []},
-                },
-                physical_resource_id=cr.PhysicalResourceId.of(
-                    f"remove-vpc{function_name}"
-                ),
-            ),
-            policy=policy,
-        )
-        vpc_removing_cr.node.add_dependency(lambda_function)
 
     @staticmethod
     def create_execution_role(

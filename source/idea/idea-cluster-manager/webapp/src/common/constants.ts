@@ -86,21 +86,6 @@ export const Constants = {
         resizeHandleAriaLabel: "Resize split panel",
     },
 
-    ServiceWorker: {
-        SKIP_WAITING: "SKIP_WAITING",
-        IDEA_AUTH_INIT: "IDEA.Auth.InitializeAuth",
-        IDEA_AUTH_TOKEN_CLAIMS: "IDEA.Auth.GetTokenClaims",
-        IDEA_AUTH_IS_LOGGED_IN: "IDEA.Auth.IsLoggedIn",
-        IDEA_AUTH_LOGOUT: "IDEA.Auth.Logout",
-        IDEA_AUTH_DEBUG: "IDEA.Auth.Debug",
-        IDEA_AUTH_ACCESS_TOKEN: "IDEA.Auth.GetAccessToken",
-        IDEA_API_INVOCATION: "IDEA.InvokeApi",
-        IDEA_HTTP_FETCH: "IDEA.HttpFetch",
-        IDEA_CLIENT_ID: "IDEA.ClientId",
-        IDEA_SW_INIT: "IDEA.InitializeServiceWorker",
-        IDEA_GET_SW_INIT: "IDEA.GetServiceWorkerInitialized",
-    },
-
     ROLE_NAME_REGEX: "^[a-zA-Z0-9-_ ]{3,36}$",
     ROLE_NAME_ERROR_MESSAGE: "Role name is required. Only use alphabets, numbers, spaces, dashes (-), or underscores (_) for role name. Must be between 3 and 36 characters long.",
     ROLE_DESC_REGEX: "^[a-zA-Z0-9-_ ]{0,50}$",

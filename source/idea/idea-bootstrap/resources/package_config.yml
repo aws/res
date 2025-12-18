@@ -19,6 +19,7 @@ package_config:
       # Default packages installed on all Linux systems, kernel related packages' version is pinned to the running kernel's
       # version to keep them synchronized.
       - dnf-plugins-core
+      - gcc
       - git
       - kernel-core-$(uname -r)
       - kernel-devel-$(uname -r)
@@ -118,6 +119,8 @@ package_config:
           - cargo
           - make
           - openssl-devel
+          - golang
+          - cmake
       debian:
         ubuntu:
           - binutils
@@ -125,6 +128,8 @@ package_config:
           - cargo
           - pkg-config
           - libssl-dev
+          - golang-go
+          - cmake
     al2: amazon-efs-utils
     repo: https://github.com/aws/efs-utils
 

@@ -245,7 +245,7 @@ class MyVirtualDesktopSessions extends Component<MyVirtualDesktopSessionsProps, 
 
     async fetchUserSessions(): Promise<ListSessionsResponse> {
         const response: ListSessionsResponse = {
-            paginator: { page_size: 100 },
+            paginator: { page_size: undefined },
             listing: [],
         }
 
@@ -264,14 +264,14 @@ class MyVirtualDesktopSessions extends Component<MyVirtualDesktopSessionsProps, 
                     }
                 ],
                 paginator: {
-                    page_size: 100,
+                    page_size: undefined,
                     cursor: cursor,
                 },
             });
             response.listing?.push(...result.listing ?? []);
             cursor = result.paginator?.cursor;
         } while (cursor);
-
+        
         return response;
     }
 
@@ -932,6 +932,10 @@ class MyVirtualDesktopSessions extends Component<MyVirtualDesktopSessionsProps, 
                         param_type: "select_or_text",
                         validate: {
                             required: true,
+                            in: this.state.selectedSessionApplicableInstanceTypes.flatMap(group =>
+                                group.options ? group.options.map(option => option.value) : []
+                            ),
+                            message: "Please select a valid instance type from the available options.",
                         },
                         choices: this.state.selectedSessionApplicableInstanceTypes,
                     },
@@ -1070,6 +1074,7 @@ class MyVirtualDesktopSessions extends Component<MyVirtualDesktopSessionsProps, 
         return (
             <VirtualDesktopScheduleModal
                 ref={this.scheduleModal}
+                modalType="session"
                 onScheduleChange={(session) => {
                     return this.getVirtualDesktopClient()
                         .updateSession({
@@ -1238,7 +1243,9 @@ class MyVirtualDesktopSessions extends Component<MyVirtualDesktopSessionsProps, 
                                             return new Promise<boolean>((resolve) =>
                                                 this.getVirtualDesktopUtilsClient()
                                                     .listAllowedInstanceTypesForSession({
-                                                        session: session,
+                                                        listAllowedInstanceTypesForSessionRequestContent: {
+                                                            session: session as any,
+                                                        }
                                                     })
                                                     .then((result) => {
                                                         this.setState(

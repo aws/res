@@ -47,11 +47,10 @@ def test_set_ebs_volume_tags_success(monkeypatch, mock_instance_id, mock_volumes
     }
 
     with patch('res.utils.instance_metadata_utils.get_instance_id', return_value=mock_instance_id), \
-         patch('boto3.client', mock_boto3.client):
+         patch('boto3.client', mock_boto3.client), \
+         patch('res.resources.cluster_settings.get_setting', return_value=["Key=test-key,Value=test-value"]):    
 
-        # Call the function with custom tags
-        custom_tags = [{'Key': 'CustomTag', 'Value': 'CustomValue'}]
-        ebs_volume_tags.setup(custom_tags)
+        ebs_volume_tags.setup()
 
         # Verify boto3 client was created with correct parameters
         mock_boto3.client.assert_called_once_with('ec2', region_name=env_vars["AWS_REGION"])
@@ -70,8 +69,9 @@ def test_set_ebs_volume_tags_success(monkeypatch, mock_instance_id, mock_volumes
             {'Key': 'res:EnvironmentName', 'Value': env_vars["IDEA_CLUSTER_NAME"]},
             {'Key': 'res:ModuleName', 'Value': env_vars["IDEA_MODULE_NAME"]},
             {'Key': 'res:ModuleId', 'Value': env_vars["IDEA_MODULE_ID"]},
-            {'Key': 'Name', 'Value': env_vars["IDEA_CLUSTER_NAME"] + '/' + env_vars["IDEA_MODULE_ID"] + ' Root Volume'}
-        ] + custom_tags
+            {'Key': 'Name', 'Value': env_vars["IDEA_CLUSTER_NAME"] + '/' + env_vars["IDEA_MODULE_ID"] + ' Root Volume'},
+            {'Key': 'test-key', 'Value': 'test-value'}
+        ]
 
         assert mock_ec2_client.create_tags.call_count == 2
 
@@ -114,10 +114,12 @@ def test_set_network_interface_tags_success(monkeypatch, mock_instance_id, mock_
     mock_ec2_client.create_tags.return_value = {'Return': True}
 
     with patch('boto3.client', return_value=mock_ec2_client), \
-         patch('res.utils.instance_metadata_utils.get_instance_id', return_value=mock_instance_id):
+         patch('res.utils.instance_metadata_utils.get_instance_id', return_value=mock_instance_id), \
+         patch('res.resources.cluster_settings.get_setting', return_value=["Key=test-key,Value=test-value"]):    
 
-        custom_tags = [{'Key': 'CustomTag', 'Value': 'CustomValue'}]
-        result = network_interface_tags.setup(custom_tags)
+        ebs_volume_tags.setup()
+
+        result = network_interface_tags.setup()
 
         mock_ec2_client.describe_network_interfaces.assert_called_once_with(
             Filters=[{'Name': 'attachment.instance-id', 'Values': [mock_instance_id]}]
@@ -127,8 +129,9 @@ def test_set_network_interface_tags_success(monkeypatch, mock_instance_id, mock_
             {'Key': 'res:EnvironmentName', 'Value': env_vars["IDEA_CLUSTER_NAME"]},
             {'Key': 'res:ModuleName', 'Value': env_vars["IDEA_MODULE_NAME"]},
             {'Key': 'res:ModuleId', 'Value': env_vars["IDEA_MODULE_ID"]},
-            {'Key': 'Name', 'Value': env_vars["IDEA_CLUSTER_NAME"] + '/' + env_vars["IDEA_MODULE_ID"] + '  Network Interface'}
-        ] + custom_tags
+            {'Key': 'Name', 'Value': env_vars["IDEA_CLUSTER_NAME"] + '/' + env_vars["IDEA_MODULE_ID"] + '  Network Interface'},
+            {'Key': 'test-key', 'Value': 'test-value'}
+        ]
 
         assert mock_ec2_client.create_tags.call_count == 2
 

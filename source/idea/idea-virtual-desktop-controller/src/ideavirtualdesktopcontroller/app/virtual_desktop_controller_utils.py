@@ -568,6 +568,10 @@ class VirtualDesktopControllerUtils:
     def get_valid_instance_types_by_software_stack(self, hibernation_support: bool, software_stack: VirtualDesktopSoftwareStack = None, gpu: VirtualDesktopGPU = None) -> List[Dict]:
         allowed_instance_types = self.context.config().get_list('virtual-desktop-controller.dcv_session.instance_types.allow', default=[])
         valid_instance_types_dict = self.get_valid_instance_types_by_allowed_list(hibernation_support, allowed_instance_types)
+
+        if software_stack and software_stack.base_os == VirtualDesktopBaseOS.WINDOWS:
+            image_info = self.describe_image_id(software_stack.ami_id)
+
         valid_instance_types_names = []
         valid_instance_types = []
         for instance_type_name in valid_instance_types_dict.keys():
@@ -589,7 +593,6 @@ class VirtualDesktopControllerUtils:
                 continue
 
             if software_stack and software_stack.base_os == VirtualDesktopBaseOS.WINDOWS:
-                image_info = self.describe_image_id(software_stack.ami_id)
                 instance_boot_modes = instance_info.get('SupportedBootModes', [])
                 image_boot_mode = image_info.get('BootMode', '')
                 if image_boot_mode:

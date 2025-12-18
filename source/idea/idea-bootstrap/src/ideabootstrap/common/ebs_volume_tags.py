@@ -6,12 +6,13 @@ import random
 import time
 import boto3
 import json
-from res.utils import logging_utils
+from res.utils import logging_utils, cluster_settings_utils
 from res.utils import instance_metadata_utils
+from res.resources import cluster_settings
 
 logger = logging_utils.get_logger("bootstrap")
 
-def setup(custom_aws_tags=[]):
+def setup():
     logger.info("Setting EBS Volume Tags")
     env = os.environ
     cluster_name = env.get("IDEA_CLUSTER_NAME")
@@ -19,14 +20,17 @@ def setup(custom_aws_tags=[]):
     module_id = env.get("IDEA_MODULE_ID")
     aws_region = env.get("AWS_REGION")
 
-    ebs_volume_tags = [
-        {'Key': 'res:EnvironmentName', 'Value': cluster_name},
-        {'Key': 'res:ModuleName', 'Value': module_name},
-        {'Key': 'res:ModuleId', 'Value': module_id},
-        {'Key': 'Name', 'Value': cluster_name + '/' + module_id + ' Root Volume'}
-    ]
+    custom_aws_tags = cluster_settings_utils.convert_custom_tags_to_dict_list(
+        cluster_settings.get_setting("global-settings.custom_tags")
+    )
 
-    combined_tags = ebs_volume_tags + custom_aws_tags
+    combined_tags = [
+        {"Key": "res:EnvironmentName", "Value": cluster_name},
+        {"Key": "res:ModuleName", "Value": module_name},
+        {"Key": "res:ModuleId", "Value": module_id},
+        {"Key": "Name", "Value": cluster_name + "/" + module_id + " Root Volume"},
+        *custom_aws_tags,
+    ]
 
     aws_instance_id = instance_metadata_utils.get_instance_id()
 

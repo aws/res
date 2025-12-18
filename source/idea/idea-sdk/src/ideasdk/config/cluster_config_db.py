@@ -639,19 +639,6 @@ class ClusterConfigDB(IDynamoDBStreamSubscriber):
             # TODO: once logging is instrumented, log the exception message
             raise exceptions.general_exception(f'Something went wrong: {e}')
 
-    def get_cluster_s3_bucket(self) -> str:
-        cluster_modules = self.get_cluster_modules()
-        for cluster_module in cluster_modules:
-            if cluster_module['name'] == constants.MODULE_CLUSTER:
-                module_id = cluster_module['module_id']
-                config_key = f'{module_id}.cluster_s3_bucket'
-                entry = self.get_config_entry(config_key)
-                cluster_s3_bucket = Utils.get_value_as_string('value', entry)
-                if Utils.is_empty(cluster_s3_bucket):
-                    raise exceptions.cluster_config_error(f'cluster s3 bucket not found for key: {config_key}')
-                return cluster_s3_bucket
-        raise exceptions.cluster_config_error('cluster s3 bucket not configured')
-
     @staticmethod
     def post_process_ddb_config_entry(item: Dict) -> Dict:
         """

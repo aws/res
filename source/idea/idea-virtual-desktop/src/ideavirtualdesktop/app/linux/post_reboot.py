@@ -68,3 +68,6 @@ def run():
         f.write(current_time)
 
     logger.info(f"Created instance ready lock file: {LINUX_VDI_CONFIG_HOST_READY_LOCK}")
+    
+    send_sqs_host_messages("DCV_HOST_READY_EVENT")
+    logger.info("Host ready event sent")

@@ -132,7 +132,6 @@ class WebPortal:
             'default_log_level': self.context.config().get_int('cluster-manager.web_portal.default_log_level', 3),
             'module_set': module_set_id,
             'modules': modules,
-            'session_management': self.context.config().get_string('cluster-manager.web_portal.session_management', 'in-memory')
         }
 
         error_msg = self.server.get_query_param_as_string('error_msg', http_request)

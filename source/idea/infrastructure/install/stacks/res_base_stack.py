@@ -36,7 +36,6 @@ from idea.infrastructure.install.constants import RES_COMMON_LAMBDA_RUNTIME
 from idea.infrastructure.install.constructs.base import ResBaseConstruct
 from idea.infrastructure.install.ddb_tables.base import RESDDBTableBase
 from idea.infrastructure.install.ddb_tables.list import ddb_tables_list
-from idea.infrastructure.install.handlers import installer_handlers
 from idea.infrastructure.install.infra_utils import utils
 from idea.infrastructure.install.infra_utils.utils import InfraUtils
 from idea.infrastructure.install.parameters.common import CommonKey
@@ -47,6 +46,9 @@ from idea.infrastructure.install.parameters.parameters import RESParameters
 from idea.infrastructure.install.parameters.shared_storage import SharedStorageKey
 from idea.infrastructure.resources.lambda_functions.custom_resource.delete_target_groups_lambda import (
     handler,
+)
+from idea.infrastructure.resources.lambda_functions.delete_dcv_broker_tables_lambda import (
+    delete_dcv_broker_tables_handler,
 )
 
 
@@ -141,7 +143,7 @@ class ResBaseStack(ResBaseConstruct):
             description="Lambda to handle deletion of the NICE DCV Broker tables",
             role=dcvBrokerTableDeletionRole,
             **utils.InfraUtils.get_handler_and_code_for_function(
-                installer_handlers.delete_dcv_broker_tables
+                delete_dcv_broker_tables_handler.delete_dcv_broker_tables
             ),
         )
         provider = cr.Provider(
@@ -162,6 +164,7 @@ class ResBaseStack(ResBaseConstruct):
         self.populator_custom_resource = self.populate_default_values()
         self.create_bucket()
         self.apply_permission_boundary(self.nested_stack)
+        self.add_common_tags(self.nested_stack)
         self.modify_provider_roles()
         self.delete_target_groups()
 
@@ -384,43 +387,19 @@ class ResBaseStack(ResBaseConstruct):
 
     def create_bucket(self) -> None:
         scope = self.nested_stack
-        stack_id = cdk.Stack.of(scope).stack_id
-        stack_id_suffix = cdk.Fn.select(
-            0, cdk.Fn.split("-", cdk.Fn.select(2, cdk.Fn.split("/", stack_id)))
+        logging_bucket_name = (
+            f"{self.cluster_name}-logging-{cdk.Aws.REGION}-{cdk.Aws.ACCOUNT_ID}"
         )
-        logging_bucket_name = f"log-{self.cluster_name}-cluster-{cdk.Aws.REGION}-{cdk.Aws.ACCOUNT_ID}-{stack_id_suffix}"
         logging_bucket = s3.Bucket(
             scope,
             "ClusterLoggingBucket",
             bucket_name=logging_bucket_name,
             encryption=s3.BucketEncryption.S3_MANAGED,
-            removal_policy=RemovalPolicy.RETAIN,
-        )
-
-        logging_bucket.add_to_resource_policy(
-            iam.PolicyStatement(
-                effect=iam.Effect.ALLOW,
-                actions=["s3:PutObject"],
-                sid="AllowS3LogRequests",
-                resources=[f"{logging_bucket.bucket_arn}/*"],
-                principals=[iam.ServicePrincipal("logging.s3.amazonaws.com")],
-            ),
-        )
-
-        staging_bucket_name = (
-            f"{self.cluster_name}-cluster-{cdk.Aws.REGION}-{cdk.Aws.ACCOUNT_ID}"
-        )
-        staging_bucket = s3.Bucket(
-            scope,
-            "ClusterStagingBucket",
-            bucket_name=staging_bucket_name,
-            access_control=s3.BucketAccessControl.PRIVATE,
-            encryption=s3.BucketEncryption.S3_MANAGED,
             removal_policy=RemovalPolicy.DESTROY,
             auto_delete_objects=True,
             versioned=True,
-            server_access_logs_bucket=logging_bucket,
-            server_access_logs_prefix="cluster-s3-bucket-logs/",
+            enforce_ssl=True,
+            server_access_logs_prefix="server-access-logs/",
         )
         elb_principal_type = self.populator_custom_resource.get_att_string(
             "elb_principal_type"
@@ -436,11 +415,11 @@ class ResBaseStack(ResBaseConstruct):
         )
 
         existing_staging_bucket_statement = []
-        if staging_bucket.policy is not None:
+        if logging_bucket.policy is not None:
             existing_staging_bucket_statement = (
-                staging_bucket.policy.document.to_json().get("Statement", [])
+                logging_bucket.policy.document.to_json().get("Statement", [])
             )
-        staging_bucket_policy_document = {
+        logging_bucket_policy_document = {
             "Version": "2012-10-17",
             "Statement": existing_staging_bucket_statement
             + [
@@ -449,7 +428,7 @@ class ResBaseStack(ResBaseConstruct):
                     "Effect": "Allow",
                     "Principal": alb_access_logs_principal_json,
                     "Action": "s3:PutObject",
-                    "Resource": f"{staging_bucket.bucket_arn}/logs/*",
+                    "Resource": f"{logging_bucket.bucket_arn}/logs/*",
                 },
                 {
                     "Sid": "AllowSSLRequestsOnly",
@@ -457,8 +436,8 @@ class ResBaseStack(ResBaseConstruct):
                     "Principal": {"AWS": "*"},
                     "Action": "s3:*",
                     "Resource": [
-                        f"{staging_bucket.bucket_arn}/*",
-                        f"{staging_bucket.bucket_arn}",
+                        f"{logging_bucket.bucket_arn}/*",
+                        f"{logging_bucket.bucket_arn}",
                     ],
                     "Condition": {"Bool": {"aws:SecureTransport": "false"}},
                 },
@@ -467,7 +446,7 @@ class ResBaseStack(ResBaseConstruct):
                     "Effect": "Allow",
                     "Principal": {"Service": f"delivery.logs.{cdk.Aws.URL_SUFFIX}"},
                     "Action": "s3:PutObject",
-                    "Resource": f"{staging_bucket.bucket_arn}/logs/*",
+                    "Resource": f"{logging_bucket.bucket_arn}/logs/*",
                     "Condition": {
                         "StringEquals": {"s3:x-amz-acl": "bucket-owner-full-control"}
                     },
@@ -477,24 +456,23 @@ class ResBaseStack(ResBaseConstruct):
                     "Effect": "Allow",
                     "Principal": {"Service": f"delivery.logs.{cdk.Aws.URL_SUFFIX}"},
                     "Action": "s3:GetBucketAcl",
-                    "Resource": f"{staging_bucket.bucket_arn}",
+                    "Resource": f"{logging_bucket.bucket_arn}",
                 },
             ],
         }
 
-        staging_bucket_policy = s3.CfnBucketPolicy(
+        logging_bucket_policy = s3.CfnBucketPolicy(
             self.nested_stack,
-            "ClusterStagingBucketPolicy",
-            bucket=staging_bucket_name,
-            policy_document=staging_bucket_policy_document,
+            "ClusterLoggingBucketPolicy",
+            bucket=logging_bucket_name,
+            policy_document=logging_bucket_policy_document,
         )
-        staging_bucket_policy.apply_removal_policy(RemovalPolicy.RETAIN)
+        logging_bucket_policy.apply_removal_policy(RemovalPolicy.RETAIN)
 
-        staging_bucket.node.add_dependency(self.populator_custom_resource)
-        staging_bucket_policy.node.add_dependency(self.populator_custom_resource)
-        staging_bucket_policy.node.add_dependency(staging_bucket)
-        cdk.Tags.of(staging_bucket).add(RES_TAG_BACKUP_PLAN, "cluster")
-        cdk.Tags.of(staging_bucket).add(RES_TAG_ENVIRONMENT_NAME, self.cluster_name)
+        logging_bucket.node.add_dependency(self.populator_custom_resource)
+        logging_bucket_policy.node.add_dependency(self.populator_custom_resource)
+        logging_bucket_policy.node.add_dependency(logging_bucket)
+        cdk.Tags.of(logging_bucket).add(RES_TAG_BACKUP_PLAN, "cluster")
         cdk.Tags.of(logging_bucket).add(RES_TAG_ENVIRONMENT_NAME, self.cluster_name)
 
     def get_cluster_settings_table_event_handler_role(

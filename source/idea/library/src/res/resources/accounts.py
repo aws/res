@@ -554,6 +554,19 @@ def get_user(username: str) -> Dict[str, Any]:
     return user
 
 
+def is_active_user(username: str) -> bool:
+    """
+    Check if the user is active
+    :param username: username to check
+    :return: True if the user is active, False otherwise
+    """
+    user = get_user(username)
+    if not user.get("enabled", False) or not user.get("is_active", False):
+        return False
+
+    return True
+
+
 def is_active_admin(username: str) -> bool:
     """
     Check if the user is active and an admin

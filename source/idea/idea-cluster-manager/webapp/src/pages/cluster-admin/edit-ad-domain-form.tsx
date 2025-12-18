@@ -114,7 +114,7 @@ export const EditADDomainForm = (props: EditADDomainFormProps) => {
                 module_id: "directoryservice",
                 settings: formData
             });
-
+            
             props.onFlashbarChange({
                 items: [
                     {
@@ -125,6 +125,20 @@ export const EditADDomainForm = (props: EditADDomainFormProps) => {
                 ],
             });
 
+            if (formData.disable_ad_join == "true") {
+                props.onFlashbarChange({
+                    items: [
+                        {
+                            type: "warning",
+                            content: "Active Directory auto-join is disabled. Windows VDIs need domain joining - enable auto-join or configure custom launch scripts on them.",
+                            dismissible: true,
+                        },
+                    ],
+                });
+            }
+
+
+
             props.updateDirectoryServiceState(formData);
             setFormError("");
             hideForm();
@@ -133,6 +147,16 @@ export const EditADDomainForm = (props: EditADDomainFormProps) => {
             console.error(e);
         }
     }
+
+    const handleFormInputChange = (updateFormData: any, updateFormFieldValidationError: any, key: string, value: string) => {    
+    try {
+        validateFormInput(key, value);
+        updateFormFieldValidationError(key, "");
+     } catch (e: any) {
+        updateFormFieldValidationError(key, e.message);
+     }
+    updateFormData(key, value);
+}
 
     const buildAdditionalConfigSection = () => {
         return (
@@ -303,8 +327,8 @@ export const EditADDomainForm = (props: EditADDomainFormProps) => {
                                     onChange={(e) => handleFormInputChange(updateFormData, updateFormFieldValidationError, "disable_ad_join", e.detail.checked ? "false" : "true")}
                                 >
                                     <FormField
-                                        label="Join Active Directory"
-                                        description="Turn on Linux integration with your directory domain."
+                                        label="Automatically join Active Directory"
+                                        description="Automatically joins Windows and Linux VDIs to your directory domain during launch. Windows instances require domain joining to launch successfully. If you disable this setting, you must implement custom domain-join logic in your Windows instance launch scripts. Linux instances can launch with or without domain joining."
                                     />
                                 </Toggle>
                                 <FormField
@@ -461,16 +485,6 @@ const handleAdditionalConfigsChange = (setAdditionalConfigs: any, updateFormData
     })
     const configsString = JSON.stringify(configObject);
     updateFormData("sssd.additional_sssd_configs", configsString);
-}
-
-const handleFormInputChange = (updateFormData: any, updateFormFieldValidationError: any, key: string, value: string) => {
-     try {
-        validateFormInput(key, value);
-        updateFormFieldValidationError(key, "");
-     } catch (e: any) {
-        updateFormFieldValidationError(key, e.message);
-     }
-    updateFormData(key, value);
 }
 
 const validateFormInput = (key: string, value: string) => {

@@ -16,7 +16,7 @@ def cognito_sync() -> None:
 
     try:
         response = lambda_client.invoke(
-            FunctionName=f'{os.environ["environment_name"]}_cognito-sync-lambda',
+            FunctionName=f'{os.environ["environment_name"]}-cognito-sync-lambda',
             InvocationType="RequestResponse",
             Payload=json.dumps({}),
         )

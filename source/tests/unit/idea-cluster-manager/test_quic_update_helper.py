@@ -300,29 +300,39 @@ def test_create_listener(context: AppContext):
     """
     create_listener should create listener with provided values and return the arn of the created listener
     """
+    with patch(
+        "res.resources.cluster_settings.get_setting",
+        return_value=["Key=test-key,Value=test-value"],
+    ):
+        result = context.accounts.quic_update_helper.create_listener(
+            external_nlb_arn="nlb-arn",
+            protocol=QUIC_PROTOCOL,
+            target_group_arn="target-group-arn",
+        )
 
-    result = context.accounts.quic_update_helper.create_listener(
-        external_nlb_arn="nlb-arn",
-        protocol=QUIC_PROTOCOL,
-        target_group_arn="target-group-arn",
-    )
-
-    context.aws().elbv2().create_listener.assert_called_with(
-        LoadBalancerArn="nlb-arn",
-        Protocol=QUIC_PROTOCOL,
-        Port=LISTENER_PORT,
-        DefaultActions=[{"Type": "forward", "TargetGroupArn": "target-group-arn"}],
-    )
-    assert result == "listener-arn"
+        context.aws().elbv2().create_listener.assert_called_with(
+            LoadBalancerArn="nlb-arn",
+            Protocol=QUIC_PROTOCOL,
+            Port=LISTENER_PORT,
+            DefaultActions=[{"Type": "forward", "TargetGroupArn": "target-group-arn"}],
+            Tags=[{"Key": "test-key", "Value": "test-value"}],
+        )
+        assert result == "listener-arn"
 
 
 def test_create_target_group(context: AppContext):
     """
     create_target_group should create target group and register the vdc_gateway instance as a registered target
     """
-    context.accounts.quic_update_helper.create_target_group(
-        target_group_name="target-group-name", protocol=QUIC_PROTOCOL, vpc_id="vpc-id"
-    )
+    with patch(
+        "res.resources.cluster_settings.get_setting",
+        return_value=["Key=test-key,Value=test-value"],
+    ):
+        context.accounts.quic_update_helper.create_target_group(
+            target_group_name="target-group-name",
+            protocol=QUIC_PROTOCOL,
+            vpc_id="vpc-id",
+        )
 
     context.aws().elbv2().register_targets.assert_called_with(
         TargetGroupArn="target-group-arn", Targets=[{"Id": "i-123"}]

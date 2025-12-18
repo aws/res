@@ -9,7 +9,7 @@ from aws_cdk import Duration
 from aws_cdk import aws_iam as iam
 from aws_cdk import aws_kinesis as kinesis
 from aws_cdk import aws_lambda as lambda_
-from aws_cdk.aws_dynamodb import BillingMode, Table
+from aws_cdk.aws_dynamodb import BillingMode, PointInTimeRecoverySpecification, Table
 from constructs import Construct
 
 from idea.infrastructure.install.constants import RES_COMMON_LAMBDA_RUNTIME
@@ -47,6 +47,9 @@ class RESDDBTableBase(Construct):
             billing_mode=BillingMode.PAY_PER_REQUEST,
             table_name=f"{cluster_name}.{self.id}",
             kinesis_stream=self.kinesis_stream,
+            point_in_time_recovery_specification=PointInTimeRecoverySpecification(
+                point_in_time_recovery_enabled=True
+            ),
             **self.table_props._values,
         )
 

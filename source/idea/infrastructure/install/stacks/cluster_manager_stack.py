@@ -15,6 +15,7 @@ from aws_cdk import aws_elasticloadbalancingv2 as elbv2
 from aws_cdk import aws_kms as kms
 from aws_cdk import aws_sqs as sqs
 from cdk_nag import NagSuppressions
+from res.constants import ENVIRONMENT_NAME_KEY, OLD_CUSTOM_TAG_KEYS  # type: ignore
 
 from idea.batteries_included.parameters.parameters import BIParameters
 from idea.infrastructure.install import constants
@@ -60,10 +61,12 @@ class ClusterManagerStack(ResBaseConstruct):
         lambda_layer: cdk.aws_lambda.LayerVersion,
         identity_stack: IdentityStack,
         cluster_stack: ClusterStack,
+        params_transformer: cdk.CustomResource,
         parameters: Union[RESParameters, BIParameters] = RESParameters(),
     ):
 
         self.parameters = parameters
+        self.params_transformer = params_transformer
         self.cluster_stack = cluster_stack
         self.identity_stack = identity_stack
         self.cluster_name = parameters.get_str(CommonKey.CLUSTER_NAME)
@@ -460,7 +463,7 @@ class ClusterManagerStack(ResBaseConstruct):
         cfn_launch_template.add_property_override(
             "LaunchTemplateData.IamInstanceProfile",
             {
-                "Arn": self.arn_builder.get_instance_profile_arn(
+                "Arn": self.arn_builder.get_instance_profile_arn_from_ref(
                     self.instance_profile.ref
                 )
             },
@@ -468,18 +471,6 @@ class ClusterManagerStack(ResBaseConstruct):
 
         cfn_launch_template.add_property_override(
             "LaunchTemplateData.ImageId", custom_ami
-        )
-
-        cfn_launch_template.add_property_override(
-            "LaunchTemplateData.TagSpecifications",
-            [
-                {
-                    "ResourceType": "instance",
-                    "Tags": [
-                        {"Key": "Name", "Value": f"{self.cluster_name}-cluster-manager"}
-                    ],
-                }
-            ],
         )
 
         self.auto_scaling_group = asg.AutoScalingGroup(
@@ -576,6 +567,9 @@ class ClusterManagerStack(ResBaseConstruct):
                 "actions": [
                     {"Type": "forward", "TargetGroupArn": self.default_target_group.ref}
                 ],
+                OLD_CUSTOM_TAG_KEYS: self.params_transformer.get_att_string(
+                    OLD_CUSTOM_TAG_KEYS
+                ),
             },
             resource_type="Custom::WebPortalEndpoint",
         )
@@ -618,6 +612,9 @@ class ClusterManagerStack(ResBaseConstruct):
                         "TargetGroupArn": self.external_target_group.ref,
                     }
                 ],
+                OLD_CUSTOM_TAG_KEYS: self.params_transformer.get_att_string(
+                    OLD_CUSTOM_TAG_KEYS
+                ),
             },
             resource_type="Custom::ClusterManagerEndpointExternal",
         )
@@ -660,6 +657,9 @@ class ClusterManagerStack(ResBaseConstruct):
                         "TargetGroupArn": self.internal_target_group.ref,
                     }
                 ],
+                OLD_CUSTOM_TAG_KEYS: self.params_transformer.get_att_string(
+                    OLD_CUSTOM_TAG_KEYS
+                ),
             },
             resource_type="Custom::ClusterManagerEndpointInternal",
         )
@@ -734,5 +734,5 @@ class ClusterManagerStack(ResBaseConstruct):
             ),
             parameters=self.parameters,
             log_retention_role=self.cluster_stack.lambda_log_retention_role,  # type: ignore
-            environment={"CLUSTER_NAME": self.cluster_name},
+            environment={ENVIRONMENT_NAME_KEY: self.cluster_name},
         )

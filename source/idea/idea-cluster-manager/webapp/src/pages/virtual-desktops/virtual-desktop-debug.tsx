@@ -23,8 +23,9 @@ import IdeaTabs from "../../components/tabs";
 import IdeaAppLayout, { IdeaAppLayoutProps } from "../../components/app-layout";
 import { withRouter } from "../../navigation/navigation-utils";
 import VirtualDesktopDCVClient from "../../client/virtual-desktop-dcv-client";
+import { ListDCVServersResponseContent } from "../../client/generated/api";
 
-export interface VirtualDesktopDebugProps extends IdeaAppLayoutProps, IdeaSideNavigationProps {}
+export interface VirtualDesktopDebugProps extends IdeaAppLayoutProps, IdeaSideNavigationProps { }
 
 export interface VirtualDesktopDebugState {
     vdHostHealth: any;
@@ -55,46 +56,93 @@ class VirtualDesktopDebug extends Component<VirtualDesktopDebugProps, VirtualDes
         });
     }
 
-    loadSessionHealth() {
-        this.setState(
-            {
-                vdSessionHealthLoading: true,
-            },
-            () => {
-                this.getVirtualDesktopDCVClient()
-                    .describeSessions({})
-                    .then((response) => {
-                        let health = response.response;
-                        delete health?.request_id;
-                        delete health?.next_token;
-                        this.setState({
-                            vdSessionHealth: health,
-                            vdSessionHealthLoading: false,
-                        });
+    async loadSessionHealth() {
+        this.setState({
+            vdSessionHealthLoading: true,
+        });
+
+        try {
+            let nextToken: string | undefined = undefined;
+            const combinedHealth: any = {};
+
+            do {
+                const response: any = await this.getVirtualDesktopDCVClient().batchGetDCVSessions({
+                    nextToken: nextToken,
+                });
+
+                if (response.response) {
+                    // Merge response into combinedHealth
+                    Object.keys(response.response).forEach(key => {
+                        if (key === 'request_id') return;
+                        const value = (response.response as any)[key];
+                        if (key === 'sessions') {
+                            // Merge sessions objects
+                            combinedHealth[key] = { ...(combinedHealth[key] || {}), ...value };
+                        } else if (Array.isArray(value)) {
+                            combinedHealth[key] = [...(combinedHealth[key] || []), ...value];
+                        } else {
+                            combinedHealth[key] = value;
+                        }
                     });
-            }
-        );
+                }
+
+                // nextToken is at the top level of the response, not inside response.response
+                nextToken = response.nextToken;
+            } while (nextToken);
+
+            this.setState({
+                vdSessionHealth: combinedHealth,
+                vdSessionHealthLoading: false,
+            });
+        } catch (error) {
+            console.error('Failed to load session health:', error);
+            this.setState({
+                vdSessionHealth: {},
+                vdSessionHealthLoading: false,
+            });
+        }
     }
 
-    loadServerHealth() {
-        this.setState(
-            {
-                vdHostHealthLoading: true,
-            },
-            () => {
-                this.getVirtualDesktopDCVClient()
-                    .describeServers({})
-                    .then((response) => {
-                        let health = response.response;
-                        delete health?.request_id;
-                        delete health?.next_token;
-                        this.setState({
-                            vdHostHealth: health,
-                            vdHostHealthLoading: false,
-                        });
+    async loadServerHealth() {
+        this.setState({
+            vdHostHealthLoading: true,
+        });
+
+        try {
+            let nextToken: string | undefined = undefined;
+            const combinedHealth: any = {};
+
+            do {
+                const response: ListDCVServersResponseContent = await this.getVirtualDesktopDCVClient().listDCVServers({
+                    nextToken: nextToken,
+                });
+
+                if (response.response) {
+                    // Merge response into combinedHealth
+                    Object.keys(response.response).forEach(key => {
+                        if (key === 'nextToken') return;
+                        const value = (response.response as any)[key];
+                        combinedHealth[key] = Array.isArray(value)
+                            ? [...(combinedHealth[key] || []), ...value]
+                            : value;
                     });
-            }
-        );
+                    nextToken = response.nextToken;
+                } else {
+                    nextToken = undefined;
+                }
+            } while (nextToken);
+
+            this.setState({
+                vdHostHealth: combinedHealth,
+                vdHostHealthLoading: false,
+            });
+        } catch (error) {
+            console.error('Failed to load server health:', error);
+            this.setState({
+                vdHostHealth: {},
+                vdHostHealthLoading: false,
+            });
+        }
     }
 
     loadHealth() {

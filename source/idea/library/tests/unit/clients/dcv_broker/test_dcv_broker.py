@@ -48,7 +48,7 @@ class TestDcvBroker(unittest.TestCase):
         self.monkeypatch.setattr(
             dcv_broker_client,
             "_describe_sessions",
-            lambda session_ids: session_response,
+            lambda session_ids=None, next_token=None: session_response,
         )
 
         result = dcv_broker_client.describe_sessions([SESSION])

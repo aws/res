@@ -71,7 +71,7 @@ class VirtualDesktopSoftwareStackDetail extends Component<VirtualDesktopSoftware
     async componentDidMount() {
         try {
             this.getVirtualDesktopUtilsClient()
-                .listSupportedOS({})
+                .listSupportedOses()
                 .then((result) => {
                     this.setState({
                         supportedOsChoices: Utils.getSupportedOSChoices(result.listing!)
@@ -79,7 +79,7 @@ class VirtualDesktopSoftwareStackDetail extends Component<VirtualDesktopSoftware
                 });
 
             this.getVirtualDesktopUtilsClient()
-                .listSupportedGPUs({})
+                .listSupportedGpus()
                 .then((result) => {
                     this.setState({
                         supportedGPUChoices: Utils.getSupportedGPUChoices(result.listing!)

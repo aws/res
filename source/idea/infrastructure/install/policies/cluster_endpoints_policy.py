@@ -27,8 +27,16 @@ class ClusterEndpointsPolicy(Policy):
                     "elasticloadbalancing:DescribeRules",
                     "elasticloadbalancing:DescribeTags",
                     "elasticloadbalancing:AddTags",
+                    "elasticloadbalancing:RemoveTags",
                 ],
                 resources=["*"],
+            ),
+            iam.PolicyStatement(
+                effect=iam.Effect.ALLOW,
+                actions=[
+                    "dynamodb:GetItem",
+                ],
+                resources=[arn_builder.get_ddb_table_arn("cluster-settings")],
             ),
         ]
         policy_statements.extend(

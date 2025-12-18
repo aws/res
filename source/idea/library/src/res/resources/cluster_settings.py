@@ -60,7 +60,7 @@ def update_setting(key: str, value: Any) -> Dict[str, Any]:
     """
     Update setting in DDB
     """
-    if not key or not value:
+    if not key or value is None:
         raise exceptions.InvalidParams("Key and value are required")
     logging.info(f"Updating setting {key} with value {value}")
     setting = table_utils.update_item(

@@ -68,3 +68,52 @@ def deregister_ami(image_id: str) -> bool:
     except Exception as e:
         logger.info(f"Error deregistering AMI {image_id}: {e}")
         return False
+
+
+def get_latest_x86_amzn2023_ami_id(region: str) -> str:
+    """
+    Get the latest public x86_64 Amazon Linux 2023 AMI ID for the specified region.
+
+    This function queries the EC2 API to find the most recently created Amazon Linux 2023
+    AMI that matches specific criteria (x86_64 architecture, available state, official Amazon AMI).
+
+    Args:
+        region: AWS region to search for AMI (e.g., 'us-west-2', 'us-east-1')
+
+    Returns:
+        AMI ID string (e.g., 'ami-0abcdef1234567890')
+
+    Raises:
+        Exception: If no AMI found or AWS API error occurs
+    """
+    try:
+        ec2 = boto3.client("ec2", region_name=region)
+
+        # Search for the latest Amazon Linux 2023 AMI
+        response = ec2.describe_images(
+            Filters=[
+                {"Name": "name", "Values": ["al2023-ami-*-x86_64"]},
+                {"Name": "owner-alias", "Values": ["amazon"]},
+                {"Name": "state", "Values": ["available"]},
+                {"Name": "architecture", "Values": ["x86_64"]},
+            ],
+            Owners=["amazon"],
+        )
+
+        if not response["Images"]:
+            raise Exception(f"No Amazon Linux 2023 AMI found in region {region}")
+
+        # Sort by creation date to get the latest
+        sorted_images = sorted(
+            response["Images"], key=lambda x: x["CreationDate"], reverse=True  # type: ignore
+        )
+        latest_ami = sorted_images[0]
+
+        logger.info(
+            f"Found latest amzn2023 AMI: {latest_ami['ImageId']} ({latest_ami['Name']}) in region {region}"
+        )
+        return latest_ami["ImageId"]  # type: ignore
+
+    except Exception as e:
+        logger.error(f"Failed to get AMI ID for region {region}: {str(e)}")
+        return ""

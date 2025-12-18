@@ -305,6 +305,10 @@ class MySharedVirtualDesktopSessions extends Component<MySharedVirtualDesktopPro
                                 value: "amazonlinux2",
                             },
                             {
+                                title: "Amazon Linux 2023",
+                                value: "amzn2023",
+                            },
+                            {
                                 title: "Windows",
                                 value: "windows",
                             },
@@ -316,6 +320,18 @@ class MySharedVirtualDesktopSessions extends Component<MySharedVirtualDesktopPro
                                 title: "RHEL 9",
                                 value: "rhel9"
                             },
+                            {
+                                title: "Ubuntu 2204",
+                                value: "ubuntu2204"
+                            },
+                            {
+                                title: "Ubuntu 2404",
+                                value: "ubuntu2404"
+                            },
+                            {
+                                title: "Rocky 9",
+                                value: "rocky9"
+                            }
                         ],
                     },
                 ]}

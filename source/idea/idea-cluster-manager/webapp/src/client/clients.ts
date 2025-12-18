@@ -37,7 +37,6 @@ export interface IdeaClientsProps {
     appId: string;
     baseUrl: string;
     authContext?: IdeaAuthenticationContext;
-    serviceWorkerRegistration?: ServiceWorkerRegistration;
 }
 
 class IdeaClients {
@@ -69,7 +68,6 @@ class IdeaClients {
             baseUrl: props.baseUrl,
             authContext: props.authContext,
             apiContextPath: Utils.getApiContextPath(Constants.MODULE_CLUSTER_MANAGER),
-            serviceWorkerRegistration: props.serviceWorkerRegistration,
         });
         this.clients.push(this.authClient);
 
@@ -78,7 +76,6 @@ class IdeaClients {
             baseUrl: props.baseUrl,
             authContext: props.authContext,
             apiContextPath: Utils.getApiContextPath(Constants.MODULE_CLUSTER_MANAGER),
-            serviceWorkerRegistration: props.serviceWorkerRegistration,
         });
         this.clients.push(this.authzClient);
 
@@ -87,7 +84,6 @@ class IdeaClients {
             baseUrl: props.baseUrl,
             authContext: props.authContext,
             apiContextPath: Utils.getApiContextPath(Constants.MODULE_CLUSTER_MANAGER),
-            serviceWorkerRegistration: props.serviceWorkerRegistration,
         });
         this.clients.push(this.authAdminClient);
 
@@ -96,7 +92,6 @@ class IdeaClients {
             baseUrl: `${props.baseUrl}/awsproxy`,
             authContext: props.authContext,
             apiContextPath: "",
-            serviceWorkerRegistration: props.serviceWorkerRegistration,
         });
         this.clients.push(this.proxyClient);
 
@@ -105,7 +100,6 @@ class IdeaClients {
             baseUrl: `${props.baseUrl}/res`,
             authContext: props.authContext,
             apiContextPath: "",
-            serviceWorkerRegistration: props.serviceWorkerRegistration,
         });
         this.clients.push(this.backendClient);
 
@@ -114,7 +108,6 @@ class IdeaClients {
             baseUrl: props.baseUrl,
             authContext: props.authContext,
             apiContextPath: Utils.getApiContextPath(Constants.MODULE_CLUSTER_MANAGER),
-            serviceWorkerRegistration: props.serviceWorkerRegistration,
         });
         this.clients.push(this.snapshotsClient);
 
@@ -123,7 +116,6 @@ class IdeaClients {
             baseUrl: props.baseUrl,
             authContext: props.authContext,
             apiContextPath: Utils.getApiContextPath(Constants.MODULE_SCHEDULER),
-            serviceWorkerRegistration: props.serviceWorkerRegistration,
         });
         this.clients.push(this.schedulerAdminClient);
 
@@ -132,7 +124,6 @@ class IdeaClients {
             baseUrl: props.baseUrl,
             authContext: props.authContext,
             apiContextPath: Utils.getApiContextPath(Constants.MODULE_SCHEDULER),
-            serviceWorkerRegistration: props.serviceWorkerRegistration,
         });
         this.clients.push(this.authClient);
 
@@ -141,7 +132,6 @@ class IdeaClients {
             baseUrl: props.baseUrl,
             authContext: props.authContext,
             apiContextPath: Utils.getApiContextPath(Constants.MODULE_CLUSTER_MANAGER),
-            serviceWorkerRegistration: props.serviceWorkerRegistration,
         });
         this.clients.push(this.fileBrowserClient);
 
@@ -150,7 +140,6 @@ class IdeaClients {
             baseUrl: props.baseUrl,
             authContext: props.authContext,
             apiContextPath: Utils.getApiContextPath(Constants.MODULE_VIRTUAL_DESKTOP_CONTROLLER),
-            serviceWorkerRegistration: props.serviceWorkerRegistration,
         });
         this.clients.push(this.authClient);
 
@@ -159,7 +148,6 @@ class IdeaClients {
             baseUrl: props.baseUrl,
             authContext: props.authContext,
             apiContextPath: Utils.getApiContextPath(Constants.MODULE_VIRTUAL_DESKTOP_CONTROLLER),
-            serviceWorkerRegistration: props.serviceWorkerRegistration,
         });
         this.clients.push(this.virtualDesktopClient);
 
@@ -168,7 +156,6 @@ class IdeaClients {
             baseUrl: props.baseUrl,
             authContext: props.authContext,
             apiContextPath: Utils.getApiContextPath(Constants.MODULE_VIRTUAL_DESKTOP_CONTROLLER),
-            serviceWorkerRegistration: props.serviceWorkerRegistration,
         });
         this.clients.push(this.virtualDesktopUtilsClient);
 
@@ -177,7 +164,6 @@ class IdeaClients {
             baseUrl: props.baseUrl,
             authContext: props.authContext,
             apiContextPath: Utils.getApiContextPath(Constants.MODULE_VIRTUAL_DESKTOP_CONTROLLER),
-            serviceWorkerRegistration: props.serviceWorkerRegistration,
         });
         this.clients.push(this.virtualDesktopDCVClient);
 
@@ -186,7 +172,6 @@ class IdeaClients {
             baseUrl: props.baseUrl,
             authContext: props.authContext,
             apiContextPath: Utils.getApiContextPath(Constants.MODULE_CLUSTER_MANAGER),
-            serviceWorkerRegistration: props.serviceWorkerRegistration,
         });
         this.clients.push(this.clusterSettingsClient);
 
@@ -195,7 +180,6 @@ class IdeaClients {
             baseUrl: props.baseUrl,
             authContext: props.authContext,
             apiContextPath: Utils.getApiContextPath(Constants.MODULE_CLUSTER_MANAGER),
-            serviceWorkerRegistration: props.serviceWorkerRegistration,
         });
         this.clients.push(this.projectsClient);
 
@@ -204,7 +188,6 @@ class IdeaClients {
             baseUrl: props.baseUrl,
             authContext: props.authContext,
             apiContextPath: Utils.getApiContextPath(Constants.MODULE_CLUSTER_MANAGER),
-            serviceWorkerRegistration: props.serviceWorkerRegistration,
         });
         this.clients.push(this.filesystemClient);
 
@@ -213,7 +196,6 @@ class IdeaClients {
             baseUrl: props.baseUrl,
             authContext: props.authContext,
             apiContextPath: Utils.getApiContextPath(Constants.MODULE_CLUSTER_MANAGER),
-            serviceWorkerRegistration: props.serviceWorkerRegistration,
         });
         this.clients.push(this.emailTemplatesClient);
     }

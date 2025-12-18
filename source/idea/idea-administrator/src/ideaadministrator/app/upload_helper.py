@@ -92,13 +92,13 @@ class UploadHelper:
         if not Utils.is_file(package_uri):
             raise exceptions.file_not_found(f'release package not found: {package_uri}')
 
-        cluster_s3_bucket = self.context.config().get_string('cluster.staging_bucket_name', required=True)
+        staging_s3_bucket = self.context.config().get_string('cluster.staging_bucket_name', required=True)
 
         s3_release_path = f'releases/{ideaadministrator.props.current_release_version}/{os.path.basename(package_uri)}'
-        s3_package_uri = f's3://{cluster_s3_bucket}/{s3_release_path}'
+        s3_package_uri = f's3://{staging_s3_bucket}/{s3_release_path}'
         self.context.info(f'uploading package: {package_uri} to {s3_package_uri} ...')
         self.context.aws().s3().upload_file(
-            Bucket=cluster_s3_bucket,
+            Bucket=staging_s3_bucket,
             Filename=package_uri,
             Key=s3_release_path
         )

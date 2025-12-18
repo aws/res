@@ -1,5 +1,0 @@
-arrow
-shortuuid
-validators
-certifi
-requests

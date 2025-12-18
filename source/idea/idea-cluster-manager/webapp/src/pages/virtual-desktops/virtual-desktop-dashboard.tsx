@@ -84,7 +84,7 @@ class VirtualDesktopDashboard extends Component<VirtualDesktopDashboardProps, Vi
 
     async fetchAllSessions(): Promise<ListSessionsResponse> {
         const response: ListSessionsResponse = {
-            paginator: { page_size: 100 },
+            paginator: { page_size: undefined },
             listing: [],
         }
 
@@ -92,7 +92,7 @@ class VirtualDesktopDashboard extends Component<VirtualDesktopDashboardProps, Vi
         let client = AppContext.get().client().virtualDesktopAdmin()
         do {
             const result: ListSessionsResponse = await client.listSessions({
-                paginator: { page_size: 100, cursor: cursor },
+                paginator: { page_size: undefined, cursor: cursor },
             });
             response.listing?.push(...result.listing ?? []);
             cursor = result.paginator?.cursor;

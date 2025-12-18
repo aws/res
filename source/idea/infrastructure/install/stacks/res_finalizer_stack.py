@@ -5,7 +5,11 @@ from typing import Union
 import aws_cdk as cdk
 import constructs
 from aws_cdk import aws_iam as iam
-from res.constants import ENVIRONMENT_NAME_KEY  # type: ignore
+from res.constants import (  # type: ignore
+    ENVIRONMENT_NAME_KEY,
+    OLD_CUSTOM_TAG_KEYS,
+    PARENT_STACK_NAME_KEY,
+)
 from res.resources import accounts, cluster_settings  # type: ignore
 
 from idea.batteries_included.parameters.parameters import BIParameters
@@ -18,14 +22,18 @@ from idea.infrastructure.install.infra_utils.utils import InfraUtils
 from idea.infrastructure.install.parameters.common import CommonKey
 from idea.infrastructure.install.parameters.parameters import RESParameters
 from idea.infrastructure.install.policies import (
-    CleanupEC2InstancePolicy,
+    CleanupResources,
     DetachVpcFromLambdaPolicy,
+    TagResourcesPolicy,
 )
 from idea.infrastructure.resources.lambda_functions.custom_resource.ddb_final_values_populator_lambda import (
     handler as populator_handler,
 )
 from idea.infrastructure.resources.lambda_functions.custom_resource.deletion_cleanup_resources_lambda import (
     handler as cleanup_handler,
+)
+from idea.infrastructure.resources.lambda_functions.custom_resource.tag_resources_lambda import (
+    tag_resources_handler,
 )
 
 
@@ -34,9 +42,13 @@ class ResFinalizerStack(ResBaseConstruct):
         self,
         scope: constructs.Construct,
         shared_library_lambda_layer: cdk.aws_lambda.LayerVersion,
+        params_transformer: cdk.CustomResource,
+        parent_stack_name: str,
         parameters: Union[RESParameters, BIParameters] = RESParameters(),
     ):
         self.parameters = parameters
+        self.params_transformer = params_transformer
+        self.parent_stack_name = parent_stack_name
         self.cluster_name = parameters.get_str(CommonKey.CLUSTER_NAME)
         self.shared_library_lambda_layer = shared_library_lambda_layer
         super().__init__(
@@ -60,12 +72,50 @@ class ResFinalizerStack(ResBaseConstruct):
         )
 
         self.cluster_settings = ClusterSettings(self.cluster_name, self.nested_stack)
-        self.arn_builder = ArnBuilder(self.cluster_name, self.cluster_settings)
+        self.arn_builder = ArnBuilder(
+            self.cluster_name, self.cluster_settings, self.parameters
+        )
 
-        self.clean_up_ec2_instance()
+        self.tag_resources()
+        self.clean_up_resources()
         self.detach_vpc_from_lambda()
         self.populate_final_values()
         self.apply_permission_boundary(self.nested_stack)
+        self.add_common_tags(self.nested_stack)
+
+    def tag_resources(self) -> None:
+        lambda_name = "tag-resources"
+        tag_resources_function = lambda_.Function(
+            self.nested_stack,
+            lambda_name,
+            handler=tag_resources_handler.handler,
+            parameters=self.parameters,
+            runtime=RES_COMMON_LAMBDA_RUNTIME,
+            description="Tag resources not supporting Cloudformation level tagging",  # type: ignore
+            timeout=cdk.Duration.seconds(900),  # type: ignore
+            layers=[self.shared_library_lambda_layer],  # type: ignore
+            initial_policy=TagResourcesPolicy.create_policy_statements(self.arn_builder),  # type: ignore
+            environment={
+                ENVIRONMENT_NAME_KEY: self.cluster_name,
+                PARENT_STACK_NAME_KEY: self.parent_stack_name,
+                "partition": cdk.Aws.PARTITION,
+                "region": cdk.Aws.REGION,
+                "account_id": cdk.Aws.ACCOUNT_ID,
+            },
+        )
+        self.tag_resources_custom_resource = cdk.CustomResource(
+            self.nested_stack,
+            lambda_name,
+            service_token=tag_resources_function.function_arn,
+            removal_policy=cdk.RemovalPolicy.DESTROY,
+            resource_type="Custom::TagResources",
+            properties={
+                OLD_CUSTOM_TAG_KEYS: self.params_transformer.get_att_string(
+                    OLD_CUSTOM_TAG_KEYS
+                ),
+                "shared_library_arn": self.shared_library_lambda_layer.layer_version_arn,
+            },
+        )
 
     def populate_final_values(self) -> None:
         lambda_name = f"{self.cluster_name}-DDBFinalValuesPopulator"
@@ -136,7 +186,7 @@ class ResFinalizerStack(ResBaseConstruct):
             ddb_final_values_populator_role_policy
         )
 
-        cdk.CustomResource(
+        self.populate_final_values_custom_resource = cdk.CustomResource(
             scope,
             "CustomResourceDDBFinalValuesPopulator",
             service_token=final_values_populator_handler.function_arn,
@@ -144,19 +194,22 @@ class ResFinalizerStack(ResBaseConstruct):
             resource_type="Custom::RESDdbPopulator",
             properties={ENVIRONMENT_NAME_KEY: self.cluster_name},
         )
+        self.populate_final_values_custom_resource.node.add_dependency(
+            self.tag_resources_custom_resource
+        )
 
-    def clean_up_ec2_instance(self) -> None:
-        lambda_name = "clean-up-ec2-instance"
-        clean_up_ec2_instance_lambda = lambda_.Function(
+    def clean_up_resources(self) -> None:
+        lambda_name = "clean-up-resources"
+        clean_up_resources_lambda = lambda_.Function(
             self.nested_stack,
             lambda_name,
             runtime=RES_COMMON_LAMBDA_RUNTIME,
-            description="Custom lambda to terminate ec2 instances when deleting RES environment",  # type: ignore
+            description="Custom lambda to terminate ec2 instances and delete VDI roles when deleting RES environment",  # type: ignore
             timeout=cdk.Duration.seconds(900),  # type: ignore
-            handler=cleanup_handler.clean_up_ec2_instance_handler,
+            handler=cleanup_handler.clean_up_resources_handler,
             parameters=self.parameters,
             layers=[self.shared_library_lambda_layer],  # type: ignore
-            initial_policy=CleanupEC2InstancePolicy.create_policy_statements(
+            initial_policy=CleanupResources.create_policy_statements(
                 self.arn_builder
             ),  # type: ignore
             environment={
@@ -164,12 +217,12 @@ class ResFinalizerStack(ResBaseConstruct):
             },
         )
 
-        self.clean_up_ec2_instance_custom_resource = cdk.CustomResource(
+        self.clean_up_resources_custom_resource = cdk.CustomResource(
             self.nested_stack,
             id=f"{lambda_name}-custom-resource",
-            service_token=clean_up_ec2_instance_lambda.function_arn,
+            service_token=clean_up_resources_lambda.function_arn,
             removal_policy=cdk.RemovalPolicy.DESTROY,
-            resource_type="Custom::CleanupEC2Instance",
+            resource_type="Custom::CleanupResources",
         )
 
     def detach_vpc_from_lambda(self) -> None:
@@ -188,7 +241,7 @@ class ResFinalizerStack(ResBaseConstruct):
             parameters=self.parameters,
             environment={
                 ENVIRONMENT_NAME_KEY: self.cluster_name,
-                "SECURITY_GROUP_IDS": self.clean_up_ec2_instance_custom_resource.get_att_string(
+                "SECURITY_GROUP_IDS": self.clean_up_resources_custom_resource.get_att_string(
                     "SECURITY_GROUP_IDS"
                 ),
             },
@@ -206,5 +259,5 @@ class ResFinalizerStack(ResBaseConstruct):
             service_timeout=cdk.Duration.seconds(1800),
         )
         detach_vpc_from_lambda_custom_resource.node.add_dependency(
-            self.clean_up_ec2_instance_custom_resource
+            self.clean_up_resources_custom_resource
         )

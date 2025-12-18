@@ -13,7 +13,7 @@ import time
 
 import res.exceptions as exceptions  # type: ignore
 
-import idea.backend.resources.ad_sync as ad_sync_api
+import idea.infrastructure.resources.lambda_functions.backend.resources.ad_sync as ad_sync_api
 
 
 def ad_sync() -> None:

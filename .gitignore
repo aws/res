@@ -203,3 +203,13 @@ integration-test-results/
 .cdk.staging
 cdk.out
 cdk.context.json
+
+# RES Api Gradle
+source/res/api/.gradle/
+source/res/api/build/
+source/res/api/generated/
+source/res/api/client/
+
+# Redoc
+RES.openapi.redoc.html.gz
+source/res/api/spec/openapi/RES.openapi.yaml

@@ -26,7 +26,7 @@ from tests.integration.framework.client.res_client import ResClient
 from tests.integration.framework.fixtures.fixture_request import FixtureRequest
 from tests.integration.framework.fixtures.res_environment import ResEnvironment
 from tests.integration.framework.model.client_auth import ClientAuth
-from tests.integration.tests.config import TEST_SOFTWARE_STACKS_GOVCLOUD
+from tests.integration.tests.smoke.config import TEST_SOFTWARE_STACKS_GOVCLOUD
 
 
 @pytest.fixture

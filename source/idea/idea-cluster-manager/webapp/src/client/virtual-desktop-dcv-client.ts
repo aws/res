@@ -11,18 +11,62 @@
  * and limitations under the License.
  */
 
-import { DescribeServersRequest, DescribeServersResponse, DescribeSessionsRequest, DescribeSessionsResponse } from "./data-model";
 import IdeaBaseClient, { IdeaBaseClientProps } from "./base-client";
+import { BatchGetDCVSessionsRequestContent, BatchGetDCVSessionsResponseContent, ListDCVServersResponseContent, VirtualDesktopDcvApi, VirtualDesktopDcvApiListDCVServersRequest } from "./generated/api";
+import { Configuration } from "./generated/configuration";
 
-export interface VirtualDesktopDCVClientProps extends IdeaBaseClientProps {}
+export interface VirtualDesktopDCVClientProps extends IdeaBaseClientProps { }
 
 class VirtualDesktopDCVClient extends IdeaBaseClient<VirtualDesktopDCVClientProps> {
-    describeSessions(req: DescribeSessionsRequest): Promise<DescribeSessionsResponse> {
-        return this.apiInvoker.invoke_alt<DescribeSessionsRequest, DescribeSessionsResponse>("VirtualDesktopDCV.DescribeSessions", req);
+    private generatedClient: VirtualDesktopDcvApi;
+
+    constructor(props: VirtualDesktopDCVClientProps) {
+        super(props);
+
+        const config = new Configuration({
+            basePath: this.getApiEndpoint(),
+            accessToken: async () => await this.getAccessToken(),
+        });
+        this.generatedClient = new VirtualDesktopDcvApi(config);
     }
 
-    describeServers(req: DescribeServersRequest): Promise<DescribeServersResponse> {
-        return this.apiInvoker.invoke_alt<DescribeServersRequest, DescribeServersResponse>("VirtualDesktopDCV.DescribeServers", req);
+    private getApiEndpoint(): string {
+        return this.props.baseUrl;
+    }
+
+    private async getAccessToken(): Promise<string> {
+        if (this.props.authContext?.getAccessToken) {
+            return await this.props.authContext.getAccessToken();
+        }
+        return '';
+    }
+
+    async listDCVServers(req?: VirtualDesktopDcvApiListDCVServersRequest): Promise<ListDCVServersResponseContent> {
+        try {
+            const response = await this.generatedClient.listDCVServers({
+                nextToken: req?.nextToken
+            });
+            return response.data;
+        } catch (error) {
+            console.warn('Generated client failed, returning empty response:', error);
+            return {
+                response: {}
+            }
+        }
+    }
+
+    async batchGetDCVSessions(req?: BatchGetDCVSessionsRequestContent): Promise<BatchGetDCVSessionsResponseContent> {
+        try {
+            const response = await this.generatedClient.batchGetDCVSessions({
+                batchGetDCVSessionsRequestContent: req
+            });
+            return response.data;
+        } catch (error) {
+            console.warn('Generated client failed, returning empty response:', error);
+            return {
+                response: {}
+            }
+        }
     }
 }
 

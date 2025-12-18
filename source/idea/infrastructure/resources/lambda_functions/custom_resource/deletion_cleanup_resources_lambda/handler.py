@@ -12,6 +12,8 @@ from res.constants import (  # type: ignore
     ENVIRONMENT_NAME_TAG_KEY,
     INSTANCE_NODE_TYPE_TAG_KEY,
 )
+from res.resources import cluster_settings, projects  # type: ignore
+from res.utils import iam_utils  # type: ignore
 from res.utils.custom_resource_utils import (  # type: ignore
     CustomResourceResponse,
     send_response,
@@ -25,9 +27,7 @@ SECURITY_GROUP_IDS = "SECURITY_GROUP_IDS"
 CLUSTER_NAME = os.environ.get(ENVIRONMENT_NAME_KEY, "")
 
 
-def clean_up_ec2_instance_handler(
-    event: Dict[str, Any], context: Dict[str, Any]
-) -> None:
+def clean_up_resources_handler(event: Dict[str, Any], context: Dict[str, Any]) -> None:
     response = CustomResourceResponse(
         Status="SUCCESS",
         Reason="SUCCESS",
@@ -47,9 +47,13 @@ def clean_up_ec2_instance_handler(
             logger.info(
                 "Finished terminating ec2 instances during environment deletion."
             )
+            _delete_vdi_roles()
+            logger.info(
+                "Finished deleting VDI roles created for projects during environment deletion."
+            )
     except Exception as e:
         response["Status"] = "FAILED"
-        error_msg = f"Failed to terminate ec2 instances: {str(e)}"
+        error_msg = f"Failed to terminate ec2 instances or VDI roles: {str(e)}"
         response["Reason"] = error_msg
         logger.error(error_msg)
     finally:
@@ -216,6 +220,40 @@ def _terminate_ec2_instances() -> None:
         error_msg = f"Error when terminating EC2 instances: {str(e)}"
         logger.error(error_msg)
         raise Exception(error_msg)
+
+
+def _delete_vdi_roles() -> None:
+    logger.info("Start deleting roles and instance profiles created for projects.")
+
+    project_list = projects.list_projects()
+    for project in project_list:
+        project_name = project.get("name", "")
+        role_name = instance_profile_name = iam_utils.get_vdi_role_name(project_name)
+        policy_arns = []
+
+        try:
+            _, policy_arns = iam_utils.get_role_attached_policies_arns(role_name)
+            # Detach managed policy from role
+            for policy_arn in policy_arns:
+                iam_utils.detach_policy_from_role(role_name, policy_arn)
+            # Remove role and instance profile association
+            iam_utils.dissociate_role_and_instance_profile(
+                role_name, instance_profile_name
+            )
+            # Delete role and instance profile
+            iam_utils.delete_iam_role(role_name)
+            iam_utils.delete_iam_instance_profile(instance_profile_name)
+
+        except Exception as e:
+            error_msg = (
+                f"Error when deleting role and instance profile {role_name}: {str(e)}"
+            )
+            logger.error(error_msg)
+            raise Exception(error_msg)
+
+    logger.info(
+        "Finished deleting all roles and instance profiles created for projects."
+    )
 
 
 def _get_lambdas_and_security_groups_to_detach() -> Tuple[List[str], List[str]]:

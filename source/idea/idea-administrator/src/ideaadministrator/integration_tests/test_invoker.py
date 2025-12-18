@@ -13,7 +13,7 @@ from ideadatamodel import constants, exceptions, errorcodes
 
 from ideaadministrator.integration_tests.test_context import TestContext
 from ideaadministrator.integration_tests import cluster_manager_tests
-from ideaadministrator.integration_tests import scheduler_tests, virtual_desktop_controller_tests
+from ideaadministrator.integration_tests import virtual_desktop_controller_tests
 
 from typing import List
 import traceback
@@ -26,7 +26,6 @@ class TestInvoker:
 
         self.module_test_cases = {
             constants.MODULE_CLUSTER_MANAGER: cluster_manager_tests.TEST_CASES,
-            constants.MODULE_SCHEDULER: scheduler_tests.TEST_CASES,
             constants.MODULE_VIRTUAL_DESKTOP_CONTROLLER: virtual_desktop_controller_tests.TEST_CASES
         }
 

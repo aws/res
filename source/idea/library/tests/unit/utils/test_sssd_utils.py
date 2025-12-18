@@ -319,6 +319,9 @@ def test_configure_sssd_while_disable_ad_join_is_true():
         [
             call(),
             call().read_string(CONNECT_AD_SSSD_CONFIG),
+            call().write(ANY),
+            call(),
+            call().read("/etc/sssd/sssd.conf"),
             call().__getitem__(SSSD_DOMAIN_SECTION),
             call()
             .__getitem__(SSSD_DOMAIN_SECTION)
@@ -359,6 +362,9 @@ def test_configure_sssd_while_disable_ad_join_is_false():
         [
             call(),
             call().read_string(JOIN_AD_SSSSD_CONFIG),
+            call().write(ANY),
+            call(),
+            call().read("/etc/sssd/sssd.conf"),
             call().__getitem__(SSSD_DOMAIN_SECTION),
             call()
             .__getitem__(SSSD_DOMAIN_SECTION)

@@ -167,18 +167,6 @@ class ArnBuilder:
                 service="s3",
                 region="",
                 account_id="",
-                resource=f"{self.cluster_settings.cluster_bucket}/*",
-            ),
-            self.get_arn(
-                service="s3",
-                region="",
-                account_id="",
-                resource=self.cluster_settings.cluster_bucket,  # type: ignore
-            ),
-            self.get_arn(
-                service="s3",
-                region="",
-                account_id="",
                 resource=f"{self.cluster_settings.staging_bucket}/*",
             ),
             self.get_arn(
@@ -238,6 +226,16 @@ class ArnBuilder:
 
     def get_instance_profile_arn(
         self,
+        profile_name_suffix: str,
+    ) -> str:
+        return self.get_arn(
+            service="iam",
+            resource=f"instance-profile{self.iam_resource_path}{self.iam_resource_prefix}{self.cluster_settings.cluster_name}-{profile_name_suffix}",
+            region="",
+        )
+
+    def get_instance_profile_arn_from_ref(
+        self,
         instance_profile_ref: str,
     ) -> str:
         return self.get_arn(
@@ -252,9 +250,12 @@ class ArnBuilder:
     ) -> str:
         return self.get_arn(
             service="iam",
-            resource=f"policy{self.iam_resource_path}{name}",
+            resource=f"policy{self.iam_resource_path}{self.iam_resource_prefix}{name}",
             region="",
         )
+
+    def get_eventbridge_rule_arn(self, name: str = "*") -> str:
+        return self.get_arn(service="events", resource=f"rule/{name}")
 
     @property
     @lru_cache

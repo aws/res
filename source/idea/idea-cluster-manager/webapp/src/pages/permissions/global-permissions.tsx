@@ -187,7 +187,7 @@ class GlobalPermissions extends Component<GlobalPermissionsProps, GlobalPermissi
         const isPublic = dot.pick(Constants.BASTION_HOST_IS_PUBLIC_KEY_NAME, bastionHostModuleSettings.settings);
 
         const ownerSettings = (await this.virtualDesktopUtilsClient().getPermissionProfile({
-            profile_id: Constants.DCV_SETTINGS_DEFAULT_OWNER_PROFILE_ID,
+            profileId: Constants.DCV_SETTINGS_DEFAULT_OWNER_PROFILE_ID,
         })).profile!;
 
         for (const permission of ownerSettings.permissions!) {

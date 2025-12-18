@@ -116,6 +116,9 @@ def test_users_table_resolver_rollback_original_data_succeed(
             "enabled": True,
         }
     )
+    monkeypatch.setattr(
+        context.projects, "_delete_vdi_role_and_instance_profile", lambda x: None
+    )
 
     resolver = ProjectsTableMerger()
     delta_records = [

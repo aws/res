@@ -5,6 +5,9 @@ TRequest = TypeVar('TRequest')
 
 def scan_db_records(request: TRequest, table) -> Dict:
     scan_request = {}
+    
+    if hasattr(request, 'page_size') and request.page_size is not None:
+        scan_request['Limit'] = request.page_size
 
     cursor = request.cursor
     last_evaluated_key = None

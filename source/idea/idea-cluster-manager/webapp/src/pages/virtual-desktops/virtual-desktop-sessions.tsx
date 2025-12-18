@@ -14,7 +14,7 @@
 import React, { Component, RefObject } from "react";
 import { TableProps } from "@cloudscape-design/components/table/interfaces";
 import { Link } from "@cloudscape-design/components";
-import { Project, SocaUserInputChoice, ListSessionsResponse, VirtualDesktopSession, VirtualDesktopSessionBatchResponsePayload } from "../../client/data-model";
+import { Project, SocaUserInputChoice, VirtualDesktopSession, VirtualDesktopSessionBatchResponsePayload } from "../../client/data-model";
 import IdeaListView from "../../components/list-view";
 import { AppContext } from "../../common";
 import { ProjectsClient, VirtualDesktopAdminClient, VirtualDesktopClient } from "../../client";
@@ -31,6 +31,9 @@ import { FlashbarProps } from "@cloudscape-design/components/flashbar/interfaces
 import VirtualDesktopCreateSessionForm from "./forms/virtual-desktop-create-session-form";
 import { withRouter } from "../../navigation/navigation-utils";
 import VirtualDesktopDCVClient from "../../client/virtual-desktop-dcv-client";
+import { fetchAllSessions } from "../../common/sessions-fetcher";
+// TODO: MigratedVirtualDesktopSession name is temporary until all APIs are migrated
+import { VirtualDesktopSession as MigratedVirtualDesktopSession } from "../../client/generated/api";
 
 export interface VirtualDesktopSessionsProps extends IdeaAppLayoutProps, IdeaSideNavigationProps { }
 
@@ -455,7 +458,7 @@ class VirtualDesktopSessions extends Component<VirtualDesktopSessionsProps, Virt
                             idea_session_id: session.idea_session_id,
                             dcv_session_id: session.dcv_session_id,
                             project: {
-                              project_id: session.project?.project_id,
+                                project_id: session.project?.project_id,
                             },
                             owner: session.owner,
                             force: this.state.forceTerminate,
@@ -734,31 +737,50 @@ class VirtualDesktopSessions extends Component<VirtualDesktopSessionsProps, Virt
                         text: "Session(s) Health",
                         disabled: !this.isSelected() || !this.isAdmin(),
                         onClick: () => {
-                            let sessions: VirtualDesktopSession[] = [];
+                            let sessions: MigratedVirtualDesktopSession[] = [];
                             this.getSelectedSessions().forEach((session) => {
                                 sessions.push({
                                     idea_session_id: session.idea_session_id,
                                     dcv_session_id: session.dcv_session_id,
+                                    hibernation_enabled: session.hibernation_enabled ?? false,
+                                    software_stack: session.software_stack as any,
                                 });
                             });
 
-                            this.getVirtualDCVClient()
-                                .describeSessions({
-                                    sessions: sessions,
-                                })
-                                .then((response) => {
-                                    let health = response.response;
-                                    delete health?.request_id;
-                                    delete health?.next_token;
+                            // Fetch all sessions with pagination
+                            (async () => {
+                                try {
+                                    let nextToken: string | undefined = undefined;
+                                    const allSessions: any = {};
+
+                                    do {
+                                        const response: any = await this.getVirtualDCVClient().batchGetDCVSessions({
+                                            sessions: sessions,
+                                            nextToken: nextToken,
+                                        });
+
+                                        if (response.response?.sessions) {
+                                            // Merge sessions
+                                            Object.assign(allSessions, response.response.sessions);
+                                        }
+
+                                        // nextToken is at the top level of the response, not inside response.response
+                                        nextToken = response.nextToken;
+                                    } while (nextToken);
+
                                     this.setState(
                                         {
-                                            sessionHealth: health?.sessions,
+                                            sessionHealth: allSessions,
                                         },
                                         () => {
                                             this.getSessionHealthModal().show();
                                         }
                                     );
-                                });
+                                } catch (error) {
+                                    console.error('Failed to fetch session health:', error);
+                                    this.setFlashMessage('Failed to fetch session health', 'error');
+                                }
+                            })();
                         },
                     },
                     {
@@ -862,6 +884,10 @@ class VirtualDesktopSessions extends Component<VirtualDesktopSessionsProps, Virt
                                 value: "amazonlinux2",
                             },
                             {
+                                title: "Amazon Linux 2023",
+                                value: "amzn2023",
+                            },
+                            {
                                 title: "Windows",
                                 value: "windows",
                             },
@@ -872,6 +898,18 @@ class VirtualDesktopSessions extends Component<VirtualDesktopSessionsProps, Virt
                             {
                                 title: "RHEL 9",
                                 value: "rhel9"
+                            },
+                            {
+                                title: "Ubuntu 2204",
+                                value: "ubuntu2204"
+                            },
+                            {
+                                title: "Ubuntu 2404",
+                                value: "ubuntu2404"
+                            },
+                            {
+                                title: "Rocky 9",
+                                value: "rocky9"
                             }
                         ],
                     },
@@ -885,46 +923,16 @@ class VirtualDesktopSessions extends Component<VirtualDesktopSessionsProps, Virt
                     });
                 }}
                 onFetchRecords={() => {
-                    return this.fetchAllSessions()
+                    return fetchAllSessions(
+                        this.isAdmin() ? this.getVirtualDesktopAdminClient() : this.getVirtualDesktopClient(),
+                        this.getListing().getFilters(),
+                        this.getListing().getFormatedDateRange(),
+                        this.props.onFlashbarChange
+                    )
                 }}
                 columnDefinitions={VIRTUAL_DESKTOP_SESSIONS_TABLE_COLUMN_DEFINITIONS}
             />
         );
-    }
-
-    async fetchAllSessions(): Promise<ListSessionsResponse> {
-        const response: ListSessionsResponse = {
-            filters: this.getListing().getFilters(),
-            paginator: { page_size: 100 },
-            date_range: this.getListing().getFormatedDateRange(),
-            listing: [],
-        }
-
-        let cursor: string | undefined = undefined;
-        let client = this.isAdmin() ? this.getVirtualDesktopAdminClient() : this.getVirtualDesktopClient()
-        do {
-            const result: ListSessionsResponse = await client.listSessions({
-                filters: this.getListing().getFilters(),
-                paginator: { page_size: 100, cursor: cursor },
-                date_range: this.getListing().getFormatedDateRange(),
-            })
-            .catch((error) => {
-                this.props.onFlashbarChange({
-                    items: [
-                        {
-                            content: error.message,
-                            type: "error",
-                            dismissible: true,
-                        },
-                    ],
-                });
-                throw error;
-            });
-            response.listing?.push(...result.listing ?? []);
-            cursor = result.paginator?.cursor;
-        } while (cursor);
-
-        return response;
     }
 
     render() {

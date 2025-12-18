@@ -186,7 +186,10 @@ class VirtualDesktopAdminAPI(VirtualDesktopAPI):
 
     def _validate_delete_session_request(self, session: VirtualDesktopSession) -> (VirtualDesktopSession, bool):
         return self.validate_delete_session_request(session)
-
+    
+    def _validate_update_session_request(self, session: VirtualDesktopSession) -> (VirtualDesktopSession, bool):
+        return self.validate_update_session_request(session)
+    
     def _validate_create_session_request(self, session: VirtualDesktopSession) -> (VirtualDesktopSession, bool):
         # Validate Session Object
         if Utils.is_empty(session):
@@ -411,6 +414,16 @@ class VirtualDesktopAdminAPI(VirtualDesktopAPI):
     def update_session(self, context: ApiInvocationContext):
         session = context.get_request_payload_as(UpdateSessionRequest).session
         self.complete_update_session_request(session, context)
+
+        session, is_valid = self._validate_update_session_request(session)
+        if not is_valid:
+            context.fail(
+                message=session.failure_reason,
+                error_code=errorcodes.UPDATE_SESSION_FAILED,
+                payload=UpdateSessionResponse(
+                    session=session
+                ))
+            return
 
         session = self._update_session(session)
         if Utils.is_not_empty(session.failure_reason):

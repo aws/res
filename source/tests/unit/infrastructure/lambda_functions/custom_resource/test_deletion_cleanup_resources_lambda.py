@@ -47,9 +47,14 @@ class TestDeletionCleanupResourcesLambda(TestCase):
             "_terminate_ec2_instances",
             MagicMock(return_value=None),
         )
+        self.monkeypatch.setattr(
+            handler,
+            "_delete_vdi_roles",
+            MagicMock(return_value=None),
+        )
         self.monkeypatch.setattr(handler, "send_response", mock_cfn_response_send)
 
-        handler.clean_up_ec2_instance_handler(event, {})
+        handler.clean_up_resources_handler(event, {})
         response = handler.CustomResourceResponse(
             Status="SUCCESS",
             Reason="SUCCESS",
@@ -72,7 +77,7 @@ class TestDeletionCleanupResourcesLambda(TestCase):
         )
         self.monkeypatch.setattr(handler, "send_response", mock_cfn_response_send)
 
-        handler.clean_up_ec2_instance_handler(event, {})
+        handler.clean_up_resources_handler(event, {})
         response = handler.CustomResourceResponse(
             Status="SUCCESS",
             Reason="SUCCESS",

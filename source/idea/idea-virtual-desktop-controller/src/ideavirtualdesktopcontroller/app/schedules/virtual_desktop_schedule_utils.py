@@ -26,7 +26,7 @@ class VirtualDesktopScheduleUtils:
         self._schedule_db = db
         self._events_utils = EventsUtils(context=self.context)
 
-    def _get_default_schedule_for_day_of_week(self, day_of_week: DayOfWeek) -> VirtualDesktopSchedule:
+    def _get_default_schedule_for_day_of_week(self, day_of_week: DayOfWeek) -> VirtualDesktopSchedule:    
         schedule_type = VirtualDesktopScheduleType(self.context.config().get_string(f'virtual-desktop-controller.dcv_session.schedule.{day_of_week.value}.type', required=True))
         if schedule_type == VirtualDesktopScheduleType.WORKING_HOURS:
             start_up_time = self.context.config().get_string('virtual-desktop-controller.dcv_session.working_hours.start_up_time', required=True)
@@ -113,7 +113,7 @@ class VirtualDesktopScheduleUtils:
         return new_schedule
 
     def update_schedule_for_session(self, new_schedules: VirtualDesktopWeekSchedule, session: VirtualDesktopSession) -> VirtualDesktopSession:
-
+            
         if Utils.is_empty(session.schedule):
             session.schedule = VirtualDesktopWeekSchedule()
 

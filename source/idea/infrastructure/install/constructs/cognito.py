@@ -18,6 +18,7 @@ from res.constants import (  # type: ignore
 from idea.batteries_included.parameters.parameters import BIParameters
 from idea.infrastructure.install import constants
 from idea.infrastructure.install.constructs.base import ResBaseConstruct
+from idea.infrastructure.install.infra_utils.utils import InfraUtils
 from idea.infrastructure.install.parameters.common import CommonKey
 from idea.infrastructure.install.parameters.parameters import RESParameters
 
@@ -184,18 +185,7 @@ class UserPool(ResBaseConstruct):
         return os.linesep.join(email_message)
 
     def get_domain_url(self) -> str:
-        fips_condition = CfnCondition(
-            self.scope,
-            "fips-condition",
-            expression=Fn.condition_or(
-                *[
-                    Fn.condition_equals(aws_cdk.Aws.REGION, region)
-                    for region in constants.CAVEATS.get(
-                        "COGNITO_REQUIRE_FIPS_ENDPOINT_REGION_LIST", []
-                    )
-                ]
-            ),
-        )
+        fips_condition = InfraUtils.get_fips_condition(self.scope)
         return Fn.condition_if(
             fips_condition.logical_id,
             self.domain.base_url(fips=True),

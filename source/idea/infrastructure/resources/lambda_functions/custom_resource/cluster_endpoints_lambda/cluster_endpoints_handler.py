@@ -13,6 +13,9 @@ from typing import Any, Dict, Optional
 
 import boto3
 import botocore.exceptions
+from res.constants import OLD_CUSTOM_TAG_KEYS  # type: ignore
+from res.resources import cluster_settings  # type: ignore
+from res.utils import cluster_settings_utils  # type: ignore
 from res.utils.custom_resource_utils import (  # type: ignore
     CustomResourceResponse,
     send_response,
@@ -117,6 +120,14 @@ def handler(event: Dict[str, Any], context: Dict[str, Any]) -> None:
         resource_tags = []
         for key, value in tags.items():
             resource_tags.append({"Key": key, "Value": value})
+        custom_tags = cluster_settings_utils.convert_custom_tags_to_dict_list(
+            cluster_settings.get_setting("global-settings.custom_tags")
+        )
+        resource_tags.extend(custom_tags)
+        old_custom_tag_keys_string = resource_properties.get(OLD_CUSTOM_TAG_KEYS, "")
+        old_custom_tag_keys = (
+            old_custom_tag_keys_string.split(";") if old_custom_tag_keys_string else []
+        )
 
         elbv2_client = boto3.client("elbv2")
 
@@ -164,6 +175,13 @@ def handler(event: Dict[str, Any], context: Dict[str, Any]) -> None:
                 elbv2_client.modify_rule(
                     RuleArn=rule_arn, Conditions=conditions, Actions=actions
                 )
+                if old_custom_tag_keys:
+                    elbv2_client.remove_tags(
+                        ResourceArns=[rule_arn], TagKeys=old_custom_tag_keys
+                    )
+                if resource_tags:
+                    elbv2_client.add_tags(ResourceArns=[rule_arn], Tags=resource_tags)
+
                 logger.info(f"rule modified. rule arn: {rule_arn}")
             else:
                 logger.warning("rule not found for target group. rule update skipped.")

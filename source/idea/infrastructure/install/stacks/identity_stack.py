@@ -110,6 +110,12 @@ class IdentityStack(ResBaseConstruct):
             self.nested_stack, parameters
         )
 
+        self.cognito_user_pool_id_not_provided = (
+            InfraUtils.get_cognito_user_pool_id_not_provided_condition(
+                self.nested_stack, parameters
+            )
+        )
+
         self.cluster_settings = ClusterSettings(self.cluster_name, self.nested_stack)
         self.arn_builder = ArnBuilder(
             self.cluster_name, self.cluster_settings, parameters=parameters
@@ -136,6 +142,7 @@ class IdentityStack(ResBaseConstruct):
 
         self.nested_stack.node.add_dependency(self.lambda_layer)
         self.apply_permission_boundary(self.nested_stack)
+        self.add_common_tags(self.nested_stack)
 
     def build_ad_sync_security_group(self, vpc: ec2.IVpc) -> None:
         """
@@ -370,14 +377,6 @@ class IdentityStack(ResBaseConstruct):
         )
 
     def build_cognito_idp(self) -> None:
-        self.cognito_user_pool_id_not_provided = CfnCondition(
-            self.nested_stack,
-            "cognito-user-pool-id-not-provided",
-            expression=Fn.condition_equals(
-                self.parameters.get_str(CognitoUserPoolKey.COGNITO_USER_POOL_ID), ""
-            ),
-        )
-
         removal_policy = cdk.RemovalPolicy(self.cluster_settings.cognito_removal_policy)
         self.new_user_pool = cognito_.UserPool(
             self.nested_stack,

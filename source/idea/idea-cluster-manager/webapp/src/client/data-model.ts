@@ -674,13 +674,6 @@ export interface LimitCheckResult {
     group_threshold?: number;
     group_current?: number;
 }
-export interface ListPermissionProfilesRequest {
-    paginator?: SocaPaginator;
-    sort_by?: SocaSortBy;
-    date_range?: SocaDateRange;
-    listing?: (SocaBaseModel | unknown)[];
-    filters?: SocaFilter[];
-}
 export interface ProvisionAlwaysOnNodesResult {
     stack_name?: string;
     stack_id?: string;
@@ -1070,10 +1063,6 @@ export interface SocaInputParamValidationEntry {
     message?: string;
     meta?: SocaUserInputParamMetadata;
 }
-export interface ListAllowedInstanceTypesRequest {
-    hibernation_support?: boolean;
-    software_stack?: VirtualDesktopSoftwareStack;
-}
 export interface AuthenticateUserRequest {
     username?: string;
     password?: string;
@@ -1356,7 +1345,6 @@ export interface DeleteEmailTemplateRequest {
 }
 export interface GetModuleInfoRequest {}
 export interface DecodedToken {}
-export interface ListScheduleTypesRequest {}
 export interface UpdateSessionPermissionRequest {
     create?: VirtualDesktopSessionPermission[];
     delete?: VirtualDesktopSessionPermission[];
@@ -1430,23 +1418,9 @@ export interface InitiateAuthResult {
 export interface AuthenticateUserResult {
     status?: boolean;
 }
-export interface ListAllowedInstanceTypesResponse {
-    paginator?: SocaPaginator;
-    sort_by?: SocaSortBy;
-    date_range?: SocaDateRange;
-    listing: unknown[];
-    filters?: SocaFilter[];
-}
 export interface EnableProjectRequest {
     project_name?: string;
     project_id?: string;
-}
-export interface ListPermissionProfilesResponse {
-    paginator?: SocaPaginator;
-    sort_by?: SocaSortBy;
-    date_range?: SocaDateRange;
-    listing?: VirtualDesktopPermissionProfile[];
-    filters?: SocaFilter[];
 }
 export interface ListHpcLicenseResourcesRequest {
     paginator?: SocaPaginator;
@@ -1603,9 +1577,6 @@ export interface ListClusterModulesResult {
     filters?: SocaFilter[];
 }
 export interface EnableProjectResult {}
-export interface ListAllowedInstanceTypesForSessionRequest {
-    session?: VirtualDesktopSession;
-}
 export interface CreateHpcLicenseResourceRequest {
     license_resource?: HpcLicenseResource;
     dry_run?: boolean;
@@ -1711,14 +1682,6 @@ export interface JobUpdate {
 export interface DeleteJobRequest {
     job_id?: string;
 }
-export interface GetPermissionProfileRequest {
-    paginator?: SocaPaginator;
-    sort_by?: SocaSortBy;
-    date_range?: SocaDateRange;
-    listing?: (SocaBaseModel | unknown)[];
-    filters?: SocaFilter[];
-    profile_id?: string;
-}
 export interface ModifyGroupResult {
     group?: Group;
 }
@@ -1747,7 +1710,9 @@ export enum UpdateModuleSettingsValuesDCVSession {
     DEFAULT_ALLOWED_SESSIONS_PER_USER_PER_PROJECT = "default_allowed_sessions_per_user_per_project",
     MAX_ROOT_VOLUME_MEMORY = "max_root_volume_memory",
     ALLOWED_INSTANCE_TYPES = "instance_types.allow",
-    DEFAULT_DCV_SESSION_TYPE= "default_dcv_session_type"
+    DEFAULT_DCV_SESSION_TYPE = "default_dcv_session_type",
+    WORKING_HOURS = "working_hours",
+    SCHEDULE = "schedule",
 }
 
 export enum UpdateModuleSettingsValuesSever {
@@ -1863,13 +1828,6 @@ export interface ListPermissionsRequest {
     idea_session_id?: string;
     username?: string;
 }
-export interface ListScheduleTypesResponse {
-    paginator?: SocaPaginator;
-    sort_by?: SocaSortBy;
-    date_range?: SocaDateRange;
-    listing?: string[];
-    filters?: SocaFilter[];
-}
 export interface RespondToAuthChallengeResult {
     challenge_name?: string;
     session?: string;
@@ -1942,22 +1900,12 @@ export interface UpdateModuleSettingsResult {}
 export interface DeleteGroupRequest {
     group_name?: string;
 }
-export interface ListAllowedInstanceTypesForSessionResponse {
-    paginator?: SocaPaginator;
-    sort_by?: SocaSortBy;
-    date_range?: SocaDateRange;
-    listing?: unknown[];
-    filters?: SocaFilter[];
-}
 export interface CheckHpcLicenseResourceAvailabilityRequest {
     name?: string;
 }
 export interface ResumeSessionsResponse {
     failed?: VirtualDesktopSession[];
     success?: VirtualDesktopSession[];
-}
-export interface GetPermissionProfileResponse {
-    profile?: VirtualDesktopPermissionProfile;
 }
 export interface DownloadFilesRequest {
     files?: string[];
@@ -1976,7 +1924,6 @@ export interface UpdateFileSystemRequest {
     filesystem_title?: string;
     projects?: string[];
 }
-export interface ListSupportedOSRequest {}
 export interface ListUsersInGroupResult {
     paginator?: SocaPaginator;
     sort_by?: SocaSortBy;
@@ -2257,13 +2204,6 @@ export interface QueuedJob {
     processed?: boolean;
     capacity_added?: boolean;
 }
-export interface ListSupportedOSResponse {
-    paginator?: SocaPaginator;
-    sort_by?: SocaSortBy;
-    date_range?: SocaDateRange;
-    listing?: string[];
-    filters?: SocaFilter[];
-}
 export interface DeleteProjectRequest {
     project_name?: string;
     project_id?: string;
@@ -2346,7 +2286,6 @@ export interface GetParamDefaultResult {
     default?: unknown;
 }
 export interface DeleteProjectResult {}
-export interface ListSupportedGPURequest {}
 export interface SocaListingPayload {
     paginator?: SocaPaginator;
     sort_by?: SocaSortBy;
@@ -2600,13 +2539,6 @@ export interface ListUsersResult {
     sort_by?: SocaSortBy;
     date_range?: SocaDateRange;
     listing?: User[];
-    filters?: SocaFilter[];
-}
-export interface ListSupportedGPUResponse {
-    paginator?: SocaPaginator;
-    sort_by?: SocaSortBy;
-    date_range?: SocaDateRange;
-    listing?: string[];
     filters?: SocaFilter[];
 }
 export interface ConfigureSSORequest {

@@ -221,16 +221,6 @@ class ArnBuilder:
 
         return required_policy_arns
 
-    @property
-    def s3_bucket_arns(self) -> List[str]:
-        return [
-            self.get_arn(service='s3', aws_region='', aws_account_id='',
-                         resource=f'{self.config.get_string("cluster.cluster_s3_bucket")}/*'),
-            self.get_arn(service='s3', aws_region='', aws_account_id='', resource=f'{self.config.get_string("cluster.cluster_s3_bucket")}'),
-            self.get_arn(service='s3', aws_region='', aws_account_id='',
-                         resource=f'{self.config.get_string("cluster.staging_bucket_name")}/*'),
-            self.get_arn(service='s3', aws_region='', aws_account_id='', resource=f'{self.config.get_string("cluster.staging_bucket_name")}'),
-        ]
 
     def get_s3_bucket_arns(self, bucket_name: str) -> List[str]:
         return [

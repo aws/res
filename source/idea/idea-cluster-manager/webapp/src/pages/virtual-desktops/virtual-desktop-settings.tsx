@@ -13,7 +13,7 @@
 
 import React, { Component, RefObject } from "react";
 
-import { Button, ColumnLayout, Container, Header, Select, SpaceBetween, Table, Tabs, TextContent, Toggle } from '@cloudscape-design/components';
+import { Button, ColumnLayout, Container, Header, Select, SpaceBetween, Table, Tabs, TextContent, Toggle } from "@cloudscape-design/components";
 import IdeaForm from "../../components/form";
 import { IdeaSideNavigationProps } from "../../components/side-navigation";
 import IdeaAppLayout, { IdeaAppLayoutProps } from "../../components/app-layout";
@@ -26,6 +26,9 @@ import { Constants } from "../../common/constants";
 import { withRouter } from "../../navigation/navigation-utils";
 import ConfigUtils from "../../common/config-utils";
 import { SocaUserInputChoice, UpdateModuleSettingsRequestVDC, UpdateModuleSettingsValuesDCVSession } from "../../client/data-model";
+import VirtualDesktopScheduleModal from "./components/virtual-desktop-schedule-modal";
+
+import WorkingHoursModal from "./components/working-hours-modal";
 
 export interface VirtualDesktopSettingsProps extends IdeaAppLayoutProps, IdeaSideNavigationProps {}
 
@@ -46,12 +49,16 @@ class VirtualDesktopSettings extends Component<VirtualDesktopSettingsProps, Virt
     generalSettingsForm: RefObject<IdeaForm>;
     updateDCVSessionSettingsForm: RefObject<IdeaForm>;
     updateDCVHostSettingsForm: RefObject<IdeaForm>;
+    scheduleModal: RefObject<VirtualDesktopScheduleModal>;
+    workingHoursModal: RefObject<WorkingHoursModal>;
 
     constructor(props: VirtualDesktopSettingsProps) {
         super(props);
         this.generalSettingsForm = React.createRef();
         this.updateDCVSessionSettingsForm = React.createRef();
         this.updateDCVHostSettingsForm = React.createRef();
+        this.workingHoursModal = React.createRef();
+        this.scheduleModal = React.createRef();
         this.state = {
             vdcModuleInfo: {},
             vdcSettings: {},
@@ -59,7 +66,7 @@ class VirtualDesktopSettings extends Component<VirtualDesktopSettingsProps, Virt
             clusterSettings: {},
             activeTabId: DEFAULT_ACTIVE_TAB_ID,
             instanceTypeAndFamilyChoices: [],
-            advOptionsEnabled: AppContext.get().getClusterSettingsService().isAdvOptionsEnabled
+            advOptionsEnabled: AppContext.get().getClusterSettingsService().isAdvOptionsEnabled,
         };
     }
 
@@ -130,6 +137,120 @@ class VirtualDesktopSettings extends Component<VirtualDesktopSettingsProps, Virt
         );
     }
 
+    buildDefaultScheduleForm() {
+        console.log(this.state)
+        return (
+            <VirtualDesktopScheduleModal
+                ref={this.scheduleModal}
+                modalType="default"
+                onScheduleChange={(newSchedule) => {
+                    let updateSettings: UpdateModuleSettingsRequestVDC = {
+                        module_id: VDC_MODULE_ID,
+                        settings: {
+                            dcv_session: {
+                                schedule: {},
+                            },
+                        },
+                    };
+                    
+                    for (const day of Object.keys(newSchedule)) {
+                        (updateSettings.settings.dcv_session.schedule as any)[day] = {};
+                        (updateSettings.settings.dcv_session.schedule as any)[day].type = newSchedule[day].schedule_type
+
+                        if (newSchedule[day].schedule_type === "CUSTOM_SCHEDULE") {
+                            (updateSettings.settings.dcv_session.schedule as any)[day].start_up_time = newSchedule[day].start_up_time;
+                            (updateSettings.settings.dcv_session.schedule as any)[day].shut_down_time = newSchedule[day].shut_down_time;
+                        }
+                    }
+                    
+                    if (Object.keys(updateSettings.settings.dcv_session).length > 0) {
+                        return AppContext.get()
+                            .client()
+                            .clusterSettings()
+                            .updateModuleSettings(updateSettings)
+                            .then((response) => {
+                                this.props.onFlashbarChange({
+                                    items: [
+                                        {
+                                            type: "success",
+                                            content: "Default schedule updated successfully.",
+                                            dismissible: true,
+                                        },
+                                    ],
+                                });
+                                this.loadSettings();
+                                return true;
+                            })
+                            .catch((error) => {
+                                this.props.onFlashbarChange({
+                                    items: [
+                                        {
+                                            type: "error",
+                                            content: error.message,
+                                            dismissible: true,
+                                        },
+                                    ],
+                                });
+                                return false;
+                            });
+                    } else {
+                        return Promise.resolve(false);
+                    }
+                }}
+            />
+        );
+    }
+
+    buildWorkinHoursModal() {
+        return (
+            <WorkingHoursModal
+                ref={this.workingHoursModal}
+                onWorkingHoursChange={(workingHours) => {
+                    let updateSettings: UpdateModuleSettingsRequestVDC = {
+                        module_id: VDC_MODULE_ID,
+                        settings: {
+                            dcv_session: {
+                                working_hours: {},
+                            },
+                        },
+                    };
+                    updateSettings.settings.dcv_session[UpdateModuleSettingsValuesDCVSession.WORKING_HOURS] = {
+                        start_up_time: workingHours.working_hours_start,
+                        shut_down_time: workingHours.working_hours_end,
+                    };
+
+                    if (Object.keys(updateSettings.settings.dcv_session).length > 0) {
+                        return AppContext.get()
+                            .client()
+                            .clusterSettings()
+                            .updateModuleSettings(updateSettings)
+                            .then((response) => {
+                                this.props.onFlashbarChange({
+                                    items: [
+                                        {
+                                            type: "success",
+                                            content: "Working hours updated successfully.",
+                                            dismissible: true,
+                                        },
+                                    ],
+                                });
+                                this.loadSettings();
+                                this.workingHoursModal.current?.cancel();
+                                return true
+                            })
+                            .catch((error) => {
+                                this.workingHoursModal.current?.setErrorMessage(error.message);
+                                return false
+                            });
+                    } else {
+                        this.workingHoursModal.current?.setErrorMessage("No settings updated.");
+                        return Promise.resolve(false);
+                    }
+                }}
+            />
+        );
+    }
+
     buildUpdateDCVSessionSettingsForm() {
         return (
             <IdeaForm
@@ -162,11 +283,11 @@ class VirtualDesktopSettings extends Component<VirtualDesktopSettingsProps, Virt
                         updateSettings.settings.dcv_session[UpdateModuleSettingsValuesDCVSession.ENFORCE_SCHEDULE] = values.enforce_schedule;
                     }
 
-                    if(values.transition_state !==  String(dot.pick("dcv_session.transition_state", this.state.vdcSettings))) {
+                    if (values.transition_state !== String(dot.pick("dcv_session.transition_state", this.state.vdcSettings))) {
                         updateSettings.settings.dcv_session[UpdateModuleSettingsValuesDCVSession.TRANSITION_STATE] = values.transition_state;
                     }
 
-                    if(values.transition_state === 'Terminate') {
+                    if (values.transition_state === "Terminate") {
                         updateSettings.settings.dcv_session[UpdateModuleSettingsValuesDCVSession.ENFORCE_SCHEDULE] = false;
                     }
 
@@ -230,15 +351,15 @@ class VirtualDesktopSettings extends Component<VirtualDesktopSettingsProps, Virt
                         data_type: "str",
                         param_type: "select",
                         multiple: false,
-                        choices:[
+                        choices: [
                             {
                                 title: "Stop",
-                                value: "Stop"
+                                value: "Stop",
                             },
                             {
                                 title: "Terminate",
                                 value: "Terminate",
-                            }
+                            },
                         ],
                         default: dot.pick("dcv_session.transition_state", this.state.vdcSettings),
                     },
@@ -250,8 +371,8 @@ class VirtualDesktopSettings extends Component<VirtualDesktopSettingsProps, Virt
                         param_type: "confirm",
                         default: Utils.asBoolean(dot.pick("dcv_session.enforce_schedule", this.state.vdcSettings)),
                         when: {
-                            param: 'transition_state',
-                            eq: 'Stop'
+                            param: "transition_state",
+                            eq: "Stop",
                         },
                     },
                 ]}
@@ -288,8 +409,7 @@ class VirtualDesktopSettings extends Component<VirtualDesktopSettingsProps, Virt
                     }
 
                     const instanceTypesChanged = !this.areArraysEqual(
-                        values.allowed_instance_types,
-                        dot.pick("dcv_session.instance_types.allow", this.state.vdcSettings)
+                        values.allowed_instance_types, dot.pick("dcv_session.instance_types.allow", this.state.vdcSettings)
                     );
 
                     if (instanceTypesChanged) {
@@ -357,7 +477,7 @@ class VirtualDesktopSettings extends Component<VirtualDesktopSettingsProps, Virt
         const instanceChoices: Set<string> = new Set<string>();
         inputList.forEach((item) => {
             const instanceType = item.InstanceType;
-            const instanceFamily = instanceType.split('.')[0];
+            const instanceFamily = instanceType.split(".")[0];
             instanceChoices.add(instanceType);
             instanceChoices.add(instanceFamily);
         });
@@ -447,81 +567,84 @@ class VirtualDesktopSettings extends Component<VirtualDesktopSettingsProps, Virt
         };
 
         const handleAdvancedOptionsToggle = (newToggleStatus: boolean) => {
-            AppContext.get().client().clusterSettings().updateModuleSettings(
-                {
+            AppContext.get()
+                .client()
+                .clusterSettings()
+                .updateModuleSettings({
                     module_id: "vdc",
                     settings: {
                         server: {
-                            enable_adv_options_non_admin: newToggleStatus
-                        }
-                    }
-                }
-            ).then((res) => {
-
-                this.props.onFlashbarChange({
-                    items: [
-                        {
-                            type: "success",
-                            content: "Successfully updated advanced options.",
-                            dismissible: true
-                        }
-                    ]
+                            enable_adv_options_non_admin: newToggleStatus,
+                        },
+                    },
                 })
-                this.setState({
-                    advOptionsEnabled: newToggleStatus
-                })
-                AppContext.get().getClusterSettingsService().isAdvOptionsEnabled = newToggleStatus
-            })
-        } 
-
+                .then((res) => {
+                    this.props.onFlashbarChange({
+                        items: [
+                            {
+                                type: "success",
+                                content: "Successfully updated advanced options.",
+                                dismissible: true,
+                            },
+                        ],
+                    });
+                    this.setState({
+                        advOptionsEnabled: newToggleStatus,
+                    });
+                    AppContext.get().getClusterSettingsService().isAdvOptionsEnabled = newToggleStatus;
+                });
+        };
 
         const handleQuicToggleChange = (newToggleStatus: boolean) => {
-            AppContext.get().client().clusterSettings().configureQUIC(
-                {
-                    enable: newToggleStatus
-                }
-            ).then((res)=> {
-                this.props.onFlashbarChange({
-                    items: [
-                        {
-                            type: "success",
-                            content: "Successfully updated QUIC configuration.",
-                            dismissible: true
-                        }
-                    ]
+            AppContext.get()
+                .client()
+                .clusterSettings()
+                .configureQUIC({
+                    enable: newToggleStatus,
                 })
-                const vdcSettings = {...this.state.vdcSettings}
-                dot.set("dcv_session.quic_support", `${newToggleStatus}`, vdcSettings)
-                this.setState({vdcSettings: vdcSettings})
-            }).catch((error) =>{
-                if (error.errorCode === "ROLLBACK_COMPLETE") {
+                .then((res) => {
                     this.props.onFlashbarChange({
                         items: [
                             {
-                                type: "warning",
-                                content: error.message,
-                                dismissible: true
-                            }
-                        ]
-                    })
-                } else {
-                    this.props.onFlashbarChange({
-                        items: [
-                            {
-                                type: "error",
-                                content: error.message,
-                                dismissible: true
-                            }
-                        ]
-                    })
-                }
-            });
-        }
+                                type: "success",
+                                content: "Successfully updated QUIC configuration.",
+                                dismissible: true,
+                            },
+                        ],
+                    });
+                    const vdcSettings = { ...this.state.vdcSettings };
+                    dot.set("dcv_session.quic_support", `${newToggleStatus}`, vdcSettings);
+                    this.setState({ vdcSettings: vdcSettings });
+                })
+                .catch((error) => {
+                    if (error.errorCode === "ROLLBACK_COMPLETE") {
+                        this.props.onFlashbarChange({
+                            items: [
+                                {
+                                    type: "warning",
+                                    content: error.message,
+                                    dismissible: true,
+                                },
+                            ],
+                        });
+                    } else {
+                        this.props.onFlashbarChange({
+                            items: [
+                                {
+                                    type: "error",
+                                    content: error.message,
+                                    dismissible: true,
+                                },
+                            ],
+                        });
+                    }
+                });
+        };
 
         const getDefaultDCVSessionType = (): string => {
-            const dcv_session_type = dot.pick("dcv_session.default_dcv_session_type", this.state.vdcSettings)
+            const dcv_session_type = dot.pick("dcv_session.default_dcv_session_type", this.state.vdcSettings);
             return dcv_session_type ? dcv_session_type.charAt(0) + dcv_session_type.substring(1).toLocaleLowerCase() : dcv_session_type;
-        }
+        };
 
         const buildAutoScalingSettingContainer = (setting: any) => {
             return (
@@ -609,9 +732,15 @@ class VirtualDesktopSettings extends Component<VirtualDesktopSettingsProps, Virt
                                                         <KeyValue title="QUIC">
                                                             <div>
                                                                 <TextContent>
-                                                                    <p><small>Quick UDP Internet Connections (QUIC) is a protocol that attempts to improve streaming in higher latency environments.<br />Toggle on to activate QUIC in favor of TCP as the default streaming protocol for all your virtual desktops</small></p>
+                                                                    <p>
+                                                                        <small>
+                                                                            Quick UDP Internet Connections (QUIC) is a protocol that attempts to improve streaming in higher latency environments.
+                                                                            <br />
+                                                                            Toggle on to activate QUIC in favor of TCP as the default streaming protocol for all your virtual desktops
+                                                                        </small>
+                                                                    </p>
                                                                 </TextContent>
-                                                                <div style={{display: 'flex', flexDirection: 'row', gap: '4px'}}>
+                                                                <div style={{ display: "flex", flexDirection: "row", gap: "4px" }}>
                                                                     <EnabledDisabledStatusIndicator enabled={Utils.asBoolean(dot.pick("dcv_session.quic_support", this.state.vdcSettings))} />
                                                                     <Toggle checked={Utils.asBoolean(dot.pick("dcv_session.quic_support", this.state.vdcSettings))} onChange={({ detail }) => handleQuicToggleChange(detail.checked)} />
                                                                 </div>
@@ -627,47 +756,51 @@ class VirtualDesktopSettings extends Component<VirtualDesktopSettingsProps, Virt
                                                         <KeyValue title="Default DCV Session Type">
                                                             <div>
                                                                 <TextContent>
-                                                                    <p><small>Default setting will only apply in cases where Instance Type and Operating System supports either Virtual or Console Session Types.</small></p>
+                                                                    <p>
+                                                                        <small>Default setting will only apply in cases where Instance Type and Operating System supports either Virtual or Console Session Types.</small>
+                                                                    </p>
                                                                 </TextContent>
                                                                 <div>
                                                                     <Select
-                                                                        options={
-                                                                            Utils.getDCVSessionTypes().map(x =>
-                                                                                ({ label: x.title as string, value: x.value as string })
-                                                                        )}
-                                                                        selectedOption={{value: getDefaultDCVSessionType()}}
+                                                                        options={Utils.getDCVSessionTypes().map((x) => ({ label: x.title as string, value: x.value as string }))}
+                                                                        selectedOption={{ value: getDefaultDCVSessionType() }}
                                                                         onChange={(e) => {
-                                                                            AppContext.get().client().clusterSettings().updateModuleSettings({
-                                                                                module_id: VDC_MODULE_ID,
-                                                                                settings: {
-                                                                                    dcv_session: {
-                                                                                        [UpdateModuleSettingsValuesDCVSession.DEFAULT_DCV_SESSION_TYPE]: e.detail.selectedOption.value
-                                                                                    }
-                                                                                }
-                                                                            }).then((res)=> {
-                                                                                this.props.onFlashbarChange({
-                                                                                    items: [
-                                                                                        {
-                                                                                            type: "success",
-                                                                                            content: "Successfully updated default DCV Session Type.",
-                                                                                            dismissible: true
-                                                                                        }
-                                                                                    ]
+                                                                            AppContext.get()
+                                                                                .client()
+                                                                                .clusterSettings()
+                                                                                .updateModuleSettings({
+                                                                                    module_id: VDC_MODULE_ID,
+                                                                                    settings: {
+                                                                                        dcv_session: {
+                                                                                            [UpdateModuleSettingsValuesDCVSession.DEFAULT_DCV_SESSION_TYPE]: e.detail.selectedOption.value,
+                                                                                        },
+                                                                                    },
                                                                                 })
-                                                                                const vdcSettings = {...this.state.vdcSettings}
-                                                                                dot.set("dcv_session.default_dcv_session_type", e.detail.selectedOption.value, vdcSettings)
-                                                                                this.setState({vdcSettings: vdcSettings})
-                                                                            }).catch((error) =>{
+                                                                                .then((res) => {
+                                                                                    this.props.onFlashbarChange({
+                                                                                        items: [
+                                                                                            {
+                                                                                                type: "success",
+                                                                                                content: "Successfully updated default DCV Session Type.",
+                                                                                                dismissible: true,
+                                                                                            },
+                                                                                        ],
+                                                                                    });
+                                                                                    const vdcSettings = { ...this.state.vdcSettings };
+                                                                                    dot.set("dcv_session.default_dcv_session_type", e.detail.selectedOption.value, vdcSettings);
+                                                                                    this.setState({ vdcSettings: vdcSettings });
+                                                                                })
+                                                                                .catch((error) => {
                                                                                     this.props.onFlashbarChange({
                                                                                         items: [
                                                                                             {
                                                                                                 type: "error",
                                                                                                 content: error.message,
-                                                                                                dismissible: true
-                                                                                            }
-                                                                                        ]
-                                                                                    })
-                                                                            });
+                                                                                                dismissible: true,
+                                                                                            },
+                                                                                        ],
+                                                                                    });
+                                                                                });
                                                                         }}
                                                                     ></Select>
                                                                 </div>
@@ -676,21 +809,20 @@ class VirtualDesktopSettings extends Component<VirtualDesktopSettingsProps, Virt
                                                         <KeyValue title="Default Allowed Sessions Per User Per Project">
                                                             <div>
                                                                 <TextContent>
-                                                                    <p><small>Default value for allowed sessions per user per project.</small></p>
+                                                                    <p>
+                                                                        <small>Default value for allowed sessions per user per project.</small>
+                                                                    </p>
                                                                 </TextContent>
                                                                 <div>
-                                                                {dot.pick("dcv_session.default_allowed_sessions_per_user_per_project", this.state.vdcSettings)}
-                                                                <Button
-                                                                    iconName="edit"
-                                                                    variant="link"
-                                                                    onClick={() => {
-                                                                        this.generalSettingsForm.current?.setParamValue(
-                                                                            "default_allowed_sessions_per_user_per_project",
-                                                                            dot.pick("dcv_session.default_allowed_sessions_per_user_per_project", this.state.vdcSettings)
-                                                                        );
-                                                                        this.generalSettingsForm.current?.showModal();
-                                                                    }}
-                                                                />
+                                                                    {dot.pick("dcv_session.default_allowed_sessions_per_user_per_project", this.state.vdcSettings)}
+                                                                    <Button
+                                                                        iconName="edit"
+                                                                        variant="link"
+                                                                        onClick={() => {
+                                                                            this.generalSettingsForm.current?.setParamValue("default_allowed_sessions_per_user_per_project", dot.pick("dcv_session.default_allowed_sessions_per_user_per_project", this.state.vdcSettings));
+                                                                            this.generalSettingsForm.current?.showModal();
+                                                                        }}
+                                                                    />
                                                                 </div>
                                                             </div>
                                                         </KeyValue>
@@ -698,14 +830,17 @@ class VirtualDesktopSettings extends Component<VirtualDesktopSettingsProps, Virt
                                                 </Container>
                                                 <Container header={<Header variant={"h2"}>Advanced Options</Header>}>
                                                     <KeyValue title="Enabled options for non-admin users">
-                                                        <div style={{display: 'flex', flexDirection: 'row', gap: '4px'}}>
+                                                        <div style={{ display: "flex", flexDirection: "row", gap: "4px" }}>
                                                             <EnabledDisabledStatusIndicator enabled={Utils.asBoolean(dot.pick("server.enable_adv_options_non_admin", this.state.advOptionsEnabled))} />
-                                                            <Toggle checked={this.state.advOptionsEnabled} onChange={({ detail }) => {
-                                                                handleAdvancedOptionsToggle(!this.state.advOptionsEnabled)
-                                                            }} />    
+                                                            <Toggle
+                                                                checked={this.state.advOptionsEnabled}
+                                                                onChange={({ detail }) => {
+                                                                    handleAdvancedOptionsToggle(!this.state.advOptionsEnabled);
+                                                                }}
+                                                            />
                                                         </div>
                                                     </KeyValue>
-                                                </Container>     
+                                                </Container>
                                             </SpaceBetween>
                                         </>
                                     ),
@@ -725,100 +860,161 @@ class VirtualDesktopSettings extends Component<VirtualDesktopSettingsProps, Virt
                                         </Container>
                                     ),
                                 },
-                                // {
-                                //     label: "Schedule",
-                                //     id: "schedule",
-                                //     content: (
-                                //         <SpaceBetween size={"m"}>
-                                //             <Container
-                                //                 header={
-                                //                     <Header variant={"h2"} description={"Default schedule applied to all sessions"}>
-                                //                         Default Schedule
-                                //                     </Header>
-                                //                 }
-                                //             >
-                                //                 <ColumnLayout variant={"text-grid"} columns={3}>
-                                //                     <KeyValue
-                                //                         title="Monday"
-                                //                         value={Utils.getScheduleTypeDisplay(
-                                //                             dot.pick("dcv_session.schedule.monday.type", this.state.vdcSettings),
-                                //                             dot.pick("dcv_session.working_hours.start_up_time", this.state.vdcSettings),
-                                //                             dot.pick("dcv_session.working_hours.shut_down_time", this.state.vdcSettings),
-                                //                             dot.pick("dcv_session.schedule.monday.start_up_time", this.state.vdcSettings),
-                                //                             dot.pick("dcv_session.schedule.monday.shut_down_time", this.state.vdcSettings)
-                                //                         )}
-                                //                     />
-                                //                     <KeyValue
-                                //                         title="Tuesday"
-                                //                         value={Utils.getScheduleTypeDisplay(
-                                //                             dot.pick("dcv_session.schedule.tuesday.type", this.state.vdcSettings),
-                                //                             dot.pick("dcv_session.working_hours.start_up_time", this.state.vdcSettings),
-                                //                             dot.pick("dcv_session.working_hours.shut_down_time", this.state.vdcSettings),
-                                //                             dot.pick("dcv_session.schedule.tuesday.start_up_time", this.state.vdcSettings),
-                                //                             dot.pick("dcv_session.schedule.tuesday.shut_down_time", this.state.vdcSettings)
-                                //                         )}
-                                //                     />
-                                //                     <KeyValue
-                                //                         title="Wednesday"
-                                //                         value={Utils.getScheduleTypeDisplay(
-                                //                             dot.pick("dcv_session.schedule.wednesday.type", this.state.vdcSettings),
-                                //                             dot.pick("dcv_session.working_hours.start_up_time", this.state.vdcSettings),
-                                //                             dot.pick("dcv_session.working_hours.shut_down_time", this.state.vdcSettings),
-                                //                             dot.pick("dcv_session.schedule.wednesday.start_up_time", this.state.vdcSettings),
-                                //                             dot.pick("dcv_session.schedule.wednesday.shut_down_time", this.state.vdcSettings)
-                                //                         )}
-                                //                     />
-                                //                     <KeyValue
-                                //                         title="Thursday"
-                                //                         value={Utils.getScheduleTypeDisplay(
-                                //                             dot.pick("dcv_session.schedule.thursday.type", this.state.vdcSettings),
-                                //                             dot.pick("dcv_session.working_hours.start_up_time", this.state.vdcSettings),
-                                //                             dot.pick("dcv_session.working_hours.shut_down_time", this.state.vdcSettings),
-                                //                             dot.pick("dcv_session.schedule.thursday.start_up_time", this.state.vdcSettings),
-                                //                             dot.pick("dcv_session.schedule.thursday.shut_down_time", this.state.vdcSettings)
-                                //                         )}
-                                //                     />
-                                //                     <KeyValue
-                                //                         title="Friday"
-                                //                         value={Utils.getScheduleTypeDisplay(
-                                //                             dot.pick("dcv_session.schedule.friday.type", this.state.vdcSettings),
-                                //                             dot.pick("dcv_session.working_hours.start_up_time", this.state.vdcSettings),
-                                //                             dot.pick("dcv_session.working_hours.shut_down_time", this.state.vdcSettings),
-                                //                             dot.pick("dcv_session.schedule.friday.start_up_time", this.state.vdcSettings),
-                                //                             dot.pick("dcv_session.schedule.friday.shut_down_time", this.state.vdcSettings)
-                                //                         )}
-                                //                     />
-                                //                     <KeyValue
-                                //                         title="Saturday"
-                                //                         value={Utils.getScheduleTypeDisplay(
-                                //                             dot.pick("dcv_session.schedule.saturday.type", this.state.vdcSettings),
-                                //                             dot.pick("dcv_session.working_hours.start_up_time", this.state.vdcSettings),
-                                //                             dot.pick("dcv_session.working_hours.shut_down_time", this.state.vdcSettings),
-                                //                             dot.pick("dcv_session.schedule.saturday.start_up_time", this.state.vdcSettings),
-                                //                             dot.pick("dcv_session.schedule.saturday.shut_down_time", this.state.vdcSettings)
-                                //                         )}
-                                //                     />
-                                //                     <KeyValue
-                                //                         title="Sunday"
-                                //                         value={Utils.getScheduleTypeDisplay(
-                                //                             dot.pick("dcv_session.schedule.sunday.type", this.state.vdcSettings),
-                                //                             dot.pick("dcv_session.working_hours.start_up_time", this.state.vdcSettings),
-                                //                             dot.pick("dcv_session.working_hours.shut_down_time", this.state.vdcSettings),
-                                //                             dot.pick("dcv_session.schedule.sunday.start_up_time", this.state.vdcSettings),
-                                //                             dot.pick("dcv_session.schedule.sunday.shut_down_time", this.state.vdcSettings)
-                                //                         )}
-                                //                     />
-                                //                 </ColumnLayout>
-                                //             </Container>
-                                //             <Container header={<Header variant={"h2"}>Working Hours</Header>}>
-                                //                 <ColumnLayout variant={"text-grid"} columns={3}>
-                                //                     <KeyValue title="Start Time" value={dot.pick("dcv_session.working_hours.start_up_time", this.state.vdcSettings)} />
-                                //                     <KeyValue title="End Time" value={dot.pick("dcv_session.working_hours.shut_down_time", this.state.vdcSettings)} />
-                                //                 </ColumnLayout>
-                                //             </Container>
-                                //         </SpaceBetween>
-                                //     ),
-                                // },
+                                {
+                                    label: "Schedule",
+                                    id: "schedule",
+                                    content: (
+                                        <SpaceBetween size={"m"}>
+                                            {this.buildDefaultScheduleForm()}
+                                            {this.buildWorkinHoursModal()}
+                                            <Container
+                                                header={
+                                                    <div
+                                                        style={{
+                                                            display: "flex",
+                                                            alignItems: "space-between",
+                                                            width: "-webkit-fill-available",
+                                                            padding: "0px 20px 0px 0px",
+                                                        }}
+                                                    >
+                                                        <Header variant={"h3"} description={"The default schedule will be applied to all newly created VDI sessions"}>
+                                                            Default Schedule
+                                                        </Header>
+                                                        <div style={{ display: "flex" }}>                                                            
+                                                            <div
+                                                                style={{
+                                                                    alignItems: "center",
+                                                                    display: "flex",
+                                                                }}
+                                                            >
+                                                                <Button
+                                                                    iconName="edit"
+                                                                    // variant="link"
+                                                                    onClick={() => {
+                                                                        this.scheduleModal.current?.showSchedule(this.state.vdcSettings.dcv_session.schedule);
+                                                                    }}
+                                                                />
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                }
+                                            >
+                                                <div>
+                                                    <ColumnLayout variant={"text-grid"} columns={3}>
+                                                        <KeyValue
+                                                            title="Monday"
+                                                            value={Utils.getScheduleTypeDisplay(
+                                                                dot.pick("dcv_session.schedule.monday.type", this.state.vdcSettings),
+                                                                dot.pick("dcv_session.working_hours.start_up_time", this.state.vdcSettings),
+                                                                dot.pick("dcv_session.working_hours.shut_down_time", this.state.vdcSettings),
+                                                                dot.pick("dcv_session.schedule.monday.start_up_time", this.state.vdcSettings),
+                                                                dot.pick("dcv_session.schedule.monday.shut_down_time", this.state.vdcSettings)
+                                                            )}
+                                                        />
+                                                        <KeyValue
+                                                            title="Tuesday"
+                                                            value={Utils.getScheduleTypeDisplay(
+                                                                dot.pick("dcv_session.schedule.tuesday.type", this.state.vdcSettings),
+                                                                dot.pick("dcv_session.working_hours.start_up_time", this.state.vdcSettings),
+                                                                dot.pick("dcv_session.working_hours.shut_down_time", this.state.vdcSettings),
+                                                                dot.pick("dcv_session.schedule.tuesday.start_up_time", this.state.vdcSettings),
+                                                                dot.pick("dcv_session.schedule.tuesday.shut_down_time", this.state.vdcSettings)
+                                                            )}
+                                                        />
+                                                        <KeyValue
+                                                            title="Wednesday"
+                                                            value={Utils.getScheduleTypeDisplay(
+                                                                dot.pick("dcv_session.schedule.wednesday.type", this.state.vdcSettings),
+                                                                dot.pick("dcv_session.working_hours.start_up_time", this.state.vdcSettings),
+                                                                dot.pick("dcv_session.working_hours.shut_down_time", this.state.vdcSettings),
+                                                                dot.pick("dcv_session.schedule.wednesday.start_up_time", this.state.vdcSettings),
+                                                                dot.pick("dcv_session.schedule.wednesday.shut_down_time", this.state.vdcSettings)
+                                                            )}
+                                                        />
+                                                        <KeyValue
+                                                            title="Thursday"
+                                                            value={Utils.getScheduleTypeDisplay(
+                                                                dot.pick("dcv_session.schedule.thursday.type", this.state.vdcSettings),
+                                                                dot.pick("dcv_session.working_hours.start_up_time", this.state.vdcSettings),
+                                                                dot.pick("dcv_session.working_hours.shut_down_time", this.state.vdcSettings),
+                                                                dot.pick("dcv_session.schedule.thursday.start_up_time", this.state.vdcSettings),
+                                                                dot.pick("dcv_session.schedule.thursday.shut_down_time", this.state.vdcSettings)
+                                                            )}
+                                                        />
+                                                        <KeyValue
+                                                            title="Friday"
+                                                            value={Utils.getScheduleTypeDisplay(
+                                                                dot.pick("dcv_session.schedule.friday.type", this.state.vdcSettings),
+                                                                dot.pick("dcv_session.working_hours.start_up_time", this.state.vdcSettings),
+                                                                dot.pick("dcv_session.working_hours.shut_down_time", this.state.vdcSettings),
+                                                                dot.pick("dcv_session.schedule.friday.start_up_time", this.state.vdcSettings),
+                                                                dot.pick("dcv_session.schedule.friday.shut_down_time", this.state.vdcSettings)
+                                                            )}
+                                                        />
+                                                        <KeyValue
+                                                            title="Saturday"
+                                                            value={Utils.getScheduleTypeDisplay(
+                                                                dot.pick("dcv_session.schedule.saturday.type", this.state.vdcSettings),
+                                                                dot.pick("dcv_session.working_hours.start_up_time", this.state.vdcSettings),
+                                                                dot.pick("dcv_session.working_hours.shut_down_time", this.state.vdcSettings),
+                                                                dot.pick("dcv_session.schedule.saturday.start_up_time", this.state.vdcSettings),
+                                                                dot.pick("dcv_session.schedule.saturday.shut_down_time", this.state.vdcSettings)
+                                                            )}
+                                                        />
+                                                        <KeyValue
+                                                            title="Sunday"
+                                                            value={Utils.getScheduleTypeDisplay(
+                                                                dot.pick("dcv_session.schedule.sunday.type", this.state.vdcSettings),
+                                                                dot.pick("dcv_session.working_hours.start_up_time", this.state.vdcSettings),
+                                                                dot.pick("dcv_session.working_hours.shut_down_time", this.state.vdcSettings),
+                                                                dot.pick("dcv_session.schedule.sunday.start_up_time", this.state.vdcSettings),
+                                                                dot.pick("dcv_session.schedule.sunday.shut_down_time", this.state.vdcSettings)
+                                                            )}
+                                                        />
+                                                    </ColumnLayout>
+                                                </div>
+                                            </Container>
+                                            <Container
+                                                header={
+                                                    <div
+                                                        style={{
+                                                            display: "flex",
+                                                            justifyContent: "space-between",
+                                                            padding: "0px 20px 0px 0px",
+                                                        }}  
+                                                    >
+                                                        <Header variant={"h3"} description={"Working hours settings will be applied to all VDI instances (both existing and newly created)."} >Working Hours</Header>
+                                                        <div
+                                                            style={{
+                                                                    alignItems: "center",
+                                                                    display: "flex",
+                                                                }}
+                                                        >
+                                                            <Button
+                                                                iconName="edit"
+                                                                // variant="link"
+                                                                onClick={() => {
+                                                                    console.log("OPening this");
+                                                                    this.workingHoursModal.current?.showSchedule();
+                                                                }}
+                                                            />
+                                                        </div>
+                                                    </div>
+                                                }
+                                            >
+                                                <div style={{ 
+                                                    pointerEvents: "none", 
+                                                    opacity: "0.5" 
+                                                    }}>
+                                                    <ColumnLayout variant={"text-grid"} columns={3}>
+                                                        <KeyValue title="Start Time" value={dot.pick("dcv_session.working_hours.start_up_time", this.state.vdcSettings)} />
+                                                        <KeyValue title="End Time" value={dot.pick("dcv_session.working_hours.shut_down_time", this.state.vdcSettings)} />
+                                                    </ColumnLayout>
+                                                </div>
+                                            </Container>
+                                        </SpaceBetween>
+                                    ),
+                                },
                                 {
                                     label: "Server",
                                     id: "server",

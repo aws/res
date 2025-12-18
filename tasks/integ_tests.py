@@ -97,7 +97,15 @@ def _run_integ_tests(
         python_path = list(set(python_path + additional_python_path))
 
     with c.cd(tests_src):
-        cmd = f'pytest -v --log-cli-level=INFO --disable-warnings {test_file} {" ".join(test_params)}'
+        # Build the base command
+        base_cmd = 'pytest -v --log-cli-level=INFO --disable-warnings'
+        
+        # Add test file if specified, otherwise run all tests in the directory
+        if test_file is not None:
+            cmd = f'{base_cmd} {test_file} {" ".join(test_params)}'
+        else:
+            cmd = f'{base_cmd} {" ".join(test_params)}'
+            
         if capture_output:
             cmd = f"{cmd} --capture=tee-sys"
         if keywords is not None:
@@ -183,6 +191,26 @@ def smoke(
         num_workers=22,
     )
     raise SystemExit(exit_code)
+
+
+@task(iterable=["params"])
+def api(
+    c, keywords=None, params=None, capture_output=False, cov_report=None,
+):
+    # type: (Context, str, List[str], bool, str) -> None
+    """
+    run API tests
+    """
+    exit_code = _run_integ_tests(
+        c=c,
+        test_id="api",
+        tests_src=idea.props.api_tests_dir,
+        params=params,
+        capture_output=capture_output,
+        keywords=keywords,
+    )
+    raise SystemExit(exit_code)
+
 
 @task(iterable=["params"])
 def vdc(

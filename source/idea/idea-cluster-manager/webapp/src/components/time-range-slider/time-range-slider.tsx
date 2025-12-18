@@ -72,7 +72,12 @@ class IdeaTimeRangeSlider extends React.Component<IdeaTimeRangeSliderProps, Idea
             ampm = "pm";
         }
         let m = minutes % 60;
-        return `${h.toFixed().padStart(2, "0")}:${m.toFixed().padStart(2, "0")}${ampm}`;
+        const displayTime = `${h.toFixed().padStart(2, "0")}:${m.toFixed().padStart(2, "0")}${ampm}`;
+        if (displayTime == "00:00pm") {
+            return "12:00pm";
+        }
+
+        return displayTime;
     }
 
     getStartTime(): string {

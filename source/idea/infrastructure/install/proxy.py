@@ -1,46 +1,40 @@
 #  Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 #  SPDX-License-Identifier: Apache-2.0
-import json
-import typing
-from typing import Any, Optional, TypedDict, Union
+
+from typing import Any, TypedDict, Union
 
 import aws_cdk
 import aws_cdk.aws_elasticloadbalancingv2 as lb
 import aws_cdk.aws_elasticloadbalancingv2_targets as targets
 from aws_cdk import aws_ec2 as ec2
 from aws_cdk import aws_iam
-from aws_cdk import aws_lambda as lambda_
 from aws_cdk import custom_resources as cr
 from aws_cdk.aws_iam import ServicePrincipal
 from aws_cdk.aws_lambda import Function
-from aws_cdk.custom_resources import AwsCustomResource, AwsCustomResourcePolicy
+from aws_cdk.custom_resources import AwsCustomResource
 from constructs import Construct
 
-from idea.infrastructure.install import proxy_handler
+from idea.batteries_included.parameters.parameters import BIParameters
 from idea.infrastructure.install.constants import RES_COMMON_LAMBDA_RUNTIME
-from idea.infrastructure.install.handlers import installer_handlers
-from idea.infrastructure.install.infra_utils import utils
+from idea.infrastructure.install.constructs import lambda_
+from idea.infrastructure.install.constructs.iam import Role
+from idea.infrastructure.install.infra_utils.arn_builder import ArnBuilder
+from idea.infrastructure.install.infra_utils.cluster_settings import ClusterSettings
 from idea.infrastructure.install.infra_utils.utils import InfraUtils
-
-
-class LambdaCodeParams(TypedDict):
-    handler: str
-    code: lambda_.Code
-
-
-class ProxyParams(TypedDict):
-    target_group_priority: int
-    ddb_users_table_name: str
-    ddb_groups_table_name: str
-    ddb_cluster_settings_table_name: str
-    cluster_name: str
-    http_proxy: str
-    https_proxy: str
-    no_proxy: str
-
+from idea.infrastructure.install.parameters.common import CommonKey
+from idea.infrastructure.install.parameters.internet_proxy import InternetProxyKey
+from idea.infrastructure.install.parameters.parameters import RESParameters
+from idea.infrastructure.install.policies import (
+    ProxyLambdaAssumeRolePolicy,
+    ProxyLambdaPolicy,
+)
+from idea.infrastructure.install.stacks.cluster_stack import ClusterStack
+from idea.infrastructure.install.stacks.identity_stack import IdentityStack
+from idea.infrastructure.resources.lambda_functions.proxy_lambda import proxy_handler
 
 proxy_lambda_security_group_name = "proxy-lambda-security-group-id"
 proxy_lambda_name = "aws-api-proxy-lambda"
+proxy_lambda_target_group_priority = 101
 
 
 class Proxy(Construct):
@@ -48,43 +42,39 @@ class Proxy(Construct):
         self,
         scope: Construct,
         id: str,
-        params: ProxyParams,
-        lambda_layer: lambda_.LayerVersion,
+        cluster_stack: ClusterStack,
+        identity_stack: IdentityStack,
+        params: Union[RESParameters, BIParameters],
+        lambda_layer: aws_cdk.aws_lambda.LayerVersion,
     ):
         super().__init__(scope, id)
-        self.params: ProxyParams = params
+        self.params = params
         self.lambda_layer = lambda_layer
+        self.cluster_name = self.params.get_str(CommonKey.CLUSTER_NAME)
+        cluster_settings = ClusterSettings(self.cluster_name, self)
+        self.arn_builder = ArnBuilder(
+            self.cluster_name, cluster_settings, parameters=params
+        )
 
         # Get existing resources in RES to integrate with the Proxy
-        cognito_domain_url = self.get_cluster_setting_string(
-            "identity-provider.cognito.domain_url"
+        cognito_domain_url = identity_stack.user_pool_domain_url.to_string()
+        cognito_provider_url = f"https://cognito-idp.{aws_cdk.Aws.REGION}.amazonaws.com/{identity_stack.user_pool.user_pool_id}"
+        external_alb_https_listener_arn = (
+            cluster_stack.external_alb_https_listener.attr_listener_arn  # type: ignore
         )
-        cognito_provider_url = self.get_cluster_setting_string(
-            "identity-provider.cognito.provider_url"
-        )
-        external_alb_https_listener_arn = self.get_cluster_setting_string(
-            "cluster.load_balancers.external_alb.https_listener_arn"
-        )
-        endpoint_custom_lambda_arn = self.get_cluster_setting_string(
-            "cluster.cluster_endpoints_lambda_arn"
-        )
-        alb_security_group_id = self.get_cluster_setting_string(
-            "cluster.network.security_groups.external-load-balancer"
-        )
-        vpc_id = self.get_cluster_setting_string("cluster.network.vpc_id")
-        subnet_ids = self.get_cluster_setting_array("cluster.network.private_subnets")
+        endpoint_custom_lambda_arn = cluster_stack.cluster_endpoints_lambda.function_arn  # type: ignore
+        alb_security_group_id = cluster_stack.security_groups[
+            "external-load-balancer"
+        ].security_group_id
+        vpc_id = self.params.get_str(CommonKey.VPC_ID)
 
+        security_group_id = self.create_security_group(alb_security_group_id, vpc_id)
         proxy_lambda = self.create_proxy_lambda(
             cognito_domain_url,
             cognito_provider_url,
-        )
-
-        security_group_id = self.create_security_group(alb_security_group_id, vpc_id)
-        InfraUtils.add_vpc_config_to_lambda(
-            self,
-            proxy_lambda,
+            cluster_stack.vpc,
             [security_group_id],
-            subnet_ids,
+            cluster_stack.cluster_settings.infrastructure_host_subnets,  # type: ignore
         )
 
         self.remove_ingress_rule_for_alb_sg_on_delete(
@@ -111,57 +101,6 @@ class Proxy(Construct):
         )
         return target_group
 
-    def get_cluster_setting_string(self, setting_to_retrieve: str) -> str:
-        get_cluster_settings_custom_resource = self.get_cluster_setting_custom_resource(
-            setting_to_retrieve
-        )
-        return get_cluster_settings_custom_resource.get_response_field("Item.value.S")
-
-    def get_cluster_setting_array(
-        self, setting_to_retrieve: str, max_index: int = 2
-    ) -> typing.List[str]:
-        get_cluster_settings_custom_resource = self.get_cluster_setting_custom_resource(
-            setting_to_retrieve
-        )
-
-        setting_array = []
-        for index in range(max_index):
-            try:
-                setting_array.append(
-                    get_cluster_settings_custom_resource.get_response_field(
-                        f"Item.value.L.{index}.S"
-                    )
-                )
-            except Exception:
-                break
-        return setting_array
-
-    def get_cluster_setting_custom_resource(
-        self, setting_to_retrieve: str
-    ) -> AwsCustomResource:
-        settings_table_name = self.params["ddb_cluster_settings_table_name"]
-        get_cluster_settings_custom_resource = cr.AwsCustomResource(
-            self,
-            f"getClusterSetting-{setting_to_retrieve}",
-            on_update=cr.AwsSdkCall(  # will also be called for a CREATE event
-                service="dynamodb",
-                action="GetItem",
-                parameters={
-                    "TableName": settings_table_name,  # "res-new.cluster-settings",
-                    "Key": {
-                        "key": {"S": setting_to_retrieve},
-                    },
-                },
-                physical_resource_id=cr.PhysicalResourceId.of(setting_to_retrieve),
-            ),
-            policy=cr.AwsCustomResourcePolicy.from_sdk_calls(
-                resources=[
-                    f"arn:{aws_cdk.Aws.PARTITION}:dynamodb:{aws_cdk.Aws.REGION}:{aws_cdk.Aws.ACCOUNT_ID}:table/{settings_table_name}"
-                ]
-            ),
-        )
-        return get_cluster_settings_custom_resource
-
     def add_target_group_to_alb(
         self, external_alb_https_listener_arn: str, endpoint_custom_lambda_arn: str
     ) -> None:
@@ -173,7 +112,7 @@ class Proxy(Construct):
             properties={
                 "endpoint_name": endpoint_id,
                 "listener_arn": external_alb_https_listener_arn,
-                "priority": self.params["target_group_priority"],
+                "priority": proxy_lambda_target_group_priority,
                 "conditions": [
                     {
                         "Field": "path-pattern",
@@ -191,12 +130,11 @@ class Proxy(Construct):
         )
 
     def create_security_group(self, alb_security_group_id: str, vpc_id: str) -> str:
-        cluster_name = self.params["cluster_name"]
         security_group = ec2.CfnSecurityGroup(
             self,
             "ProxyLambdaSecurityGroup",
             group_description="Security group for Proxy Lambda",
-            group_name=f"{cluster_name}_{proxy_lambda_security_group_name}",
+            group_name=f"{self.cluster_name}_{proxy_lambda_security_group_name}",
             security_group_egress=[
                 ec2.CfnSecurityGroup.EgressProperty(
                     ip_protocol="tcp",
@@ -229,7 +167,6 @@ class Proxy(Construct):
             ],
             vpc_id=vpc_id,
         )
-        security_group.apply_removal_policy(aws_cdk.RemovalPolicy.RETAIN)
         return security_group.attr_group_id
 
     def remove_ingress_rule_for_alb_sg_on_delete(
@@ -272,12 +209,15 @@ class Proxy(Construct):
         self,
         cognito_domain_url: str,
         cognito_provider_url: str,
+        vpc: ec2.IVpc,
+        security_group_ids: list[str],
+        subnet_ids: list[str],
     ) -> Function:
 
-        users_table_name = self.params["ddb_users_table_name"]
-        groups_table_name = self.params["ddb_groups_table_name"]
-        cluster_settings_table_name = self.params["ddb_cluster_settings_table_name"]
-        cluster_name = self.params["cluster_name"]
+        users_table_name = f"{self.cluster_name}.accounts.users"
+        groups_table_name = f"{self.cluster_name}.accounts.groups"
+        cluster_settings_table_name = f"{self.cluster_name}.cluster-settings"
+        cluster_name = self.params.get_str(CommonKey.CLUSTER_NAME)
 
         execution_role = InfraUtils.create_execution_role(
             self,
@@ -287,15 +227,13 @@ class Proxy(Construct):
 
         proxy_lambda = lambda_.Function(
             self,
-            "proxyLambda",
+            proxy_lambda_name,
             runtime=RES_COMMON_LAMBDA_RUNTIME,
-            function_name=f"{cluster_name}_{proxy_lambda_name}",
-            role=execution_role,
-            timeout=aws_cdk.Duration.seconds(10),
-            description="Lambda to act as AWS API Proxy",
-            **utils.InfraUtils.get_handler_and_code_for_function(
-                proxy_handler.handle_proxy_event
-            ),
+            description="Lambda to act as AWS API Proxy",  # type: ignore
+            timeout=aws_cdk.Duration.seconds(10),  # type: ignore
+            handler=proxy_handler.handle_proxy_event,
+            role=execution_role,  # type: ignore
+            parameters=self.params,
             environment={
                 "COGNITO_USER_POOL_PROVIDER_URL": cognito_provider_url,
                 "COGNITO_USER_POOL_DOMAIN_URL": cognito_domain_url,
@@ -303,206 +241,63 @@ class Proxy(Construct):
                 "DDB_GROUPS_TABLE_NAME": groups_table_name,
                 "DDB_CLUSTER_SETTINGS_TABLE_NAME": cluster_settings_table_name,
                 "ASSUME_ROLE_ARN": assume_role.role_arn,
-                "HTTP_PROXY": self.params["http_proxy"],
-                "HTTPS_PROXY": self.params["https_proxy"],
-                "NO_PROXY": self.params["no_proxy"],
+                "HTTP_PROXY": self.params.get_str(InternetProxyKey.HTTP_PROXY),
+                "HTTPS_PROXY": self.params.get_str(InternetProxyKey.HTTPS_PROXY),
+                "NO_PROXY": self.params.get_str(InternetProxyKey.NO_PROXY),
             },
-            # Pass Shared Lambda Layer here
-            layers=[self.lambda_layer],
+            layers=[self.lambda_layer],  # type: ignore
+            vpc=vpc,  # type: ignore
+            security_groups=[  # type: ignore
+                ec2.SecurityGroup.from_security_group_id(
+                    self, f"proxy-lambda-sg-{i}", security_group_id
+                )
+                for i, security_group_id in enumerate(security_group_ids)
+            ],
         )
-        proxy_lambda.add_to_role_policy(
-            aws_cdk.aws_iam.PolicyStatement(
-                actions=["dynamodb:GetItem"],
-                resources=[
-                    f"arn:{aws_cdk.Aws.PARTITION}:dynamodb:{aws_cdk.Aws.REGION}:{aws_cdk.Aws.ACCOUNT_ID}:table/{users_table_name}",
-                    f"arn:{aws_cdk.Aws.PARTITION}:dynamodb:{aws_cdk.Aws.REGION}:{aws_cdk.Aws.ACCOUNT_ID}:table/{cluster_settings_table_name}",
-                ],
+        cfn_proxy_lambda: aws_cdk.aws_lambda.CfnFunction = (
+            proxy_lambda.node.default_child  # type: ignore
+        )
+        cfn_proxy_lambda.add_property_override(
+            "VpcConfig.SubnetIds",
+            subnet_ids,
+        )
+
+        proxy_lambda_policy = ProxyLambdaPolicy(
+            self,
+            "proxy-lambda-role-policy",
+            self.arn_builder,
+            self.params,
+        )
+        execution_role.attach_inline_policy(
+            proxy_lambda_policy,
+        )
+        execution_role.add_managed_policy(
+            aws_iam.ManagedPolicy.from_aws_managed_policy_name(
+                "service-role/AWSLambdaVPCAccessExecutionRole"
             )
         )
-        proxy_lambda.add_to_role_policy(
-            aws_cdk.aws_iam.PolicyStatement(
-                actions=["dynamodb:Scan"],
-                resources=[
-                    f"arn:{aws_cdk.Aws.PARTITION}:dynamodb:{aws_cdk.Aws.REGION}:{aws_cdk.Aws.ACCOUNT_ID}:table/{groups_table_name}",
-                ],
-            )
-        )
-        proxy_lambda.add_to_role_policy(
-            aws_cdk.aws_iam.PolicyStatement(
-                actions=["cognito-idp:DescribeUserPoolClient"],
-                resources=[
-                    f"arn:{aws_cdk.Aws.PARTITION}:cognito-idp:{aws_cdk.Aws.REGION}:{aws_cdk.Aws.ACCOUNT_ID}:userpool/{cognito_provider_url.split('/')[-1]}",
-                ],
-            )
-        )
-        proxy_lambda.add_to_role_policy(
-            aws_cdk.aws_iam.PolicyStatement(
-                actions=["ce:GetCostAndUsage", "ce:GetTags"],
-                resources=[
-                    f"arn:{aws_cdk.Aws.PARTITION}:billing::{aws_cdk.Aws.ACCOUNT_ID}:billingview/primary",
-                ],
-            )
-        )
-        proxy_lambda.apply_removal_policy(aws_cdk.RemovalPolicy.RETAIN)
+        proxy_lambda.node.add_dependency(proxy_lambda_policy)
+
         return proxy_lambda
 
     def create_assume_role(
         self, execution_role_arn: str, cluster_name: str
     ) -> aws_iam.Role:
-        proxy_assume_role = aws_iam.Role(
-            self,
-            "ProxyLambdaAssumeRole",
-            assumed_by=aws_iam.ArnPrincipal(execution_role_arn),
-            role_name=f"{cluster_name}-ProxyLambdaAssumeRole",
-        )
-        proxy_assume_role.add_to_policy(
-            aws_iam.PolicyStatement(
-                actions=[
-                    "budgets:ViewBudget",
-                    "ce:GetTags",
-                    "ce:GetCostAndUsage",
-                    "ce:ListCostAllocationTags",
-                    "ce:UpdateCostAllocationTagsStatus",
-                    "fsx:DescribeFileSystems",
-                    "elasticfilesystem:DescribeFileSystems",
-                    "ec2:DescribeInstances",
-                    "elasticfilesystem:DescribeMountTargets",
-                    "fsx:DescribeVolumes",
-                    "fsx:DescribeStorageVirtualMachines",
-                ],
-                resources=["*"],
-            )
-        )
-        return proxy_assume_role
-
-
-# Construct to clean up retained security group and lambda function
-class LambdaAndSecurityGroupCleanup(Construct):
-    def __init__(
-        self,
-        scope: Construct,
-        id: str,
-        vpc_id: str,
-        lambdas_to_cleanup: typing.List[str],
-        security_groups_to_cleanup: typing.List[str],
-    ):
-        super().__init__(scope, id)
-
-        self.remove_security_group_cr = self.remove_security_group(
-            vpc_id, security_groups_to_cleanup
-        )
-        self.remove_lambda_function(lambdas_to_cleanup)
-
-    def remove_security_group(
-        self, vpc_id: str, security_groups_to_cleanup: typing.List[str]
-    ) -> aws_cdk.CustomResource:
-        security_group_cleanup_function = lambda_.Function(
-            self,
-            "cr-to-remove-leftover-security-groups",
-            description="Lambda to remove left over security groups.",
-            runtime=RES_COMMON_LAMBDA_RUNTIME,
-            **utils.InfraUtils.get_handler_and_code_for_function(
-                installer_handlers.handle_security_group_delete
-            ),
-            timeout=aws_cdk.Duration.seconds(300),
-        )
-        # Create an IAM policy for the Lambda function
-        security_group_cleanup_policy = aws_cdk.aws_iam.PolicyStatement(
-            effect=aws_cdk.aws_iam.Effect.ALLOW,
-            actions=[
-                "ec2:DescribeSecurityGroups",
-                "ec2:DeleteSecurityGroup",
-                "ec2:DeleteNetworkInterface",
-                "ec2:DescribeNetworkInterfaces",
+        proxy_assume_role = Role(
+            scope=self,
+            name="proxy-lambda-assume-role",
+            description="proxy-lambda-assume-role",
+            assumed_by=[aws_iam.ArnPrincipal(execution_role_arn)],
+            inline_policies=[
+                ProxyLambdaAssumeRolePolicy(
+                    self,
+                    "proxy-lambda-assume-role-policy",
+                    self.arn_builder,
+                    self.params,
+                ),
             ],
-            resources=["*"],
+            parameters=self.params,
+            arn_builder=self.arn_builder,
         )
 
-        # Add the policy to the Lambda function's role
-        security_group_cleanup_function.add_to_role_policy(
-            security_group_cleanup_policy
-        )
-
-        return aws_cdk.CustomResource(
-            self,
-            "remove-security-group",
-            service_token=security_group_cleanup_function.function_arn,
-            properties={
-                "security_group_name": json.dumps(security_groups_to_cleanup),
-                "vpc_id": vpc_id,
-            },
-            resource_type="Custom::SecurityGroupDeletion",
-        )
-
-    def remove_lambda_function(self, lambdas_to_cleanup: typing.List[str]) -> None:
-        # Lambda names contain CFn token for cluster name, which cannot be included
-        # in construct IDs. Using count instead to make each function's
-        # custom resource ID unique.
-        for count, function_name in enumerate(lambdas_to_cleanup):
-            remove_function_cr = cr.AwsCustomResource(
-                self,
-                f"remove-lambda-function-{count}",
-                on_delete=cr.AwsSdkCall(
-                    service="@aws-sdk/client-lambda",
-                    action="DeleteFunctionCommand",
-                    parameters={
-                        "FunctionName": function_name,
-                    },
-                    physical_resource_id=cr.PhysicalResourceId.of(
-                        "remove-proxy-lambda-function-cr"
-                    ),
-                    ignore_error_codes_matching="ResourceNotFoundException",
-                ),
-                policy=AwsCustomResourcePolicy.from_statements(
-                    [
-                        aws_iam.PolicyStatement(
-                            actions=["lambda:DeleteFunction", "lambda:GetFunction"],
-                            resources=["*"],
-                        ),
-                    ]
-                ),
-            )
-            remove_function_cr.node.add_dependency(self.remove_security_group_cr)
-
-
-class ProxyStack(aws_cdk.Stack):
-    def __init__(
-        self,
-        scope: Construct,
-        stack_id: str,
-        params: ProxyParams,
-        lambda_layer_arn: str,
-        vpc_id: str,
-        synthesizer: Optional[aws_cdk.IStackSynthesizer] = None,
-        env: Union[aws_cdk.Environment, dict[str, Any], None] = None,
-    ):
-        super().__init__(
-            scope,
-            stack_id,
-            env=env,
-            synthesizer=synthesizer,
-            description=f"RES_proxyLambdaStack",
-        )
-
-        # Get the Lambda layer resource from its ARN
-        lambda_layer = lambda_.LayerVersion.from_layer_version_arn(
-            self, "ApiProxyDepsLayer", lambda_layer_arn
-        )
-
-        cluster_name = params["cluster_name"]
-        self.proxyConstructCleanup = LambdaAndSecurityGroupCleanup(
-            self,
-            "remove-leftover-proxy-resources",
-            vpc_id,
-            [f"{cluster_name}_{proxy_lambda_name}"],
-            [f"{cluster_name}_{proxy_lambda_security_group_name}"],
-        )
-
-        self.proxyLambda = Proxy(
-            self,
-            "proxy",
-            params,
-            lambda_layer=lambda_layer,  # type: ignore
-        )
-
-        self.proxyLambda.node.add_dependency(self.proxyConstructCleanup)
+        return proxy_assume_role

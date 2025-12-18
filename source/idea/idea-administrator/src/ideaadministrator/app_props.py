@@ -12,7 +12,6 @@
 from ideasdk.utils import Utils, EnvironmentUtils
 from ideadatamodel import exceptions
 
-from ideaadministrator import app_constants
 import ideaadministrator_meta
 
 from typing import Dict, Optional, List
@@ -91,46 +90,6 @@ class AdministratorProps:
             return self.dev_mode_bootstrap_source_dir
         else:
             return os.path.join(self.resources_dir, 'bootstrap')
-
-    @property
-    def lambda_function_commons_package_name(self) -> str:
-        return 'idea_lambda_commons'
-
-    @property
-    def lambda_function_commons_dir(self) -> str:
-        return os.path.join(self.lambda_functions_dir, self.lambda_function_commons_package_name)
-
-    @property
-    def lambda_functions_dir(self) -> str:
-        return os.path.join(self.resources_dir, 'lambda_functions')
-
-    @property
-    def policy_templates_dir(self) -> str:
-        return os.path.join(self.resources_dir, 'policies')
-
-    @property
-    def user_data_template_dir(self) -> str:
-        return os.path.join(self.resources_dir, 'userdata')
-
-    @property
-    def installer_config_defaults_file(self) -> str:
-        return os.path.join(self.resources_dir, app_constants.INSTALLER_CONFIG_DEFAULTS_FILE)
-
-    @property
-    def default_values_file(self) -> str:
-        return os.path.join(self.resources_dir, 'config', 'values.yml')
-
-    @property
-    def install_params_file(self) -> str:
-        return os.path.join(self.resources_dir, 'input_params', 'install_params.yml')
-
-    @property
-    def shared_storage_params_file(self) -> str:
-        return os.path.join(self.resources_dir, 'input_params', 'shared_storage_params.yml')
-
-    @property
-    def aws_endpoints_file(self) -> str:
-        return os.path.join(self.resources_dir, app_constants.AWS_ENDPOINTS_FILE)
 
     @property
     def cluster_default_config_dir(self) -> str:

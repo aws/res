@@ -58,10 +58,6 @@ class BootstrapContext:
         return self.config.get_string('cluster.cluster_name', required=True)
 
     @property
-    def cluster_s3_bucket(self) -> str:
-        return self.config.get_string('cluster.cluster_s3_bucket', required=True)
-
-    @property
     def cluster_home_dir(self) -> str:
         return self.config.get_string('cluster.home_dir', required=True)
 

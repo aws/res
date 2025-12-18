@@ -46,7 +46,6 @@ def _run_unit_tests(c: Context,
         idea.props.data_model_src,
         idea.props.sdk_src,
         idea.props.test_utils_src,
-        idea.props.lambda_functions_src,
         idea.props.library_src,
         idea.props.backend_dir
     ]
@@ -159,24 +158,6 @@ def administrator(c, keywords=None, params=None, capture_output=False, cov_repor
     )
     raise SystemExit(exit_code)
 
-@task(iterable=['params'])
-def lambda_functions(c, keywords=None, params=None, capture_output=False, cov_report=None):
-    # type: (Context, str, List[str], bool, str) -> None
-    """
-    run administrator unit tests
-    """
-    exit_code = _run_unit_tests(
-        c=c,
-        component_name='lambda_functions',
-        component_src=idea.props.lambda_functions_src,
-        component_tests_src=idea.props.lambda_functions_tests_src,
-        package_name='lambda_functions',
-        params=params,
-        capture_output=capture_output,
-        keywords=keywords,
-        cov_report=cov_report
-    )
-    raise SystemExit(exit_code)
 
 @task(iterable=['params'])
 def pipeline(c, keywords=None, params=None, capture_output=False, cov_report=None):
@@ -269,7 +250,6 @@ def run_all(c, keywords=None, params=None, capture_output=False, cov_report=None
         administrator,
         cluster_manager,
         virtual_desktop_controller,
-        lambda_functions,
         pipeline,
         infrastructure,
         library,

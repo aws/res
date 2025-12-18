@@ -20,13 +20,24 @@ import moment from "moment";
 import { Alert, Box, Button, ColumnLayout, Form, Header, Modal, SpaceBetween } from "@cloudscape-design/components";
 import { AppContext } from "../../../common";
 
+enum DaysOfWeek {
+    MONDAY = 'Monday',
+    TUESDAY = 'Tuesday', 
+    WEDNESDAY = 'Wednesday',
+    THURSDAY = 'Thursday',
+    FRIDAY = 'Friday',
+    SATURDAY = 'Saturday',
+    SUNDAY = 'Sunday'
+}
+
 // Day Of Week Schedule Component
 
 interface VirtualDesktopDayOfWeekScheduleProps {
     dayOfWeek: string;
-    schedule?: VirtualDesktopSchedule;
+    schedule?: any;
     working_hours_start: string;
     working_hours_end: string;
+    modalType: string;
 }
 
 interface VirtualDesktopDayOfWeekScheduleState {
@@ -39,6 +50,21 @@ class VirtualDesktopDayOfWeekSchedule extends Component<VirtualDesktopDayOfWeekS
     constructor(props: VirtualDesktopDayOfWeekScheduleProps) {
         super(props);
         this.timeRangeSlider = React.createRef();
+        if (props.modalType === "default") {
+            this.state = {
+	             schedule: this.props.schedule
+	                 ? {
+	                       schedule_type: this.props.schedule.type || this.props.schedule.schedule_type || "NO_SCHEDULE",
+	                       start_up_time: this.props.schedule.start_up_time,
+	                       shut_down_time: this.props.schedule.shut_down_time,
+	                   }
+	                 : {
+	                       schedule_type: "NO_SCHEDULE",
+	                   },
+	         };
+            return
+        }
+       
         this.state = {
             schedule:
                 this.props.schedule && this.props.schedule.schedule_type
@@ -46,7 +72,7 @@ class VirtualDesktopDayOfWeekSchedule extends Component<VirtualDesktopDayOfWeekS
                     : {
                           schedule_type: "NO_SCHEDULE",
                       },
-        };
+        };  
     }
 
     getTimeRangeSlider(): IdeaTimeRangeSlider | null {
@@ -55,7 +81,7 @@ class VirtualDesktopDayOfWeekSchedule extends Component<VirtualDesktopDayOfWeekS
         }
         return null;
     }
-
+ 
     getValue(): VirtualDesktopSchedule {
         if (this.state.schedule.schedule_type === "CUSTOM_SCHEDULE") {
             return {
@@ -119,8 +145,11 @@ class VirtualDesktopDayOfWeekSchedule extends Component<VirtualDesktopDayOfWeekS
 }
 
 interface VirtualDesktopScheduleModalProps {
-    onScheduleChange: (session: VirtualDesktopSession) => Promise<boolean>;
-}
+    onScheduleChange: (item: VirtualDesktopSession | any) => Promise<boolean>;
+    modalType: string;
+    start_up_time?: string;
+    shut_down_time?: string;
+}   
 
 interface VirtualDesktopScheduleModalState {
     visible: boolean;
@@ -130,6 +159,8 @@ interface VirtualDesktopScheduleModalState {
     currentTime: any;
     working_hours_start: string;
     working_hours_end: string;
+    modalType: string;
+    defaultSchedule: any | null;
 }
 
 class VirtualDesktopScheduleModal extends Component<VirtualDesktopScheduleModalProps, VirtualDesktopScheduleModalState> {
@@ -155,6 +186,7 @@ class VirtualDesktopScheduleModal extends Component<VirtualDesktopScheduleModalP
         this.sundaySchedule = React.createRef();
 
         this.state = {
+            modalType: props.modalType,
             visible: false,
             session: null,
             errorMessage: null,
@@ -162,11 +194,13 @@ class VirtualDesktopScheduleModal extends Component<VirtualDesktopScheduleModalP
             currentTime: null,
             working_hours_start: "",
             working_hours_end: "",
+            defaultSchedule: null,
         };
     }
 
-    componentDidMount() {
-        AppContext.get()
+    async resetModal() {
+         if (this.state.modalType === "session") {
+            AppContext.get()
             .getClusterSettingsService()
             .getVirtualDesktopSettings()
             .then((settings) => {
@@ -175,22 +209,52 @@ class VirtualDesktopScheduleModal extends Component<VirtualDesktopScheduleModalP
                     working_hours_end: settings.dcv_session.working_hours.shut_down_time,
                 });
             });
+             
+        } else if (this.state.modalType === "default") {
+            AppContext.get()
+            .getClusterSettingsService()
+            .getVirtualDesktopSettings()
+            .then((settings) => {
+                this.setState({
+                    visible: false,
+                    working_hours_start: settings.dcv_session.working_hours.start_up_time,
+                    working_hours_end: settings.dcv_session.working_hours.shut_down_time,
+                    defaultSchedule: settings.dcv_session.schedule,
+                });
+            });
+        }
+        
         this.clockInterval = setInterval(() => {
             this.setState({
                 currentTime: moment(),
             });
-        }, 1000);
+        }, 1000);   
+    }
+
+    componentDidMount() {
+       this.resetModal()
     }
 
     componentWillUnmount() {
         clearInterval(this.clockInterval);
     }
 
-    showSchedule(session: VirtualDesktopSession) {
-        this.setState({
-            visible: true,
-            session: session,
-        });
+    async showSchedule(item: VirtualDesktopSession | VirtualDesktopWeekSchedule) {
+        await this.resetModal()
+
+        if (this.state.modalType === "session") {
+            this.setState({
+                visible: true,
+                session: item as VirtualDesktopSession,
+            });
+        } 
+        
+        if (this.state.modalType === "default") {
+            this.setState({
+                visible: true,
+                defaultSchedule: item as VirtualDesktopWeekSchedule || null,
+            });
+        }
     }
 
     cancel() {
@@ -202,17 +266,28 @@ class VirtualDesktopScheduleModal extends Component<VirtualDesktopScheduleModalP
         });
     }
 
-    save() {
-        if (this.state.session) {
-            let weekSchedule: VirtualDesktopWeekSchedule = {
-                monday: this.mondaySchedule.current!.getValue(),
-                tuesday: this.tuesdaySchedule.current!.getValue(),
-                wednesday: this.wednesdaySchedule.current!.getValue(),
-                thursday: this.thursdaySchedule.current!.getValue(),
-                friday: this.fridaySchedule.current!.getValue(),
-                saturday: this.saturdaySchedule.current!.getValue(),
-                sunday: this.sundaySchedule.current!.getValue(),
-            };
+    saveDefaultSchedule(weekSchedule: VirtualDesktopWeekSchedule) {
+        this.setState(
+            {
+                errorMessage: null,
+                saveLoading: true,
+            },
+            () => {
+                this.props.onScheduleChange(weekSchedule as any).then((status) => {
+                    if (status) {
+                        this.cancel();
+                    } else {
+                        this.setState({
+                            saveLoading: false,
+                        });
+                    }
+                });
+            }
+        );
+    }
+
+    saveSessionSchedule(weekSchedule: VirtualDesktopWeekSchedule) {
+         if (this.state.session) {
             this.setState(
                 {
                     errorMessage: null,
@@ -237,10 +312,55 @@ class VirtualDesktopScheduleModal extends Component<VirtualDesktopScheduleModalP
         }
     }
 
+    save() {
+        let weekSchedule: VirtualDesktopWeekSchedule = {
+                monday: this.mondaySchedule.current!.getValue(),
+                tuesday: this.tuesdaySchedule.current!.getValue(),
+                wednesday: this.wednesdaySchedule.current!.getValue(),
+                thursday: this.thursdaySchedule.current!.getValue(),
+                friday: this.fridaySchedule.current!.getValue(),
+                saturday: this.saturdaySchedule.current!.getValue(),
+                sunday: this.sundaySchedule.current!.getValue(),
+       };
+       if (this.state.modalType === "session") {
+            this.saveSessionSchedule(weekSchedule)
+       }
+       if (this.state.modalType === "default") {
+            this.saveDefaultSchedule(weekSchedule)
+       }
+    }
+
     setErrorMessage(message: string) {
         this.setState({
             errorMessage: message,
         });
+    }
+
+    renderDaySchedules() {
+        const days = Object.values(DaysOfWeek);
+        const refs = [this.mondaySchedule, this.tuesdaySchedule, this.wednesdaySchedule, 
+                    this.thursdaySchedule, this.fridaySchedule, this.saturdaySchedule, this.sundaySchedule];
+        
+        const scheduleData = this.state.modalType === "session" 
+            ? this.state.session?.schedule
+            // modalType === default 
+            : this.state.defaultSchedule;
+
+        return (
+            <ColumnLayout columns={1}>
+                {days.map((day, index) => (
+                    <VirtualDesktopDayOfWeekSchedule 
+                        key={day}
+                        modalType={this.state.modalType}
+                        ref={refs[index]}
+                        dayOfWeek={day}
+                        schedule={scheduleData?.[day.toLowerCase()]}
+                        working_hours_start={this.state.working_hours_start}
+                        working_hours_end={this.state.working_hours_end}
+                    />
+                ))}
+            </ColumnLayout>
+        );
     }
 
     render() {
@@ -254,7 +374,7 @@ class VirtualDesktopScheduleModal extends Component<VirtualDesktopScheduleModalP
                     }}
                     header={
                         <Header variant="h3" description="Setup a schedule to start/stop your virtual desktop to save and manage costs. The schedule operates at the cluster timezone setup by your cluster administrator.">
-                            Schedule for {this.state.session?.name}
+                            {this.state.session?.name ? `Schedule for ${this.state.session.name}` : "Default Schedule"}
                         </Header>
                     }
                     footer={
@@ -272,21 +392,17 @@ class VirtualDesktopScheduleModal extends Component<VirtualDesktopScheduleModalP
                 >
                     <SpaceBetween size={"m"}>
                         <Alert>
-                            <strong>
-                                Cluster Time: {this.state.currentTime.tz(AppContext.get().getClusterSettingsService().getClusterTimeZone()).format("LLL")} ({AppContext.get().getClusterSettingsService().getClusterTimeZone()})
-                            </strong>
+                            {this.state.currentTime ? (
+                                <strong>
+                                    Cluster Time: {this.state.currentTime.tz(AppContext.get().getClusterSettingsService().getClusterTimeZone()).format("LLL")} ({AppContext.get().getClusterSettingsService().getClusterTimeZone()})
+                                </strong>
+                            ) : (
+                                <strong/>
+                            )}
                             <br />
                         </Alert>
                         <Form errorText={this.state.errorMessage}>
-                            <ColumnLayout columns={1}>
-                                <VirtualDesktopDayOfWeekSchedule ref={this.mondaySchedule} dayOfWeek="Monday" schedule={this.state.session?.schedule?.monday} working_hours_start={this.state.working_hours_start} working_hours_end={this.state.working_hours_end} />
-                                <VirtualDesktopDayOfWeekSchedule ref={this.tuesdaySchedule} dayOfWeek="Tuesday" schedule={this.state.session?.schedule?.tuesday} working_hours_start={this.state.working_hours_start} working_hours_end={this.state.working_hours_end} />
-                                <VirtualDesktopDayOfWeekSchedule ref={this.wednesdaySchedule} dayOfWeek="Wednesday" schedule={this.state.session?.schedule?.wednesday} working_hours_start={this.state.working_hours_start} working_hours_end={this.state.working_hours_end} />
-                                <VirtualDesktopDayOfWeekSchedule ref={this.thursdaySchedule} dayOfWeek="Thursday" schedule={this.state.session?.schedule?.thursday} working_hours_start={this.state.working_hours_start} working_hours_end={this.state.working_hours_end} />
-                                <VirtualDesktopDayOfWeekSchedule ref={this.fridaySchedule} dayOfWeek="Friday" schedule={this.state.session?.schedule?.friday} working_hours_start={this.state.working_hours_start} working_hours_end={this.state.working_hours_end} />
-                                <VirtualDesktopDayOfWeekSchedule ref={this.saturdaySchedule} dayOfWeek="Saturday" schedule={this.state.session?.schedule?.saturday} working_hours_start={this.state.working_hours_start} working_hours_end={this.state.working_hours_end} />
-                                <VirtualDesktopDayOfWeekSchedule ref={this.sundaySchedule} dayOfWeek="Sunday" schedule={this.state.session?.schedule?.sunday} working_hours_start={this.state.working_hours_start} working_hours_end={this.state.working_hours_end} />
-                            </ColumnLayout>
+                            {this.renderDaySchedules()}
                         </Form>
                     </SpaceBetween>
                 </Modal>

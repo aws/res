@@ -47,10 +47,9 @@ UNIT_TESTS = [
     "tests.bootstrap",
     "tests.pipeline",
     "tests.infrastructure",
-    "tests.lambda-functions",
 ]
 COVERAGEREPORTS = ["coverage"]
-COMPONENT_INTEG_TESTS = ["integ-tests.cluster-manager"]
+INFRA_HOST_INTEG_TESTS = ["integ-tests.cluster-manager"]
 SCANS = ["npm_audit", "bandit", "viperlight_scan"]
 PUBLICECRRepository = "public.ecr.aws/l6g7n3r5/research-engineering-studio"
 ONBOARDED_REGIONS = "ap-northeast-1,ap-northeast-2,ap-northeast-3,ap-south-1,ap-southeast-1,ap-southeast-2,ca-central-1,eu-central-1,eu-north-1,eu-south-1,eu-west-1,eu-west-2,eu-west-3,sa-east-1,us-east-1,us-east-2,us-west-1,us-west-2"
@@ -283,23 +282,30 @@ class PipelineStack(Stack):
                 post_steps.append(create_web_and_vdi_record_step)
 
             if self._integ_tests:
-                component_integ_test_steps = self.get_component_integ_test_steps(
-                    COMPONENT_INTEG_TESTS
+                component_integ_test_steps = self.get_infra_host_integ_test_steps(
+                    INFRA_HOST_INTEG_TESTS
                 )
                 component_integ_test_steps.append(self.get_ad_sync_integ_test_step())
 
-                smoke_test_step = self.get_smoke_test_step()
-                # Smoke test cannot run with other integ tests in parallel, as it requires to relaunch the web servers
+                api_test_step = self.get_api_test_step()
+
+                # API tests cannot run with other integ tests in parallel, as it requires to relaunch the infra host applications
                 # and the servers will become temporarily unresponsive to other integ tests.
                 # And all integ tests should run after create_web_and_vdi_record_step.
                 for component_integ_test_step in component_integ_test_steps:
-                    smoke_test_step.add_step_dependency(component_integ_test_step)
+                    api_test_step.add_step_dependency(component_integ_test_step)
                     if self._portal_domain_name != "":
                         component_integ_test_step.add_step_dependency(
                             create_web_and_vdi_record_step
                         )
 
+                # Smoke tests cannot run with API tests in parallel,
+                # since both of them need to restart the infra host applications.
+                smoke_test_step = self.get_smoke_test_step()
+                smoke_test_step.add_step_dependency(api_test_step)
+
                 post_steps += component_integ_test_steps
+                post_steps.append(api_test_step)
                 post_steps.append(smoke_test_step)
 
             if self._destroy:
@@ -441,7 +447,7 @@ class PipelineStack(Stack):
             role_policy_statements=[codebuild_read_policy, codebuild_route53_policy],
         )
 
-    def get_component_integ_test_steps(
+    def get_infra_host_integ_test_steps(
         self, integ_test_envs: list[str]
     ) -> list[pipelines.CodeBuildStep]:
         steps: list[pipelines.CodeBuildStep] = []
@@ -493,7 +499,10 @@ class PipelineStack(Stack):
     def get_smoke_test_step(self) -> pipelines.CodeBuildStep:
         step = (
             IntegTestStepBuilder(
-                "integ-tests.smoke", self.params.cluster_name, self.region
+                "integ-tests.smoke",
+                self.params.cluster_name,
+                self.region,
+                compute_type=codebuild.ComputeType.LARGE,
             )
             .test_specific_role_policy_statement(
                 iam.PolicyStatement.from_json(
@@ -594,7 +603,7 @@ class PipelineStack(Stack):
                         "Action": [
                             "lambda:InvokeFunction",
                         ],
-                        "Resource": f"arn:{self.partition}:lambda:{self.region}:{self.account}:function:{self.params.cluster_name}_cognito-sync-lambda",
+                        "Resource": f"arn:{self.partition}:lambda:{self.region}:{self.account}:function:{self.params.cluster_name}-cognito-sync-lambda",
                     },
                 ),
                 iam.PolicyStatement.from_json(
@@ -628,6 +637,167 @@ class PipelineStack(Stack):
                         "Action": ["ec2:DescribeSecurityGroups", "ec2:DeregisterImage"],
                         "Resource": "*",
                     }
+                ),
+                iam.PolicyStatement.from_json(
+                    {
+                        "Effect": "Allow",
+                        "Action": [
+                            "lambda:GetFunctionConfiguration",
+                            "lambda:UpdateFunctionConfiguration",
+                        ],
+                        "Resource": f"arn:{self.partition}:lambda:{self.region}:{self.account}:function:{self.params.cluster_name}-backend-lambda",
+                    }
+                ),
+            )
+            .build()
+        )
+
+        return step
+
+    def get_api_test_step(self) -> pipelines.CodeBuildStep:
+        step = (
+            IntegTestStepBuilder(
+                "integ-tests.api", self.params.cluster_name, self.region
+            )
+            .test_specific_role_policy_statement(
+                iam.PolicyStatement.from_json(
+                    {
+                        "Effect": "Allow",
+                        "Action": [
+                            "ssm:SendCommand",
+                        ],
+                        "Resource": [
+                            f"arn:{self.partition}:ssm:{self.region}:*:document/*",
+                        ],
+                    }
+                ),
+                iam.PolicyStatement.from_json(
+                    {
+                        "Effect": "Allow",
+                        "Action": [
+                            "ssm:SendCommand",
+                        ],
+                        "Resource": [
+                            f"arn:{self.partition}:ec2:{self.region}:{self.account}:instance/*"
+                        ],
+                        "Condition": {
+                            "StringLike": {
+                                "ssm:resourceTag/res:EnvironmentName": [
+                                    self.params.cluster_name
+                                ]
+                            }
+                        },
+                    }
+                ),
+                iam.PolicyStatement.from_json(
+                    {
+                        "Effect": "Allow",
+                        "Action": [
+                            "ssm:GetCommandInvocation",
+                        ],
+                        "Resource": "*",
+                    }
+                ),
+                iam.PolicyStatement.from_json(
+                    {
+                        "Effect": "Allow",
+                        "Action": [
+                            "elasticloadbalancing:DescribeLoadBalancers",
+                        ],
+                        "Resource": "*",
+                    }
+                ),
+                iam.PolicyStatement.from_json(
+                    {
+                        "Effect": "Allow",
+                        "Action": [
+                            "elasticloadbalancing:ModifyLoadBalancerAttributes",
+                        ],
+                        "Resource": f"arn:{self.partition}:elasticloadbalancing:{self.region}:{self.account}:loadbalancer/app/{self.params.cluster_name}-external-alb/*",
+                    }
+                ),
+                iam.PolicyStatement.from_json(
+                    {
+                        "Effect": "Allow",
+                        "Action": [
+                            "autoscaling:DescribeAutoScalingGroups",
+                        ],
+                        "Resource": "*",
+                    }
+                ),
+                iam.PolicyStatement.from_json(
+                    {
+                        "Effect": "Allow",
+                        "Action": [
+                            "dynamodb:GetItem",
+                            "dynamodb:Scan",
+                            "dynamodb:PutItem",
+                            "dynamodb:DeleteItem",
+                            "dynamodb:Query",
+                        ],
+                        "Resource": [
+                            f"arn:{self.partition}:dynamodb:{self.region}:{self.account}:table/{self.params.cluster_name}.cluster-settings",
+                            f"arn:{self.partition}:dynamodb:{self.region}:{self.account}:table/{self.params.cluster_name}.ad-sync.distributed-lock",
+                            f"arn:{self.partition}:dynamodb:{self.region}:{self.account}:table/{self.params.cluster_name}.ad-sync.status",
+                        ],
+                    }
+                ),
+                iam.PolicyStatement.from_json(
+                    {
+                        "Effect": "Allow",
+                        "Action": [
+                            "lambda:InvokeFunction",
+                        ],
+                        "Resource": f"arn:{self.partition}:lambda:{self.region}:{self.account}:function:{self.params.cluster_name}-cognito-sync-lambda",
+                    },
+                ),
+                iam.PolicyStatement.from_json(
+                    {
+                        "Effect": "Allow",
+                        "Action": [
+                            "ecs:RunTask",
+                            "ecs:StopTask",
+                            "ecs:ListTasks",
+                        ],
+                        "Resource": "*",
+                        "Condition": {
+                            "ArnEquals": {
+                                "ecs:cluster": f"arn:{self.partition}:ecs:{self.region}:{self.account}:cluster/{self.params.cluster_name}-ad-sync-cluster",
+                            }
+                        },
+                    },
+                ),
+                iam.PolicyStatement.from_json(
+                    {
+                        "Effect": "Allow",
+                        "Action": [
+                            "iam:PassRole",
+                        ],
+                        "Resource": f"arn:{self.partition}:iam::{self.account}:role/{self.params.cluster_name}-ad-sync-task-role",
+                    }
+                ),
+                iam.PolicyStatement.from_json(
+                    {
+                        "Effect": "Allow",
+                        "Action": ["ec2:DescribeSecurityGroups", "ec2:DeregisterImage"],
+                        "Resource": "*",
+                    }
+                ),
+                iam.PolicyStatement.from_json(
+                    {
+                        "Effect": "Allow",
+                        "Action": [
+                            "lambda:GetFunctionConfiguration",
+                            "lambda:UpdateFunctionConfiguration",
+                        ],
+                        "Resource": f"arn:{self.partition}:lambda:{self.region}:{self.account}:function:{self.params.cluster_name}-backend-lambda",
+                    }
+                ),
+                iam.PolicyStatement(
+                    actions=[
+                        "ec2:DescribeImages",
+                    ],
+                    resources=["*"],
                 ),
             )
             .build()
@@ -1018,7 +1188,6 @@ class DeployStage(Stage):
         staging_bucket_name: str = "",
     ):
         super().__init__(scope, construct_id)
-        installer_registry_name = self.node.try_get_context("installer_registry_name")
         ad_sync_registry_name = self.node.try_get_context("ad_sync_registry_name")
 
         self.batteries_included_stack = None
@@ -1036,7 +1205,6 @@ class DeployStage(Stage):
             INSTALL_STACK_NAME,
             parameters=parameters,
             staging_bucket_name=staging_bucket_name,
-            installer_registry_name=installer_registry_name,
             ad_sync_registry_name=ad_sync_registry_name,
         )
         if self.batteries_included_stack:

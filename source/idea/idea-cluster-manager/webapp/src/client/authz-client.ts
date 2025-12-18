@@ -35,7 +35,6 @@ import IdeaBaseClient, { IdeaBaseClientProps } from "./base-client";
 export interface AuthzClientProps extends IdeaBaseClientProps {
     baseUrl: string;
     apiContextPath: string;
-    serviceWorkerRegistration?: ServiceWorkerRegistration;
 }
 
 class AuthzClient extends IdeaBaseClient<AuthzClientProps> {
@@ -55,7 +54,7 @@ class AuthzClient extends IdeaBaseClient<AuthzClientProps> {
   listRoles(request: ListRolesRequest): Promise<ListRolesResponse> {
     return this.apiInvoker.invoke_alt<ListRolesRequest, ListRolesResponse>("Authz.ListRoles", request);
   }
-  
+
   getRole(request: GetRoleRequest): Promise<GetRoleResponse> {
     return this.apiInvoker.invoke_alt<GetRoleRequest, GetRoleResponse>("Authz.GetRole", request);
   }

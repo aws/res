@@ -17,7 +17,7 @@ import IdeaListView from "../../components/list-view";
 import { VirtualDesktopAdminClient } from "../../client";
 import { AppContext } from "../../common";
 import { TableProps } from "@cloudscape-design/components/table/interfaces";
-import { VirtualDesktopPermission, VirtualDesktopPermissionProfile } from "../../client/data-model";
+import { VirtualDesktopPermissionProfile } from "../../client/data-model";
 import { IdeaSideNavigationProps } from "../../components/side-navigation";
 import { IdeaAppLayoutProps } from "../../components/app-layout";
 import { Container, Header, Link } from "@cloudscape-design/components";
@@ -30,7 +30,6 @@ export interface VirtualDesktopPermissionProfilesProps extends IdeaAppLayoutProp
 
 export interface VirtualDesktopPermissionProfilesState {
     permissionProfileSelected: boolean;
-    base_permissions: VirtualDesktopPermission[];
     settings: any;
     profileCount: number;
 }
@@ -76,7 +75,6 @@ class VirtualDesktopPermissionProfiles extends Component<VirtualDesktopPermissio
         this.listing = React.createRef();
         this.state = {
             permissionProfileSelected: false,
-            base_permissions: [],
             settings: {},
             profileCount: 0,
         };
@@ -89,14 +87,6 @@ class VirtualDesktopPermissionProfiles extends Component<VirtualDesktopPermissio
             .then((settings) => {
                 this.setState({
                     settings: settings,
-                });
-            });
-
-        this.getVirtualDesktopUtilsClient()
-            .getBasePermissions({})
-            .then((response) => {
-                this.setState({
-                    base_permissions: response.permissions!,
                 });
             });
     }
@@ -213,14 +203,18 @@ class VirtualDesktopPermissionProfiles extends Component<VirtualDesktopPermissio
                     });
                 }}
                 onFetchRecords={() => {
+                    // Extract profile_id filter from the filters array
+                    const filters = this.getListing().getFilters();
+                    const profileIdFilter = filters?.find(f => f.key === 'profile_id');
+                    const profileId = profileIdFilter?.like || undefined;
+
                     return this.getVirtualDesktopUtilsClient()
-                        .listPermissionProfiles({ filters: this.getListing().getFilters(), paginator: this.getListing().getPaginator() })
+                        .listPermissionProfiles({ profileId: profileId })
                         .then((data) => {
                             this.setState({
                                 profileCount: data.listing!.filter((profile) => profile.profile_id !== Constants.DCV_SETTINGS_DEFAULT_OWNER_PROFILE_ID).length ?? 0
                             })
                             return {
-                                ...data,
                                 listing: data.listing!.filter((profile) => profile.profile_id !== Constants.DCV_SETTINGS_DEFAULT_OWNER_PROFILE_ID),
                             };
                         })

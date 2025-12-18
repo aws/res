@@ -150,7 +150,7 @@ class VirtualDesktopSoftwareStacks extends Component<VirtualDesktopSoftwareStack
 
     componentDidMount() {
         this.getVirtualDesktopUtilsClient()
-            .listSupportedOS({})
+            .listSupportedOses()
             .then((result) => {
                 this.setState({
                     supportedOsChoices: Utils.getSupportedOSChoices(result.listing!),
@@ -158,7 +158,7 @@ class VirtualDesktopSoftwareStacks extends Component<VirtualDesktopSoftwareStack
             });
 
         this.getVirtualDesktopUtilsClient()
-            .listSupportedGPUs({})
+            .listSupportedGpus()
             .then((result) => {
                 this.setState({
                     supportedGPUChoices: Utils.getSupportedGPUChoices(result.listing!),
@@ -731,6 +731,10 @@ class VirtualDesktopSoftwareStacks extends Component<VirtualDesktopSoftwareStack
                                 value: "amazonlinux2",
                             },
                             {
+                                title: "Amazon Linux 2023",
+                                value: "amzn2023",
+                            },
+                            {
                                 title: "Windows",
                                 value: "windows",
                             },
@@ -741,6 +745,18 @@ class VirtualDesktopSoftwareStacks extends Component<VirtualDesktopSoftwareStack
                             {
                                 title: "RHEL 9",
                                 value: "rhel9"
+                            },
+                            {
+                                title: "Ubuntu 2204",
+                                value: "ubuntu2204"
+                            },
+                            {
+                                title: "Ubuntu 2404",
+                                value: "ubuntu2404"
+                            },
+                            {
+                                title: "Rocky 9",
+                                value: "rocky9"
                             }
                         ],
                     },

@@ -25,3 +25,4 @@ PyYAML~=6.0
 types-PyYAML~=6.0
 types-requests~=2.0
 types-xmltodict~=0.14
+uvicorn~=0.38

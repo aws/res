@@ -1,0 +1,15 @@
+{
+  "version": "1.0",
+  "plugins": {
+    "openapi": {
+      "service": "res#RES",
+      "protocol": "aws.protocols#restJson1",
+      "tags": true,
+      "defaultTimestampFormat": "date-time",
+      "useIntegerType": true,
+      "jsonAdd": {
+        "/components/securitySchemes/smithy.api.httpBearerAuth/x-bearerInfoFunc": "api.controllers.security_controller.bearer_auth"
+      }
+    }
+  }
+}

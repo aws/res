@@ -39,7 +39,6 @@ export interface IdeaApiInvokerProps {
     name: string;
     url: string;
     timeout?: number;
-    serviceWorkerRegistration?: ServiceWorkerRegistration;
     authContext?: IdeaAuthenticationContext;
 }
 
@@ -68,20 +67,6 @@ export class IdeaApiInvoker {
         return emptyPayload;
     };
 
-    async invoke_service_worker(message: any): Promise<any> {
-        return new Promise((resolve, reject) => {
-            let messageChannel = new MessageChannel();
-            messageChannel.port1.onmessage = (event) => {
-                if (event.data.error) {
-                    this.logger.error(event.data.error);
-                    reject(event.data.error);
-                }
-                return resolve(event.data);
-            };
-            this.props.serviceWorkerRegistration!.active!.postMessage(message, [messageChannel.port2]);
-        });
-    }
-
     async invoke<REQ = any, RES = any>(request: IdeaEnvelope<REQ>, isPublic: boolean = false, isAWSProxyRequest: boolean = false, httpMethod:HTTPMethod = "POST"): Promise<IdeaEnvelope<RES>> {
         let url = `${this.props.url}/${request.header!.namespace}`;
 
@@ -90,30 +75,12 @@ export class IdeaApiInvoker {
         }
 
         let response;
-        if (this.props.serviceWorkerRegistration) {
-            let options: any = {
-                url: url,
-                request: request,
-                isPublic: isPublic,
-                isAWSProxyRequest: isAWSProxyRequest
-            }
-            if (isAWSProxyRequest) {
-                options["httpMethod"] = httpMethod;
-                options["additionalHeader"] = request.additionalHeader;
-            }
-            const result = await this.invoke_service_worker({
-                type: Constants.ServiceWorker.IDEA_API_INVOCATION,
-                options: options
-            });
-            response = result.response;
+        if (request.header?.namespace === "Auth.InitiateAuth") {
+            response = await this.props.authContext?.initiateAuth(request);
+        } else if (isAWSProxyRequest) {
+            response = await this.props.authContext?.invoke(url, request.payload, isPublic, request.additionalHeader, httpMethod);
         } else {
-            if (request.header?.namespace === "Auth.InitiateAuth") {
-                response = await this.props.authContext?.initiateAuth(request);
-            } else if (isAWSProxyRequest) {
-                response = await this.props.authContext?.invoke(url, request.payload, isPublic, request.additionalHeader, httpMethod);
-            } else {
-                response = await this.props.authContext?.invoke(url, request, isPublic);
-            }
+            response = await this.props.authContext?.invoke(url, request, isPublic);
         }
 
         if (this.logger.isTrace()) {
@@ -161,102 +128,42 @@ export class IdeaApiInvoker {
     }
 
     async isLoggedIn(): Promise<boolean> {
-        if (this.props.serviceWorkerRegistration) {
-            const result = await this.invoke_service_worker({
-                type: Constants.ServiceWorker.IDEA_AUTH_IS_LOGGED_IN,
-            });
-            return result.status;
-        } else {
-            return this.props.authContext!.isLoggedIn();
-        }
+        return this.props.authContext!.isLoggedIn();
     }
 
     async logout(): Promise<boolean> {
-        if (this.props.serviceWorkerRegistration) {
-            const result = await this.invoke_service_worker({
-                type: Constants.ServiceWorker.IDEA_AUTH_LOGOUT,
-            });
-            return result.status;
-        } else {
-            return this.props.authContext!.logout();
-        }
+        return this.props.authContext!.logout();
     }
 
     async getAccessToken(): Promise<string> {
-        if (this.props.serviceWorkerRegistration) {
-            const result = await this.invoke_service_worker({
-                type: Constants.ServiceWorker.IDEA_AUTH_ACCESS_TOKEN,
-            });
-            return result.accessToken;
-        } else {
-            return await this.props.authContext!.getAccessToken();
-        }
-    }
-
-    async getSWInitialized(): Promise<boolean>{
-        const result = await this.invoke_service_worker({
-            type: Constants.ServiceWorker.IDEA_GET_SW_INIT,
-        });
-        return result.isSwInitialized;
+        return await this.props.authContext!.getAccessToken();
     }
 
     async getClientId(): Promise<string> {
-        if (this.props.serviceWorkerRegistration) {
-            const result = await this.invoke_service_worker({
-                type: Constants.ServiceWorker.IDEA_CLIENT_ID,
-            });
-            return result.clientId;
-        } else {
-            try {
+        try {
                 return this.props.authContext!.getClientId();
             } catch (error) {
                 return Promise.reject(error);
             }
-        }
     }
 
     debug() {
-        if (this.props.serviceWorkerRegistration) {
-            this.props.serviceWorkerRegistration!.active!.postMessage({
-                type: Constants.ServiceWorker.IDEA_AUTH_DEBUG,
-            });
-        } else {
-            this.props.authContext!.printDebugInfo();
-        }
+        this.props.authContext!.printDebugInfo();
     }
 
     async getClaims(): Promise<JwtTokenClaims> {
-        if (this.props.serviceWorkerRegistration) {
-            const result = await this.invoke_service_worker({
-                type: Constants.ServiceWorker.IDEA_AUTH_TOKEN_CLAIMS,
-            });
-            return result.claims;
-        } else {
-            try {
-                return this.props.authContext!.getClaims();
-            } catch (error) {
-                return Promise.reject(error);
-            }
+        try {
+            return this.props.authContext!.getClaims();
+        } catch (error) {
+            return Promise.reject(error);
         }
     }
 
     async fetch(url: string, options: any, isPublic: boolean = false): Promise<Response> {
-        if (this.props.serviceWorkerRegistration) {
-            const result = await this.invoke_service_worker({
-                type: Constants.ServiceWorker.IDEA_HTTP_FETCH,
-                options: {
-                    url: url,
-                    options: options,
-                    isPublic: isPublic,
-                },
-            });
-            return result.response;
-        } else {
-            try {
-                return await this.props.authContext!.fetch(url, options, isPublic);
-            } catch (error) {
-                return Promise.reject(error);
-            }
+        try {
+            return await this.props.authContext!.fetch(url, options, isPublic);
+        } catch (error) {
+            return Promise.reject(error);
         }
     }
 }

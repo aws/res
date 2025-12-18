@@ -57,13 +57,9 @@ class AppLogger {
         this.name = props.name;
 
         if (typeof props.default_log_level !== "undefined") {
-            // window reference is not available in service worker, so default log level is passed to ServiceWorker during IDEA_APP_INIT
-            // which in turn is passed to AppLoggerProps by AuthenticationContext that runs within a service worker
             this.logLevel = Utils.asNumber(props.default_log_level, LogLevel.INFO);
         } else if (typeof window !== "undefined" && typeof localStorage !== "undefined") {
-            // for all other components (not initialized in service worker) window reference will be available and initialize default log level from app data
             const defaultLogLevel = Utils.asNumber(window.idea.app.default_log_level, LogLevel.INFO);
-            // local storage reference is not available in service worker.
             this.logLevel = Utils.asNumber(localStorage.getItem(KEY_LOG_LEVEL), defaultLogLevel);
         } else {
             this.logLevel = LogLevel.INFO;
