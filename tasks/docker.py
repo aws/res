@@ -27,20 +27,7 @@ def prepare_artifacts(c):
     if not os.path.isfile(all_package_archive):
         raise Exception(f'${all_package_archive} not found')
 
-    shutil.copy(all_package_archive, idea.props.deployment_administrator_dir)
     shutil.copy(all_package_archive, idea.props.deployment_ad_sync_dir)
-
-
-@task
-def build_installer_image(c, no_cache=False, platform="linux/amd64"):
-    # type: (Context, bool, str) -> None
-    """
-    build administrator docker image
-    """
-
-    prepare_artifacts(c)
-
-    build(c, "idea-administrator", idea.props.deployment_administrator_dir, no_cache, platform)
 
 
 @task

@@ -132,7 +132,7 @@ class VirtualDesktopCreateSessionForm extends Component<VirtualDesktopCreateSess
         this.getVirtualDesktopUtilsClient()
             .listAllowedInstanceTypes({})
             .then((result) => {
-                this.instanceTypesInfo = this.generateInstanceTypeReverseIndex(result.listing);
+                this.instanceTypesInfo = this.generateInstanceTypeReverseIndex(result.listing || []);
                 this.defaultInstanceTypeChoices = Utils.generateInstanceTypeListing(result.listing);
             });
         this.authAdmin()
@@ -524,6 +524,10 @@ class VirtualDesktopCreateSessionForm extends Component<VirtualDesktopCreateSess
             param_type: "select_or_text",
             validate: {
                 required: true,
+                in: this.defaultInstanceTypeChoices.flatMap(group =>
+                    group.options ? group.options.map(option => option.value) : []
+                ),
+                message: "Please select a valid instance type from the available options.",
             },
             readonly: true,
             choices: this.defaultInstanceTypeChoices,
@@ -657,16 +661,21 @@ class VirtualDesktopCreateSessionForm extends Component<VirtualDesktopCreateSess
                                 this.updateSessionTypeChoicesIfRequired(event.param.name);
                                 this.getVirtualDesktopUtilsClient()
                                 .listAllowedInstanceTypesForSession({
-                                    session:{
-                                        hibernation_enabled: this.getForm()?.getValue("hibernate_instance"),
-                                        software_stack: this.state.softwareStacks[stackId],
+                                    listAllowedInstanceTypesForSessionRequestContent: {
+                                        session: {
+                                            hibernation_enabled: this.getForm()?.getValue("hibernate_instance"),
+                                            software_stack: this.state.softwareStacks[stackId] as any,
+                                        }
                                     }
                                 })
                                 .then(async (result) => {
                                     let instance_type = this.getForm()?.getFormField("instance_type");
+                                    const newInstanceTypeChoices = Utils.generateInstanceTypeListing(result.listing);
+                                    // Update the class property so validation uses the new choices
+                                    this.defaultInstanceTypeChoices = newInstanceTypeChoices;
                                     await instance_type?.reset();
                                     instance_type?.setOptions({
-                                        listing: Utils.generateInstanceTypeListing(result.listing),
+                                        listing: newInstanceTypeChoices,
                                     });
                                     this.updateRootVolumeSizeIfRequired();
                                     instance_type?.disable(false);
@@ -693,15 +702,19 @@ class VirtualDesktopCreateSessionForm extends Component<VirtualDesktopCreateSess
                             if (stackId) {
                                 this.getVirtualDesktopUtilsClient()
                                     .listAllowedInstanceTypesForSession({
-                                        session: {
-                                            hibernation_enabled: event.value,
-                                            software_stack: this.state.softwareStacks[stackId],
+                                        listAllowedInstanceTypesForSessionRequestContent: {
+                                            session: {
+                                                hibernation_enabled: event.value,
+                                                software_stack: this.state.softwareStacks[stackId] as any,
+                                            }
                                         }
                                     })
                                     .then((result) => {
                                         let instance_type = this.getForm()?.getFormField("instance_type");
+                                        const newInstanceTypeChoices = Utils.generateInstanceTypeListing(result.listing);
+                                        this.defaultInstanceTypeChoices = newInstanceTypeChoices;
                                         instance_type?.setOptions({
-                                            listing: Utils.generateInstanceTypeListing(result.listing),
+                                            listing: newInstanceTypeChoices,
                                         });
                                         this.updateRootVolumeSizeIfRequired();
                                     });

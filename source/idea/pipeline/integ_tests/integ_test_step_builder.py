@@ -19,6 +19,7 @@ class IntegTestStepBuilder:
         region: str,
         is_legacy: bool = False,
         requires_alb: bool = True,
+        compute_type: codebuild.ComputeType = codebuild.ComputeType.SMALL,
     ):
         self._invoke_command = invoke_command
         self._invoke_command_arguments = [f"aws-region={region}"]
@@ -54,6 +55,7 @@ class IntegTestStepBuilder:
             ),
         ]
         self._requires_alb = requires_alb
+        self._compute_type = compute_type
 
     def test_specific_invoke_command_argument(
         self, *arguments: str
@@ -105,7 +107,7 @@ class IntegTestStepBuilder:
             self._invoke_command,
             build_environment=codebuild.BuildEnvironment(
                 build_image=codebuild.LinuxBuildImage.STANDARD_7_0,
-                compute_type=codebuild.ComputeType.SMALL,
+                compute_type=self._compute_type,
                 privileged=True,
             ),
             env=self._env,

@@ -14,7 +14,8 @@ from res.utils.bootstrap_userdata_builder import (  # type: ignore
 )
 
 from idea.batteries_included.parameters.parameters import BIParameters
-from idea.infrastructure.install.constructs import iam
+from idea.infrastructure.install import constants
+from idea.infrastructure.install.constructs import iam, lambda_
 from idea.infrastructure.install.constructs.base import ResBaseConstruct
 from idea.infrastructure.install.infra_utils.arn_builder import ArnBuilder
 from idea.infrastructure.install.infra_utils.cluster_settings import ClusterSettings
@@ -22,8 +23,14 @@ from idea.infrastructure.install.infra_utils.utils import InfraUtils
 from idea.infrastructure.install.parameters.common import CommonKey
 from idea.infrastructure.install.parameters.internet_proxy import InternetProxyKey
 from idea.infrastructure.install.parameters.parameters import RESParameters
-from idea.infrastructure.install.policies import BastionHostPolicy
+from idea.infrastructure.install.policies import (
+    BastionHostCleanupPolicy,
+    BastionHostPolicy,
+)
 from idea.infrastructure.install.stacks.cluster_stack import ClusterStack
+from idea.infrastructure.resources.lambda_functions.bastion_host_cleanup_lambda import (
+    bastion_host_cleanup_handler,
+)
 
 
 class BastionHostStack(ResBaseConstruct):
@@ -72,8 +79,11 @@ class BastionHostStack(ResBaseConstruct):
         self.build_iam_roles()
         self.build_cluster_settings()
 
+        self.build_bastion_host_cleanup_custom_resource()
+
         self.nested_stack.node.add_dependency(self.lambda_layer)
         self.apply_permission_boundary(self.nested_stack)
+        self.add_common_tags(self.nested_stack)
 
     def build_iam_roles(self) -> None:
 
@@ -169,3 +179,26 @@ class BastionHostStack(ResBaseConstruct):
 
         ec2_managed_policies += self.cluster_settings.ec2_managed_policy_arns
         return ec2_managed_policies
+
+    def build_bastion_host_cleanup_custom_resource(self) -> None:
+        cleanup_function = lambda_.Function(
+            self.nested_stack,
+            "cleanup-bastion-host-and-route53",
+            runtime=constants.RES_COMMON_LAMBDA_RUNTIME,
+            description="Lambda to remove the bastion host instance and Route53 record.",  # type: ignore
+            timeout=cdk.Duration.seconds(600),  # type: ignore
+            handler=bastion_host_cleanup_handler.handle_bastion_host_delete,
+            initial_policy=BastionHostCleanupPolicy.create_policy_statements(self.arn_builder),  # type: ignore
+            parameters=self.parameters,
+            log_retention_role=self.cluster_stack.roles[constants.LOG_RETENTION_ROLE_NAME],  # type: ignore
+            layers=[self.lambda_layer],  # type: ignore
+        )
+        cdk.CustomResource(
+            self,
+            "cleanup-bastion-host-and-route53",
+            service_token=cleanup_function.function_arn,
+            properties={
+                "cluster_name": self.cluster_name,
+            },
+            resource_type="Custom::BastionHostAndRoute53Cleanup",
+        )

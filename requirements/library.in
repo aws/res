@@ -12,3 +12,5 @@ python_dynamodb_lock==0.9.1
 random-password-generator~=2.0
 Jinja2~=3.0
 pyhocon==0.3.61
+connexion~=3.3
+starlette~=0.48

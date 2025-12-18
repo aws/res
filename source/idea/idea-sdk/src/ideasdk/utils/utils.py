@@ -573,10 +573,6 @@ class Utils:
         return f'ip-{transformed_ip}'
 
     @staticmethod
-    def build_package_download_url(cluster_s3_bucket: str, module_name: str, module_version: str):
-        return f's3://{cluster_s3_bucket}/idea/releases/idea-{module_name}-{module_version}.tar.gz'
-
-    @staticmethod
     def check_and_convert_decimal_value(value: Any) -> Any:
         """
         since the ddb table resource returns all Number (N) types as decimals, additional processing is required to distinguish between int and float

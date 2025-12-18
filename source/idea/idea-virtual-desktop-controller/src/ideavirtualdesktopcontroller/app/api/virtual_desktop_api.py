@@ -62,8 +62,8 @@ from ideavirtualdesktopcontroller.app.software_stacks.virtual_desktop_software_s
 from ideavirtualdesktopcontroller.app.ssm_commands.virtual_desktop_ssm_commands_db import VirtualDesktopSSMCommandsDB
 from ideavirtualdesktopcontroller.app.ssm_commands.virtual_desktop_ssm_commands_utils import VirtualDesktopSSMCommandsUtils
 from ideavirtualdesktopcontroller.app.virtual_desktop_controller_utils import VirtualDesktopControllerUtils
-from res.exceptions import SoftwareStackNotFound
-from res.resources import software_stacks, vdi_management
+from res.exceptions import SoftwareStackNotFound, UserSessionNotFound
+from res.resources import software_stacks, vdi_management, sessions
 
 class VirtualDesktopAPI(BaseAPI):
     TEMP_IMAGE_ID = 'TEMP_IMAGE_ID'
@@ -345,14 +345,8 @@ class VirtualDesktopAPI(BaseAPI):
             session.failure_reason = 'missing session.server.instance_type'
             return session, False
 
-        is_instance_type_valid = False
-        allowed_instance_types = self.controller_utils.get_valid_instance_types_by_software_stack(session.hibernation_enabled, session.software_stack)
-        for allowed_instance_type in allowed_instance_types:
-            is_instance_type_valid = session.server.instance_type == Utils.get_value_as_string('InstanceType', allowed_instance_type, '')
-            if is_instance_type_valid:
-                break
-
-        if not is_instance_type_valid:
+        valid_instance_types_dict = self.controller_utils.get_valid_instance_types_by_allowed_list(session.hibernation_enabled, session.software_stack.allowed_instance_types)
+        if session.server.instance_type not in valid_instance_types_dict.keys():
             session.failure_reason = f'Invalid session.server.instance_type: {session.server.instance_type}. Not allowed for current configuration'
             return session, False
 
@@ -401,6 +395,38 @@ class VirtualDesktopAPI(BaseAPI):
             return session, False
 
         return session, True
+    
+    def validate_update_session_request(self, session: VirtualDesktopSession) -> (VirtualDesktopSession, bool):
+        if Utils.is_empty(session.idea_session_id):
+            session.failure_reason = "missing session.res_session_id"
+            return session, False
+
+        if Utils.is_empty(session.owner):
+            session.failure_reason = "missing session.owner"
+            return session, False
+
+        try:
+            session_dict = sessions.get_session(session.owner, session.idea_session_id)
+
+            base_os = session_dict["software_stack"]["base_os"]
+            software_stack_id = session_dict["software_stack"]["stack_id"]
+        except UserSessionNotFound:
+            session.failure_reason = f"session.res_session_id: {session.idea_session_id} does not exist"
+            return session, False
+        
+        try:
+            software_stack_dict = software_stacks.get_software_stack(stack_id=software_stack_id, base_os=base_os)
+        except SoftwareStackNotFound:
+            session.failure_reason = f"software_stack.stack_id: {software_stack_id} and software_stack.base_os: {base_os} does not exist"
+            return session, False
+        
+        valid_instance_types_dict = self.controller_utils.get_valid_instance_types_by_allowed_list(hibernation_support=session_dict["hibernation_enabled"], allowed_instance_types=software_stack_dict["allowed_instance_types"])
+        if session.server.instance_type not in valid_instance_types_dict.keys():
+            session.failure_reason = f'Invalid session.server.instance_type: {session.server.instance_type}. Not allowed for current configuration.'
+            return session, False
+        
+        return session, True
+            
 
     @staticmethod
     def validate_delete_session_request(session: VirtualDesktopSession) -> (VirtualDesktopSession, bool):

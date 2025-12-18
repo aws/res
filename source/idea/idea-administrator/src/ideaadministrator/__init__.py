@@ -10,11 +10,9 @@
 #  and limitations under the License.
 
 import ideaadministrator_meta
-from ideaadministrator.app_protocols import AdministratorContextProtocol
 from ideaadministrator.app_props import AdministratorProps
 
 __name__ = ideaadministrator_meta.__name__
 __version__ = ideaadministrator_meta.__version__
 
 props = AdministratorProps()
-Context = AdministratorContextProtocol

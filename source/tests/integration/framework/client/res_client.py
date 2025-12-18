@@ -44,8 +44,6 @@ from ideadatamodel import (  # type: ignore
     DownloadFilesResult,
     GetModuleSettingsRequest,
     GetModuleSettingsResult,
-    GetPermissionProfileRequest,
-    GetPermissionProfileResponse,
     GetSessionConnectionInfoRequest,
     GetSessionConnectionInfoResponse,
     GetSessionInfoRequest,
@@ -54,8 +52,6 @@ from ideadatamodel import (  # type: ignore
     GetSoftwareStackInfoResponse,
     GetUserRequest,
     GetUserResult,
-    ListAllowedInstanceTypesRequest,
-    ListAllowedInstanceTypesResponse,
     ListEmailTemplatesRequest,
     ListEmailTemplatesResult,
     ListFilesRequest,
@@ -206,19 +202,6 @@ class ResClient:
             should_succeed,
         )
 
-    def list_allowed_instance_types(
-        self, request: ListAllowedInstanceTypesRequest, should_succeed: bool = True
-    ) -> ListAllowedInstanceTypesResponse:
-        logger.info(f"listing allowed instance types...")
-
-        return self._invoke(
-            "VirtualDesktopUtils.ListAllowedInstanceTypes",
-            "vdc",
-            request,
-            ListAllowedInstanceTypesResponse,
-            should_succeed,
-        )
-
     def create_session(
         self, request: CreateSessionRequest, should_succeed: bool = True
     ) -> CreateSessionResponse:
@@ -361,12 +344,30 @@ class ResClient:
         options.add_argument("--disable-background-networking")
         options.add_argument("--disk-cache-size=1")
 
-        driver = webdriver.Chrome(options=options)
-
+        # Retry mechanism for driver creation and page loading to handle tab crashes
+        max_retries = 3
         connection_url = f"{connection_info.endpoint}{connection_info.web_url_path}?authToken={connection_info.access_token}#{connection_info.dcv_session_id}"
-        driver.get(connection_url)
 
-        return driver
+        for attempt in range(max_retries):
+            driver = None
+            try:
+                driver = webdriver.Chrome(options=options)
+                driver.get(connection_url)
+                return driver
+            except Exception as e:
+                logger.warning(f"Chrome WebDriver attempt {attempt + 1} failed: {e}")
+                # Cleanup driver on failure
+                if driver:
+                    try:
+                        driver.quit()
+                    except:
+                        pass
+
+                if attempt < max_retries - 1:
+                    # Sleep before retry
+                    time.sleep(2)
+
+        assert False, f"Failed to join session within {max_retries} attempts"
 
     def delete_sessions(
         self, request: DeleteSessionRequest, should_succeed: bool = True
@@ -540,21 +541,6 @@ class ResClient:
             "cluster-manager",
             request,
             DeleteFilesResult,
-            should_succeed,
-        )
-
-    def get_permission_profile(
-        self,
-        request: GetPermissionProfileRequest,
-        should_succeed: bool = True,
-    ) -> GetPermissionProfileResponse:
-        logger.info(f"getting permission profile...")
-
-        return self._invoke(
-            "VirtualDesktopUtils.GetPermissionProfile",
-            "vdc",
-            request,
-            GetPermissionProfileResponse,
             should_succeed,
         )
 

@@ -83,11 +83,6 @@ def test_ecr_images_duplication_project_creation(
                             "Value": {"Ref": "AWS::Region"},
                         },
                         {
-                            "Name": "DEST_INSTALLER_REGISTRY",
-                            "Type": "PLAINTEXT",
-                            "Value": "fake-registry-name",
-                        },
-                        {
                             "Name": "DEST_AD_SYNC_REGISTRY",
                             "Type": "PLAINTEXT",
                             "Value": "fake-registry-name",
@@ -110,7 +105,7 @@ def test_ecr_images_duplication_project_creation(
                     ]
                 },
                 "Source": {
-                    "BuildSpec": '{\n  "version": "0.2",\n  "phases": {\n    "build": {\n      "commands": [\n        "aws ecr get-login-password --region ${AWS_REGION} | docker login --username AWS --password-stdin fake-registry-name",\n        "docker pull fake-registry-name",\n        "docker tag fake-registry-name ${DEST_INSTALLER_REGISTRY}",\n        "aws ecr get-login-password --region ${AWS_REGION} | docker login --username AWS --password-stdin ${RES_REPO_URI}",\n        "docker push ${DEST_INSTALLER_REGISTRY}",\n        "aws ecr get-login-password --region ${AWS_REGION} | docker login --username AWS --password-stdin fake-registry-name",\n        "docker pull fake-registry-name",\n        "docker tag fake-registry-name ${DEST_AD_SYNC_REGISTRY}",\n        "aws ecr get-login-password --region ${AWS_REGION} | docker login --username AWS --password-stdin ${RES_REPO_URI}",\n        "docker push ${DEST_AD_SYNC_REGISTRY}"\n      ]\n    }\n  }\n}',
+                    "BuildSpec": '{\n  "version": "0.2",\n  "phases": {\n    "build": {\n      "commands": [\n        "aws ecr get-login-password --region ${AWS_REGION} | docker login --username AWS --password-stdin fake-registry-name",\n        "docker pull fake-registry-name",\n        "docker tag fake-registry-name ${DEST_AD_SYNC_REGISTRY}",\n        "aws ecr get-login-password --region ${AWS_REGION} | docker login --username AWS --password-stdin ${RES_REPO_URI}",\n        "docker push ${DEST_AD_SYNC_REGISTRY}"\n      ]\n    }\n  }\n}',
                     "Type": "NO_SOURCE",
                 },
             },
@@ -135,7 +130,6 @@ def test_custom_resource_ecr_images_handler_creation(
                 "ResEcrRepositoryName": {
                     "Ref": util.get_logical_id(stack, ["ResEcrRepo"]),
                 },
-                "InstallerRegistryName": "fake-registry-name",
                 "ADSyncRegistryName": "fake-registry-name",
             },
             "UpdateReplacePolicy": "Delete",
@@ -297,15 +291,13 @@ def test_params_transformer_custom_resource_creation(
     util.assert_resource_name_has_correct_type_and_props(
         stack,
         template,
-        resources=["CustomResourceParamsListToStringTransformer"],
+        resources=["params-transformer"],
         cfn_type="Custom::ParamsListToStringTransformer",
         props={
             "Properties": {
                 "ServiceToken": {
                     "Fn::GetAtt": [
-                        util.get_logical_id(
-                            stack, ["ParameterListToStringTransformLambda"]
-                        ),
+                        util.get_logical_id(stack, ["params-transformer-construct"]),
                         "Arn",
                     ]
                 },
@@ -323,20 +315,20 @@ def test_params_transformer_handler_creation(
     util.assert_resource_name_has_correct_type_and_props(
         stack,
         template,
-        resources=["ParameterListToStringTransformLambda"],
+        resources=["params-transformer-construct"],
         cfn_type="AWS::Lambda::Function",
         props={
             "Properties": {
                 "Role": {
                     "Fn::GetAtt": [
                         util.get_logical_id(
-                            stack, ["ParameterListToStringTransformLambdaRole"]
+                            stack, ["params-transformer-construct", "ServiceRole"]
                         ),
                         "Arn",
                     ]
                 },
                 "Runtime": RES_COMMON_LAMBDA_RUNTIME.name,
-                "Timeout": 300,
+                "Timeout": 180,
             }
         },
     )
@@ -349,7 +341,7 @@ def test_params_transformer_handler_role_creation(
     util.assert_resource_name_has_correct_type_and_props(
         stack,
         template,
-        resources=["ParameterListToStringTransformLambdaRole"],
+        resources=["params-transformer-construct", "ServiceRole"],
         cfn_type="AWS::IAM::Role",
         props={
             "Properties": {
@@ -372,18 +364,6 @@ def test_params_transformer_handler_role_creation(
                     ]
                 },
                 "Path": stack.resolve(stack.parameters.iam_resource_path_string),
-                "RoleName": {
-                    "Fn::Join": [
-                        "",
-                        [
-                            stack.resolve(stack.parameters.iam_resource_prefix_string),
-                            {
-                                "Ref": CommonKey.CLUSTER_NAME,
-                            },
-                            "-ParameterListToStringTransformLambdaRole",
-                        ],
-                    ]
-                },
             }
         },
     )
@@ -396,16 +376,51 @@ def test_params_transformer_handler_role_policy_creation(
     util.assert_resource_name_has_correct_type_and_props(
         stack,
         template,
-        resources=["ParameterListToStringTransformLambdaRolePolicy"],
+        resources=["params-transformer-construct", "ServiceRole", "DefaultPolicy"],
         cfn_type="AWS::IAM::Policy",
         props={
             "Properties": {
                 "PolicyDocument": {
                     "Statement": [
                         {
+                            "Action": "dynamodb:GetItem",
+                            "Effect": "Allow",
+                            "Resource": {
+                                "Fn::Join": [
+                                    "",
+                                    [
+                                        "arn:",
+                                        {"Ref": "AWS::Partition"},
+                                        ":dynamodb:",
+                                        {"Ref": "AWS::Region"},
+                                        ":",
+                                        {"Ref": "AWS::AccountId"},
+                                        ":table/",
+                                        stack.resolve(stack.cluster_name),
+                                        ".cluster-settings",
+                                    ],
+                                ]
+                            },
+                        },
+                        {
                             "Action": "logs:CreateLogGroup",
                             "Effect": "Allow",
-                            "Resource": "*",
+                            "Resource": {
+                                "Fn::Join": [
+                                    "",
+                                    [
+                                        "arn:",
+                                        {"Ref": "AWS::Partition"},
+                                        ":logs:",
+                                        {"Ref": "AWS::Region"},
+                                        ":",
+                                        {"Ref": "AWS::AccountId"},
+                                        ":log-group:/aws/lambda/",
+                                        stack.resolve(stack.cluster_name),
+                                        "*",
+                                    ],
+                                ]
+                            },
                             "Sid": "CloudWatchLogsPermissions",
                         },
                         {
@@ -415,28 +430,192 @@ def test_params_transformer_handler_role_policy_creation(
                                 "logs:DeleteLogStream",
                             ],
                             "Effect": "Allow",
-                            "Resource": "*",
+                            "Resource": {
+                                "Fn::Join": [
+                                    "",
+                                    [
+                                        "arn:",
+                                        {"Ref": "AWS::Partition"},
+                                        ":logs:",
+                                        {"Ref": "AWS::Region"},
+                                        ":",
+                                        {"Ref": "AWS::AccountId"},
+                                        ":log-group:/aws/lambda/",
+                                        stack.resolve(stack.cluster_name),
+                                        "*:log-stream:*",
+                                    ],
+                                ]
+                            },
                             "Sid": "CloudWatchLogStreamPermissions",
                         },
-                    ],
-                },
-                "PolicyName": {
-                    "Fn::Join": [
-                        "",
-                        [
-                            stack.resolve(stack.parameters.iam_resource_prefix_string),
-                            {
-                                "Ref": CommonKey.CLUSTER_NAME,
-                            },
-                            "-ParameterListToStringTransformLambdaRolePolicy",
-                        ],
                     ],
                 },
                 "Roles": [
                     {
                         "Ref": util.get_logical_id(
-                            stack, ["ParameterListToStringTransformLambdaRole"]
+                            stack, ["params-transformer-construct", "ServiceRole"]
                         ),
+                    }
+                ],
+            }
+        },
+    )
+
+
+def test_populate_custom_tag_custom_resource_creation(
+    stack: InstallStack, template: Template
+) -> None:
+    util.assert_resource_name_has_correct_type_and_props(
+        stack,
+        template,
+        resources=["populate-custom-tag"],
+        cfn_type="Custom::PopulateCustomTag",
+        props={
+            "Properties": {
+                "ServiceToken": {
+                    "Fn::GetAtt": [
+                        util.get_logical_id(stack, ["populate-custom-tag-construct"]),
+                        "Arn",
+                    ]
+                },
+            },
+            "UpdateReplacePolicy": "Delete",
+            "DeletionPolicy": "Delete",
+        },
+    )
+
+
+def test_populate_custom_tag_handler_creation(
+    stack: InstallStack,
+    template: Template,
+) -> None:
+    util.assert_resource_name_has_correct_type_and_props(
+        stack,
+        template,
+        resources=["populate-custom-tag-construct"],
+        cfn_type="AWS::Lambda::Function",
+        props={
+            "Properties": {
+                "Role": {
+                    "Fn::GetAtt": [
+                        util.get_logical_id(
+                            stack, ["populate-custom-tag-construct", "ServiceRole"]
+                        ),
+                        "Arn",
+                    ]
+                },
+                "Runtime": RES_COMMON_LAMBDA_RUNTIME.name,
+                "Timeout": 180,
+            }
+        },
+    )
+
+
+def test_populate_custom_tag_handler_role_policy_creation(
+    stack: InstallStack,
+    template: Template,
+) -> None:
+    util.assert_resource_name_has_correct_type_and_props(
+        stack,
+        template,
+        resources=["populate-custom-tag-construct", "ServiceRole", "DefaultPolicy"],
+        cfn_type="AWS::IAM::Policy",
+        props={
+            "Properties": {
+                "PolicyDocument": {
+                    "Statement": [
+                        {
+                            "Action": "dynamodb:UpdateItem",
+                            "Effect": "Allow",
+                            "Resource": {
+                                "Fn::Join": [
+                                    "",
+                                    [
+                                        "arn:",
+                                        {"Ref": "AWS::Partition"},
+                                        ":dynamodb:",
+                                        {"Ref": "AWS::Region"},
+                                        ":",
+                                        {"Ref": "AWS::AccountId"},
+                                        ":table/",
+                                        stack.resolve(stack.cluster_name),
+                                        ".cluster-settings",
+                                    ],
+                                ]
+                            },
+                        },
+                        {
+                            "Action": "cloudformation:DescribeStacks",
+                            "Effect": "Allow",
+                            "Resource": {
+                                "Fn::Join": [
+                                    "",
+                                    [
+                                        "arn:",
+                                        {"Ref": "AWS::Partition"},
+                                        ":cloudformation:",
+                                        {"Ref": "AWS::Region"},
+                                        ":",
+                                        {"Ref": "AWS::AccountId"},
+                                        ":stack/*/*",
+                                    ],
+                                ]
+                            },
+                        },
+                        {
+                            "Action": "logs:CreateLogGroup",
+                            "Effect": "Allow",
+                            "Resource": {
+                                "Fn::Join": [
+                                    "",
+                                    [
+                                        "arn:",
+                                        {"Ref": "AWS::Partition"},
+                                        ":logs:",
+                                        {"Ref": "AWS::Region"},
+                                        ":",
+                                        {"Ref": "AWS::AccountId"},
+                                        ":log-group:/aws/lambda/",
+                                        stack.resolve(stack.cluster_name),
+                                        "*",
+                                    ],
+                                ]
+                            },
+                            "Sid": "CloudWatchLogsPermissions",
+                        },
+                        {
+                            "Action": [
+                                "logs:CreateLogStream",
+                                "logs:PutLogEvents",
+                                "logs:DeleteLogStream",
+                            ],
+                            "Effect": "Allow",
+                            "Resource": {
+                                "Fn::Join": [
+                                    "",
+                                    [
+                                        "arn:",
+                                        {"Ref": "AWS::Partition"},
+                                        ":logs:",
+                                        {"Ref": "AWS::Region"},
+                                        ":",
+                                        {"Ref": "AWS::AccountId"},
+                                        ":log-group:/aws/lambda/",
+                                        stack.resolve(stack.cluster_name),
+                                        "*:log-stream:*",
+                                    ],
+                                ]
+                            },
+                            "Sid": "CloudWatchLogStreamPermissions",
+                        },
+                    ],
+                },
+                "Roles": [
+                    {
+                        "Ref": util.get_logical_id(
+                            stack,
+                            ["populate-custom-tag-construct", "ServiceRole"],
+                        )
                     }
                 ],
             }

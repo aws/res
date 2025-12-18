@@ -1,35 +1,38 @@
 #  Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 #  SPDX-License-Identifier: Apache-2.0
-from typing import Any, Optional, Union
+from typing import Union
 
-from aws_cdk import (
-    Aws,
-    Duration,
-    Environment,
-    IStackSynthesizer,
-    RemovalPolicy,
-    Stack,
-    aws_iam,
-)
-from aws_cdk import aws_lambda as lambda_
+import res.constants as res_constants  # type: ignore
+from aws_cdk import Aws, CfnResource, Duration
+from aws_cdk import aws_ec2 as ec2
+from aws_cdk import aws_iam, aws_lambda
 from aws_cdk import aws_lambda_event_sources as lambda_event_sources
 from aws_cdk import aws_sqs as sqs
 from aws_cdk import custom_resources as cr
 from constructs import Construct
 
 from idea.batteries_included.parameters.parameters import BIParameters
-from idea.infrastructure.install import (
+from idea.infrastructure.install import constants
+from idea.infrastructure.install.constructs import lambda_
+from idea.infrastructure.install.infra_utils.arn_builder import ArnBuilder
+from idea.infrastructure.install.infra_utils.cluster_settings import ClusterSettings
+from idea.infrastructure.install.infra_utils.utils import InfraUtils
+from idea.infrastructure.install.parameters.common import CommonKey
+from idea.infrastructure.install.parameters.internet_proxy import InternetProxyKey
+from idea.infrastructure.install.parameters.parameters import RESParameters
+from idea.infrastructure.install.policies import (
+    CognitoTriggerWorkflowCreatePostAuthPolicy,
+    CognitoTriggerWorkflowCreateUidPolicy,
+)
+from idea.infrastructure.install.stacks.cluster_stack import ClusterStack
+from idea.infrastructure.install.stacks.identity_stack import IdentityStack
+from idea.infrastructure.resources.lambda_functions.cognito_trigger_workflow_lambda import (
     cognito_trigger_workflow_post_auth_handler,
     cognito_trigger_workflow_uid_handler,
 )
-from idea.infrastructure.install.constants import RES_COMMON_LAMBDA_RUNTIME
-from idea.infrastructure.install.infra_utils.utils import InfraUtils
-from idea.infrastructure.install.parameters.internet_proxy import InternetProxyKey
-from idea.infrastructure.install.parameters.parameters import RESParameters
 from ideadatamodel import (  # type: ignore
     CognitoConstructParams,
     SocaBaseModel,
-    constants,
     get_cognito_construct_params,
 )
 
@@ -44,30 +47,25 @@ class CognitoTriggerWorkflow(Construct):
         self,
         scope: Construct,
         id: str,
-        cluster_name: str,
+        cluster_stack: ClusterStack,
+        identity_stack: IdentityStack,
         params: Union[RESParameters, BIParameters],
     ):
         super().__init__(scope, id)
         # Get existing resource
+        cluster_name = params.get_str(CommonKey.CLUSTER_NAME)
+        self.cluster_stack = cluster_stack
+        cluster_settings = ClusterSettings(cluster_name, self)
+        self.arn_builder = ArnBuilder(cluster_name, cluster_settings, parameters=params)
         self.params = params
         self.apply_permission_boundary = InfraUtils.create_permission_boundary_applier(
             self.params
         )
 
-        user_pool_id = InfraUtils.get_cluster_setting_string(
-            self, "identity-provider.cognito.user_pool_id", cluster_name
-        )
-
-        alb_security_group_id = InfraUtils.get_cluster_setting_string(
-            self, "cluster.network.security_groups.external-load-balancer", cluster_name
-        )
-        vpc_id = InfraUtils.get_cluster_setting_string(
-            self, "cluster.network.vpc_id", cluster_name
-        )
-        subnet_ids = InfraUtils.get_cluster_setting_array(
-            self, "cluster.network.private_subnets", cluster_name
-        )
-        cognito_user_pool_arn = f"arn:{Aws.PARTITION}:cognito-idp:{Aws.REGION}:{Aws.ACCOUNT_ID}:userpool/{user_pool_id}"
+        vpc_id = params.get_str(CommonKey.VPC_ID)
+        alb_security_group_id = cluster_stack.security_groups[
+            "external-load-balancer"
+        ].security_group_id
 
         # CREATE NEW RESOURCES
         # SQS queue
@@ -91,37 +89,28 @@ class CognitoTriggerWorkflow(Construct):
 
         # POST AUTH LAMBDA
         post_auth_lambda = self.create_post_auth_lambda(
-            cluster_name, cognito_user_pool_arn, queue.queue_url, queue.queue_arn
-        )
-
-        InfraUtils.add_vpc_config_to_lambda(
-            self,
-            post_auth_lambda,
+            cluster_name,
+            queue.queue_url,
+            cluster_stack.vpc,
             [post_auth_security_group_id],
-            subnet_ids,
+            cluster_stack.cluster_settings.infrastructure_host_subnets,  # type: ignore
         )
 
         self.add_lambdas_as_cognito_trigger(
             cluster_name,
             post_auth_lambda,
-            user_pool_id,
+            identity_stack.user_pool.user_pool_id,
         )
 
         # UID LAMBDA
         uid_lambda = self.create_uid_lambda(
             cluster_name,
-            user_pool_id,
-            cognito_user_pool_arn,
+            identity_stack.user_pool.user_pool_id,
             queue,
             sqs_visibility_timeout,
-        )
-
-        InfraUtils.add_vpc_config_to_lambda(
-            self,
-            uid_lambda,
+            cluster_stack.vpc,
             [uid_security_group_id],
-            subnet_ids,
-            "vpc-config-uid-lambda",
+            cluster_stack.cluster_settings.infrastructure_host_subnets,  # type: ignore
         )
 
         # Remove SG on CFN delete
@@ -200,122 +189,115 @@ class CognitoTriggerWorkflow(Construct):
         self,
         cluster_name: str,
         user_pool_id: str,
-        cognito_user_pool_arn: str,
         queue: sqs.Queue,
         sqs_visibility_timeout: Duration,
+        vpc: ec2.IVpc,
+        security_group_ids: list[str],
+        subnet_ids: list[str],
     ) -> lambda_.Function:
-        execution_role = InfraUtils.create_execution_role(self, "uid-lambda-role")
-
         uid_lambda = lambda_.Function(
             self,
-            "generate-uid",
-            runtime=RES_COMMON_LAMBDA_RUNTIME,
-            timeout=sqs_visibility_timeout,  # SQS lambda trigger timeout must be the same as SQS visibility timeout
-            function_name=f"{cluster_name}_uid_{cognito_trigger_workflow_lambda_name}",
-            role=execution_role,
-            description="Add uuid for users that don't have one. Add uid to Cognito and DDB",
-            **InfraUtils.get_handler_and_code_for_function(
-                cognito_trigger_workflow_uid_handler.handle_event
-            ),
-            reserved_concurrent_executions=1,
+            f"uid-{cognito_trigger_workflow_lambda_name}",
+            runtime=constants.RES_COMMON_LAMBDA_RUNTIME,
+            description="Add uuid for users that don't have one. Add uid to Cognito and DDB",  # type: ignore
+            timeout=sqs_visibility_timeout,  # type: ignore
+            reserved_concurrent_executions=1,  # type: ignore
+            handler=cognito_trigger_workflow_uid_handler.handle_event,
+            initial_policy=CognitoTriggerWorkflowCreateUidPolicy.create_policy_statements(self.arn_builder),  # type: ignore
+            parameters=self.params,
             environment={
-                "CUSTOM_UID_ATTRIBUTE": f"custom:{constants.COGNITO_UID_ATTRIBUTE}",
-                "COGNITO_MIN_ID_INCLUSIVE": str(constants.COGNITO_MIN_ID_INCLUSIVE),
-                "COGNITO_MAX_ID_INCLUSIVE": str(constants.COGNITO_MAX_ID_INCLUSIVE),
+                "CUSTOM_UID_ATTRIBUTE": f"custom:{res_constants.COGNITO_UID_ATTRIBUTE}",
+                "COGNITO_MIN_ID_INCLUSIVE": str(res_constants.COGNITO_MIN_ID_INCLUSIVE),
+                "COGNITO_MAX_ID_INCLUSIVE": str(res_constants.COGNITO_MAX_ID_INCLUSIVE),
                 "USER_POOL_ID": user_pool_id,
                 "CLUSTER_NAME": cluster_name,
                 "HTTP_PROXY": self.params.get_str(InternetProxyKey.HTTP_PROXY),
                 "HTTPS_PROXY": self.params.get_str(InternetProxyKey.HTTPS_PROXY),
                 "NO_PROXY": self.params.get_str(InternetProxyKey.NO_PROXY),
             },
+            vpc=vpc,  # type: ignore
+            security_groups=[  # type: ignore
+                ec2.SecurityGroup.from_security_group_id(
+                    self, f"uid-lambda-sg-{i}", security_group_id
+                )
+                for i, security_group_id in enumerate(security_group_ids)
+            ],
         )
-
-        ddb_user_table_arn = f"arn:{Aws.PARTITION}:dynamodb:{Aws.REGION}:{Aws.ACCOUNT_ID}:table/{cluster_name}.accounts.users"
-
-        uid_lambda.add_to_role_policy(
-            aws_iam.PolicyStatement(
-                actions=[
-                    "dynamodb:GetItem",
-                    "dynamodb:UpdateItem",
-                ],
-                resources=[
-                    ddb_user_table_arn,
-                ],
+        cfn_uid_lambda: aws_lambda.CfnFunction = (
+            uid_lambda.node.default_child  # type: ignore
+        )
+        cfn_uid_lambda.add_property_override(
+            "VpcConfig.SubnetIds",
+            subnet_ids,
+        )
+        uid_lambda.role.add_managed_policy(  # type: ignore
+            aws_iam.ManagedPolicy.from_aws_managed_policy_name(
+                "service-role/AWSLambdaVPCAccessExecutionRole"
             )
         )
-        uid_lambda.add_to_role_policy(
-            aws_iam.PolicyStatement(
-                actions=[
-                    "cognito-idp:ListUsers",
-                    "cognito-idp:AdminUpdateUserAttributes",
-                ],
-                resources=[cognito_user_pool_arn],
-            )
-        )
-        uid_lambda.apply_removal_policy(RemovalPolicy.RETAIN)
 
         uid_lambda.add_event_source(
             lambda_event_sources.SqsEventSource(
                 queue, batch_size=10, report_batch_item_failures=True
             )
         )
+
+        # Prevent event source mapping from inheriting stack tags
+        # Tags will be applied manually via the tag_resources_handler
+        for child in uid_lambda.node.children:
+            if (
+                hasattr(child, "node")
+                and res_constants.EVENT_SOURCE_MAPPING_RESOURCE_TYPE in child.node.id
+            ):
+                cfn_event_source = child.node.default_child
+                if cfn_event_source and isinstance(cfn_event_source, CfnResource):
+                    cfn_event_source.add_property_override("Tags", [])
+
         return uid_lambda
 
     def create_post_auth_lambda(
         self,
         cluster_name: str,
-        cognito_user_pool_arn: str,
         queue_url: str,
-        queue_arn: str,
+        vpc: ec2.IVpc,
+        security_group_ids: list[str],
+        subnet_ids: list[str],
     ) -> lambda_.Function:
-        execution_role = InfraUtils.create_execution_role(self, "post-auth-lambda-role")
         cognito_post_auth_lambda = lambda_.Function(
             self,
-            "cognito-post-auth",
-            runtime=RES_COMMON_LAMBDA_RUNTIME,
-            function_name=f"{cluster_name}_post_auth_{cognito_trigger_workflow_lambda_name}",
-            timeout=Duration.seconds(5),
-            role=execution_role,
-            description="Add user event to post auth SQS queue for users that don't have UID",
-            **InfraUtils.get_handler_and_code_for_function(
-                cognito_trigger_workflow_post_auth_handler.handle_event
-            ),
+            f"post-auth-{cognito_trigger_workflow_lambda_name}",
+            runtime=constants.RES_COMMON_LAMBDA_RUNTIME,
+            description="Add user event to post auth SQS queue for users that don't have UID",  # type: ignore
+            timeout=Duration.seconds(5),  # type: ignore
+            handler=cognito_trigger_workflow_post_auth_handler.handle_event,
+            initial_policy=CognitoTriggerWorkflowCreatePostAuthPolicy.create_policy_statements(self.arn_builder),  # type: ignore
+            parameters=self.params,
             environment={
-                "COGNITO_USER_IDP_TYPE": constants.COGNITO_USER_IDP_TYPE,
+                "COGNITO_USER_IDP_TYPE": res_constants.COGNITO_USER_IDP_TYPE,
                 "CLUSTER_NAME": cluster_name,
                 "QUEUE_URL": queue_url,
             },
+            vpc=vpc,  # type: ignore
+            security_groups=[  # type: ignore
+                ec2.SecurityGroup.from_security_group_id(
+                    self, f"post-auth-lambda-sg-{i}", security_group_id
+                )
+                for i, security_group_id in enumerate(security_group_ids)
+            ],
+        )
+        cfn_post_auth_lambda: aws_lambda.CfnFunction = (
+            cognito_post_auth_lambda.node.default_child  # type: ignore
+        )
+        cfn_post_auth_lambda.add_property_override(
+            "VpcConfig.SubnetIds",
+            subnet_ids,
+        )
+        cognito_post_auth_lambda.role.add_managed_policy(  # type: ignore
+            aws_iam.ManagedPolicy.from_aws_managed_policy_name(
+                "service-role/AWSLambdaVPCAccessExecutionRole"
+            )
         )
 
-        ddb_user_table_arn = f"arn:{Aws.PARTITION}:dynamodb:{Aws.REGION}:{Aws.ACCOUNT_ID}:table/{cluster_name}.accounts.users"
-
-        cognito_post_auth_lambda.add_to_role_policy(
-            aws_iam.PolicyStatement(
-                actions=[
-                    "dynamodb:GetItem",
-                ],
-                resources=[
-                    ddb_user_table_arn,
-                ],
-            )
-        )
-        cognito_post_auth_lambda.add_to_role_policy(
-            aws_iam.PolicyStatement(
-                actions=[
-                    "cognito-idp:ListUsers",
-                ],
-                resources=[cognito_user_pool_arn],
-            )
-        )
-        cognito_post_auth_lambda.add_to_role_policy(
-            aws_iam.PolicyStatement(
-                actions=[
-                    "sqs:SendMessage",
-                ],
-                resources=[queue_arn],
-            )
-        )
-        cognito_post_auth_lambda.apply_removal_policy(RemovalPolicy.RETAIN)
         return cognito_post_auth_lambda
 
     def add_lambdas_as_cognito_trigger(
@@ -325,11 +307,7 @@ class CognitoTriggerWorkflow(Construct):
         user_pool_id: str,
     ) -> None:
         cognito_user_pool_arn = f"arn:{Aws.PARTITION}:cognito-idp:{Aws.REGION}:{Aws.ACCOUNT_ID}:userpool/{user_pool_id}"
-        external_alb_dns = InfraUtils.get_cluster_setting_string(
-            self,
-            "cluster.load_balancers.external_alb.load_balancer_dns_name",
-            cluster_name,
-        )
+        external_alb_dns = self.cluster_stack.external_alb.attr_dns_name  # type: ignore
         cognito_params = get_cognito_construct_params(cluster_name, external_alb_dns)
 
         update_user_pool = cr.AwsSdkCall(
@@ -364,26 +342,4 @@ class CognitoTriggerWorkflow(Construct):
             "invoke-post-auth-permission",
             principal=aws_iam.ServicePrincipal("cognito-idp.amazonaws.com"),
             source_arn=cognito_user_pool_arn,
-        )
-
-
-class CognitoTriggerWorkflowStack(Stack):
-    def __init__(
-        self,
-        scope: Construct,
-        stack_id: str,
-        cluster_name: str,
-        params: Union[RESParameters, BIParameters],
-        synthesizer: Optional[IStackSynthesizer] = None,
-        env: Union[Environment, dict[str, Any], None] = None,
-    ):
-        super().__init__(
-            scope,
-            stack_id,
-            env=env,
-            synthesizer=synthesizer,
-            description="RES Cognito Trigger workflow",
-        )
-        self.CognitoTriggerWorkflow = CognitoTriggerWorkflow(
-            self, "cognito-trigger-workflow", cluster_name, params
         )

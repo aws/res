@@ -795,6 +795,19 @@ class IdeaFormField extends Component<IdeaFormFieldProps, IdeaFormFieldState> {
             }
         }
 
+        if (validate.in != null) {
+            const stringVal = this.state.stringVal();
+            if (Array.isArray(validate.in)) {
+                if (!validate.in.includes(stringVal)) {
+                    return "IN";
+                }
+            } else if (typeof validate.in === 'string') {
+                if (validate.in !== stringVal) {
+                    return "IN";
+                }
+            }
+        }
+
         if (validate.required == null || Utils.isFalse(validate.required)) {
             return "OK";
         }
@@ -872,6 +885,9 @@ class IdeaFormField extends Component<IdeaFormFieldProps, IdeaFormFieldState> {
                     break;
                 case "REGEX":
                     errorMessage = this.props.param.validate?.message ?? `${displayTitle} must satisfy regex: ${this.props.param.validate?.regex}`;
+                    break;
+                case "IN":
+                    errorMessage = this.props.param.validate?.message ?? `${displayTitle} must be one of the allowed values.`;
                     break;
                 case 'CUSTOM_FAILED':
                     errorMessage = this.props.param.custom_error_message

@@ -9,12 +9,15 @@
 #  OR CONDITIONS OF ANY KIND, express or implied. See the License for the specific language governing permissions
 #  and limitations under the License.
 
+from typing import Optional
+
 from pydantic import BaseModel
 
 
 class ClientAuth(BaseModel):
     """
-    Client auth information including the username and groups.
+    Client auth information including the username and auth_token.
     """
 
     username: str
+    auth_token: Optional[str] = "test"

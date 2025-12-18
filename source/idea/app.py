@@ -17,7 +17,6 @@ from idea.constants import (
     STAGING_BUCKET_PREFIX_NAME,
 )
 from idea.infrastructure.install.parameters.parameters import RESParameters
-from idea.infrastructure.install.proxy import ProxyStack
 from idea.infrastructure.install.stacks.install_stack import InstallStack
 from idea.pipeline.stack import PipelineStack
 
@@ -65,7 +64,6 @@ def main() -> None:
         app,
         INSTALL_STACK_NAME,
         parameters=parameters,
-        installer_registry_name=installer_registry_name,
         ad_sync_registry_name=ad_sync_registry_name,
         staging_bucket_name=(
             f"{ARTIFACTS_BUCKET_PREFIX_NAME}-${{AWS::Region}}"

@@ -31,6 +31,9 @@ from typing import Any, Dict
 
 import boto3
 import botocore.exceptions
+from res.constants import OLD_CUSTOM_TAG_KEYS  # type: ignore
+from res.resources import cluster_settings  # type: ignore
+from res.utils import cluster_settings_utils  # type: ignore
 from res.utils.custom_resource_utils import (  # type: ignore
     CustomResourceResponse,
     send_response,
@@ -130,6 +133,7 @@ def handle_create_or_update(event: Dict[str, Any], context: Dict[str, Any]) -> N
     create_acm_certificate = resource_properties.get("create_acm_certificate", False)
     kms_key_id = resource_properties.get("kms_key_id", None)
     tags = resource_properties.get("tags", {})
+    old_custom_tag_keys_string = resource_properties.get(OLD_CUSTOM_TAG_KEYS, "")
 
     response = CustomResourceResponse(
         Status="SUCCESS",
@@ -146,6 +150,15 @@ def handle_create_or_update(event: Dict[str, Any], context: Dict[str, Any]) -> N
         common_tags = []
         for key, value in tags.items():
             common_tags.append({"Key": key, "Value": value})
+        custom_tags = cluster_settings_utils.convert_custom_tags_to_dict_list(
+            cluster_settings.get_setting("global-settings.custom_tags")
+        )
+        common_tags.extend(custom_tags)
+
+        old_custom_tag_keys_string = resource_properties.get(OLD_CUSTOM_TAG_KEYS, "")
+        old_custom_tag_keys = (
+            old_custom_tag_keys_string.split(";") if old_custom_tag_keys_string else []
+        )
 
         certificate_secret_name = f"{certificate_name}-certificate"
         private_key_secret_name = f"{certificate_name}-private-key"
@@ -261,6 +274,16 @@ def handle_create_or_update(event: Dict[str, Any], context: Dict[str, Any]) -> N
                 **create_secret_request
             )
             private_key_secret_arn = create_private_key_secret_result.get("ARN")
+        else:
+            for secret_name in [certificate_secret_name, private_key_secret_name]:
+                if old_custom_tag_keys:
+                    secretsmanager_client.untag_resource(
+                        SecretId=secret_name, TagKeys=old_custom_tag_keys
+                    )
+                if custom_tags:
+                    secretsmanager_client.tag_resource(
+                        SecretId=secret_name, Tags=custom_tags
+                    )
 
         acm_certificate_arn = None
         if create_acm_certificate:
@@ -280,6 +303,16 @@ def handle_create_or_update(event: Dict[str, Any], context: Dict[str, Any]) -> N
                     Tags=common_tags,
                 )
                 acm_certificate_arn = import_certificate_response.get("CertificateArn")
+            else:
+                if old_custom_tag_keys:
+                    acm_client.remove_tags_from_certificate(
+                        CertificateArn=acm_certificate_arn,
+                        Tags=[{"Key": key} for key in old_custom_tag_keys],
+                    )
+                if custom_tags:
+                    acm_client.add_tags_to_certificate(
+                        CertificateArn=acm_certificate_arn, Tags=custom_tags
+                    )
 
         response["Data"] = {
             "certificate_secret_arn": certificate_secret_arn,

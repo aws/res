@@ -300,15 +300,15 @@ class BuildTool:
             idea.console.print(f'deleting {self.output_archive_file} ...')
             os.remove(self.output_archive_file)
 
-        if self.app_name == 'idea-administrator' or self.app_name == 'ad-sync':
-            files = os.listdir(idea.props.deployment_administrator_dir)
+        if self.app_name == 'ad-sync':
+            files = os.listdir(idea.props.deployment_ad_sync_dir)
             for file in files:
-                if file == 'Dockerfile' or file == 'cfn_params_2_values.sh' or file == 'python.sh':
+                if file == 'Dockerfile' or file == 'python.sh':
                     continue
-                file_path = os.path.join(idea.props.deployment_administrator_dir, file)
+                file_path = os.path.join(idea.props.deployment_ad_sync_dir, file)
                 if os.path.isfile(file_path):
                     idea.console.print(f'deleting {file_path} ...')
-                    os.remove(os.path.join(idea.props.deployment_administrator_dir, file))
+                    os.remove(os.path.join(idea.props.deployment_ad_sync_dir, file))
                 elif os.path.isdir(file_path):
                     idea.console.print(f'deleting {file_path} ...')
                     shutil.rmtree(file_path)

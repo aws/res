@@ -316,6 +316,10 @@ class ClusterManagerPolicy(Policy):
                     "iam:AttachRolePolicy",
                     "iam:DetachRolePolicy",
                     "iam:GetRole",
+                    "iam:TagRole",
+                    "iam:TagInstanceProfile",
+                    "iam:DeleteInstanceProfile",
+                    "iam:RemoveRoleFromInstanceProfile",
                 ],
                 resources=[
                     arn_builder.get_vdi_iam_role_arn("*"),
@@ -338,8 +342,22 @@ class ClusterManagerPolicy(Policy):
                 resources=["*"],
             ),
             iam.PolicyStatement(
-                actions=["iam:AttachRolePolicy", "iam:DetachRolePolicy", "iam:GetRole"],
+                actions=[
+                    "iam:AttachRolePolicy",
+                    "iam:DetachRolePolicy",
+                    "iam:GetRole",
+                ],
                 resources=[arn_builder.get_vdi_iam_role_arn("*")],
+                effect=iam.Effect.ALLOW,
+            ),
+            iam.PolicyStatement(
+                actions=[
+                    "iam:ListAttachedRolePolicies",
+                ],
+                resources=[
+                    arn_builder.get_vdi_iam_role_arn("*"),
+                    arn_builder.get_iam_role_arn(f"{arn_builder.cluster_name}-vdi-*"),
+                ],
                 effect=iam.Effect.ALLOW,
             ),
             iam.PolicyStatement(

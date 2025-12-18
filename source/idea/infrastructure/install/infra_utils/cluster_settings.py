@@ -269,10 +269,10 @@ class ClusterSettings:
 
     @property
     @lru_cache
-    def cluster_bucket(self) -> str:
+    def logging_bucket(self) -> str:
         return InfraUtils.get_cluster_setting_string(
             self.scope,
-            "cluster.cluster_s3_bucket",
+            "cluster.logging_bucket_name",
             self.cluster_name,
         )
 

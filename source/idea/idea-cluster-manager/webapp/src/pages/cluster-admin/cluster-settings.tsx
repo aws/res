@@ -216,7 +216,7 @@ class ClusterSettings extends Component<ClusterSettingsProps, ClusterSettingsSta
                             <ColumnLayout variant={"text-grid"} columns={3}>
                                 <KeyValue title="Environment Name" value={dot.pick("cluster_name", this.state.cluster)} clipboard={true} />
                                 <KeyValue title="AWS Region" value={dot.pick("aws.region", this.state.cluster)} />
-                                <KeyValue title="S3 Bucket" value={dot.pick("cluster_s3_bucket", this.state.cluster)} clipboard={true} type={"s3:bucket-name"} />
+                                <KeyValue title="S3 Logging Bucket" value={dot.pick("logging_bucket_name", this.state.cluster)} clipboard={true} type={"s3:bucket-name"} />
                             </ColumnLayout>
                         </Container>
                         <Tabs

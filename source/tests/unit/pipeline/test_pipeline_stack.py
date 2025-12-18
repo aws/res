@@ -56,12 +56,11 @@ def test_registry_name_set_correctly_from_context() -> None:
         RESParameters(),
     )
 
-    assert stage.install_stack.installer_registry_name == PUBLIC_REGISTRY_NAME
+    assert stage.install_stack.ad_sync_registry_name == PUBLIC_REGISTRY_NAME
 
     # context should override
     app = aws_cdk.App(context={"vpc_id": "vpc-0fakeexample0000001"})
     app.node.set_context("ad_sync_registry_name", "ad_sync")
-    app.node.set_context("installer_registry_name", "foo")
     stage = DeployStage(app, "DeployStage", False, RESParameters())
 
-    assert stage.install_stack.installer_registry_name == "foo"
+    assert stage.install_stack.ad_sync_registry_name == "ad_sync"

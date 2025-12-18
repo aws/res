@@ -14,24 +14,36 @@ from aws_cdk import aws_ecr as ecr
 from aws_cdk import aws_iam as iam
 from aws_cdk import aws_lambda as lambda_
 from constructs import Construct, DependencyGroup
+from res.constants import ENVIRONMENT_NAME_KEY  # type: ignore
 
 import idea
 from idea.batteries_included.parameters.parameters import BIParameters
-from idea.infrastructure.install import installer
-from idea.infrastructure.install.backend import BastionHostCleanup
+from idea.infrastructure.install.backend import BackendLambda
+from idea.infrastructure.install.cognito_sync_lambda import CognitoSyncLambda
+from idea.infrastructure.install.cognito_trigger_workflow import CognitoTriggerWorkflow
 from idea.infrastructure.install.constants import (
     API_PROXY_LAMBDA_LAYER_NAME,
     RES_COMMON_LAMBDA_RUNTIME,
     RES_ECR_REPO_NAME_SUFFIX,
     SHARED_RES_LIBRARY_LAMBDA_LAYER_NAME,
 )
+from idea.infrastructure.install.constructs import lambda_ as res_lambda
 from idea.infrastructure.install.handlers import ecr_images_handler
+from idea.infrastructure.install.infra_utils.arn_builder import ArnBuilder
+from idea.infrastructure.install.infra_utils.cluster_settings import ClusterSettings
 from idea.infrastructure.install.infra_utils.utils import InfraUtils
 from idea.infrastructure.install.parameters.common import CommonKey
 from idea.infrastructure.install.parameters.parameters import (
     AllRESParameterGroups,
     RESParameters,
 )
+from idea.infrastructure.install.policies.params_transformer_policy import (
+    ParamsTransformerPolicy,
+)
+from idea.infrastructure.install.policies.populate_custom_tags_policy import (
+    PopulateCustomTagsPolicy,
+)
+from idea.infrastructure.install.proxy import Proxy
 from idea.infrastructure.install.stacks.bastion_host_stack import BastionHostStack
 from idea.infrastructure.install.stacks.cluster_manager_stack import ClusterManagerStack
 from idea.infrastructure.install.stacks.cluster_stack import ClusterStack
@@ -41,6 +53,12 @@ from idea.infrastructure.install.stacks.res_finalizer_stack import ResFinalizerS
 from idea.infrastructure.install.stacks.shared_storage_stack import SharedStorageStack
 from idea.infrastructure.install.stacks.virtual_desktop_controller_stack import (
     VirtualDesktopControllerStack,
+)
+from idea.infrastructure.resources.lambda_functions.custom_resource.parameter_list_to_string_transform_lambda import (
+    handler as params_transformer_handler,
+)
+from idea.infrastructure.resources.lambda_functions.custom_resource.populate_custom_tags_lambda import (
+    populate_custom_tags_handler,
 )
 
 PUBLIC_REGISTRY_NAME = (
@@ -54,7 +72,6 @@ class InstallStack(Stack):
         scope: Construct,
         stack_id: str,
         parameters: Union[RESParameters, BIParameters] = RESParameters(),
-        installer_registry_name: Optional[str] = None,
         ad_sync_registry_name: Optional[str] = None,
         staging_bucket_name: str = "",
         env: Union[Environment, dict[str, Any], None] = None,
@@ -72,11 +89,6 @@ class InstallStack(Stack):
         self.parameters.generate(self)
         self.cluster_name = parameters.get_str(CommonKey.CLUSTER_NAME)
         self.template_options.metadata = AllRESParameterGroups.template_metadata()
-        self.installer_registry_name = (
-            installer_registry_name
-            if installer_registry_name is not None
-            else PUBLIC_REGISTRY_NAME
-        )
         self.ad_sync_registry_name = (
             ad_sync_registry_name
             if ad_sync_registry_name is not None
@@ -140,13 +152,19 @@ class InstallStack(Stack):
             ).to_string()
         )
 
-        # List parameters cannot be passed to nested stack
-        # Transform them to String before parsing
-        self.params_transformer = self.get_param_list_to_string_custom_resource()
+        self.cluster_settings = ClusterSettings(self.cluster_name, self)
+        self.arn_builder = ArnBuilder(
+            self.cluster_name, self.cluster_settings, self.parameters
+        )
 
         self.lambda_layers[SHARED_RES_LIBRARY_LAMBDA_LAYER_NAME] = (
             self.create_shared_res_library_lambda_layer()
         )
+
+        # List parameters cannot be passed to nested stack
+        # Transform them to String before parsing
+        self.params_transformer = self.get_param_list_to_string_custom_resource()
+
         self.res_base_stack = ResBaseStack(
             self,
             self.lambda_layers[SHARED_RES_LIBRARY_LAMBDA_LAYER_NAME],
@@ -156,23 +174,22 @@ class InstallStack(Stack):
         )
         self.res_base_stack.nested_stack.node.add_dependency(self.params_transformer)
 
-        dependency_group = DependencyGroup()
-        dependency_group.add(self.res_base_stack.nested_stack)
-        dependency_group.add(self.lambda_layers[SHARED_RES_LIBRARY_LAMBDA_LAYER_NAME])
+        self.custom_tags_populator = self.populate_custom_tag_custom_resource()
+        self.custom_tags_populator.node.add_dependency(self.res_base_stack.nested_stack)
 
         self.res_ecr_repo = self.create_res_ecr_repo()
         ecr_images_handler_lambda = self.create_ecr_images_handler()
-        dependency_group.add(ecr_images_handler_lambda)
 
         self.cluster_stack = ClusterStack(
             self,
             lambda_layer=self.lambda_layers[SHARED_RES_LIBRARY_LAMBDA_LAYER_NAME],
+            params_transformer=self.params_transformer,
             parameters=parameters,
         )
         self.cluster_stack.nested_stack.node.add_dependency(
             self.res_base_stack.nested_stack
         )
-        dependency_group.add(self.cluster_stack.nested_stack)
+        self.cluster_stack.nested_stack.node.add_dependency(self.custom_tags_populator)
 
         self.identity_stack = IdentityStack(
             self,
@@ -194,22 +211,24 @@ class InstallStack(Stack):
         self.shared_storage_stack.nested_stack.node.add_dependency(
             self.cluster_stack.nested_stack
         )
-        dependency_group.add(self.shared_storage_stack.nested_stack)
 
         self.cluster_manager_stack = ClusterManagerStack(
             self,
             lambda_layer=self.lambda_layers[SHARED_RES_LIBRARY_LAMBDA_LAYER_NAME],
             cluster_stack=self.cluster_stack,
             identity_stack=self.identity_stack,
+            params_transformer=self.params_transformer,
             parameters=parameters,
         )
 
         self.cluster_manager_stack.nested_stack.node.add_dependency(
             self.cluster_stack.nested_stack
         )
-
         self.cluster_manager_stack.nested_stack.node.add_dependency(
             self.identity_stack.nested_stack
+        )
+        self.cluster_manager_stack.nested_stack.node.add_dependency(
+            self.shared_storage_stack.nested_stack
         )
 
         self.bastion_host_stack = BastionHostStack(
@@ -230,40 +249,81 @@ class InstallStack(Stack):
             lambda_layer=self.lambda_layers[SHARED_RES_LIBRARY_LAMBDA_LAYER_NAME],
             cluster_stack=self.cluster_stack,
             identity_stack=self.identity_stack,
+            params_transformer=self.params_transformer,
             parameters=parameters,
         )
 
         self.vdc_stack.nested_stack.node.add_dependency(self.cluster_stack.nested_stack)
 
-        dependency_group.add(self.cluster_manager_stack.nested_stack)
-
-        self.bastionHostCleanup = BastionHostCleanup(
-            self,
-            "remove-leftover-bastion-host-resource",
-            parameters.get_str(CommonKey.CLUSTER_NAME),
+        _cognito_user_pool_id_not_provided = (
+            InfraUtils.get_cognito_user_pool_id_not_provided_condition(
+                self, self.parameters
+            )
         )
-        self.bastionHostCleanup.node.add_dependency(self.res_base_stack)
+        _fips_condition = InfraUtils.get_fips_condition(self)
 
-        self.installer = installer.Installer(
+        cognito_sync_lambda = CognitoSyncLambda(
             self,
-            "Installer",
-            registry_name=self.get_private_registry_name(self.installer_registry_name),
-            params=self.parameters,
-            dependency_group=dependency_group,
-            lambda_layers=self.lambda_layers,
+            "cognito-sync-lambda",
+            self.cluster_stack,
+            self.identity_stack,
+            self.parameters,
         )
-        self.installer.node.add_dependency(self.cluster_manager_stack)
+        cognito_sync_lambda.node.add_dependency(self.cluster_stack.nested_stack)
+        cognito_sync_lambda.node.add_dependency(self.identity_stack.nested_stack)
+
+        cognito_trigger_workflow = CognitoTriggerWorkflow(
+            self,
+            "cognito-trigger-workflow",
+            self.cluster_stack,
+            self.identity_stack,
+            self.parameters,
+        )
+        cognito_trigger_workflow.node.add_dependency(self.cluster_stack.nested_stack)
+        cognito_trigger_workflow.node.add_dependency(self.identity_stack.nested_stack)
+
+        proxy_lambda = Proxy(
+            self,
+            "AWSProxy",
+            self.cluster_stack,
+            self.identity_stack,
+            self.parameters,
+            lambda_layer=self.lambda_layers[API_PROXY_LAMBDA_LAYER_NAME],
+        )
+        proxy_lambda.node.add_dependency(self.cluster_stack.nested_stack)
+        proxy_lambda.node.add_dependency(self.identity_stack.nested_stack)
+
+        backend_lambda = BackendLambda(
+            self,
+            "BackendLambda",
+            self.cluster_stack,
+            self.identity_stack,
+            self.parameters,
+            lambda_layer=self.lambda_layers[SHARED_RES_LIBRARY_LAMBDA_LAYER_NAME],
+        )
+        backend_lambda.node.add_dependency(self.cluster_stack.nested_stack)
+        backend_lambda.node.add_dependency(self.identity_stack.nested_stack)
 
         self.res_finalizer_stack = ResFinalizerStack(
             self,
             self.lambda_layers[SHARED_RES_LIBRARY_LAMBDA_LAYER_NAME],
+            self.params_transformer,
+            self.stack_id,
             self.parameters,
         )
 
-        self.res_finalizer_stack.nested_stack.node.add_dependency(self.installer)
+        self.res_finalizer_stack.nested_stack.node.add_dependency(
+            self.bastion_host_stack.nested_stack
+        )
         self.res_finalizer_stack.nested_stack.node.add_dependency(
             self.vdc_stack.nested_stack
         )
+        self.res_finalizer_stack.nested_stack.node.add_dependency(cognito_sync_lambda)
+        self.res_finalizer_stack.nested_stack.node.add_dependency(
+            cognito_trigger_workflow
+        )
+        self.res_finalizer_stack.nested_stack.node.add_dependency(proxy_lambda)
+        self.res_finalizer_stack.nested_stack.node.add_dependency(backend_lambda)
 
         self.vdc_stack.nested_stack.node.add_dependency(
             self.cluster_manager_stack.nested_stack
@@ -446,9 +506,8 @@ class InstallStack(Stack):
             properties={
                 "ProjectName": project.project_name,
                 "ResEcrRepositoryName": self.res_ecr_repo.repository_name,
-                # Add the installer and AD Sync registry name to properties to make sure that
+                # Add the AD Sync registry name to properties to make sure that
                 # the custom resource can be triggered whenever the registry names are updated
-                "InstallerRegistryName": self.installer_registry_name,
                 "ADSyncRegistryName": self.ad_sync_registry_name,
             },
         )
@@ -456,12 +515,6 @@ class InstallStack(Stack):
     def create_ecr_image_duplication_project(self) -> codebuild.Project:
         commands: List[str] = []
         resources: Set[str] = {self.res_ecr_repo.repository_arn}
-        self.process_ecr_image_duplication_request(
-            self.installer_registry_name,
-            "${DEST_INSTALLER_REGISTRY}",
-            resources,
-            commands,
-        )
         self.process_ecr_image_duplication_request(
             self.ad_sync_registry_name,
             "${DEST_AD_SYNC_REGISTRY}",
@@ -494,9 +547,6 @@ class InstallStack(Stack):
             environment_variables={
                 "AWS_REGION": codebuild.BuildEnvironmentVariable(
                     value=aws_cdk.Aws.REGION
-                ),
-                "DEST_INSTALLER_REGISTRY": codebuild.BuildEnvironmentVariable(
-                    value=self.get_private_registry_name(self.installer_registry_name)
                 ),
                 "DEST_AD_SYNC_REGISTRY": codebuild.BuildEnvironmentVariable(
                     value=self.get_private_registry_name(self.ad_sync_registry_name)
@@ -573,61 +623,70 @@ class InstallStack(Stack):
         """
         Create a lambda function to transform the parameters from list to string for the nested stacks
         """
-        role = iam.Role(
-            self,
-            id="ParameterListToStringTransformLambdaRole",
-            role_name=f"{self.cluster_name}-ParameterListToStringTransformLambdaRole",
-            path=self.iam_resource_path,
-            assumed_by=iam.ServicePrincipal("lambda.amazonaws.com"),
-        )
-        role_policy = iam.Policy(
-            self,
-            id="ParameterListToStringTransformLambdaRolePolicy",
-            policy_name=f"{self.cluster_name}-ParameterListToStringTransformLambdaRolePolicy",
-            statements=[
-                iam.PolicyStatement(
-                    actions=["logs:CreateLogGroup"],
-                    sid="CloudWatchLogsPermissions",
-                    resources=["*"],
-                ),
-                iam.PolicyStatement(
-                    actions=[
-                        "logs:CreateLogStream",
-                        "logs:PutLogEvents",
-                        "logs:DeleteLogStream",
-                    ],
-                    sid="CloudWatchLogStreamPermissions",
-                    resources=["*"],
-                ),
-            ],
-        )
-        role.attach_inline_policy(role_policy)
 
-        params_transformer_handler = lambda_.Function(
+        lambda_name = "params-transformer"
+
+        params_transformer_function = res_lambda.Function(
             self,
-            id="ParameterListToStringTransformLambda",
-            function_name=f"{self.cluster_name}-ParameterListToStringTransformLambda",
+            lambda_name,
+            handler=params_transformer_handler.handler,
+            parameters=self.parameters,
             runtime=RES_COMMON_LAMBDA_RUNTIME,
-            timeout=aws_cdk.Duration.seconds(300),
-            role=role,
-            handler="lambda_functions.custom_resource.parameter_list_to_string_transform_lambda.handler.handler",
-            description="Lambda to transform the parameters from list to string for nested stack",
-            code=lambda_.Code.from_asset(InfraUtils.resources_dir()),
+            description="Lambda to transform the parameters from list to string for nested stack",  # type: ignore
+            timeout=aws_cdk.Duration.seconds(180),  # type: ignore
+            layers=[self.lambda_layers[SHARED_RES_LIBRARY_LAMBDA_LAYER_NAME]],  # type: ignore
+            initial_policy=ParamsTransformerPolicy.create_policy_statements(self.arn_builder),  # type: ignore
             environment={
                 "LOAD_BALANCER_SUBNETS": self.parameters.load_balancer_subnets_string
                 or "",
                 "INFRA_SUBNETS": self.parameters.infrastructure_host_subnets_string
                 or "",
                 "VDI_SUBNETS": self.parameters.dcv_session_private_subnets_string or "",
+                ENVIRONMENT_NAME_KEY: self.cluster_name,
             },
         )
 
         custom_resource = aws_cdk.CustomResource(
             self,
-            "CustomResourceParamsListToStringTransformer",
-            service_token=params_transformer_handler.function_arn,
+            lambda_name,
+            service_token=params_transformer_function.function_arn,
             removal_policy=aws_cdk.RemovalPolicy.DESTROY,
             resource_type="Custom::ParamsListToStringTransformer",
+            properties={
+                "shared_library_arn": self.lambda_layers[
+                    SHARED_RES_LIBRARY_LAMBDA_LAYER_NAME
+                ].layer_version_arn,
+            },
+        )
+        return custom_resource
+
+    def populate_custom_tag_custom_resource(self) -> aws_cdk.CustomResource:
+        lambda_name = "populate-custom-tag"
+        populate_custom_tags_function = res_lambda.Function(
+            self,
+            lambda_name,
+            handler=populate_custom_tags_handler.handler,
+            parameters=self.parameters,
+            runtime=RES_COMMON_LAMBDA_RUNTIME,
+            description="Populate Cloudformation custom tags to cluster-settings DDB",  # type: ignore
+            timeout=aws_cdk.Duration.seconds(180),  # type: ignore
+            layers=[self.lambda_layers[SHARED_RES_LIBRARY_LAMBDA_LAYER_NAME]],  # type: ignore
+            initial_policy=PopulateCustomTagsPolicy.create_policy_statements(self.arn_builder),  # type: ignore
+            environment={
+                ENVIRONMENT_NAME_KEY: self.cluster_name,
+            },
+        )
+        custom_resource = aws_cdk.CustomResource(
+            self,
+            lambda_name,
+            service_token=populate_custom_tags_function.function_arn,
+            removal_policy=aws_cdk.RemovalPolicy.DESTROY,
+            resource_type="Custom::PopulateCustomTag",
+            properties={
+                "shared_library_arn": self.lambda_layers[
+                    SHARED_RES_LIBRARY_LAMBDA_LAYER_NAME
+                ].layer_version_arn,
+            },
         )
         return custom_resource
 

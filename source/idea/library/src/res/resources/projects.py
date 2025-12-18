@@ -1,7 +1,7 @@
 #  Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 #  SPDX-License-Identifier: Apache-2.0
 
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 
 from res.utils import logging_utils, table_utils  # type: ignore
 
@@ -76,3 +76,12 @@ def _get_project_by_name(name: str) -> Optional[Dict[str, Any]]:
 
     project: Dict[str, Any] = items[0]
     return project
+
+
+def list_projects() -> List[Dict[str, Any]]:
+    """
+    Retrieve the projects from DDB
+    :return: List of projects
+    """
+    projects: List[Dict[str, Any]] = table_utils.list_items(PROJECTS_TABLE_NAME)
+    return projects

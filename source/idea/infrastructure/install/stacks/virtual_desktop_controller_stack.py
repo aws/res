@@ -25,6 +25,7 @@ from aws_cdk import aws_sns as sns
 from aws_cdk import aws_sns_subscriptions as sns_subscription
 from aws_cdk import aws_sqs as sqs
 from aws_cdk.aws_events import Schedule
+from res.constants import OLD_CUSTOM_TAG_KEYS  # type: ignore
 from res.utils.bootstrap_userdata_builder import (  # type: ignore
     BootstrapUserDataBuilder,
 )
@@ -92,10 +93,12 @@ class VirtualDesktopControllerStack(ResBaseConstruct):
         lambda_layer: cdk.aws_lambda.LayerVersion,
         cluster_stack: ClusterStack,
         identity_stack: IdentityStack,
+        params_transformer: cdk.CustomResource,
         parameters: Union[RESParameters, BIParameters] = RESParameters(),
     ):
 
         self.parameters = parameters
+        self.params_transformer = params_transformer
         self.cluster_name = parameters.get_str(CommonKey.CLUSTER_NAME)
         self.module_id = constants.MODULE_ID_VDC_CONTROLLER
         self.aws_region = cdk.Aws.REGION
@@ -1080,6 +1083,9 @@ class VirtualDesktopControllerStack(ResBaseConstruct):
                         "TargetGroupArn": self.client_target_group.target_group_arn,
                     }
                 ],
+                OLD_CUSTOM_TAG_KEYS: self.params_transformer.get_att_string(
+                    OLD_CUSTOM_TAG_KEYS
+                ),
             },
             resource_type="Custom::DcvBrokerClientEndpointInternal",
         )
@@ -1113,6 +1119,9 @@ class VirtualDesktopControllerStack(ResBaseConstruct):
                         "TargetGroupArn": agent_target_group.target_group_arn,
                     }
                 ],
+                OLD_CUSTOM_TAG_KEYS: self.params_transformer.get_att_string(
+                    OLD_CUSTOM_TAG_KEYS
+                ),
             },
             resource_type="Custom::DcvBrokerAgentEndpointInternal",
         )
@@ -1146,6 +1155,9 @@ class VirtualDesktopControllerStack(ResBaseConstruct):
                         "TargetGroupArn": gateway_target_group.target_group_arn,
                     }
                 ],
+                OLD_CUSTOM_TAG_KEYS: self.params_transformer.get_att_string(
+                    OLD_CUSTOM_TAG_KEYS
+                ),
             },
             resource_type="Custom::DcvBrokerGatewayEndpointInternal",
         )
@@ -1288,6 +1300,9 @@ class VirtualDesktopControllerStack(ResBaseConstruct):
                         "TargetGroupArn": external_target_group.target_group_arn,
                     }
                 ],
+                OLD_CUSTOM_TAG_KEYS: self.params_transformer.get_att_string(
+                    OLD_CUSTOM_TAG_KEYS
+                ),
             },
             resource_type="Custom::ControllerEndpointExternal",
         )
@@ -1324,6 +1339,9 @@ class VirtualDesktopControllerStack(ResBaseConstruct):
                         "TargetGroupArn": internal_target_group.target_group_arn,
                     }
                 ],
+                OLD_CUSTOM_TAG_KEYS: self.params_transformer.get_att_string(
+                    OLD_CUSTOM_TAG_KEYS
+                ),
             },
             resource_type="Custom::ControllerEndpointInternal",
         )
@@ -1354,7 +1372,7 @@ class VirtualDesktopControllerStack(ResBaseConstruct):
             "dcv_host_role_managed_policy_arn": self.dcv_host_role_scoped_down_managed_policy.managed_policy_arn,  # type: ignore
             "dcv_host_role_scoped_down_arn": self.dcv_host_role_scoped_down.role_arn,  # type: ignore
             "dcv_host_scoped_down_instance_profile_name": self.dcv_host_scoped_down_instance_profile.ref,  # type: ignore
-            "dcv_host_scoped_down_instance_profile_arn": self.arn_builder.get_instance_profile_arn(
+            "dcv_host_scoped_down_instance_profile_arn": self.arn_builder.get_instance_profile_arn_from_ref(
                 self.dcv_host_scoped_down_instance_profile.ref  # type: ignore
             ),
             "dcv_host_role_scoped_down_name": self.dcv_host_role_scoped_down.role_name,  # type: ignore
@@ -1383,7 +1401,7 @@ class VirtualDesktopControllerStack(ResBaseConstruct):
             "s3_mount_base_bucket_read_only_role_arn": self.s3_mount_base_bucket_read_only_role.role_arn,  # type: ignore
             "s3_mount_base_bucket_read_write_role_arn": self.s3_mount_base_bucket_read_write_role.role_arn,  # type: ignore
             "dcv_host_instance_profile_name": self.dcv_host_scoped_down_instance_profile.ref,  # type: ignore
-            "dcv_host_instance_profile_arn": self.arn_builder.get_instance_profile_arn(
+            "dcv_host_instance_profile_arn": self.arn_builder.get_instance_profile_arn_from_ref(
                 self.dcv_host_scoped_down_instance_profile.ref  # type: ignore
             ),
             "ssm_commands_sns_topic_arn": self.ssm_commands_sns_topic.topic_arn,  # type: ignore
@@ -1556,10 +1574,10 @@ class VirtualDesktopControllerStack(ResBaseConstruct):
             ),
         )
 
-        cluster_s3_bucket = s3.Bucket.from_bucket_name(
+        logging_s3_bucket = s3.Bucket.from_bucket_name(
             scope=self.nested_stack,
-            id="cluster-s3-bucket",
-            bucket_name=self.cluster_settings.cluster_bucket,  # type: ignore
+            id="logging-s3-bucket",
+            bucket_name=self.cluster_settings.logging_bucket,  # type: ignore
         )
         load_balancer_attributes = (
             [
@@ -1569,7 +1587,7 @@ class VirtualDesktopControllerStack(ResBaseConstruct):
                 # https://docs.aws.amazon.com/elasticloadbalancing/latest/application/load-balancer-access-logs.html
                 {
                     "key": "access_logs.s3.bucket",
-                    "value": cluster_s3_bucket.bucket_name,
+                    "value": logging_s3_bucket.bucket_name,
                 },
                 {
                     "key": "access_logs.s3.prefix",
@@ -1696,6 +1714,9 @@ class VirtualDesktopControllerStack(ResBaseConstruct):
                     "res:EnvironmentName": self.cluster_name,
                     "res:ModuleName": "virtual-desktop-controller",
                 },
+                OLD_CUSTOM_TAG_KEYS: self.params_transformer.get_att_string(
+                    OLD_CUSTOM_TAG_KEYS
+                ),
             },
             resource_type="Custom::SelfSignedCertificateConnectionGateway",
         )

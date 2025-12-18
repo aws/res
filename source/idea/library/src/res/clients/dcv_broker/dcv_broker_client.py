@@ -132,16 +132,23 @@ def _delete_sessions(sessions: List[Dict[str, Any]]) -> Dict:
     return api_response.to_dict()
 
 
-def describe_sessions(sessions: List[Dict[str, Any]]) -> Dict:
+def describe_sessions(sessions: List[Dict[str, Any]], next_token=None) -> Dict:
     if not sessions:
         sessions = []
 
-    session_ids = [session.get("dcv_session_id") for session in sessions]
+    session_ids = [
+        session.get("dcv_session_id")
+        for session in sessions
+        if session.get("dcv_session_id")
+    ]
     if not session_ids:
         session_ids = None
 
-    response = _describe_sessions(session_ids=session_ids)
-    response["sessions"] = {session["id"]: session for session in response["sessions"]}
+    response = _describe_sessions(session_ids=session_ids, next_token=next_token)
+
+    # Transform sessions list to dict, but preserve next_token and other fields
+    sessions_list = response.get("sessions", [])
+    response["sessions"] = {session["id"]: session for session in sessions_list}
     return response
 
 

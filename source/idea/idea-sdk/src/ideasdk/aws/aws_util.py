@@ -1111,7 +1111,7 @@ class AWSUtil(AWSUtilProtocol):
         return self.aws().s3().generate_presigned_url(
             'get_object',
             Params={
-                'Bucket': self._context.config().get_string('cluster.cluster_s3_bucket', required=True),
+                'Bucket': self._context.config().get_string('cluster.logging_bucket_name', required=True),
                 'Key': key
             },
             ExpiresIn=expires_in
@@ -1119,6 +1119,8 @@ class AWSUtil(AWSUtilProtocol):
 
     def create_vdi_host_role(self, role_name: str, permissions_boundary: Optional[str]) -> bool:
         iam_resource_path = self._context.config().get_string('cluster.iam.iam_resource_path', default="/")
+        custom_tags = self._context.config().get_list('global-settings.custom_tags', [])
+        custom_tags_dict = Utils.convert_custom_tags_to_key_value_pairs(custom_tags)
         region = self.aws().aws_region()
         assume_role_policy_document = {
             "Version": "2012-10-17",
@@ -1144,6 +1146,12 @@ class AWSUtil(AWSUtilProtocol):
             "Description": f'{role_name} used for VDI instance',
             "RoleName": role_name,
             "AssumeRolePolicyDocument": json.dumps(assume_role_policy_document),
+            "Tags": [
+                {
+                    "Key": key,
+                    "Value": value
+                } for key, value in custom_tags_dict.items()
+            ]
         }
         if permissions_boundary:
             self.aws().iam().create_role(
@@ -1152,17 +1160,6 @@ class AWSUtil(AWSUtilProtocol):
             )
         else:
             self.aws().iam().create_role(**arguments)
-        return True
-
-    def delete_vdi_host_role(self, role_name) -> bool:
-        try:
-            self.aws().iam().delete_role(
-                RoleName=role_name
-            )
-        except botocore.exceptions.ClientError as e:
-            if e.response['Error']['Code'] == 'NoSuchEntityException':
-                return True
-            raise e
         return True
 
     def attach_role_policy(self, role_name: str, policy_arn: str) -> bool:
@@ -1177,37 +1174,21 @@ class AWSUtil(AWSUtilProtocol):
             raise e
         return True
 
-    def detach_role_policy(self, role_name: str, policy_arn: str) -> bool:
-        try:
-            self.aws().iam().detach_role_policy(
-                RoleName=role_name,
-                PolicyArn=policy_arn
-            )
-        except botocore.exceptions.ClientError as e:
-            if e.response['Error']['Code'] == 'NoSuchEntityException':
-                return True
-            raise e
-        return True
-
     def create_vdi_instance_profile(self, instance_profile_name: str) -> bool:
         region = self.aws().aws_region()
         iam_resource_path = self._context.config().get_string('cluster.iam.iam_resource_path', default="/")
+        custom_tags = self._context.config().get_list('global-settings.custom_tags', [])
+        custom_tags_dict = Utils.convert_custom_tags_to_key_value_pairs(custom_tags)
         self.aws().iam().create_instance_profile(
             InstanceProfileName=instance_profile_name,
-            Path=f'{LaunchRoleHelper.get_vdi_instance_profile_path(cluster_name=self._context.cluster_name(), region=region, path=iam_resource_path)}/'
+            Path=f'{LaunchRoleHelper.get_vdi_instance_profile_path(cluster_name=self._context.cluster_name(), region=region, path=iam_resource_path)}/',
+            Tags=[
+                {
+                    "Key": key,
+                    "Value": value
+                } for key, value in custom_tags_dict.items()
+            ]
         )
-        return True
-
-    def delete_vdi_instance_profile(self, instance_profile_name: str) -> bool:
-
-        try:
-            self.aws().iam().delete_instance_profile(
-                InstanceProfileName=instance_profile_name
-            )
-        except botocore.exceptions.ClientError as e:
-            if e.response['Error']['Code'] == 'NoSuchEntityException':
-                return True
-            raise e
         return True
 
     def add_role_to_instance_profile(self, role_name: str, instance_profile_name: str) -> bool:

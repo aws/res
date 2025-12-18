@@ -11,7 +11,7 @@
  * and limitations under the License.
  */
 
-import LocalStorageService from "./local-storage-service";
+import SessionStorageService from "./session-storage-service";
 import { User } from "../client/data-model";
 import IdeaException from "../common/exceptions";
 import { AUTH_LOGIN_CHALLENGE, AUTH_PASSWORD_RESET_REQUIRED, UNAUTHORIZED_ACCESS } from "../common/error-codes";
@@ -21,7 +21,7 @@ import { Constants } from "../common/constants";
 import { IdeaClients } from "../client";
 
 export interface AuthServiceProps {
-    localStorage: LocalStorageService;
+    sessionStorage: SessionStorageService;
     clients: IdeaClients;
 }
 
@@ -89,7 +89,7 @@ class AuthService {
             })
             .catch((error) => {
                 if (error.errorCode === AUTH_PASSWORD_RESET_REQUIRED) {
-                    this.props.localStorage.setItem(KEY_FORGOT_PASSWORD_USERNAME, cognito_username);
+                    this.props.sessionStorage.setItem(KEY_FORGOT_PASSWORD_USERNAME, cognito_username);
                 }
                 throw error;
             });
@@ -128,9 +128,9 @@ class AuthService {
                 new_password: newPassword,
             })
             .then((_) => {
-                this.props.localStorage.removeItem(KEY_CHALLENGE_NAME);
-                this.props.localStorage.removeItem(KEY_CHALLENGE_SESSION);
-                this.props.localStorage.removeItem(KEY_CHALLENGE_PARAMS);
+                this.props.sessionStorage.removeItem(KEY_CHALLENGE_NAME);
+                this.props.sessionStorage.removeItem(KEY_CHALLENGE_SESSION);
+                this.props.sessionStorage.removeItem(KEY_CHALLENGE_PARAMS);
                 return this.login(username, newPassword);
             });
     }
@@ -222,7 +222,7 @@ class AuthService {
      * this is used when user wants to resend verification email
      */
     getForgotPasswordUserName(): string | null {
-        return this.props.localStorage.getItem(KEY_FORGOT_PASSWORD_USERNAME);
+        return this.props.sessionStorage.getItem(KEY_FORGOT_PASSWORD_USERNAME);
     }
 
     forgotPassword(username: string): Promise<boolean> {
@@ -232,13 +232,13 @@ class AuthService {
                 username: username,
             })
             .then((_) => {
-                this.props.localStorage.setItem(KEY_FORGOT_PASSWORD_USERNAME, username);
+                this.props.sessionStorage.setItem(KEY_FORGOT_PASSWORD_USERNAME, username);
                 return true;
             });
     }
 
     confirmForgotPassword(verificationCode: string, password: string): Promise<boolean> {
-        const username = this.props.localStorage.getItem(KEY_FORGOT_PASSWORD_USERNAME);
+        const username = this.props.sessionStorage.getItem(KEY_FORGOT_PASSWORD_USERNAME);
         if (username == null) {
             return Promise.resolve(false);
         }
@@ -250,7 +250,7 @@ class AuthService {
                 password: password,
             })
             .then((_) => {
-                this.props.localStorage.removeItem(KEY_FORGOT_PASSWORD_USERNAME);
+                this.props.sessionStorage.removeItem(KEY_FORGOT_PASSWORD_USERNAME);
                 return this.login(username, password);
             });
     }
@@ -357,20 +357,20 @@ class AuthService {
     }
 
     private saveChallengeParams(name: string, session: string, params: any) {
-        this.props.localStorage.setItem(KEY_CHALLENGE_NAME, name);
-        this.props.localStorage.setItem(KEY_CHALLENGE_SESSION, session);
-        this.props.localStorage.setItem(KEY_CHALLENGE_PARAMS, JSON.stringify(params));
+        this.props.sessionStorage.setItem(KEY_CHALLENGE_NAME, name);
+        this.props.sessionStorage.setItem(KEY_CHALLENGE_SESSION, session);
+        this.props.sessionStorage.setItem(KEY_CHALLENGE_PARAMS, JSON.stringify(params));
     }
 
     getChallengeParams(): any | null {
-        let challengeName = this.props.localStorage.getItem(KEY_CHALLENGE_NAME);
+        let challengeName = this.props.sessionStorage.getItem(KEY_CHALLENGE_NAME);
         if (challengeName == null) {
             return null;
         }
 
-        let session = this.props.localStorage.getItem(KEY_CHALLENGE_SESSION);
+        let session = this.props.sessionStorage.getItem(KEY_CHALLENGE_SESSION);
 
-        let paramsStr = this.props.localStorage.getItem(KEY_CHALLENGE_PARAMS);
+        let paramsStr = this.props.sessionStorage.getItem(KEY_CHALLENGE_PARAMS);
         let params = null;
         if (paramsStr != null) {
             params = JSON.parse(paramsStr);

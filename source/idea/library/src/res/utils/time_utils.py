@@ -26,3 +26,12 @@ def iso_to_ms(iso_time: str) -> int:
     :return: Time in milliseconds.
     """
     return int(arrow.get(iso_time).timestamp() * 1000)
+
+
+def ms_to_iso(time_ms: int) -> str:
+    """
+    Convert time in milliseconds to ISO-8601 formatted string in UTC.
+    :param time_ms: Time in milliseconds.
+    :return: ISO-8601 formatted string.
+    """
+    return arrow.get(time_ms / 1000).format("YYYY-MM-DD HH:mm:ssZZ")

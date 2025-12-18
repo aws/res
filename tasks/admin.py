@@ -9,7 +9,6 @@
 #  OR CONDITIONS OF ANY KIND, express or implied. See the License for the specific language governing permissions
 #  and limitations under the License.
 
-from ideaadministrator.app_utils import AdministratorUtils
 from ideasdk.context import SocaCliContext, SocaContextOptions
 from ideasdk.config.cluster_config import ClusterConfig
 from ideadatamodel import constants
@@ -21,104 +20,6 @@ from invoke import task, Context
 from typing import Optional
 import os
 import prettytable
-
-
-@task
-def test_iam_policies(c, cluster_name, aws_region, aws_profile=None):
-    # type: (Context, str, str, Optional[str]) -> None
-    """
-    test and render all IAM policy documents
-    """
-
-    all_modules = [
-        {
-            'module_name': constants.MODULE_CLUSTER,
-            'templates': [
-                'custom-resource-cluster-endpoints.yml',
-                'custom-resource-self-signed-certificate.yml',
-                'custom-resource-update-cluster-prefix-list.yml',
-                'custom-resource-update-cluster-settings.yml',
-                'log-retention.yml',
-                'solution-metrics-lambda-function.yml',
-            ]
-        },
-        {
-            'module_name': constants.MODULE_SHARED_STORAGE,
-            'templates': [
-                'efs-throughput-lambda.yml'
-            ]
-        },
-        {
-            'module_name': constants.MODULE_IDENTITY_PROVIDER,
-            'templates': [
-                'custom-resource-get-user-pool-client-secret.yml'
-            ]
-        },
-        {
-            'module_name': constants.MODULE_DIRECTORYSERVICE,
-            'templates': [
-                'openldap-server.yml'
-            ]
-        },
-        {
-            'module_name': constants.MODULE_CLUSTER_MANAGER,
-            'templates': [
-                'cluster-manager.yml'
-            ]
-        },
-        {
-            'module_name': constants.MODULE_SCHEDULER,
-            'templates': [
-                'scheduler.yml',
-                'compute-node.yml',
-                'spot-fleet-request.yml'
-            ]
-        },
-        {
-            'module_name': constants.MODULE_VIRTUAL_DESKTOP_CONTROLLER,
-            'templates': [
-                'virtual-desktop-controller.yml',
-                'virtual-desktop-dcv-broker.yml',
-                'virtual-desktop-dcv-connection-gateway.yml',
-                'virtual-desktop-dcv-host.yml',
-                'controller-scheduled-event-transformer-lambda.yml',
-                'controller-ssm-command-pass-role.yml'
-            ]
-        },
-        {
-            'module_name': constants.MODULE_BASTION_HOST,
-            'templates': [
-                'bastion-host.yml'
-            ]
-        }
-    ]
-
-    context = SocaCliContext(options=SocaContextOptions(
-        cluster_name=cluster_name,
-        aws_region=aws_region,
-        aws_profile=aws_profile,
-        enable_aws_client_provider=True,
-        enable_aws_util=True
-    ))
-
-    for module in all_modules:
-        module_name = module['module_name']
-        if not context.config().is_module_enabled(module_name):
-            continue
-        module_id = context.config().get_module_id(module_name)
-
-        context.print_title(f'ModuleName: {module_name}, ModuleId: {module_id}')
-        templates = module['templates']
-        for policy_template_name in templates:
-            context.print(f'PolicyTemplate: {policy_template_name}')
-            policy = AdministratorUtils.render_policy(
-                policy_template_name=policy_template_name,
-                cluster_name=cluster_name,
-                module_id=module_id,
-                config=context.config()
-            )
-            context.print_json(policy)
-        context.new_line(2)
 
 
 @task

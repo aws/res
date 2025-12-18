@@ -789,6 +789,14 @@ mock_admin_group = {"name": "admin_group", "role": constants.ADMIN_ROLE}
 mock_regular_group = {"name": "regular_group", "role": "non-admin"}
 
 
+def test_is_active_user(monkeypatch):
+    monkeypatch.setattr(accounts, "get_user", lambda x: mock_admin_user)
+    assert accounts.is_active_user("regular_user") == True
+
+    monkeypatch.setattr(accounts, "get_user", lambda x: mock_regular_user)
+    assert accounts.is_active_user("regular_user") == True
+
+
 def test_is_active_admin_admin_user(monkeypatch):
     monkeypatch.setattr(accounts, "get_user", lambda x: mock_admin_user)
     assert accounts.is_active_admin("admin_user") == True

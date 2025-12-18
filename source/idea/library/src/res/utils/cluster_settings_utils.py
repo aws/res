@@ -74,3 +74,20 @@ def post_process_ddb_config_entry(item: Dict) -> Dict:
         value
     )
     return item
+
+
+def convert_custom_tags_to_dict_list(tags: List[str]) -> List[Dict[str, str]]:
+    """
+    convert custom tags from list of str to list of dict
+    """
+    result = []
+    for tag in tags:
+        tokens = tag.split(",", 1)
+        key = tokens[0].split("Key=")[1].strip()
+        value = tokens[1].split("Value=")[1].strip()
+        if not key:
+            continue
+        if not value:
+            continue
+        result.append({"Key": key, "Value": value})
+    return result

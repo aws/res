@@ -95,7 +95,6 @@ from defusedxml.ElementTree import parse
 from ideadatamodel import (
     exceptions
 )
-from ideaadministrator import app_constants
 
 import os
 from typing import Dict, List, Optional
@@ -104,6 +103,8 @@ __new_created_session__: VirtualDesktopSession = None
 __new_software_stack__: VirtualDesktopSoftwareStack = None
 __is_test_results_report_created__ = False
 __vdc_test_results__ = {}
+
+DCV_SETTINGS_DEFAULT_OWNER_PROFILE_ID = "admin_profile"
 
 
 class VirtualDesktopSessionTestcases(str, Enum):
@@ -302,7 +303,7 @@ class SessionsTestHelper:
                 idea_session_base_os=self.session.base_os,
                 idea_session_created_on=self.session.created_on,
                 idea_session_hibernation_enabled=self.session.hibernation_enabled,
-                permission_profile=permission_profile.get_permission(app_constants.DCV_SETTINGS_DEFAULT_OWNER_PROFILE_ID))]
+                permission_profile=permission_profile.get_permission(DCV_SETTINGS_DEFAULT_OWNER_PROFILE_ID))]
             return session_permission_payload
 
         except exceptions.SocaException as e:
@@ -607,11 +608,11 @@ class VirtualDesktopApiHelper:
 
     def update_admin_permission_profile(self, namespace: str) -> UpdatePermissionProfileResponse:
         try:
-            owner_profile: VirtualDesktopPermissionProfile = self.get_permission_profile(profile_id=app_constants.DCV_SETTINGS_DEFAULT_OWNER_PROFILE_ID)
+            owner_profile: VirtualDesktopPermissionProfile = self.get_permission_profile(profile_id=DCV_SETTINGS_DEFAULT_OWNER_PROFILE_ID)
             response = self.context.get_virtual_desktop_controller_client(timeout=7200).invoke_alt(
                 namespace=namespace,
                 payload=UpdatePermissionProfileRequest(profile=VirtualDesktopPermissionProfile(
-                    profile_id=app_constants.DCV_SETTINGS_DEFAULT_OWNER_PROFILE_ID,
+                    profile_id=DCV_SETTINGS_DEFAULT_OWNER_PROFILE_ID,
                     title=owner_profile.title,
                     description=owner_profile.description,
                     permissions=owner_profile.permissions,

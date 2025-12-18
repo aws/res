@@ -1,0 +1,63 @@
+builtin:
+  name: Built In
+  description: All features
+display:
+  name: Display
+  description: View the remote desktop.
+pointer:
+  name: Pointer
+  description: View mouse of remote desktop.
+mouse:
+  name: Mouse
+  description: Use local mouse on remote desktop.
+keyboard:
+  name: Keyboard
+  description: Use the local keyboard on remote desktop.
+audio_in:
+  name: Audio in
+  description: Use local microphone on remote desktop.
+audio_out:
+  name: Audio out
+  description: Playback audio from remote desktop.
+clipboard_copy:
+  name: Clipboard copy
+  description: Copy from remote desktop to local clipboard.
+clipboard_paste:
+  name: Clipboard paste
+  description: Copy from local clipboard to remote desktop.
+file_upload:
+  name: File upload
+  description: Upload files to remote desktop storage.
+file_download:
+  name: File download
+  description: Download files from remote desktop storage.
+usb:
+  name: USB
+  description: Use USB devices on remote desktop.
+printer:
+  name: Printer
+  description: Create PDF or XPS files from remote desktop.
+smartcard:
+  name: Smartcard
+  description: Use local smartcard on remote desktop.
+stylus:
+  name: Stylus
+  description: Use local 3D pointing devices or graphic tablets on remote desktop.
+keyboard_sas:
+  name: Keyboard SAS
+  description: Use the Secure Attention Sequence (Ctrl+Alt+Del).
+webcam:
+  name: Web camera
+  description: Use local webcamera on remote desktop.
+touch:
+  name: Touch
+  description: Use local touch events on remote desktop.
+screenshot:
+  name: Screenshot
+  description: Save screenshot of remote desktop.
+gamepad:
+  name: Gamepad
+  description: Use local gamepad on remote desktop.
+unsupervised_access:
+  name: Unsupervised access
+  description: Allow a user to connect to session without supervision

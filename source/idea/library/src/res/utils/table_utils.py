@@ -27,18 +27,25 @@ def get_table_kinesis_stream_name(table_name: str) -> str:
     return f"{resolved_table_name}-kinesis-stream"
 
 
-def list_items(table_name: str) -> List[Dict[str, Any]]:
+def list_items(
+    table_name: str, scan_filter: Optional[Dict[str, Any]] = None
+) -> List[Dict[str, Any]]:
     """
     Retrieve the items from DDB
+    :param table_name: Name of the DynamoDB table
+    :param scan_filter: Optional ScanFilter to apply to the scan operation
     :return: list of items
     """
-    response = table(table_name).scan()
+    scan_params: Dict[str, Any] = {}
+    if scan_filter is not None:
+        scan_params["ScanFilter"] = scan_filter
+
+    response = table(table_name).scan(**scan_params)
     items: List[Dict[str, Any]] = response.get("Items", [])
 
     while "LastEvaluatedKey" in response:
-        response = table(table_name).scan(
-            ExclusiveStartKey=response["LastEvaluatedKey"]
-        )
+        scan_params["ExclusiveStartKey"] = response["LastEvaluatedKey"]
+        response = table(table_name).scan(**scan_params)
         items.extend(response.get("Items", []))
 
     return items

@@ -81,7 +81,7 @@ class Role(ResBaseConstruct, iam.Role):
         arn_builder: ArnBuilder,
         parameters: Union[RESParameters, BIParameters],
         description: str,
-        assumed_by: List[str],
+        assumed_by: List[Any],
         inline_policies: Optional[List[Policy]] = None,
         managed_policies: Optional[List[Any]] = None,
     ):
@@ -126,10 +126,13 @@ class Role(ResBaseConstruct, iam.Role):
                 else:
                     self.add_managed_policy(managed_policy)
 
-    def build_assumed_by(self, assumed_by: List[str]) -> iam.IPrincipal:
+    def build_assumed_by(self, assumed_by: List[Any]) -> iam.IPrincipal:
         principals = []
-        for service in assumed_by:
-            principals.append(self.build_service_principal(service))
+        for principal in assumed_by:
+            if isinstance(principal, iam.PrincipalBase):
+                principals.append(principal)
+                continue
+            principals.append(self.build_service_principal(principal))
         return iam.CompositePrincipal(*principals)
 
 

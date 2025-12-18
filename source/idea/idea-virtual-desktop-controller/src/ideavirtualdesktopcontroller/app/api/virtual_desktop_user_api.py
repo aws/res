@@ -228,8 +228,9 @@ class VirtualDesktopUserAPI(VirtualDesktopAPI):
         message, is_valid = self._validate_owner(session.owner, context)
         if not is_valid:
             session.failure_reason = message
+            return session, False
 
-        return session, is_valid
+        return self.validate_update_session_request(session)
 
     def _validate_create_session_request(self, session: VirtualDesktopSession, context: ApiInvocationContext) -> (VirtualDesktopSession, bool):
         # Validate Session Object

@@ -107,12 +107,18 @@ class ResBaseConstruct(constructs.Construct):
         cdk.Tags.of(construct).add(
             constants.IDEA_TAG_NAME,
             self.resource_name,
-            exclude_resource_types=["AWS::Events::Rule"],
+            exclude_resource_types=[
+                "AWS::Events::Rule",
+                "AWS::Lambda::EventSourceMapping",
+            ],
         )
         cdk.Tags.of(construct).add(
             constants.IDEA_TAG_ENVIRONMENT_NAME,
             self._cluster_name,
-            exclude_resource_types=["AWS::Events::Rule"],
+            exclude_resource_types=[
+                "AWS::Events::Rule",
+                "AWS::Lambda::EventSourceMapping",
+            ],
         )
 
     # trimmed format - {prefix}-{region}-{name[:10]}-{hash}

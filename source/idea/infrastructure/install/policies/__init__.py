@@ -17,9 +17,15 @@ from idea.infrastructure.install.policies.add_to_user_pool_client_scopes_policy 
 from idea.infrastructure.install.policies.amazon_ssm_managed_instance_core_policy import (
     AmazonSsmManagedInstanceCorePolicy,
 )
+from idea.infrastructure.install.policies.backend_lambda_policy import (
+    BackendLambdaPolicy,
+)
+from idea.infrastructure.install.policies.bastion_host_cleanup_policy import (
+    BastionHostCleanupPolicy,
+)
 from idea.infrastructure.install.policies.bastion_host_policy import BastionHostPolicy
-from idea.infrastructure.install.policies.clean_up_ec2_instance_policy import (
-    CleanupEC2InstancePolicy,
+from idea.infrastructure.install.policies.clean_up_resources_policy import (
+    CleanupResources,
 )
 from idea.infrastructure.install.policies.cloud_watch_agent_server_policy import (
     CloudWatchAgentServerPolicy,
@@ -29,6 +35,13 @@ from idea.infrastructure.install.policies.cluster_endpoints_policy import (
 )
 from idea.infrastructure.install.policies.cluster_manager_policy import (
     ClusterManagerPolicy,
+)
+from idea.infrastructure.install.policies.cognito_sync_policy import CognitoSyncPolicy
+from idea.infrastructure.install.policies.cognito_trigger_workflow_create_post_auth_policy import (
+    CognitoTriggerWorkflowCreatePostAuthPolicy,
+)
+from idea.infrastructure.install.policies.cognito_trigger_workflow_create_uid_policy import (
+    CognitoTriggerWorkflowCreateUidPolicy,
 )
 from idea.infrastructure.install.policies.configure_sso_lambda_policy import (
     ConfigureSSOLambdaPolicy,
@@ -64,6 +77,16 @@ from idea.infrastructure.install.policies.lambda_basic_execution_policy import (
     LambdaBasicExecutionPolicy,
 )
 from idea.infrastructure.install.policies.log_retention_policy import LogRetentionPolicy
+from idea.infrastructure.install.policies.params_transformer_policy import (
+    ParamsTransformerPolicy,
+)
+from idea.infrastructure.install.policies.populate_custom_tags_policy import (
+    PopulateCustomTagsPolicy,
+)
+from idea.infrastructure.install.policies.proxy_lambda_assume_role_policy import (
+    ProxyLambdaAssumeRolePolicy,
+)
+from idea.infrastructure.install.policies.proxy_lambda_policy import ProxyLambdaPolicy
 from idea.infrastructure.install.policies.s3_mount_base_bucket_read_only_policy import (
     S3MountBaseBucketReadOnlyPolicy,
 )
@@ -79,6 +102,7 @@ from idea.infrastructure.install.policies.self_signed_certificate_policy import 
 from idea.infrastructure.install.policies.shared_efs_file_storage_policy import (
     SharedEfsFileStoragePolicy,
 )
+from idea.infrastructure.install.policies.tag_resources_policy import TagResourcesPolicy
 from idea.infrastructure.install.policies.terminate_ad_sync_task_policy import (
     TerminateADSyncTaskPolicy,
 )
@@ -110,6 +134,11 @@ from idea.infrastructure.install.policies.virtual_desktop_dcv_host_scoped_down_p
 from idea.infrastructure.install.policies.vpc_lookup_policy import VpcLookupPolicy
 
 __all__ = [
+    "ProxyLambdaPolicy",
+    "ProxyLambdaAssumeRolePolicy",
+    "BackendLambdaPolicy",
+    "CognitoTriggerWorkflowCreateUidPolicy",
+    "CognitoTriggerWorkflowCreatePostAuthPolicy",
     "AmazonSsmManagedInstanceCorePolicy",
     "ActiveDirectoryPolicy",
     "AddNatEipsToAlbSecurityGroupPolicy",
@@ -117,11 +146,12 @@ __all__ = [
     "AddToUserpoolClientScopesPolicy",
     "ADSyncTaskPolicy",
     "BastionHostPolicy",
-    "BuildBootstrapUserdataPolicy",
-    "CleanupEC2InstancePolicy",
+    "BastionHostCleanupPolicy",
+    "CleanupResources",
     "ClusterEndpointsPolicy",
     "ClusterManagerPolicy",
     "CloudWatchAgentServerPolicy",
+    "CognitoSyncPolicy",
     "ConfigureSSOLambdaPolicy",
     "ControllerScheduledEventTransformerLambdaPolicy",
     "ControllerSSMCommandPassRolePolicy",
@@ -150,4 +180,7 @@ __all__ = [
     "VirtualDesktopDcvHostScopedDownPolicy",
     "VirtualDesktopDcvPolicy",
     "VpcLookupPolicy",
+    "PopulateCustomTagsPolicy",
+    "TagResourcesPolicy",
+    "ParamsTransformerPolicy",
 ]

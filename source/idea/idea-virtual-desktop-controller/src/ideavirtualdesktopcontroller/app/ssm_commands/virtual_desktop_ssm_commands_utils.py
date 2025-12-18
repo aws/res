@@ -40,7 +40,7 @@ class VirtualDesktopSSMCommandsUtils:
                 'CloudWatchOutputEnabled': True,
                 'CloudWatchLogGroupName': f'/{self.context.cluster_name()}/{self.context.module_id()}/dcv-session/{idea_session_id}/resume'
             },
-            OutputS3BucketName=self.context.config().get_string('cluster.cluster_s3_bucket', required=True),
+            OutputS3BucketName=self.context.config().get_string('cluster.logging_bucket_name', required=True),
             OutputS3KeyPrefix=f'/{self.context.cluster_name()}/{self.context.module_id()}/dcv-session/{idea_session_id}/resume'
         )
         # self._logger.info(f'response is {response}')
@@ -86,7 +86,7 @@ class VirtualDesktopSSMCommandsUtils:
                 'CloudWatchOutputEnabled': True,
                 'CloudWatchLogGroupName': f'/{self.context.cluster_name()}/{self.context.module_id()}/dcv-session/{idea_session_id}/clean-up'
             },
-            OutputS3BucketName=self.context.config().get_string('cluster.cluster_s3_bucket', required=True),
+            OutputS3BucketName=self.context.config().get_string('cluster.logging_bucket_name', required=True),
             OutputS3KeyPrefix=f'/{self.context.cluster_name()}/{self.context.module_id()}/dcv-session/{idea_session_id}/clean-up'
         )
         command_id = Utils.get_value_as_string('CommandId', Utils.get_value_as_dict('Command', response, {}), '')
@@ -119,7 +119,7 @@ class VirtualDesktopSSMCommandsUtils:
                 'CloudWatchOutputEnabled': True,
                 'CloudWatchLogGroupName': f'/{self.context.cluster_name()}/{self.context.module_id()}/dcv-session/{idea_session_id}/disable-userdata'
             },
-            OutputS3BucketName=self.context.config().get_string('cluster.cluster_s3_bucket', required=True),
+            OutputS3BucketName=self.context.config().get_string('cluster.logging_bucket_name', required=True),
             OutputS3KeyPrefix=f'/{self.context.cluster_name()}/{self.context.module_id()}/dcv-session/{idea_session_id}/disable-userdata'
         )
         # self._logger.info(f'response is {response}')
@@ -183,7 +183,7 @@ class VirtualDesktopSSMCommandsUtils:
                 'CloudWatchOutputEnabled': True,
                 'CloudWatchLogGroupName': f'/{self.context.cluster_name()}/{self.context.module_id()}/dcv-session/{idea_session_id}/enable-userdata'
             },
-            OutputS3BucketName=self.context.config().get_string('cluster.cluster_s3_bucket', required=True),
+            OutputS3BucketName=self.context.config().get_string('cluster.logging_bucket_name', required=True),
             OutputS3KeyPrefix=f'/{self.context.cluster_name()}/{self.context.module_id()}/dcv-session/{idea_session_id}/enable-userdata'
         )
         # self._logger.info(f'response is {response}')
@@ -232,7 +232,7 @@ class VirtualDesktopSSMCommandsUtils:
                 'CloudWatchOutputEnabled': True,
                 'CloudWatchLogGroupName': f'/{self.context.cluster_name()}/{self.context.module_id()}/dcv-session/{idea_session_id}/cpu-utilization'
             },
-            OutputS3BucketName=self.context.config().get_string('cluster.cluster_s3_bucket', required=True),
+            OutputS3BucketName=self.context.config().get_string('cluster.logging_bucket_name', required=True),
             OutputS3KeyPrefix=f'/{self.context.cluster_name()}/{self.context.module_id()}/dcv-session/{idea_session_id}/cpu-utilization'
         )
         # self._logger.info(f'response is {response}')

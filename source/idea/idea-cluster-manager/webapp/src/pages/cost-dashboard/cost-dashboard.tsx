@@ -16,10 +16,11 @@ import { Button, Container, Header, Link, SpaceBetween, Tabs } from "@cloudscape
 import { IdeaSideNavigationProps } from "../../components/side-navigation";
 import IdeaAppLayout, { IdeaAppLayoutProps } from "../../components/app-layout";
 import { withRouter } from "../../navigation/navigation-utils";
-import { VirtualDesktopSession } from '../../client/data-model'
+import { ListSessionsResponse, VirtualDesktopSession } from '../../client/data-model'
 import { AppContext } from "../../common";
 import ResourcesTab from "./components/resources-tab";
 import CostsTab from "./components/costs-tab"
+import { fetchAllSessions } from "../../common/sessions-fetcher";
 
 export interface CostDashboardProps extends IdeaAppLayoutProps, IdeaSideNavigationProps {}
 
@@ -63,23 +64,20 @@ class CostDashboard extends Component<CostDashboardProps, CostDashboardState> {
     }
 
     async loadSessionsData() {
-        this.setState({loading: true})
+        this.setState({loading: true});
         try {
-            const sessions = await AppContext.get().client().virtualDesktopAdmin().listSessions({
-                paginator: { page_size: 100 }
-            })
-            this.setState({sessions: sessions.listing ?? [], loading: false})
+            const client = AppContext.get().client().virtualDesktopAdmin();
+           
+            const result = await fetchAllSessions(
+                client,
+                [], 
+                undefined, 
+                this.props.onFlashbarChange
+            );
+            
+            this.setState({sessions: result.listing ?? [], loading: false});
         } catch (error: any) {
-            this.props.onFlashbarChange({
-                items: [
-                    {
-                        content: error.message,
-                        type: "error",
-                        dismissible: true,
-                    },
-                ],
-            });
-            throw error;
+            this.setState({loading: false});
         }
     }
 

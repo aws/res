@@ -50,7 +50,6 @@ import IdeaBaseClient, { IdeaBaseClientProps } from "./base-client";
 export interface AuthClientProps extends IdeaBaseClientProps {
     baseUrl: string;
     apiContextPath: string;
-    serviceWorkerRegistration?: ServiceWorkerRegistration;
 }
 
 /**
@@ -79,10 +78,6 @@ class AuthClient extends IdeaBaseClient<AuthClientProps> {
 
     debug() {
         return this.apiInvoker.debug();
-    }
-
-    getSWInitialized(): Promise<boolean> {
-        return this.apiInvoker.getSWInitialized();
     }
 
     getClientId(): Promise<string> {

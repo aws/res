@@ -9,6 +9,7 @@
 #  OR CONDITIONS OF ANY KIND, express or implied. See the License for the specific language governing permissions
 #  and limitations under the License.
 
+import json
 import logging
 from functools import cmp_to_key
 from typing import Any, Dict, Optional
@@ -19,6 +20,7 @@ from ideadatamodel import (  # type: ignore
     CreateSessionRequest,
     DeleteProjectRequest,
     DeleteSessionRequest,
+    ListAllowedInstanceTypesForSessionRequest,
     ListAllowedInstanceTypesRequest,
     Project,
     SocaMemory,
@@ -31,13 +33,25 @@ from ideadatamodel import (  # type: ignore
     VirtualDesktopSoftwareStack,
     VirtualDesktopWeekSchedule,
 )
+from tests.integration.framework.client.api_client import ApiClient
 from tests.integration.framework.client.res_client import ResClient
 from tests.integration.framework.fixtures.fixture_request import FixtureRequest
 from tests.integration.framework.fixtures.res_environment import ResEnvironment
-from tests.integration.framework.model.client_auth import ClientAuth
+from tests.integration.framework.utils.model_utils import (
+    get_backend_model_class,
+    remove_none_values,
+)
 from tests.integration.framework.utils.session_utils import (
     wait_for_deleting_session,
     wait_for_launching_session,
+)
+
+ListAllowedInstanceTypesForSessionRequestContent = get_backend_model_class(
+    "list_allowed_instance_types_for_session_request_content",
+    "ListAllowedInstanceTypesForSessionRequestContent",
+)
+VirtualDesktopSession_ = get_backend_model_class(
+    "virtual_desktop_session", "VirtualDesktopSession"
 )
 
 logger = logging.getLogger(__name__)
@@ -69,14 +83,17 @@ def create_session(
     session: VirtualDesktopSession,
     software_stack: VirtualDesktopSoftwareStack,
     client: ResClient,
+    api_client: ApiClient,
 ) -> Optional[VirtualDesktopSession]:
 
-    allowed_instance_types = client.list_allowed_instance_types(
-        ListAllowedInstanceTypesRequest(
-            hibernation_support=session.hibernation_enabled,
-            software_stack=software_stack,
+    # Convert session to dict and recursively remove any fields with None values
+    session_dict = remove_none_values(json.loads(session.json()))
+
+    allowed_instance_types = api_client.list_allowed_instance_types_for_session(
+        ListAllowedInstanceTypesForSessionRequestContent(
+            session=VirtualDesktopSession_.from_dict(session_dict)
         )
-    ).listing
+    ).listing  # type: ignore
 
     if not allowed_instance_types:
         pytest.skip(
@@ -133,7 +150,8 @@ def create_session(
 
 @pytest.fixture
 def session(
-    request: FixtureRequest, res_environment: ResEnvironment
+    request: FixtureRequest,
+    res_environment: ResEnvironment,
 ) -> Optional[VirtualDesktopSession]:
     """
     Fixture for setting up/tearing down the test project
@@ -149,8 +167,9 @@ def session(
 
     api_invoker_type = request.config.getoption("--api-invoker-type")
     client = ResClient(res_environment, clientAuth, api_invoker_type)
+    api_client = ApiClient(res_environment, clientAuth)
 
-    session = create_session(session, software_stack, client)
+    session = create_session(session, software_stack, client, api_client)
 
     def tear_down() -> None:
         delete_session(client, session)

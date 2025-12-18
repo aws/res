@@ -13,6 +13,7 @@ from aws_cdk import aws_events as events
 from aws_cdk import aws_events_targets as events_targets
 from aws_cdk import aws_route53 as route53
 from aws_cdk import aws_s3 as s3
+from res.constants import ENVIRONMENT_NAME_KEY, OLD_CUSTOM_TAG_KEYS  # type: ignore
 
 from idea.batteries_included.parameters.parameters import BIParameters
 from idea.infrastructure.install import constants
@@ -78,10 +79,12 @@ class ClusterStack(ResBaseConstruct):
         self,
         scope: constructs.Construct,
         lambda_layer: cdk.aws_lambda.LayerVersion,
+        params_transformer: cdk.CustomResource,
         parameters: Union[RESParameters, BIParameters] = RESParameters(),
     ):
 
         self.parameters = parameters
+        self.params_transformer = params_transformer
         self.cluster_name = parameters.get_str(CommonKey.CLUSTER_NAME)
         self.module_id = constants.MODULE_CLUSTER
         self.aws_region = cdk.Aws.REGION
@@ -435,6 +438,9 @@ class ClusterStack(ResBaseConstruct):
             initial_policy=SelfSignedCertificatePolicy.create_policy_statements(self.arn_builder),  # type: ignore
             parameters=self.parameters,
             log_retention_role=self.roles[constants.LOG_RETENTION_ROLE_NAME],  # type: ignore
+            environment={
+                ENVIRONMENT_NAME_KEY: self.cluster_name,
+            },
         )
 
     def build_self_signed_certificates(self) -> None:
@@ -464,6 +470,9 @@ class ClusterStack(ResBaseConstruct):
                     "Name": f"{self.cluster_name} external alb certs",
                     "res:EnvironmentName": self.cluster_name,
                 },
+                OLD_CUSTOM_TAG_KEYS: self.params_transformer.get_att_string(
+                    OLD_CUSTOM_TAG_KEYS
+                ),
             },
             resource_type="Custom::SelfSignedCertificateExternal",
         )
@@ -487,6 +496,9 @@ class ClusterStack(ResBaseConstruct):
                     "Name": f"{self.cluster_name} internal alb certs",
                     "res:EnvironmentName": self.cluster_name,
                 },
+                OLD_CUSTOM_TAG_KEYS: self.params_transformer.get_att_string(
+                    OLD_CUSTOM_TAG_KEYS
+                ),
             },
             resource_type="Custom::SelfSignedCertificateInternal",
         )
@@ -591,6 +603,9 @@ class ClusterStack(ResBaseConstruct):
             layers=[self.lambda_layer],  # type: ignore
             parameters=self.parameters,
             log_retention_role=self.roles[constants.LOG_RETENTION_ROLE_NAME],  # type: ignore
+            environment={
+                ENVIRONMENT_NAME_KEY: self.cluster_name,
+            },
         )
 
         # external ALB - can be deployed in public or private subnets
@@ -603,10 +618,10 @@ class ClusterStack(ResBaseConstruct):
             ),
         )
 
-        cluster_s3_bucket = s3.Bucket.from_bucket_name(
+        logging_s3_bucket = s3.Bucket.from_bucket_name(
             scope=self.nested_stack,
-            id="cluster-s3-bucket",
-            bucket_name=self.cluster_settings.cluster_bucket,  # type: ignore
+            id="logging-s3-bucket",
+            bucket_name=self.cluster_settings.logging_bucket,  # type: ignore
         )
 
         external_load_balancer_attributes = (
@@ -616,7 +631,7 @@ class ClusterStack(ResBaseConstruct):
                 # https://docs.aws.amazon.com/elasticloadbalancing/latest/application/load-balancer-access-logs.html
                 {
                     "key": "access_logs.s3.bucket",
-                    "value": cluster_s3_bucket.bucket_name,
+                    "value": logging_s3_bucket.bucket_name,
                 },
                 {
                     "key": "access_logs.s3.prefix",
@@ -663,7 +678,7 @@ class ClusterStack(ResBaseConstruct):
                 {"key": "access_logs.s3.enabled", "value": "true"},
                 {
                     "key": "access_logs.s3.bucket",
-                    "value": cluster_s3_bucket.bucket_name,
+                    "value": logging_s3_bucket.bucket_name,
                 },
                 {
                     "key": "access_logs.s3.prefix",

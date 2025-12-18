@@ -156,7 +156,11 @@ class SocaDevelopmentProps:
 
     @property
     def end_to_end_integ_tests_dir(self) -> str:
-        return os.path.join(self.project_root_dir, 'source', 'tests', 'integration', 'tests')
+        return os.path.join(self.project_root_dir, 'source', 'tests', 'integration', 'tests', 'smoke')
+
+    @property
+    def api_tests_dir(self) -> str:
+        return os.path.join(self.project_root_dir, 'source', 'tests', 'integration', 'tests', 'api')
 
     @property
     def deployment_ecr_dir(self) -> str:
@@ -181,14 +185,6 @@ class SocaDevelopmentProps:
     @property
     def administrator_tests_src(self) -> str:
         return os.path.join(self.project_unit_tests_dir, 'idea-administrator')
-
-    @property
-    def lambda_functions_src(self) -> str:
-        return os.path.join(self.administrator_project_dir, 'resources')
-
-    @property
-    def lambda_functions_tests_src(self) -> str:
-        return os.path.join(self.project_unit_tests_dir, 'lambda_functions')
 
     @property
     def pipeline_project_dir(self) -> str:

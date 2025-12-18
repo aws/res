@@ -401,16 +401,26 @@ class ExternalLoadBalancerSecurityGroup(SecurityGroup):
         cluster_prefix_list = ec2.Peer.prefix_list(self.cluster_prefix_list_id)  # type: ignore
         self.add_peer_ingress_rule(cluster_prefix_list, "Cluster Prefix List")
 
-        self.add_ingress_rule(
-            self.bastion_host_security_group,
-            ec2.Port.tcp(80),
+        ec2.CfnSecurityGroupIngress(
+            self.scope,
+            "bastion-host-http-ingress",
+            group_id=self.security_group_id,
+            source_security_group_id=self.bastion_host_security_group.security_group_id,
+            ip_protocol="tcp",
+            from_port=80,
+            to_port=80,
             description="Allow HTTP from Bastion Host",
         )
 
-        self.add_ingress_rule(
-            self.bastion_host_security_group,
-            ec2.Port.tcp(443),
-            description="Allow HTTPs from Bastion Host",
+        ec2.CfnSecurityGroupIngress(
+            self.scope,
+            "bastion-host-https-ingress",
+            group_id=self.security_group_id,
+            source_security_group_id=self.bastion_host_security_group.security_group_id,
+            ip_protocol="tcp",
+            from_port=443,
+            to_port=443,
+            description="Allow HTTPS from Bastion Host",
         )
 
     def setup_egress(self) -> None:

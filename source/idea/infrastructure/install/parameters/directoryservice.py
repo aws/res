@@ -117,7 +117,7 @@ class DirectoryServiceParameters(Base):
         Attributes(
             id=DirectoryServiceKey.DISABLE_AD_JOIN,
             type="String",
-            description="Set to True to prevent linux hosts from joining the Directory Domain. Otherwise set to False",
+            description="When set to True, prevents Linux and Windows hosts from automatically joining the Directory Domain. Windows instances require domain joining to launch successfully. If this setting is set to True, you must implement custom domain-join logic in your Windows instance launch scripts. Linux instances can launch with or without domain joining.",
             allowed_values=["True", "False", ""],
         )
     )

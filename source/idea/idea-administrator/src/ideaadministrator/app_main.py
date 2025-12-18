@@ -21,35 +21,21 @@ from ideadatamodel import (
 )
 from ideadatamodel.constants import CLICK_SETTINGS
 from ideasdk.utils import Utils, ModuleMetadataHelper
-from ideasdk.user_input.framework import (
-    SocaUserInputParamRegistry,
-    SocaUserInputArgs
-)
 from ideasdk.config.cluster_config_db import ClusterConfigDB
 from ideasdk.config.cluster_config import ClusterConfig
 from ideasdk.config.soca_config import SocaConfig
-from ideasdk.context import SocaCliContext, SocaContextOptions
+from ideasdk.context import SocaCliContext
 
 import ideaadministrator
-from ideaadministrator import app_constants
 from ideaadministrator.app_utils import AdministratorUtils
-from ideaadministrator.app.installer_params import QuickSetupPromptFactory
 from ideaadministrator.app_props import AdministratorProps
-from ideaadministrator.app.cdk.cdk_invoker import CdkInvoker
 from ideaadministrator.app.config_generator import ConfigGenerator
-from ideaadministrator.app.delete_cluster import DeleteCluster
 from ideaadministrator.app.patch_helper import PatchHelper
 from ideaadministrator.app.upload_helper import UploadHelper
-from ideaadministrator.app.deployment_helper import DeploymentHelper
-from ideaadministrator.integration_tests.test_context import TestContext
-from ideaadministrator.integration_tests.test_invoker import TestInvoker
-from ideaadministrator.app.values_diff import ValuesDiff
 from ideaadministrator.app.vpc_endpoints_helper import VpcEndpointsHelper
 from ideaadministrator.app.aws_service_availability_helper import AwsServiceAvailabilityHelper
 from ideaadministrator.app.cluster_prefix_list_helper import ClusterPrefixListHelper
-from ideaadministrator.app.support_helper import SupportHelper
 from ideaadministrator.app.directory_service_helper import DirectoryServiceHelper
-from ideaadministrator.app.shared_storage_helper import SharedStorageHelper
 
 from prettytable import PrettyTable
 import os
@@ -127,181 +113,6 @@ def cluster_prefix_list():
     cluster prefix list utilities
     """
     pass
-
-
-@click.group()
-def support():
-    """
-    support options
-    """
-    pass
-
-
-@click.group()
-def shared_storage():
-    """
-    shared-storage options
-    """
-    pass
-
-
-@config.command('generate', context_settings=CLICK_SETTINGS)
-@click.option('--values-file', help='path to values.yml file')
-@click.option('--config-dir', help='path to where to create config directory')
-@click.option('--force', is_flag=True, help='Skip all confirmation prompts.')
-@click.option('--existing-resources', is_flag=True, help='Generate configuration using existing resources')
-@click.option('--regenerate', is_flag=True, help='Regenerate configuration for an existing cluster. Enables skipping validations such as existing cluster name and CIDR block.')
-def config_generate(values_file: str, config_dir: str, force: bool, existing_resources: bool = False, regenerate: bool = False):
-    """
-    generate configuration
-    """
-
-    context = SocaCliContext(
-        options=SocaContextOptions(enable_aws_client_provider=True)
-    )
-
-    if config_dir is not None:
-        if not os.path.isdir(config_dir):
-            context.error(f'{config_dir} not found or is not a valid directory.')
-            raise SystemExit
-
-    if Utils.is_empty(values_file):
-
-        param_registry = SocaUserInputParamRegistry(
-            context=context,
-            file=ideaadministrator.props.install_params_file
-        )
-
-        installer_args = SocaUserInputArgs(context, param_registry=param_registry)
-        installer_args.set('_regenerate', regenerate)
-
-        if existing_resources:
-            deployment_option = app_constants.DEPLOYMENT_OPTION_INSTALL_IDEA_USING_EXISTING_RESOURCES
-        else:
-            deployment_option = app_constants.DEPLOYMENT_OPTION_INSTALL_IDEA
-
-        prompt_factory = QuickSetupPromptFactory(
-            context=context,
-            args=installer_args,
-            param_registry=param_registry
-        )
-
-        user_input_module = prompt_factory.build_module(user_input_module=deployment_option)
-        user_input_module.safe_ask()
-        values = installer_args.build()
-
-        cluster_name = Utils.get_value_as_string('cluster_name', values)
-        aws_region = Utils.get_value_as_string('aws_region', values)
-
-        if not Utils.are_empty(cluster_name, aws_region):
-            if not Utils.is_empty(config_dir):
-                cluster_region_dir = config_dir
-            else:
-                props = AdministratorProps()
-                cluster_dir = props.cluster_dir(cluster_name)
-                cluster_region_dir = props.cluster_region_dir(cluster_dir, aws_region)
-
-            if not force:
-                if AdministratorUtils.cluster_region_dir_exists_and_has_config(cluster_region_dir):
-                    confirm = context.prompt(f'Config directory: {cluster_region_dir} is not empty, would you like to overwrite it?', default=True)
-                    if not confirm:
-                        context.info('Aborted!')
-                        raise SystemExit
-                    AdministratorUtils.cleanup_cluster_region_dir(cluster_region_dir)
-
-            os.makedirs(cluster_region_dir, exist_ok=True)
-            values_file = os.path.join(cluster_region_dir, 'values.yml')
-
-            context.info(f'saving values to: {values_file}')
-            with open(values_file, 'w') as f:
-                f.write(Utils.to_yaml(values))
-        else:
-            context.warning('Cluster name and AWS region are required')
-            raise SystemExit
-
-    # values file is given
-    else:
-        if not Utils.is_file(values_file):
-            raise exceptions.invalid_params(f'file not found: {values_file}')
-
-        with open(values_file, 'r') as f:
-            values = Utils.from_yaml(f.read())
-
-        props = AdministratorProps()
-        # config dir is not provided
-        if Utils.is_empty(config_dir):
-            cluster_dir = props.cluster_dir(Utils.get_value_as_string('cluster_name', values))
-            cluster_region_dir = props.cluster_region_dir(cluster_dir, Utils.get_value_as_string('aws_region', values))
-        else:
-            cluster_region_dir = config_dir
-
-        values_file_copy = os.path.join(cluster_region_dir, 'values.yml')
-
-        preserve_values_file = False
-        if Utils.are_equal(values_file, values_file_copy):
-            preserve_values_file = True
-
-        if not force:
-            if AdministratorUtils.cluster_region_dir_exists_and_has_config(cluster_region_dir):
-                confirm = context.prompt(f'Config directory: {cluster_region_dir} is not empty, would you like to overwrite it?', default=True)
-                if not confirm:
-                    context.info('Aborted!')
-                    raise SystemExit
-                AdministratorUtils.cleanup_cluster_region_dir(cluster_region_dir, preserve_values_file)
-
-        os.makedirs(cluster_region_dir, exist_ok=True)
-
-        context.info(f'saving values to: {values_file_copy}')
-        with open(values_file_copy, 'w') as f:
-            f.write(Utils.to_yaml(values))
-
-    config_generator = ConfigGenerator(values)
-
-    context.print_title('generating config from templates ...')
-
-    if Utils.is_empty(config_dir):
-        config_generator.generate_config_from_templates()
-    else:
-        config_generator.generate_config_from_templates(True, cluster_region_dir)
-
-    # values returned by generate_config are used by quick setup flow. do not remove the return statement.
-    return values
-
-
-@config.command('save-values', context_settings=CLICK_SETTINGS)
-@click.option('--cluster-name', required=True, help="Cluster Name")
-@click.option('--aws-profile', help='AWS Profile')
-@click.option('--aws-region', required=True, help='AWS Region')
-@click.option('--values-file', help='path to values.yml file')
-def save_values(cluster_name: str, aws_profile: str, aws_region: str, values_file: str):
-    """
-    save values file in s3 bucket
-    """
-
-    context = SocaCliContext(
-        options=SocaContextOptions(enable_aws_client_provider=True)
-    )
-
-    cluster_config_db = ClusterConfigDB(
-        cluster_name=cluster_name,
-        aws_region=aws_region,
-        aws_profile=aws_profile
-    )
-
-    bucket_name = get_bucket_name(cluster_name, aws_region, cluster_config_db, context)
-
-    values_diff = ValuesDiff(cluster_name, aws_region)
-
-    if Utils.is_empty(values_file):
-        values_file = values_diff.get_values_file_path()
-        print_using_default_warning('Values file', values_file, context)
-
-    context.info(f'Saving in bucket: {bucket_name} at location: values/value.yml')
-    context.aws().s3().upload_file(
-        Bucket=bucket_name,
-        Filename=values_file,
-        Key='values/values.yml'
-    )
 
 
 @config.command('update', context_settings=CLICK_SETTINGS)
@@ -609,45 +420,6 @@ def export_config(cluster_name: str, aws_profile: str, aws_region: str, export_d
         f.write(Utils.to_yaml(idea_config))
 
 
-@config.command('download-values', context_settings=CLICK_SETTINGS)
-@click.option('--cluster-name', required=True, help='Cluster Name')
-@click.option('--aws-profile', help='AWS Profile')
-@click.option('--aws-region', required=True, help='AWS Region')
-@click.option('--values-dir', help='Path to folder to save values.yml file')
-def download_values(cluster_name: str, aws_profile: str, aws_region: str, values_dir: str):
-    """
-    download values.yml from s3 bucket to default or provided location
-    """
-
-    context = SocaCliContext(
-        options=SocaContextOptions(enable_aws_client_provider=True)
-    )
-
-    cluster_config_db = ClusterConfigDB(
-        cluster_name=cluster_name,
-        aws_region=aws_region,
-        aws_profile=aws_profile
-    )
-
-    values_diff = ValuesDiff(cluster_name, aws_region)
-    if Utils.is_empty(values_dir):
-        values_file = values_diff.get_values_file_path()
-        print_using_default_warning('Values file directory', values_diff.get_cluster_region_dir(), context)
-    else:
-        os.makedirs(values_dir, exist_ok=True)
-        values_file = os.path.join(values_dir, 'values.yml')
-
-    bucket_name = get_bucket_name(cluster_name, aws_region, cluster_config_db, context)
-
-    response = context.aws().s3().get_object(Bucket=bucket_name, Key=values_diff.get_values_file_s3_key())
-
-    values = Utils.from_yaml(response['Body'])
-
-    print(f'saving values to: {values_file}')
-    with open(values_file, 'w') as f:
-        f.write(Utils.to_yaml(values))
-
-
 @config.command('diff', context_settings=CLICK_SETTINGS)
 @click.option('--cluster-name', required=True, help='Cluster Name')
 @click.option('--aws-profile', help='AWS Profile Name')
@@ -784,157 +556,6 @@ def delete_config(cluster_name: str, aws_profile: str, aws_region: str, config_k
     for config_key_prefix in config_key_prefixes:
         config_key_prefix = config_key_prefix.strip()
         db.delete_config_entries(config_key_prefix)
-
-
-@click.command()
-@click.option('--cluster-name', required=True, help='Cluster Name')
-@click.option('--aws-region', required=True, help='AWS Region')
-@click.option('--aws-profile', help='AWS Profile Name')
-@click.option('--termination-protection', default=True, help='Set termination protection to true or false. Default: true')
-@click.option('--deployment-id', help='A UUID to identify the deployment.')
-@click.option('--upgrade', is_flag=True, help='Upgrade the module by re-running the CDK stack if the module has already been deployed.')
-@click.option('--force-build-bootstrap', is_flag=True, help='If the bootstrap package directory for a given DeploymentId already exists, '
-                                                            'the directory will be deleted and rendered again.')
-@click.option('--rollback/--no-rollback', default=True, help='Rollback stack to stable state on failure. Defaults to "true", iterate more rapidly with --no-rollback.')
-@click.option('--optimize-deployment', is_flag=True, help='If flag is provided, deployment will be optimized and applicable stacks will be deployed in parallel.')
-@click.option('--module-set', help='Name of the ModuleSet. Default: default')
-@click.argument('MODULES', required=True, nargs=-1)
-def deploy(cluster_name: str, aws_region: str, aws_profile: str, termination_protection: bool, deployment_id: str,
-           upgrade: bool, force_build_bootstrap: bool, rollback: bool, optimize_deployment: bool, module_set: str, modules):
-    """
-    deploy modules
-
-    deploy an IDEA module using the Module Id. You can provide multiple module ids and each module will be deployed sequentially.
-    The order of module deployment will be handled automatically to ensure correct module dependencies.
-
-    Use `all` as the module id to deploy all modules
-    The default behavior of deploy is to skip deployment of a module if it's already deployed.
-    Use --upgrade to re-run the cdk stack for the module.
-
-    Experimental:
-    The --optimize-deployment flag can be provided to optimize deployment time and deploy applicable modules in parallel.
-    """
-
-    # dedupe and convert to list
-    module_ids_to_deploy = []
-    all_modules = False
-    for module_id in modules:
-        if module_id == 'all':
-            all_modules = True
-        if module_id in module_ids_to_deploy:
-            continue
-        module_ids_to_deploy.append(module_id)
-
-    if all_modules:
-        if len(module_ids_to_deploy) > 1:
-            raise exceptions.invalid_params('fatal error - use of "all" deployment must be the only requested module')
-        module_ids_to_deploy = None
-
-    DeploymentHelper(
-        cluster_name=cluster_name,
-        aws_region=aws_region,
-        termination_protection=termination_protection,
-        deployment_id=deployment_id,
-        upgrade=upgrade,
-        module_set=module_set,
-        all_modules=all_modules,
-        force_build_bootstrap=force_build_bootstrap,
-        optimize_deployment=optimize_deployment,
-        module_ids=module_ids_to_deploy,
-        aws_profile=aws_profile,
-        rollback=rollback
-    ).invoke()
-
-
-@cdk.command('synth')
-@click.option('--cluster-name', required=True, help='Cluster Name')
-@click.option('--aws-region', required=True, help='AWS Region')
-@click.option('--aws-profile', help='AWS Profile Name')
-@click.option('--deployment-id', help='A UUID to identify the deployment.')
-@click.option('--module-set', help='Name of the ModuleSet. Default: default')
-@click.argument('module', required=True)
-def cdk_synth(cluster_name: str, aws_region: str, aws_profile: str, deployment_id: str, module_set: str, module: str):
-    """
-    synthesize cloudformation template for a module
-    """
-    CdkInvoker(
-        module_id=module,
-        module_set=module_set,
-        cluster_name=cluster_name,
-        aws_region=aws_region,
-        deployment_id=deployment_id,
-        aws_profile=aws_profile
-    ).cdk_synth()
-
-
-@cdk.command()
-@click.option('--cluster-name', required=True, help='Cluster Name')
-@click.option('--aws-region', required=True, help='AWS Region')
-@click.option('--aws-profile', help='AWS Profile Name')
-@click.option('--deployment-id', help='A UUID to identify the deployment.')
-@click.option('--module-set', help='Name of the ModuleSet. Default: default')
-@click.argument('module', required=True)
-def diff(cluster_name: str, aws_region: str, aws_profile: str, deployment_id: str, module_set: str, module: str):
-    """
-     compares the specified module with the deployed module
-    """
-    CdkInvoker(
-        module_id=module,
-        module_set=module_set,
-        cluster_name=cluster_name,
-        aws_region=aws_region,
-        deployment_id=deployment_id,
-        aws_profile=aws_profile
-    ).cdk_diff()
-
-
-@cdk.command(context_settings=CLICK_SETTINGS)
-@click.option('--cluster-name', required=True, help='Cluster Name')
-@click.option('--aws-profile', help='AWS Profile Name')
-@click.option('--aws-region', required=True, help='AWS Region')
-@click.option('--module-name', required=True, help='module name')
-@click.option('--module-id', required=True, help='module id')
-@click.option('--deployment-id', help='A UUID to identify the deployment.')
-@click.option('--termination-protection', default=True, help='Toggle termination protection for the cloud formation stack. Default: true')
-def cdk_app(cluster_name, aws_profile, aws_region, module_name, module_id, deployment_id, termination_protection):
-    """
-    cdk app
-    """
-    from ideaadministrator.app.cdk.cdk_app import CdkApp
-    CdkApp(
-        cluster_name=cluster_name,
-        aws_profile=aws_profile,
-        aws_region=aws_region,
-        module_name=module_name,
-        module_id=module_id,
-        deployment_id=deployment_id,
-        termination_protection=termination_protection
-    ).invoke()
-
-
-@click.command()
-@click.option('--cluster-name', required=True, help='Cluster Name')
-@click.option('--aws-region', required=True, help='AWS Region')
-@click.option('--aws-profile', help='AWS Profile Name')
-@click.option('--deployment-id', help='Deployment Id')
-@click.option('--module-set', help='Name of the ModuleSet. Default: default')
-@click.argument('module', required=True)
-def upload_packages(cluster_name: str, aws_region: str, aws_profile: str, deployment_id: str, module_set: str, module: str):
-    """
-    upload applicable packages for a module
-    """
-    CdkInvoker(
-        module_id=module,
-        module_set=module_set,
-        cluster_name=cluster_name,
-        aws_region=aws_region,
-        aws_profile=aws_profile,
-        deployment_id=deployment_id
-    ).invoke(
-        upload_bootstrap_package=True,
-        upload_release_package=True,
-        deploy_stack=False
-    )
 
 
 @click.command('patch')
@@ -1101,35 +722,6 @@ def check_cluster_status(cluster_name: str, aws_region: str, aws_profile: str, w
 @click.option('--cluster-name', required=True, help='Cluster Name')
 @click.option('--aws-region', required=True, help='AWS Region')
 @click.option('--aws-profile', help='AWS Profile Name')
-@click.option('--deployment-id', help='Deployment Id')
-@click.option('--force-build', is_flag=True, help='Delete and re-build bootstrap package if directory already exists.')
-@click.option('--module-set', help='Name of the ModuleSet. Default: default')
-@click.argument('module', required=True)
-def build_bootstrap_package(cluster_name: str, aws_region: str, aws_profile: str, deployment_id: str,
-                            force_build: bool, module_set: str, module: str):
-    """
-    build bootstrap package for a module
-    """
-    CdkInvoker(
-        module_id=module,
-        module_set=module_set,
-        cluster_name=cluster_name,
-        aws_region=aws_region,
-        aws_profile=aws_profile,
-        deployment_id=deployment_id
-    ).invoke(
-        render_bootstrap_package=True,
-        force_build_bootstrap=force_build,
-        upload_bootstrap_package=False,
-        upload_release_package=False,
-        deploy_stack=False
-    )
-
-
-@click.command()
-@click.option('--cluster-name', required=True, help='Cluster Name')
-@click.option('--aws-region', required=True, help='AWS Region')
-@click.option('--aws-profile', help='AWS Profile Name')
 def list_modules(cluster_name: str, aws_region: str, aws_profile: str):
     """
     list all modules for a cluster
@@ -1228,178 +820,6 @@ def show_connection_info(cluster_name: str, aws_region: str, aws_profile: str, m
 
 
 @click.command()
-def quick_setup_help():
-    """
-    display quick-setup help
-    """
-    values_file = ideaadministrator.props.default_values_file
-    with open(values_file, 'r') as f:
-        content = f.read()
-    print(content)
-
-
-@click.command()
-@click.option('--values-file', help='path to values.yml file')
-@click.option('--existing-resources', is_flag=True, help='Install IDEA using existing resources')
-@click.option('--termination-protection', default=True, help='enable/disable termination protection for all stacks')
-@click.option('--deployment-id', help='Deployment Id')
-@click.option('--optimize-deployment', is_flag=True, help='If flag is provided, deployment will be optimized and applicable stacks will be deployed in parallel.')
-@click.option('--force', is_flag=True, help='Skip all confirmation prompts')
-@click.option('--skip-config', is_flag=True, help='Skip config generation and update steps. Assumes configuration tables are already created and configuration has already been synced. --values-file is required, when --skip-config flag is provided.')
-@click.option('--rollback/--no-rollback', default=True, help='Rollback stack to stable state on failure. Defaults to "true", iterate more rapidly with --no-rollback.')
-@click.option('--module-set', help='Name of the ModuleSet. Default: default')
-@click.pass_context
-def quick_setup(ctx, values_file: str, existing_resources: bool, termination_protection: bool, deployment_id: str, optimize_deployment: bool, force: bool, skip_config: bool, rollback: bool, module_set: str):
-    """
-    Install a new cluster
-    """
-
-    cli = SocaCliContext()
-    if skip_config:
-
-        if Utils.is_empty(values_file):
-            cli.error('--values-file is required when --skip-config flag is provided.')
-            raise SystemExit(1)
-        if not Utils.is_file(values_file):
-            cli.error(f'File not found: {values_file}')
-            raise SystemExit(1)
-        with open(values_file, 'r') as f:
-            values = Utils.from_yaml(f.read())
-
-        cluster_name = Utils.get_value_as_string('cluster_name', values)
-        aws_region = Utils.get_value_as_string('aws_region', values)
-        aws_profile = Utils.get_value_as_string('aws_profile', values)
-
-    else:
-
-        ctx.invoke(about)
-
-        # generate config
-        values = ctx.invoke(config_generate, values_file=values_file, existing_resources=existing_resources, force=force)
-
-        cluster_name = Utils.get_value_as_string('cluster_name', values)
-        aws_region = Utils.get_value_as_string('aws_region', values)
-        aws_profile = Utils.get_value_as_string('aws_profile', values)
-
-        # update config
-        ctx.invoke(config_update, cluster_name=cluster_name, aws_region=aws_region, aws_profile=aws_profile, force=force)
-
-    # print cluster configuration
-    ctx.invoke(show_config, cluster_name=cluster_name, aws_region=aws_region, aws_profile=aws_profile)
-
-    # print module info
-    ctx.invoke(list_modules, cluster_name=cluster_name, aws_region=aws_region, aws_profile=aws_profile)
-
-    if not force:
-        continue_deployment = cli.prompt('Are you sure you want to deploy above IDEA modules with applicable configuration settings?', default=True)
-        if not continue_deployment:
-            cli.info('Deployment aborted!')
-            raise SystemExit
-
-    # todo - check required services using AwsServiceAvailabilityHelper before proceeding ahead with deployment
-
-    # deploy stacks
-    deployment_helper = DeploymentHelper(
-        cluster_name=cluster_name,
-        aws_region=aws_region,
-        termination_protection=termination_protection,
-        deployment_id=deployment_id,
-        module_set=module_set,
-        force_build_bootstrap=True,
-        optimize_deployment=optimize_deployment,
-        aws_profile=aws_profile,
-        all_modules=True,
-        upgrade=False
-    )
-    module_ids = deployment_helper.get_deployment_order()
-    if len(module_ids) > 0:
-        if optimize_deployment:
-            deployment_order = deployment_helper.get_optimized_deployment_order()
-        else:
-            deployment_order = module_ids
-        with cli.spinner(f'deploying modules: {deployment_order}'):
-            ctx.invoke(deploy,
-                       cluster_name=cluster_name,
-                       aws_profile=aws_profile,
-                       aws_region=aws_region,
-                       termination_protection=termination_protection,
-                       deployment_id=deployment_id,
-                       rollback=rollback,
-                       optimize_deployment=optimize_deployment,
-                       modules=tuple(module_ids))
-    else:
-        cli.info('all modules are already deployed. skipping deployment.')
-
-    # wait for cluster endpoints to be healthy
-    ctx.invoke(check_cluster_status, cluster_name=cluster_name, aws_profile=aws_profile, aws_region=aws_region, wait=True, wait_timeout=30 * 60)
-
-    # print module info
-    ctx.invoke(list_modules, cluster_name=cluster_name, aws_profile=aws_profile, aws_region=aws_region)
-
-    # print connection information
-    cli.print_rule('Cluster Connection Info')
-    ctx.invoke(show_connection_info, cluster_name=cluster_name, aws_profile=aws_profile, aws_region=aws_region)
-    cli.print_rule()
-
-
-@click.command()
-@click.option('--cluster-name', required=True, help='Cluster Name')
-@click.option('--aws-region', required=True, help='AWS Region')
-@click.option('--aws-profile', help='AWS Profile Name')
-@click.option('--delete-bootstrap', is_flag=True, help='Delete Bootstrap and S3 bucket')
-@click.option('--delete-databases', is_flag=True, help='Delete Databases')
-@click.option('--delete-backups', is_flag=True, help='Delete Backups')
-@click.option('--delete-cloudwatch-logs', is_flag=True, help='Delete CloudWatch Logs')
-@click.option('--delete-all', is_flag=True, help='Delete all')
-@click.option('--force', is_flag=True, help='Skip confirmation prompts')
-def delete_cluster(cluster_name: str, aws_region: str, aws_profile: str, delete_bootstrap: bool, delete_databases: bool, delete_backups: bool, delete_cloudwatch_logs: bool, delete_all: bool, force: bool):
-    """
-    delete cluster
-    """
-
-    DeleteCluster(
-        cluster_name=cluster_name,
-        aws_region=aws_region,
-        aws_profile=aws_profile,
-        delete_bootstrap=delete_bootstrap,
-        delete_databases=delete_databases,
-        delete_backups=delete_backups,
-        delete_cloudwatch_logs=delete_cloudwatch_logs,
-        delete_all=delete_all,
-        force=force
-    ).invoke()
-
-
-@click.command()
-@click.option('--cluster-name', required=True, help='Cluster Name')
-@click.option('--aws-region', required=True, help='AWS Region')
-@click.option('--aws-profile', help='AWS Profile Name')
-@click.option('--force', is_flag=True, help='Skip confirmation prompts')
-def delete_backups(cluster_name: str, aws_region: str, aws_profile: str, force: bool):
-    """
-    delete all recovery points in the cluster's backup vault
-    """
-
-    context = SocaCliContext()
-    confirm_delete_backups = force
-    if not force:
-        confirm_delete_backups = context.prompt('Are you sure you want to delete all the backup recovery points?')
-
-    if not confirm_delete_backups:
-        return
-
-    DeleteCluster(
-        cluster_name=cluster_name,
-        aws_region=aws_region,
-        aws_profile=aws_profile,
-        delete_bootstrap=False,
-        delete_databases=False,
-        delete_backups=True,
-        force=force
-    ).delete_backup_vault_recovery_points()
-
-
-@click.command()
 @click.option('--no-banner', is_flag=True, help='Do not print graphics and additional information')
 def about(no_banner: bool):
     """
@@ -1425,101 +845,10 @@ def about(no_banner: bool):
         context.print_banner(meta_info=meta_info)
 
 
-@click.command()
-@click.option('--cluster-name', required=True, help='Cluster Name')
-@click.option('--aws-region', required=True, help='AWS Region')
-@click.option('--aws-profile', help='AWS Profile Name')
-@click.option('--admin-username', required=True, help='Cluster Administrator Username')
-@click.option('--admin-password', required=True, help='Cluster Administrator Password')
-@click.option('--test-case-id', help='Provide specific Test Case Id to execute. Multiple test case ids can be provided as a comma separated string.')
-@click.option('--debug', is_flag=True, help='Enable debug logging')
-@click.option('--param', '-p', help='Additional test case parameters used by individual test cases. Format: Key=param1,Value=value1', multiple=True)
-@click.option('--module-set', help='Name of the ModuleSet. Default: default')
-@click.argument('MODULES', required=True, nargs=-1)
-def run_integration_tests(cluster_name: str, aws_region: str, aws_profile: str, admin_username: str, admin_password: str,
-                          test_case_id: str, debug: bool, param: tuple, module_set: str, modules):
-    """
-    run integration tests for a module
-
-    examples:
-
-    \b
-    * Run all scheduler test cases. All job test cases will be executed for the configured Compute Node OS and Compute Node AMI for the cluster
-    ./res-admin.sh run-integration-tests scheduler \\
-            --cluster-name idea-test1 \\
-            --aws-region eu-west-1 \\
-            --admin-username YOUR_ADMIN_USER \\
-            --admin-password YOUR_ADMIN_PASSWORD
-
-    \b
-    * Run scheduler job submission test cases: hello_world and custom_instance_type for base_os: amazonlinux2 with a custom ami
-    ./res-admin.sh run-integration-tests scheduler \\
-            --cluster-name idea-test1 \\
-            --aws-region eu-west-1 \\
-            --admin-username YOUR_ADMIN_USER \\
-            --admin-password YOUR_ADMIN_PASSWORD \\
-            --param job_test_cases=hello_world,custom_instance_type \\
-            --param base_os=amazonlinux2:YOUR_CUSTOM_AMI \\
-            --test-case-id SCHEDULER_JOB_TEST_CASES
-    """
-
-    # dedupe and convert to list
-    module_ids_to_test = []
-    for module_id in modules:
-        if module_id in module_ids_to_test:
-            continue
-        module_ids_to_test.append(module_id)
-
-    extra_params = {}
-    if Utils.is_not_empty(param):
-        for token in param:
-            kv = token.split('=', 1)
-            if len(kv) == 2:
-                key = kv[0]
-                value = kv[1]
-                extra_params[key] = value
-
-    if not Utils.is_empty(test_case_id):
-        test_case_ids = test_case_id.split(',')
-    else:
-        test_case_ids = []
-
-    test_context = TestContext(
-        cluster_name=cluster_name,
-        aws_region=aws_region,
-        aws_profile=aws_profile,
-        admin_username=admin_username,
-        admin_password=admin_password,
-        debug=debug,
-        extra_params=extra_params,
-        test_case_ids=test_case_ids,
-        module_set=module_set,
-        module_ids=module_ids_to_test
-    )
-
-    test_invoker = TestInvoker(
-        test_context=test_context,
-        module_ids=module_ids_to_test
-    )
-
-    test_invoker.invoke()
-
 def print_using_default_warning(arg: str, path: str, cli: SocaCliContext = None):
     if cli is None:
         cli = SocaCliContext()
     cli.warning(f'WARNING: {arg} was not specified; Using default location: {path}')
-
-
-def get_bucket_name(cluster_name: str, aws_region: str,
-                    cluster_config_db: ClusterConfigDB, context: SocaCliContext):
-    config_entry = cluster_config_db.get_config_entry('cluster.cluster_s3_bucket')
-    bucket_name = None
-    if Utils.is_not_empty(config_entry):
-        bucket_name = config_entry['value']
-    if Utils.is_empty(bucket_name):
-        aws_account_id = context.aws().aws_account_id()
-        bucket_name = f'{cluster_name}-cluster-{aws_region}-{aws_account_id}'
-    return bucket_name
 
 
 @vpc_endpoints.command('service-info', context_settings=CLICK_SETTINGS)
@@ -1612,23 +941,6 @@ def cluster_prefix_list_remove_entry(cluster_name: str, aws_region: str, aws_pro
     ).remove_entry(cidr=cidr)
 
 
-@support.command('deployment', context_settings=CLICK_SETTINGS)
-@click.option('--cluster-name', required=True, help='Cluster Name')
-@click.option('--aws-region', required=True, help='AWS Region')
-@click.option('--aws-profile', help='AWS Profile Name')
-@click.option('--module-set', help='Name of the ModuleSet. Default: default')
-def support_deployment(cluster_name: str, aws_region: str, aws_profile: str, module_set: str):
-    """
-    build deployment support debug package
-    """
-    SupportHelper(
-        cluster_name=cluster_name,
-        aws_region=aws_region,
-        aws_profile=aws_profile,
-        module_set=module_set
-    ).invoke()
-
-
 @directoryservice.command('create-service-account-secrets', context_settings=CLICK_SETTINGS)
 @click.option('--cluster-name', required=True, help='Cluster Name')
 @click.option('--aws-region', required=True, help='AWS Region')
@@ -1708,59 +1020,17 @@ def ds_create_service_secrets(cluster_name: str, aws_region: str, aws_profile: s
     print(f'Credentials Secret ARN: {credentials_secret_arn}')
 
 
-@shared_storage.command('add-file-system', context_settings=CLICK_SETTINGS)
-@click.option('--cluster-name', help='Cluster Name')
-@click.option('--aws-region', required=True, help='AWS Region')
-@click.option('--aws-profile', help='AWS Profile Name')
-@click.option('--kms-key-id', help='KMS Key ID')
-def add_file_system(cluster_name: str, aws_region: str, aws_profile: str, kms_key_id: str):
-    """
-    add new shared-storage file-system
-    """
-    SharedStorageHelper(
-        cluster_name=cluster_name,
-        aws_region=aws_region,
-        aws_profile=aws_profile,
-        kms_key_id=kms_key_id
-    ).add_file_system(use_existing_fs=False)
 
-
-@shared_storage.command('attach-file-system', context_settings=CLICK_SETTINGS)
-@click.option('--cluster-name', help='Cluster Name')
-@click.option('--aws-region', required=True, help='AWS Region')
-@click.option('--aws-profile', help='AWS Profile Name')
-@click.option('--kms-key-id', help='KMS Key ID')
-def attach_file_system(cluster_name: str, aws_region: str, aws_profile: str, kms_key_id: str):
-    """
-    attach existing shared-storage file-system
-    """
-    SharedStorageHelper(
-        cluster_name=cluster_name,
-        aws_region=aws_region,
-        aws_profile=aws_profile,
-        kms_key_id=kms_key_id
-    ).add_file_system(use_existing_fs=True)
-
-
-main.add_command(deploy)
 main.add_command(cdk)
 main.add_command(config)
-main.add_command(upload_packages)
 main.add_command(list_modules)
-main.add_command(build_bootstrap_package)
 main.add_command(show_connection_info)
-main.add_command(quick_setup_help)
-main.add_command(quick_setup)
-main.add_command(delete_cluster)
 main.add_command(patch_module)
 main.add_command(upload_package)
 main.add_command(check_cluster_status)
 main.add_command(about)
-main.add_command(run_integration_tests)
 main.add_command(utils)
-main.add_command(support)
 main.add_command(directoryservice)
-main.add_command(shared_storage)
 
 
 def main_wrapper():

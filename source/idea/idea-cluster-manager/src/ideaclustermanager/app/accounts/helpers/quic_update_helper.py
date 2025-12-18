@@ -13,6 +13,9 @@ from enum import Enum
 from ideadatamodel import constants
 from ideasdk.context import SocaContext
 
+from res.utils import cluster_settings_utils
+from res.resources import cluster_settings
+
 TCP = 'TCP'
 QUIC = 'QUIC'
 TCP_PROTOCOL = 'TCP'
@@ -182,6 +185,7 @@ class QuicUpdateHelper:
         self.context.config().put(f'{module_id}.dcv_session.quic_support', value)
 
     def create_listener(self, external_nlb_arn: str, protocol: str, target_group_arn: str) -> str:
+        custom_tags = cluster_settings_utils.convert_custom_tags_to_dict_list(cluster_settings.get_setting("global-settings.custom_tags"))
         return self.context.aws().elbv2().create_listener(
             LoadBalancerArn=external_nlb_arn,
             Protocol=protocol,
@@ -191,10 +195,12 @@ class QuicUpdateHelper:
                     'Type': 'forward',
                     'TargetGroupArn': target_group_arn
                 }
-            ]
+            ],
+            Tags=custom_tags,
         ).get('Listeners', [None])[0]['ListenerArn']
 
     def create_target_group(self, target_group_name: str, protocol: str, vpc_id: str):
+        custom_tags = cluster_settings_utils.convert_custom_tags_to_dict_list(cluster_settings.get_setting("global-settings.custom_tags"))
         target_group_arn = self.context.aws().elbv2().create_target_group(
             Name=target_group_name,
             Protocol=protocol,
@@ -219,7 +225,8 @@ class QuicUpdateHelper:
                 {
                     'Key': 'res:ModuleVersion',
                     'Value': self.context.module_version()
-                }
+                },
+                *custom_tags
             ]
         ).get('TargetGroups', [None])[0]['TargetGroupArn']
         try:

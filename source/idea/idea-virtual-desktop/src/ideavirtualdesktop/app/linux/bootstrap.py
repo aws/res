@@ -31,7 +31,6 @@ from ideabootstrap.dcv import dcv
 import os
 import subprocess
 import time
-from ideavirtualdesktop.app.utils import send_sqs_host_messages
 from ideavirtualdesktop.app.linux import post_reboot
 
 logger = logging_utils.get_logger("boostrap")
@@ -89,8 +88,6 @@ def run():
 
         bootstrap_common.source_launch_env_file('/etc/launch_script_environment')
         on_vdi_configured()
-
-        send_sqs_host_messages("DCV_HOST_READY_EVENT")
 
         logger.info(f"Created semaphore directory: {SEMAPHORE_DIR}")
         os.makedirs(SEMAPHORE_DIR, exist_ok=True)

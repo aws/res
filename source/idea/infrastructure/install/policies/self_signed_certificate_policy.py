@@ -24,6 +24,7 @@ class SelfSignedCertificatePolicy(Policy):
                     "acm:ListCertificates",
                     "acm:DeleteCertificate",
                     "acm:AddTagsToCertificate",
+                    "acm:RemoveTagsFromCertificate",
                 ],
                 resources=["*"],
             ),
@@ -36,8 +37,16 @@ class SelfSignedCertificatePolicy(Policy):
                     "secretsmanager:GetSecretValue",
                     "secretsmanager:CreateSecret",
                     "secretsmanager:TagResource",
+                    "secretsmanager:UntagResource",
                 ],
                 resources=["*"],
+            ),
+            iam.PolicyStatement(
+                effect=iam.Effect.ALLOW,
+                actions=[
+                    "dynamodb:GetItem",
+                ],
+                resources=[arn_builder.get_ddb_table_arn("cluster-settings")],
             ),
         ]
         policy_statements.extend(

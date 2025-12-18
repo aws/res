@@ -67,9 +67,9 @@ class SocaListingPayload(SocaPayload):
     filters: Optional[List[SocaFilter]]
 
     @property
-    def page_size(self) -> int:
+    def page_size(self) -> Optional[str]:
         if self.paginator is None:
-            return 20
+            return None
         return ModelUtils.get_as_int(self.paginator.page_size)
 
     @property

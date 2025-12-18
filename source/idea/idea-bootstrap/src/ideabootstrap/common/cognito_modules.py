@@ -111,7 +111,7 @@ def _setup_nss():
         f.writelines(lines)
 
     os.makedirs('/opt/cognito_auth/', exist_ok=True)
-    os.chmod('/opt/cognito_auth', 0o777) # nosec
+    os.chmod('/opt/cognito_auth', 0o700) # nosec
     logger.info(f"Setup to NSS Switch file: {nsswitch_file} was successfully")
 
 def configure():

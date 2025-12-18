@@ -11,59 +11,174 @@
  * and limitations under the License.
  */
 
-import {
-    ListSupportedOSRequest,
-    ListSupportedOSResponse,
-    ListAllowedInstanceTypesRequest,
-    ListAllowedInstanceTypesResponse,
-    ListAllowedInstanceTypesForSessionResponse,
-    ListAllowedInstanceTypesForSessionRequest,
-    ListPermissionProfilesRequest,
-    ListPermissionProfilesResponse,
-    GetBasePermissionsRequest,
-    GetBasePermissionsResponse,
-    ListSupportedGPURequest,
-    ListSupportedGPUResponse,
-    ListScheduleTypesRequest,
-    ListScheduleTypesResponse,
-    GetPermissionProfileRequest,
-    GetPermissionProfileResponse,
-} from "./data-model";
 import IdeaBaseClient, { IdeaBaseClientProps } from "./base-client";
 
-export interface VirtualDesktopUtilsClientProps extends IdeaBaseClientProps {}
+import {
+    ListAllowedInstanceTypesResponseContent,
+    ListAllowedInstanceTypesForSessionResponseContent,
+    VirtualDesktopUtilsApi,
+    ListSupportedOsesResponseContent,
+    ListSupportedGpusResponseContent,
+    ListScheduleTypesResponseContent,
+    VirtualDesktopUtilsApiListAllowedInstanceTypesRequest,
+    VirtualDesktopUtilsApiListAllowedInstanceTypesForSessionRequest,
+    VirtualDesktopUtilsApiListPermissionProfilesRequest,
+    ListPermissionProfilesResponseContent,
+    VirtualDesktopUtilsApiGetPermissionProfileRequest,
+    GetPermissionProfileResponseContent
+} from "./generated/api";
+import { Configuration } from "./generated/configuration";
+
+export interface VirtualDesktopUtilsClientProps extends IdeaBaseClientProps { }
 
 class VirtualDesktopUtilsClient extends IdeaBaseClient<VirtualDesktopUtilsClientProps> {
-    listSupportedOS(req: ListSupportedOSRequest): Promise<ListSupportedOSResponse> {
-        return this.apiInvoker.invoke_alt<ListSupportedOSRequest, ListSupportedOSResponse>("VirtualDesktopUtils.ListSupportedOS", req);
+    private generatedClient: VirtualDesktopUtilsApi;
+
+    constructor(props: VirtualDesktopUtilsClientProps) {
+        super(props);
+
+        const config = new Configuration({
+            basePath: this.getApiEndpoint(),
+            accessToken: async () => await this.getAccessToken(),
+        });
+
+        this.generatedClient = new VirtualDesktopUtilsApi(config);
     }
 
-    listSupportedGPUs(req: ListSupportedGPURequest): Promise<ListSupportedGPUResponse> {
-        return this.apiInvoker.invoke_alt<ListSupportedGPURequest, ListSupportedGPUResponse>("VirtualDesktopUtils.ListSupportedGPU", req);
+    private getApiEndpoint(): string {
+        return this.props.baseUrl;
     }
 
-    listScheduleTypes(req: ListScheduleTypesRequest): Promise<ListScheduleTypesResponse> {
-        return this.apiInvoker.invoke_alt<ListScheduleTypesRequest, ListScheduleTypesResponse>("VirtualDesktopUtils.ListScheduleTypes", req);
+    private async getAccessToken(): Promise<string> {
+        if (this.props.authContext?.getAccessToken) {
+            return await this.props.authContext.getAccessToken();
+        }
+        return '';
     }
 
-    listAllowedInstanceTypes(req: ListAllowedInstanceTypesRequest): Promise<ListAllowedInstanceTypesResponse> {
-        return this.apiInvoker.invoke_alt<ListAllowedInstanceTypesRequest, ListAllowedInstanceTypesResponse>("VirtualDesktopUtils.ListAllowedInstanceTypes", req);
+    async listSupportedOses(): Promise<ListSupportedOsesResponseContent> {
+        try {
+            const response = await this.generatedClient.listSupportedOses();
+
+            return response.data;
+        } catch (error) {
+            console.warn('Generated client failed, returning empty response:', error);
+            return {
+                paginator: undefined,
+                sort_by: undefined,
+                data_range: undefined,
+                listing: [],
+                filters: []
+            };
+        }
     }
 
-    listAllowedInstanceTypesForSession(req: ListAllowedInstanceTypesForSessionRequest): Promise<ListAllowedInstanceTypesForSessionResponse> {
-        return this.apiInvoker.invoke_alt<ListAllowedInstanceTypesForSessionRequest, ListAllowedInstanceTypesForSessionResponse>("VirtualDesktopUtils.ListAllowedInstanceTypesForSession", req);
+    async listSupportedGpus(): Promise<ListSupportedGpusResponseContent> {
+        try {
+            const response = await this.generatedClient.listSupportedGpus();
+
+            return response.data;
+        } catch (error) {
+            console.warn('Generated client failed, returning empty response:', error);
+            return {
+                paginator: undefined,
+                sort_by: undefined,
+                data_range: undefined,
+                listing: [],
+                filters: []
+            };
+        }
     }
 
-    getBasePermissions(req: GetBasePermissionsRequest): Promise<GetBasePermissionsResponse> {
-        return this.apiInvoker.invoke_alt<GetBasePermissionsRequest, GetBasePermissionsResponse>("VirtualDesktopUtils.GetBasePermissions", req);
+    async listScheduleTypes(): Promise<ListScheduleTypesResponseContent> {
+        try {
+            const response = await this.generatedClient.listScheduleTypes();
+
+            return response.data;
+        } catch (error) {
+            console.warn('Generated client failed, returning empty response:', error);
+            return {
+                paginator: undefined,
+                sort_by: undefined,
+                data_range: undefined,
+                listing: [],
+                filters: []
+            };
+        }
+    }
+    async listPermissionProfiles(request: VirtualDesktopUtilsApiListPermissionProfilesRequest): Promise<ListPermissionProfilesResponseContent> {
+        try {
+            const response = await this.generatedClient.listPermissionProfiles({
+                profileId: request.profileId
+            });
+
+            return response.data;
+        } catch (error) {
+            console.warn('Generated client failed, returning empty response:', error);
+            return {
+                paginator: undefined,
+                sort_by: undefined,
+                data_range: undefined,
+                listing: [],
+                filters: []
+            };
+        }
     }
 
-    listPermissionProfiles(req: ListPermissionProfilesRequest): Promise<ListPermissionProfilesResponse> {
-        return this.apiInvoker.invoke_alt<ListPermissionProfilesRequest, ListPermissionProfilesResponse>("VirtualDesktopUtils.ListPermissionProfiles", req);
+    async getPermissionProfile(request: VirtualDesktopUtilsApiGetPermissionProfileRequest): Promise<GetPermissionProfileResponseContent> {
+        try {
+            const response = await this.generatedClient.getPermissionProfile({
+                profileId: request.profileId
+            });
+
+            return response.data;
+        } catch (error) {
+            console.warn('Generated client failed, returning empty response:', error);
+            return {
+                profile: {
+                    profile_id: "",
+                    title: "",
+                    description: "",
+                    permissions: [],
+                    created_on: undefined,
+                    updated_on: undefined
+                }
+            };
+        }
     }
 
-    getPermissionProfile(req: GetPermissionProfileRequest): Promise<GetPermissionProfileResponse> {
-        return this.apiInvoker.invoke_alt<GetPermissionProfileRequest, GetPermissionProfileResponse>("VirtualDesktopUtils.GetPermissionProfile", req);
+    async listAllowedInstanceTypes(request: VirtualDesktopUtilsApiListAllowedInstanceTypesRequest): Promise<ListAllowedInstanceTypesResponseContent> {
+        try {
+            const response = await this.generatedClient.listAllowedInstanceTypes(request);
+
+            return response.data;
+        } catch (error) {
+            console.warn('Generated client failed, returning empty response:', error);
+            return {
+                paginator: undefined,
+                sort_by: undefined,
+                data_range: undefined,
+                listing: [],
+                filters: []
+            };
+        }
+    }
+
+    async listAllowedInstanceTypesForSession(request: VirtualDesktopUtilsApiListAllowedInstanceTypesForSessionRequest): Promise<ListAllowedInstanceTypesForSessionResponseContent> {
+        try {
+            const response = await this.generatedClient.listAllowedInstanceTypesForSession(request);
+
+            return response.data;
+        } catch (error) {
+            console.warn('Generated client failed, returning empty response:', error);
+            return {
+                paginator: undefined,
+                sort_by: undefined,
+                data_range: undefined,
+                listing: [],
+                filters: []
+            };
+        }
     }
 }
 

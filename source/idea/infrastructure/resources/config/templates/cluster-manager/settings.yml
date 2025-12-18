@@ -30,15 +30,6 @@ web_portal:
   subtitle: ~
   copyright_text: 'Copyright 2023 Amazon Inc. or its affiliates. All Rights Reserved.'
 
-  # session management refers to client side session management
-  # valid values are one of: [in-memory, local-storage]
-  # * in-memory: implies access tokens and refresh tokens will be saved in-memory within ServerWorker instance in WebBrowser. (recommended)
-  # * local-storage: implies access tokens and refresh tokens will be saved in browser local storage.
-  # Note: ServiceWorkers cannot be activated on Browsers when serving over insecure HTTPS/TLS context. Unless you are using valid TLS certs, ServiceWorkers will not be activated.
-  # Web Portal implementation will fall back to local-storage for session management when ServiceWorker cannot be installed.
-  # Change below value to local-storage only if you want to disable ServiceWorker based session management.
-  session_management: in-memory
-
   # front end default log level
   #  0: OFF
   #  1: ERROR
@@ -46,7 +37,7 @@ web_portal:
   #  3: INFO
   #  4: DEBUG
   #  5: TRACE
-  # log level can be overriden by user by setting the `idea.log-level` local storage key using browser console
+  # log level can be overridden by user by setting the `idea.log-level` local storage key using browser console
   # eg. localStorage.setItem('idea.log-level', '4')
   default_log_level: 3
 

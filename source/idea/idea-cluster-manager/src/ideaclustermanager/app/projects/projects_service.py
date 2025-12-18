@@ -34,6 +34,7 @@ from ideasdk.utils import Utils, ApiUtils
 from ideasdk.launch_configurations import LaunchScriptsHelper, LaunchRoleHelper
 from ideasdk.context import SocaContext, ArnBuilder
 from ideasdk.client.vdc_client import AbstractVirtualDesktopControllerClient
+from res.utils import iam_utils
 
 from ideaclustermanager.app.projects.db.projects_dao import ProjectsDAO
 from ideaclustermanager.app.authz.db.role_assignments_dao import RoleAssignmentsDAO
@@ -140,6 +141,7 @@ class ProjectsService:
         Delete a Project
         validate required fields, remove the project from DynamoDB and Cache.
         Also remove the virtual desktop sessions and update software stacks.
+        Also delete role and instance profile created for the project.
         :param request: DeleteProjectRequest
         :param access_token: access token used for this request
         :param api_authorization: authorization for this request
@@ -155,7 +157,8 @@ class ProjectsService:
 
         project = self.projects_dao.get_project_by_id(project_id) if project_id else self.projects_dao.get_project_by_name(project_name)
         if project is not None:
-            project_id = self.projects_dao.convert_from_db(project).project_id
+            project_obj = self.projects_dao.convert_from_db(project)
+            project_id = project_obj.project_id
             sessions_by_project_id = self.vdc_client.list_sessions_by_project_id(project_id)
             if sessions_by_project_id:
                 self.vdc_client.delete_sessions(sessions=sessions_by_project_id, force_delete=True)
@@ -173,6 +176,8 @@ class ProjectsService:
             for role_assignment in role_assignments:
                 if role_assignment.actor_type in constants.VALID_ROLE_ASSIGNMENT_ACTOR_TYPES:
                     self.role_assignments_dao.delete_role_assignment(actor_key=role_assignment.actor_key, resource_key=role_assignment.resource_key)
+            
+            self._delete_vdi_role_and_instance_profile(project_obj.name)
             self.projects_dao.delete_project(project_id)
 
         return DeleteProjectResult()
@@ -487,17 +492,54 @@ class ProjectsService:
             # Roll back creation of VDI role and instance profile if any steps fail
             if policies_added:
                 for policy_arn in policies_added:
-                    self.context.aws_util().detach_role_policy(
-                        role_name=vdi_role_name,
-                        policy_arn=policy_arn
-                    )
+                    iam_utils.detach_policy_from_role(vdi_role_name, policy_arn)
             if is_vdi_role_created:
-                self.context.aws_util().delete_vdi_host_role(vdi_role_name)
+                iam_utils.delete_iam_role(vdi_role_name)
             if is_vdi_instance_profile_created:
-                self.context.aws_util().delete_vdi_instance_profile(instance_profile_name)
+                iam_utils.delete_iam_instance_profile(instance_profile_name)
             self.logger.error(f'Create VDI role error {e}')
             raise exceptions.general_exception("Could not create role with given policies")
         return True
+    
+    def _delete_vdi_role_and_instance_profile(self, project_name: str) -> None:
+
+        vdi_role_name = instance_profile_name = LaunchRoleHelper.get_vdi_role_name(cluster_name=self.context.cluster_name(), project_name=project_name)
+        is_vdi_role_deleted = False
+        is_role_profile_dissociated = False
+        is_vdi_instance_profile_deleted = False
+        policies_detached = []
+        permissions_boundary = self.context.config().get_string('cluster.iam.permission_boundary_arn', None)
+        try:
+            role_exists, policies_attached = iam_utils.get_role_attached_policies_arns(vdi_role_name)
+            if not role_exists:
+                self.logger.info(f'No VDI role created for project, return')
+                return
+
+            self.logger.info(f'Deleting VDI role and instance profile for project {project_name}')
+
+            for policy_arn in policies_attached:
+                iam_utils.detach_policy_from_role(vdi_role_name, policy_arn)
+                policies_detached.append(policy_arn)
+
+            is_role_profile_dissociated = iam_utils.dissociate_role_and_instance_profile(vdi_role_name, instance_profile_name)
+            is_vdi_role_deleted = iam_utils.delete_iam_role(vdi_role_name)
+            is_vdi_instance_profile_deleted = iam_utils.delete_iam_instance_profile(instance_profile_name)
+        except Exception as e:
+            # Roll back deletion of VDI role and instance profile if any steps fail
+            if is_vdi_instance_profile_deleted:
+                self.context.aws_util().create_vdi_instance_profile(instance_profile_name)
+            if is_vdi_role_deleted:
+                self.context.aws_util().create_vdi_host_role(vdi_role_name, permissions_boundary)
+            if is_role_profile_dissociated:
+                self.context.aws_util().add_role_to_instance_profile(role_name=vdi_role_name, instance_profile_name=instance_profile_name)
+            if policies_detached:
+                for policy_arn in policies_detached:
+                    self.context.aws_util().attach_role_policy(
+                        role_name=vdi_role_name,
+                        policy_arn=policy_arn
+                    )
+            self.logger.error(f"Delete VDI role error {e}")
+            raise exceptions.general_exception(f"Could not delete role for project {project_name}")
 
     def _update_vdi_role(self, project_name, policies_to_detach: Set[str], policies_to_attach: Set[str]) -> bool:
         vdi_role_name = LaunchRoleHelper.get_vdi_role_name(cluster_name=self.context.cluster_name(), project_name=project_name)
@@ -508,7 +550,7 @@ class ProjectsService:
         policies_removed = []
         try:
             for policy_arn in policies_to_detach:
-                self.context.aws_util().detach_role_policy(role_name=vdi_role_name, policy_arn=policy_arn)
+                iam_utils.detach_policy_from_role(vdi_role_name, policy_arn)
                 policies_removed.append(policy_arn)
             for policy_arn in policies_to_attach:
                 self.context.aws_util().attach_role_policy(role_name=vdi_role_name, policy_arn=policy_arn)
@@ -516,10 +558,7 @@ class ProjectsService:
         except Exception as e:
             if policies_added:
                 for policy_arn in policies_added:
-                    self.context.aws_util().detach_role_policy(
-                        role_name=vdi_role_name,
-                        policy_arn=policy_arn
-                    )
+                    iam_utils.detach_policy_from_role(vdi_role_name, policy_arn)
             if policies_removed:
                 for policy_arn in policies_removed:
                     self.context.aws_util().attach_role_policy(

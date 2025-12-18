@@ -1,0 +1,135 @@
+// #  Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+// #  SPDX-License-Identifier: Apache-2.0
+
+plugins {
+    id("org.openapi.generator") version "7.17.0"
+}
+
+openApiValidate {
+    inputSpec = "$projectDir/spec/openapi/RES.openapi.yaml".toString()
+}
+
+task cleanGenerated(type: Delete) {
+    description "Clean generated folder before generation"
+    group "Research and Engineering Studio API"
+    delete "$projectDir/generated"
+}
+
+task generatePythonServer(
+        type: org.openapitools.generator.gradle.plugin.tasks.GenerateTask,
+        dependsOn: ['buildSmithyModel', 'openApiValidate', 'cleanGenerated']
+) {
+    description "Generate a Python server using Open API Tools Generator."
+    group "Research and Engineering Studio API"
+    outputs.upToDateWhen { false }
+    outputs.cacheIf { false }
+    generatorName = "python-flask"
+    inputSpec = "$projectDir/spec/openapi/RES.openapi.yaml".toString()
+    outputDir = "$projectDir/generated/server-stub".toString()
+    configOptions = [
+            disallowAdditionalPropertiesIfNotPresent: "false",
+            prependFormOrBodyParameters: "true",
+            packageName: "api",
+    ]
+    globalProperties = [
+            modelDocs: "false",
+            modelTests: "false"
+    ]
+    additionalProperties = [
+            "asyncio": "true",
+            "generateSourceCodeOnly": "true"
+    ]
+    finalizedBy 'postGeneration'
+}
+
+task postGeneration(type: Exec) {
+    description "Customize the auto-generated API code"
+    group "Research and Engineering Studio API"
+    workingDir "$projectDir"
+    commandLine "./post-generation-scripts/post-generation.sh"
+}
+
+task basePythonClient(
+        type: org.openapitools.generator.gradle.plugin.tasks.GenerateTask,
+        dependsOn: ['buildSmithyModel', 'openApiValidate']
+) {
+    description "Generate base Python client code using Open API Tools Generator."
+    outputs.upToDateWhen { false }
+    outputs.cacheIf { false }
+    generatorName = "python"
+    inputSpec = "$projectDir/spec/openapi/RES.openapi.yaml".toString()
+    outputDir = "$projectDir/generated/client/python/src".toString()
+    configOptions = [
+            packageName: "res_client"
+    ]
+}
+
+task generatePythonClient(type:Exec, dependsOn: ['basePythonClient']) {
+    description "Generate a Python client using Open API Tools Generator."
+    group "Research and Engineering Studio API"
+    workingDir "$projectDir"
+    environment 'NO_PACKAGE_PREFIX', 'true'
+    commandLine "./client/patch-client.sh"
+}
+
+task generateTypeScriptClient(
+        type: org.openapitools.generator.gradle.plugin.tasks.GenerateTask,
+        dependsOn: ['buildSmithyModel', 'openApiValidate']
+) {
+    description "Generate a TypeScript client using Open API Tools Generator."
+    group "Research and Engineering Studio API"
+    outputs.upToDateWhen { false }
+    outputs.cacheIf { false }
+    generatorName = "typescript-axios"
+    inputSpec = "$projectDir/spec/openapi/RES.openapi.yaml".toString()
+    outputDir = "$projectDir/generated/client/typescript/src".toString()
+    configOptions = [
+            npmName: "res-typescript-client",
+            npmVersion: "1.0.0",
+            supportsES6: "true",
+            withInterfaces: "true",
+            useSingleRequestParameter: "true"
+    ]
+    globalProperties = [
+            modelDocs: "false",
+            modelTests: "false"
+    ]
+    additionalProperties = [
+            "generateSourceCodeOnly": "false"
+    ]
+    finalizedBy 'postGenerationTypeScript'
+}
+
+task postGenerationTypeScript(type: Exec) {
+    description "Add copyright headers to generated TypeScript client files"
+    group "Research and Engineering Studio API"
+    workingDir "$projectDir"
+    commandLine "./post-generation-scripts/add_typescript_copyright_headers.sh", "generated/client/typescript/src"
+}
+
+task buildSmithyModel(type:Exec) {
+    description "Build Smithy model and generate the OpenAPI spec file"
+    group "Research and Engineering Studio API"
+    workingDir "$projectDir/spec"
+    commandLine "./build-model.sh"
+}
+
+task swaggerUI(
+        type:Exec,
+        dependsOn: ['buildSmithyModel', 'openApiValidate']
+) {
+    description "Run a Docker container hosting a Swagger UI with the Research and Engineering Studio API specs."
+    group "Research and Engineering Studio API"
+    workingDir "$projectDir/spec"
+    commandLine "./run-swagger-ui.sh"
+}
+
+task redoc(
+        type:Exec,
+        dependsOn: ['buildSmithyModel', 'openApiValidate']
+) {
+    description "Generate a standalone html page with the redoc documentation of the API"
+    group "Research and Engineering Studio API"
+    workingDir "$projectDir/spec"
+    commandLine "./generate-redoc-bundle.sh"
+}

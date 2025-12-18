@@ -13,6 +13,7 @@
 
 import AuthService from "./auth-service";
 import LocalStorageService from "./local-storage-service";
+import SessionStorageService from "./session-storage-service";
 import ClusterSettingsService from "./cluster-settings-service";
 
-export { AuthService, LocalStorageService, ClusterSettingsService };
+export { AuthService, LocalStorageService, SessionStorageService, ClusterSettingsService };

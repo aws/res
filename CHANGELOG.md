@@ -1,6 +1,35 @@
 # Change Log
 This file is used to list changes made in each release of Research and Engineering Studio (RES).
 
+2025.12
+------
+
+**ENHANCEMENTS**
+
+- Propagation of custom CloudFormation tags to all RES components during deployment.
+- Allow administrators to disable Active Directory joining for Windows hosts.
+- Enable administrators to set default schedules for VDI desktop instances.
+- S3 bucket access logging enabled for compliance and audit requirements.
+- SSL/TLS encryption required on all S3 bucket communications.
+- Enabled point-in-time recovery for RES managed DynamoDB tables.
+- Updated permissions of /opt/cognito_auth directory to root-only access.
+
+**CHANGES**
+
+- Migrated VDC-related APIs out of the VDC EC2 host to the backend Lambda.
+
+**BUG FIXES**
+
+- Refreshing Allowed Instance Types when launching a new VDI.
+- Fixed missing dependencies for efs_utils.
+- Fixed cost dashboard total number of sessions in RES portal.
+- Fixed issue where users could manually bypass the allowed instance types.
+- Addressed race condition that could block DCV connection for Linux VDIs.
+- Added missing operating systems from Software Stack page OS drop-down menu.
+- Fixed frequent logout issue when using custom domain with Chrome.
+- Fixed issue where the runtime SSSD configurations are not applied after disabling AD join.
+- Fixed RES environment deletion failure caused by remaining VDI role.
+
 2025.09
 ------
 

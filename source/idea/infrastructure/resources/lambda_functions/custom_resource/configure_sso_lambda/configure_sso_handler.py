@@ -12,6 +12,8 @@ from typing import Any, Dict, List, Optional, Tuple
 
 import boto3
 import botocore.exceptions
+from res.constants import ENVIRONMENT_NAME_KEY  # type: ignore
+from res.utils import cluster_settings_utils  # type: ignore
 
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
@@ -240,9 +242,13 @@ class SingleSignOnHelper:
         # get custom kms key id for secrets manager if configured
         # and add kms key id to request if available. else boto client throws validation exception for None
         kms_key_id = self.config.get_item("cluster.secretsmanager.kms_key_id")
+        custom_tags = cluster_settings_utils.convert_custom_tags_to_dict_list(
+            self.config.get_item("global-settings.custom_tags")
+        )
         tags = [
             {"Key": "res:EnvironmentName", "Value": self.cluster_name},
             {"Key": "res:ModuleName", "Value": "cluster-manager"},
+            *custom_tags,
         ]
 
         secret_name = f"{self.cluster_name}-sso-client-secret"
@@ -503,9 +509,9 @@ class SingleSignOnHelper:
 def handler(event: Dict[str, Any], context: Any) -> bool:
     logger.info(f"ReceivedEvent: {event}")
     try:
-        cluster_name = os.environ.get("CLUSTER_NAME")
+        cluster_name = os.environ.get(ENVIRONMENT_NAME_KEY)
         if not cluster_name:
-            raise Exception("CLUSTER_NAME environment variable is required")
+            raise Exception(f"{ENVIRONMENT_NAME_KEY} environment variable is required")
         configure_sso_request = event.get("configure_sso_request")
         if not configure_sso_request:
             raise Exception("Configure sso input is empty")

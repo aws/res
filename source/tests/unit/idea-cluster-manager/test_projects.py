@@ -26,6 +26,7 @@ from ideaclustermanager.app.accounts.db.user_dao import UserDAO
 from ideasdk.aws import AwsClientProvider
 from ideasdk.utils import Utils
 from res.resources import accounts
+from res.utils import iam_utils
 
 from ideadatamodel import (
     AwsProjectBudget,
@@ -595,11 +596,18 @@ def test_projects_crud_create_project_valid_policy_arn_create_new_role_fails_sho
         "operation_name",
     )
 
-    mock_iam.detach_role_policy = MagicMock()
-    mock_iam.delete_role = MagicMock()
-    mock_iam.delete_instance_profile = MagicMock()
+    mock_detach_policy_from_role = MagicMock()
+    mock_delete_iam_role = MagicMock()
+    mock_delete_iam_instance_profile = MagicMock()
 
     monkey_session.setattr(AwsClientProvider, "iam", lambda *_: mock_iam)
+    monkey_session.setattr(
+        iam_utils, "detach_policy_from_role", mock_detach_policy_from_role
+    )
+    monkey_session.setattr(iam_utils, "delete_iam_role", mock_delete_iam_role)
+    monkey_session.setattr(
+        iam_utils, "delete_iam_instance_profile", mock_delete_iam_instance_profile
+    )
     name = generate_random_id("sampleproject")
 
     request = CreateProjectRequest(
@@ -619,9 +627,9 @@ def test_projects_crud_create_project_valid_policy_arn_create_new_role_fails_sho
         context.projects.create_project(request)
     assert exc_info.value.error_code == errorcodes.GENERAL_ERROR
     assert "Could not create role with given policies" in exc_info.value.message
-    mock_iam.detach_role_policy.assert_called()
-    mock_iam.delete_role.assert_called()
-    mock_iam.delete_instance_profile.assert_called()
+    mock_detach_policy_from_role.assert_called()
+    mock_delete_iam_role.assert_called()
+    mock_delete_iam_instance_profile.assert_called()
 
 
 def test_projects_crud_create_project_invalid_allowed_sessions_per_user_fails(
@@ -1013,7 +1021,8 @@ def test_project_crud_update_project_tags(context):
     assert len(result.project.tags) is initial_number_of_tags + 1
 
 
-def test_projects_crud_delete_project(context, membership):
+def test_projects_crud_delete_project(context, monkey_session, membership):
+
     assert ProjectsTestContext.crud_project is not None
     project_id = ProjectsTestContext.crud_project.project_id
     create_role_assignment(
@@ -1045,6 +1054,32 @@ def test_projects_crud_delete_project(context, membership):
 
     context.projects.vdc_client.sessions = [test_session]
     context.projects.vdc_client.software_stacks = [test_stack]
+
+    mock_get_role_attached_policies_arns = MagicMock()
+    mock_get_role_attached_policies_arns.return_value = (True, ["test_arn"])
+    mock_dissociate_role_and_profile = MagicMock()
+    mock_detach_policy_from_role = MagicMock()
+    mock_delete_iam_role = MagicMock()
+    mock_delete_iam_instance_profile = MagicMock()
+
+    monkey_session.setattr(
+        iam_utils,
+        "get_role_attached_policies_arns",
+        mock_get_role_attached_policies_arns,
+    )
+    monkey_session.setattr(
+        iam_utils,
+        "dissociate_role_and_instance_profile",
+        mock_dissociate_role_and_profile,
+    )
+    monkey_session.setattr(
+        iam_utils, "detach_policy_from_role", mock_detach_policy_from_role
+    )
+    monkey_session.setattr(iam_utils, "delete_iam_role", mock_delete_iam_role)
+    monkey_session.setattr(
+        iam_utils, "delete_iam_instance_profile", mock_delete_iam_instance_profile
+    )
+
     context.projects.delete_project(
         DeleteProjectRequest(
             project_id=ProjectsTestContext.crud_project.project_id, force_delete=True

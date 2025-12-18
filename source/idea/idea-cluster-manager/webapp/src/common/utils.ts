@@ -1220,7 +1220,7 @@ class Utils {
     // Build drop-down options of all possible allowed instance types for a software stack based on global allowed list
     static async getAllowedInstanceTypesOptionsForSelectedSoftwareStack(
         selectedSoftwareStack: VirtualDesktopSoftwareStack | undefined): Promise<string[]> {
-        if (!selectedSoftwareStack) return [];
+        if (!selectedSoftwareStack || !selectedSoftwareStack.ami_id) return [];
 
         const settings = await AppContext.get()
             .getClusterSettingsService()
@@ -1232,7 +1232,9 @@ class Utils {
             .client()
             .virtualDesktopUtils()
             .listAllowedInstanceTypes({
-                software_stack: selectedSoftwareStack,
+                listAllowedInstanceTypesRequestContent: {
+                    software_stack: selectedSoftwareStack as any,
+                }
             });
 
         const instanceTypes = new Set<string>();

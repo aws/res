@@ -1,9 +1,0 @@
-Version: '2012-10-17'
-Statement:
-  - Action:
-      - logs:PutRetentionPolicy
-      - logs:DeleteRetentionPolicy
-    Resource: '*'
-    Effect: Allow
-
-{% include '_templates/lambda-basic-execution.yml' %}

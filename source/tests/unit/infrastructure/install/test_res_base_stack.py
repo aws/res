@@ -16,6 +16,20 @@ from tests.unit.infrastructure.install import util
 def cluster_manager_tags(res_base_stack: ResBaseStack) -> List[Dict[str, Any]]:
     return [
         {
+            "Key": "Name",
+            "Value": {
+                "Fn::Join": [
+                    "",
+                    [
+                        res_base_stack.nested_stack.resolve(
+                            res_base_stack.cluster_name
+                        ),
+                        "-res-base",
+                    ],
+                ]
+            },
+        },
+        {
             "Key": "res:BackupPlan",
             "Value": {
                 "Fn::Join": [
@@ -41,6 +55,20 @@ def cluster_manager_tags(res_base_stack: ResBaseStack) -> List[Dict[str, Any]]:
 @pytest.fixture
 def vdc_tags(res_base_stack: ResBaseStack) -> List[Dict[str, Any]]:
     return [
+        {
+            "Key": "Name",
+            "Value": {
+                "Fn::Join": [
+                    "",
+                    [
+                        res_base_stack.nested_stack.resolve(
+                            res_base_stack.cluster_name
+                        ),
+                        "-res-base",
+                    ],
+                ]
+            },
+        },
         {
             "Key": "res:BackupPlan",
             "Value": {
@@ -94,6 +122,9 @@ def test_project_table_creation(
                     {"AttributeName": "name", "AttributeType": "S"},
                 ],
                 "BillingMode": "PAY_PER_REQUEST",
+                "PointInTimeRecoverySpecification": {
+                    "PointInTimeRecoveryEnabled": True
+                },
                 "Tags": cluster_manager_tags,
                 "GlobalSecondaryIndexes": [
                     {
@@ -125,6 +156,9 @@ def test_user_table_creation(
                     {"AttributeName": "role", "AttributeType": "S"},
                     {"AttributeName": "email", "AttributeType": "S"},
                 ],
+                "PointInTimeRecoverySpecification": {
+                    "PointInTimeRecoveryEnabled": True
+                },
                 "Tags": cluster_manager_tags,
                 "GlobalSecondaryIndexes": [
                     {
@@ -171,6 +205,9 @@ def test_group_table_creation(
                 "AttributeDefinitions": [
                     {"AttributeName": "group_name", "AttributeType": "S"}
                 ],
+                "PointInTimeRecoverySpecification": {
+                    "PointInTimeRecoveryEnabled": True
+                },
                 "Tags": cluster_manager_tags,
             },
         },
@@ -197,6 +234,9 @@ def test_group_member_table_creation(
                     {"AttributeName": "group_name", "AttributeType": "S"},
                     {"AttributeName": "username", "AttributeType": "S"},
                 ],
+                "PointInTimeRecoverySpecification": {
+                    "PointInTimeRecoveryEnabled": True
+                },
                 "Tags": cluster_manager_tags,
             },
         },
@@ -219,6 +259,9 @@ def test_sso_state_table_creation(
                 "AttributeDefinitions": [
                     {"AttributeName": "state", "AttributeType": "S"}
                 ],
+                "PointInTimeRecoverySpecification": {
+                    "PointInTimeRecoveryEnabled": True
+                },
                 "Tags": cluster_manager_tags,
                 "TimeToLiveSpecification": {"AttributeName": "ttl", "Enabled": True},
             },
@@ -246,6 +289,9 @@ def test_role_assignment_table_creation(
                     {"AttributeName": "actor_key", "AttributeType": "S"},
                     {"AttributeName": "resource_key", "AttributeType": "S"},
                 ],
+                "PointInTimeRecoverySpecification": {
+                    "PointInTimeRecoveryEnabled": True
+                },
                 "Tags": cluster_manager_tags,
                 "GlobalSecondaryIndexes": [
                     {
@@ -280,6 +326,9 @@ def test_roles_table_creation(
                 "AttributeDefinitions": [
                     {"AttributeName": "role_id", "AttributeType": "S"},
                 ],
+                "PointInTimeRecoverySpecification": {
+                    "PointInTimeRecoveryEnabled": True
+                },
                 "Tags": cluster_manager_tags,
             },
         },
@@ -304,6 +353,9 @@ def test_ad_automation_table_creation(
                 "AttributeDefinitions": [
                     {"AttributeName": "instance_id", "AttributeType": "S"},
                 ],
+                "PointInTimeRecoverySpecification": {
+                    "PointInTimeRecoveryEnabled": True
+                },
                 "Tags": cluster_manager_tags,
             },
         },
@@ -330,6 +382,9 @@ def test_snapshot_table_creation(
                     {"AttributeName": "s3_bucket_name", "AttributeType": "S"},
                     {"AttributeName": "snapshot_path", "AttributeType": "S"},
                 ],
+                "PointInTimeRecoverySpecification": {
+                    "PointInTimeRecoveryEnabled": True
+                },
                 "Tags": cluster_manager_tags,
             },
         },
@@ -354,6 +409,9 @@ def test_apply_snapshot_table_creation(
                 "AttributeDefinitions": [
                     {"AttributeName": "apply_snapshot_identifier", "AttributeType": "S"}
                 ],
+                "PointInTimeRecoverySpecification": {
+                    "PointInTimeRecoveryEnabled": True
+                },
                 "Tags": cluster_manager_tags,
             },
         },
@@ -380,6 +438,9 @@ def test_distributed_local_table_creation(
                     {"AttributeName": "lock_key", "AttributeType": "S"},
                     {"AttributeName": "sort_key", "AttributeType": "S"},
                 ],
+                "PointInTimeRecoverySpecification": {
+                    "PointInTimeRecoveryEnabled": True
+                },
                 "Tags": cluster_manager_tags,
                 "TimeToLiveSpecification": {
                     "AttributeName": "expiry_time",
@@ -406,6 +467,9 @@ def test_email_template_table_creation(
                 "AttributeDefinitions": [
                     {"AttributeName": "name", "AttributeType": "S"}
                 ],
+                "PointInTimeRecoverySpecification": {
+                    "PointInTimeRecoveryEnabled": True
+                },
                 "Tags": cluster_manager_tags,
             },
         },
@@ -428,6 +492,9 @@ def test_vdc_permission_profile_table_creation(
                 "AttributeDefinitions": [
                     {"AttributeName": "profile_id", "AttributeType": "S"}
                 ],
+                "PointInTimeRecoverySpecification": {
+                    "PointInTimeRecoveryEnabled": True
+                },
                 "Tags": vdc_tags,
             },
         },
@@ -466,6 +533,9 @@ def test_vdc_schedule_table_creation(
                         "AttributeType": "S",
                     },
                 ],
+                "PointInTimeRecoverySpecification": {
+                    "PointInTimeRecoveryEnabled": True
+                },
                 "Tags": vdc_tags,
             },
         },
@@ -493,6 +563,9 @@ def test_vdc_ssm_command_table_creation(
                 "AttributeDefinitions": [
                     {"AttributeName": "command_id", "AttributeType": "S"}
                 ],
+                "PointInTimeRecoverySpecification": {
+                    "PointInTimeRecoveryEnabled": True
+                },
                 "Tags": vdc_tags,
             },
         },
@@ -525,6 +598,9 @@ def test_vdc_software_stack_table_creation(
                     {"AttributeName": "base_os", "AttributeType": "S"},
                     {"AttributeName": "stack_id", "AttributeType": "S"},
                 ],
+                "PointInTimeRecoverySpecification": {
+                    "PointInTimeRecoveryEnabled": True
+                },
                 "Tags": vdc_tags,
             },
         },
@@ -551,6 +627,9 @@ def test_vdc_session_table_creation(
                     {"AttributeName": "owner", "AttributeType": "S"},
                     {"AttributeName": "idea_session_id", "AttributeType": "S"},
                 ],
+                "PointInTimeRecoverySpecification": {
+                    "PointInTimeRecoveryEnabled": True
+                },
                 "Tags": vdc_tags,
             },
         },
@@ -577,6 +656,9 @@ def test_vdc_session_counter_table_creation(
                     {"AttributeName": "idea_session_id", "AttributeType": "S"},
                     {"AttributeName": "counter_type", "AttributeType": "S"},
                 ],
+                "PointInTimeRecoverySpecification": {
+                    "PointInTimeRecoveryEnabled": True
+                },
                 "Tags": vdc_tags,
             },
         },
@@ -599,6 +681,9 @@ def test_vdc_server_table_creation(
                 "AttributeDefinitions": [
                     {"AttributeName": "instance_id", "AttributeType": "S"},
                 ],
+                "PointInTimeRecoverySpecification": {
+                    "PointInTimeRecoveryEnabled": True
+                },
                 "Tags": vdc_tags,
             },
         },
@@ -637,6 +722,9 @@ def test_vdc_session_permission_table_creation(
                         "AttributeType": "S",
                     },
                 ],
+                "PointInTimeRecoverySpecification": {
+                    "PointInTimeRecoveryEnabled": True
+                },
                 "Tags": vdc_tags,
             },
         },
@@ -663,6 +751,9 @@ def test_vdc_distributed_local_table_creation(
                     {"AttributeName": "lock_key", "AttributeType": "S"},
                     {"AttributeName": "sort_key", "AttributeType": "S"},
                 ],
+                "PointInTimeRecoverySpecification": {
+                    "PointInTimeRecoveryEnabled": True
+                },
                 "Tags": vdc_tags,
                 "TimeToLiveSpecification": {
                     "AttributeName": "expiry_time",
@@ -695,6 +786,9 @@ def test_settings_table_creation(
                     {"AttributeName": "key", "AttributeType": "S"}
                 ],
                 "KinesisStreamSpecification": {"StreamArn": Match.any_value()},
+                "PointInTimeRecoverySpecification": {
+                    "PointInTimeRecoveryEnabled": True
+                },
                 "Tags": cluster_manager_tags,
             },
         },
@@ -715,11 +809,25 @@ def test_settings_table_kinesis_stream_creation(
                 "StreamModeDetails": {"StreamMode": "ON_DEMAND"},
                 "Tags": [
                     {
+                        "Key": "Name",
+                        "Value": {
+                            "Fn::Join": [
+                                "",
+                                [
+                                    res_base_stack.nested_stack.resolve(
+                                        res_base_stack.cluster_name
+                                    ),
+                                    "-res-base",
+                                ],
+                            ]
+                        },
+                    },
+                    {
                         "Key": "res:EnvironmentName",
                         "Value": res_base_stack.nested_stack.resolve(
                             res_base_stack.cluster_name
                         ),
-                    }
+                    },
                 ],
                 "StreamEncryption": {
                     "EncryptionType": "KMS",
@@ -765,11 +873,25 @@ def test_cluster_settings_table_event_handler_creation(
                 "Runtime": RES_COMMON_LAMBDA_RUNTIME.to_string(),
                 "Tags": [
                     {
+                        "Key": "Name",
+                        "Value": {
+                            "Fn::Join": [
+                                "",
+                                [
+                                    res_base_stack.nested_stack.resolve(
+                                        res_base_stack.cluster_name
+                                    ),
+                                    "-res-base",
+                                ],
+                            ]
+                        },
+                    },
+                    {
                         "Key": "res:EnvironmentName",
                         "Value": res_base_stack.nested_stack.resolve(
                             res_base_stack.cluster_name
                         ),
-                    }
+                    },
                 ],
             },
         },
@@ -1074,6 +1196,9 @@ def test_modules_table_creation(
                 "AttributeDefinitions": [
                     {"AttributeName": "module_id", "AttributeType": "S"}
                 ],
+                "PointInTimeRecoverySpecification": {
+                    "PointInTimeRecoveryEnabled": True
+                },
                 "Tags": cluster_manager_tags,
             },
         },

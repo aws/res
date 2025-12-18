@@ -12,7 +12,7 @@
  */
 
 import { v4 as uuid } from "uuid";
-import { AuthService, LocalStorageService } from "../service";
+import { AuthService, SessionStorageService, LocalStorageService } from "../service";
 import IdeaException from "../common/exceptions";
 import JobTemplatesService from "../service/job-templates-service";
 import ClusterSettingsService from "../service/cluster-settings-service";
@@ -26,8 +26,6 @@ export interface AppContextProps {
     albEndpoint: string;
     releaseVersion: string;
     app: AppData;
-    serviceWorkerRegistration?: ServiceWorkerRegistration;
-    serviceWorkerInitialized?: boolean;
 }
 
 export interface AppData {
@@ -41,19 +39,17 @@ export interface AppData {
     copyright_text?: string;
     module_set: string;
     modules: any;
-    session_management: "local-storage" | "in-memory";
     default_log_level: number;
 }
 
 const DARK_MODE_KEY = "theme.dark-mode";
 const COMPACT_MODE_KEY = "theme.compact-mode";
 
-let IS_LOGGED_IN_INTERVAL: any = null;
-
 class AppContext {
     private props: AppContextProps;
 
     private readonly clients: IdeaClients;
+    private readonly sessionStorageService: SessionStorageService;
     private readonly localStorageService: LocalStorageService;
     private readonly authContext?: IdeaAuthenticationContext;
     private readonly authService: AuthService;
@@ -71,54 +67,13 @@ class AppContext {
 
         const authEndpoint = `${props.httpEndpoint}${Utils.getApiContextPath(Constants.MODULE_CLUSTER_MANAGER)}`;
 
-        const reInitializeServiceWorker = () => {
-            /*
-             * Current mechanism to reInitialize is to hit the homepage
-             * UX: User redirected to homepage regardless
-             */
-            window.location.href = "/";
-        };
+        this.authContext = new IdeaAuthenticationContext({
+            authEndpoint: authEndpoint,
+        });
 
-        const initializeServiceWorker = () => {
-            if (this.props.serviceWorkerRegistration) {
-                if (this.props.serviceWorkerInitialized && window.idea.context != null) {
-                    AppContext.get()
-                        .client()
-                        .auth()
-                        .getSWInitialized()
-                        .then((isSwInitialized) => {
-                            /*
-                             * If ServiceWorker(SW) is not initialized but appContext says its initialized
-                             * it means that the SW was stopped in between => re-initialize SW.
-                             * The SW could be killed by the browser to save up on memory (known in Chrome).
-                             */
-                            if (!isSwInitialized) {
-                                reInitializeServiceWorker();
-                            }
-                        });
-                }
-                this.props.serviceWorkerRegistration.active!.postMessage({
-                    type: Constants.ServiceWorker.IDEA_SW_INIT,
-                });
-                this.props.serviceWorkerRegistration.active!.postMessage({
-                    type: Constants.ServiceWorker.IDEA_AUTH_INIT,
-                    options: {
-                        authEndpoint: authEndpoint,
-                        defaultLogLevel: props.app.default_log_level,
-                    },
-                });
-                this.props.serviceWorkerInitialized = true;
-            }
-        };
-
-        if (this.props.serviceWorkerRegistration) {
-            initializeServiceWorker();
-        } else {
-            this.authContext = new IdeaAuthenticationContext({
-                sessionManagement: "local-storage",
-                authEndpoint: authEndpoint,
-            });
-        }
+        this.sessionStorageService = new SessionStorageService({
+            prefix: "idea",
+        });
 
         this.localStorageService = new LocalStorageService({
             prefix: "idea",
@@ -128,11 +83,10 @@ class AppContext {
             appId: "web-portal",
             baseUrl: props.httpEndpoint,
             authContext: this.authContext,
-            serviceWorkerRegistration: props.serviceWorkerRegistration,
         });
 
         this.authService = new AuthService({
-            localStorage: this.localStorageService,
+            sessionStorage: this.sessionStorageService,
             clients: this.clients,
         });
 
@@ -141,30 +95,6 @@ class AppContext {
         });
 
         this.jobTemplatesService = new JobTemplatesService({});
-
-        // the purpose of below interval is:
-        // 1. ensure we send a periodic heart-beat to service-worker so that service worker remains active.
-        //    this is only applicable when service worker is initialized. on FireFox, service worker becomes inactive
-        //    after 30-seconds of no activity to service worker and session expires prematurely.
-        // 2. check for login status changes and take respective actions
-
-        if (IS_LOGGED_IN_INTERVAL != null) {
-            clearInterval(IS_LOGGED_IN_INTERVAL);
-        }
-
-        IS_LOGGED_IN_INTERVAL = setInterval(() => {
-            // initializing service worker in this interval ensures that in the event the service worker was stopped and
-            //  started, the service worker knows the authentication endpoints
-            initializeServiceWorker();
-
-            // check if the user is logged in. this may query the service worker or authentication context based on current session management mode.
-            this.authService.isLoggedIn().then((status) => {
-                if (this.isLoggedIn && !status) {
-                    this.authService.logout().finally();
-                }
-                this.isLoggedIn = status;
-            });
-        }, 10000);
     }
 
     static setOnRoute(onRoute: any) {
