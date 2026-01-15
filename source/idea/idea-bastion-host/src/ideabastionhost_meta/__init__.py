@@ -10,4 +10,4 @@
 #  and limitations under the License.
 
 __name__ = 'idea-bastion-host'
-__version__ = '2025.12'
+__version__ = '2025.12.01'

@@ -99,13 +99,13 @@ class CognitoTriggerWorkflow(Construct):
         self.add_lambdas_as_cognito_trigger(
             cluster_name,
             post_auth_lambda,
-            identity_stack.user_pool.user_pool_id,
+            cluster_settings.user_pool_id,  # type: ignore
         )
 
         # UID LAMBDA
         uid_lambda = self.create_uid_lambda(
             cluster_name,
-            identity_stack.user_pool.user_pool_id,
+            cluster_settings.user_pool_id,  # type: ignore
             queue,
             sqs_visibility_timeout,
             cluster_stack.vpc,

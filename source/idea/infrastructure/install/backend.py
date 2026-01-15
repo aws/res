@@ -55,8 +55,8 @@ class BackendLambda(Construct):
             self.cluster_name, cluster_settings, parameters=params
         )
 
-        cognito_domain_url = identity_stack.user_pool_domain_url.to_string()
-        cognito_provider_url = f"https://cognito-idp.{aws_cdk.Aws.REGION}.amazonaws.com/{identity_stack.user_pool.user_pool_id}"
+        cognito_domain_url = cluster_settings.user_pool_domain_url
+        cognito_provider_url = f"https://cognito-idp.{aws_cdk.Aws.REGION}.amazonaws.com/{cluster_settings.user_pool_id}"
         external_alb_https_listener_arn = (
             cluster_stack.external_alb_https_listener.attr_listener_arn  # type: ignore
         )
@@ -74,7 +74,7 @@ class BackendLambda(Construct):
             "backend",
         )
         backend_lambda = self.create_backend_lambda(
-            cognito_domain_url,
+            cognito_domain_url, # type: ignore
             cognito_provider_url,
             cluster_stack.vpc,
             [security_group_id],

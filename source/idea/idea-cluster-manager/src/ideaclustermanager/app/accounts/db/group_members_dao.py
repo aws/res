@@ -36,10 +36,11 @@ class GroupMembersDAO:
         self.table = self.context.aws().dynamodb_table().Table(self.get_table_name())
 
     def list_users_in_group(self, request: ListUsersInGroupRequest) -> ListUsersInGroupResult:
+
         group_names = request.group_names
         if Utils.is_empty(group_names):
             raise exceptions.invalid_params('group_names are required')
-
+        
         cursor = request.cursor
         exclusive_start_keys = None
         last_evaluated_keys = {}
@@ -51,18 +52,19 @@ class GroupMembersDAO:
 
         for group_name in group_names:
             exclusive_start_key = Utils.get_value_as_dict(group_name, exclusive_start_keys, {})
-            if Utils.is_not_empty(exclusive_start_key):
-                query_result = self.table.query(
-                    Limit=request.page_size,
-                    ExclusiveStartKey=exclusive_start_key,
-                    KeyConditionExpression=Key('group_name').eq(group_name)
-                )
-            else:
-                query_result = self.table.query(
-                    Limit=request.page_size,
-                    KeyConditionExpression=Key('group_name').eq(group_name)
-                )
+            
+            query_params = {
+                "KeyConditionExpression": Key('group_name').eq(group_name)
 
+            }
+
+            if exclusive_start_key:
+                query_params["ExclusiveStartKey"]=exclusive_start_key
+            if request.page_size:
+                query_params["Limit"]=request.page_size
+
+            query_result = self.table.query(**query_params)
+            
             db_user_groups = Utils.get_value_as_list('Items', query_result, [])
             for db_user_group in db_user_groups:
                 db_username = db_user_group['username']
@@ -90,3 +92,4 @@ class GroupMembersDAO:
                 cursor=response_cursor
             )
         )
+

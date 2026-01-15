@@ -2,4 +2,4 @@
 #  SPDX-License-Identifier: Apache-2.0
 
 __name__ = "ad-sync"
-__version__ = "2025.12"
+__version__ = "2025.12.01"

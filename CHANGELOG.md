@@ -1,6 +1,14 @@
 # Change Log
 This file is used to list changes made in each release of Research and Engineering Studio (RES).
 
+2025.12.01
+------
+
+**BUG FIXES**
+- Resolved RES deployment issues when using an existing Cognito User Pool.
+- Fixed an issue where the username drop-down is empty when sharing virtual desktops and administrators cannot manage existing session permissions in the web portal.
+- Resolved API failures when user email prefix differs from username, which prevented viewing allowed instance types, triggering AD synchronization, and managing bastion host settings.
+
 2025.12
 ------
 
