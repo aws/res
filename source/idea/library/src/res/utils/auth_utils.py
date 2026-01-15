@@ -7,7 +7,9 @@ import typing
 
 import validators
 from password_generator import PasswordGenerator
+from res.constants import USERS_TABLE_NAME
 from res.resources import cluster_settings
+from res.utils import table_utils
 
 DEFAULT_LOGIN_SHELL = "/bin/bash"
 USER_HOME_DIR_BASE = "/home"
@@ -93,7 +95,17 @@ def get_ddb_user_name(username: str, idp_name: typing.Union[str, None]) -> str:
     email = username
     if username.startswith(identity_provider_prefix):
         email = username.replace(identity_provider_prefix, "", 1)
-    return email.split("@")[0]
+
+    users = table_utils.query(
+        table_name=USERS_TABLE_NAME,
+        attributes={"email": email},
+        index_name="email-index",
+    )
+    if len(users) > 1:
+        raise Exception(f"Multiple users found with email {email}")
+
+    username = users[0]["username"] if users else email.split("@")[0]
+    return username
 
 
 def generate_password(

@@ -142,6 +142,15 @@ class ClusterSettings:
 
     @property
     @lru_cache
+    def user_pool_domain_url(self) -> str:
+        return InfraUtils.get_cluster_setting_string(
+            self.scope,
+            "identity-provider.cognito.domain_url",
+            self.cluster_name,
+        )
+
+    @property
+    @lru_cache
     def private_hosted_zone_name(self) -> str:
         return InfraUtils.get_cluster_setting_string(
             self.scope,

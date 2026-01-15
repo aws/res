@@ -68,7 +68,7 @@ class CognitoSyncLambda(Construct):
         cognito_sync_lambda = self.create_lambda(
             cluster_name,
             sudoer_group_name,
-            identity_stack.user_pool.user_pool_id,
+            cluster_settings.user_pool_id,  # type: ignore
             cluster_admin_name,
             cluster_stack.vpc,
             [security_group_id],
