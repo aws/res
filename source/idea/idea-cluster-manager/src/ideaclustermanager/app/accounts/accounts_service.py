@@ -289,8 +289,8 @@ class AccountsService:
             raise exceptions.invalid_params('Password should include at least 1 uppercase letter')
         elif user_pool_password_policy.require_lowercase and re.search('[a-z]', password) is None:
             raise exceptions.invalid_params('Password should include at least 1 lowercase letter')
-        elif user_pool_password_policy.require_symbols and re.search('[\^\$\*\.\[\]{}\(\)\?"!@#%&\/\\,><\':;\|_~`=\+\-]', password) is None:
-            raise exceptions.invalid_params('Password should include at least 1 of these special characters: ^ $ * . [ ] { } ( ) ? " ! @ # % & / \ , > < \' : ; | _ ~ ` = + -')
+        elif user_pool_password_policy.require_symbols and re.search(r'[\^\$\*\.\[\]{}\(\)\?"!@#%&\/\\,><\'\:;\|_~`=\+\-]', password) is None:
+            raise exceptions.invalid_params(r'Password should include at least 1 of these special characters: ^ $ * . [ ] { } ( ) ? " ! @ # % & / \ , > < \' : ; | _ ~ ` = + -')
 
     def activate_user(self, existing_user: User):
         accounts.activate_user(UserDAO.convert_to_db(existing_user))

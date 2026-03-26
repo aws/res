@@ -47,6 +47,7 @@ def _run_unit_tests(c: Context,
         idea.props.sdk_src,
         idea.props.test_utils_src,
         idea.props.library_src,
+        idea.props.datamodel_src,
         idea.props.backend_dir
     ]
     if component_src not in python_path:
@@ -218,6 +219,24 @@ def library(c, keywords=None, params=None, capture_output=False, cov_report=None
     )
     raise SystemExit(exit_code)
 
+@task(iterable=['params'])
+def datamodel(c, keywords=None, params=None, capture_output=False, cov_report=None):
+    # type: (Context, str, List[str], bool, str) -> None
+    """
+    run data-model unit tests
+    """
+    exit_code = _run_unit_tests(
+        c=c,
+        component_name='datamodel',
+        component_src=idea.props.datamodel_src,
+        component_tests_src=idea.props.datamodel_tests_src,
+        package_name='datamodel',
+        params=params,
+        capture_output=capture_output,
+        keywords=keywords,
+        cov_report=cov_report
+    )
+    raise SystemExit(exit_code)
 
 @task(iterable=['params'])
 def bootstrap(c, keywords=None, params=None, capture_output=False, cov_report=None):
@@ -253,6 +272,7 @@ def run_all(c, keywords=None, params=None, capture_output=False, cov_report=None
         pipeline,
         infrastructure,
         library,
+        datamodel,
         bootstrap,
     ]
 

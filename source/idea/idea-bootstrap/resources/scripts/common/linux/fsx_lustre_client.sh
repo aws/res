@@ -93,7 +93,9 @@ elif [[ $BASE_OS == "rhel9" ]] || [[ $BASE_OS == "rocky9" ]]; then
     log_info "Found kernel version: $kernel running on: $machine"
 
     declare -A kernel_versions=(
-      ["5.14.0-503"]=""
+      ["5.14.0-611"]=""
+      ["5.14.0-570"]="9.6"
+      ["5.14.0-503"]="9.5"
       ["5.14.0-427"]="9.4"
       ["5.14.0-362"]="9.3"
       ["5.14.0-70"]="9.0"

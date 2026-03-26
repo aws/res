@@ -14,7 +14,7 @@
 import { Box } from "@cloudscape-design/components";
 import VirtualDesktopBaseChart from "./virtual-desktop-base-chart";
 import PieOrDonutChart from "../../../components/charts/pie-or-donut-chart";
-import { VirtualDesktopSession } from '../../../client/data-model'
+import { VirtualDesktopSession } from "../../../client/generated/api";
 
 export interface VirtualDesktopInstanceTypesChartProps {
     loading: boolean

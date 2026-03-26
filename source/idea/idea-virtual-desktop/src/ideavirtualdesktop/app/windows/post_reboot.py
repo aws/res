@@ -6,6 +6,8 @@ from ideabootstrap.common.constants import (
     WINDOWS_BOOTSTRAP_DIR,
 )
 
+from ideabootstrap.dcv import dcv
+
 from res.utils import logging_utils
 
 import os
@@ -19,6 +21,10 @@ logger = logging_utils.get_logger("bootstrap")
 def run():
     if os.path.isfile(WINDOWS_VDI_CONFIG_HOST_READY_LOCK):
         logger.info(f"Config lock file already exists {WINDOWS_VDI_CONFIG_HOST_READY_LOCK}")
+
+        if not dcv.is_dcvserver_ready(timeout_seconds=300, retry_interval=5):
+            logger.warning("DCV server is not ready for creating session")
+
         send_sqs_host_messages("DCV_HOST_REBOOT_COMPLETE_EVENT")
         return
 
@@ -37,8 +43,8 @@ def run():
     current_time = str(int(time.time()))
     with open(WINDOWS_VDI_CONFIG_HOST_READY_LOCK, 'w') as f:
         f.write(current_time)
-    
+
     logger.info("Finished running Post Reboot Configuration")
     send_sqs_host_messages("DCV_HOST_READY_EVENT")
     logger.info("Host ready event sent")
-    
+

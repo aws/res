@@ -89,10 +89,10 @@ class VirtualDesktopSettings extends Component<VirtualDesktopSettingsProps, Virt
                         },
                     };
                     if (values.default_allowed_sessions_per_user_per_project !== dot.pick("dcv_session.default_allowed_sessions_per_user_per_project", this.state.vdcSettings)) {
-                        updateSettings.settings.dcv_session[UpdateModuleSettingsValuesDCVSession.DEFAULT_ALLOWED_SESSIONS_PER_USER_PER_PROJECT] = values.default_allowed_sessions_per_user_per_project;
+                        (updateSettings.settings.dcv_session as any)[UpdateModuleSettingsValuesDCVSession.DEFAULT_ALLOWED_SESSIONS_PER_USER_PER_PROJECT] = values.default_allowed_sessions_per_user_per_project;
                     }
 
-                    if (Object.keys(updateSettings.settings.dcv_session).length > 0) {
+                    if (updateSettings.settings.dcv_session && Object.keys(updateSettings.settings.dcv_session).length > 0) {
                         AppContext.get()
                             .client()
                             .clusterSettings()

@@ -1,0 +1,4300 @@
+openapi: 3.0.2
+info:
+  description: RES API
+  title: RES
+  version: 1.0.0
+servers:
+- url: /
+# Comment out the security section for local development
+security:
+- smithy.api.httpBearerAuth: []
+paths:
+  /res/virtual-desktop-dcv/server:
+    get:
+      description: List DCV Servers
+      x-openapi-router-controller: api.controllers.virtual_desktop_dcv_controller
+      operationId: list_dcv_servers
+      parameters:
+      - description: Pagination token for next page
+        explode: true
+        in: query
+        name: nextToken
+        required: false
+        schema:
+          description: Pagination token for next page
+          type: string
+        style: form
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ListDCVServersResponseContent"
+          description: ListDCVServers 200 response
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BadRequestExceptionResponseContent"
+          description: BadRequestException 400 response
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InternalServiceExceptionResponseContent"
+          description: InternalServiceException 500 response
+      tags:
+      - virtual-desktop-dcv
+  /res/virtual-desktop-dcv/session:
+    post:
+      description: Retrieve details of DCV sessions
+      x-openapi-router-controller: api.controllers.virtual_desktop_dcv_controller
+      operationId: batch_get_dcv_sessions
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/BatchGetDCVSessionsRequestContent"
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BatchGetDCVSessionsResponseContent"
+          description: BatchGetDCVSessions 200 response
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BadRequestExceptionResponseContent"
+          description: BadRequestException 400 response
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InternalServiceExceptionResponseContent"
+          description: InternalServiceException 500 response
+      tags:
+      - virtual-desktop-dcv
+  /res/virtual-desktop-utils/allowed-instance-type:
+    post:
+      description: List allowed instance types for virtual desktops
+      x-openapi-router-controller: api.controllers.virtual_desktop_utils_controller
+      operationId: list_allowed_instance_types
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ListAllowedInstanceTypesRequestContent"
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ListAllowedInstanceTypesResponseContent"
+          description: ListAllowedInstanceTypes 200 response
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BadRequestExceptionResponseContent"
+          description: BadRequestException 400 response
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InternalServiceExceptionResponseContent"
+          description: InternalServiceException 500 response
+      tags:
+      - virtual-desktop-utils
+  /res/virtual-desktop-utils/allowed-instance-type-for-session:
+    post:
+      description: List allowed instance types for a virtual desktop session
+      x-openapi-router-controller: api.controllers.virtual_desktop_utils_controller
+      operationId: list_allowed_instance_types_for_session
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ListAllowedInstanceTypesForSessionRequestContent"
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ListAllowedInstanceTypesForSessionResponseContent"
+          description: ListAllowedInstanceTypesForSession 200 response
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BadRequestExceptionResponseContent"
+          description: BadRequestException 400 response
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InternalServiceExceptionResponseContent"
+          description: InternalServiceException 500 response
+      tags:
+      - virtual-desktop-utils
+  /res/virtual-desktop-utils/permission-profile:
+    get:
+      description: Get a list of permission profiles
+      x-openapi-router-controller: api.controllers.virtual_desktop_utils_controller
+      operationId: list_permission_profiles
+      parameters:
+      - description: Filter by profileId
+        explode: true
+        in: query
+        name: profileId
+        required: false
+        schema:
+          description: Filter by profileId
+          type: string
+        style: form
+      - description: Pagination token for next page
+        explode: true
+        in: query
+        name: nextToken
+        required: false
+        schema:
+          description: Pagination token for next page
+          type: string
+        style: form
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ListPermissionProfilesResponseContent"
+          description: ListPermissionProfiles 200 response
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BadRequestExceptionResponseContent"
+          description: BadRequestException 400 response
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InternalServiceExceptionResponseContent"
+          description: InternalServiceException 500 response
+      tags:
+      - virtual-desktop-utils
+  /res/virtual-desktop-utils/permission-profile/{profileId}:
+    get:
+      description: Get details of a permission profile
+      x-openapi-router-controller: api.controllers.virtual_desktop_utils_controller
+      operationId: get_permission_profile
+      parameters:
+      - description: Id of the profile
+        explode: false
+        in: path
+        name: profileId
+        required: true
+        schema:
+          description: Id of the profile
+          type: string
+        style: simple
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GetPermissionProfileResponseContent"
+          description: GetPermissionProfile 200 response
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BadRequestExceptionResponseContent"
+          description: BadRequestException 400 response
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InternalServiceExceptionResponseContent"
+          description: InternalServiceException 500 response
+      tags:
+      - virtual-desktop-utils
+  /res/virtual-desktop/permission-profile:
+    post:
+      description: Create Permission Profile
+      x-openapi-router-controller: api.controllers.virtual_desktop_controller
+      operationId: create_permission_profile
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreatePermissionProfileRequestContent"
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CreatePermissionProfileResponseContent"
+          description: CreatePermissionProfile 200 response
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BadRequestExceptionResponseContent"
+          description: BadRequestException 400 response
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InternalServiceExceptionResponseContent"
+          description: InternalServiceException 500 response
+      tags:
+      - virtual-desktop
+  /res/virtual-desktop/permission-profile/{profileId}:
+    delete:
+      description: Delete Permission Profile
+      x-openapi-router-controller: api.controllers.virtual_desktop_controller
+      operationId: delete_permission_profile
+      parameters:
+      - explode: false
+        in: path
+        name: profileId
+        required: true
+        schema:
+          type: string
+        style: simple
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DeletePermissionProfileResponseContent"
+          description: DeletePermissionProfile 200 response
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BadRequestExceptionResponseContent"
+          description: BadRequestException 400 response
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/NotFoundExceptionResponseContent"
+          description: NotFoundException 404 response
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InternalServiceExceptionResponseContent"
+          description: InternalServiceException 500 response
+      tags:
+      - virtual-desktop
+    put:
+      description: Update Permission Profile
+      x-openapi-router-controller: api.controllers.virtual_desktop_controller
+      operationId: update_permission_profile
+      parameters:
+      - explode: false
+        in: path
+        name: profileId
+        required: true
+        schema:
+          type: string
+        style: simple
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdatePermissionProfileRequestContent"
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UpdatePermissionProfileResponseContent"
+          description: UpdatePermissionProfile 200 response
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BadRequestExceptionResponseContent"
+          description: BadRequestException 400 response
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/NotFoundExceptionResponseContent"
+          description: NotFoundException 404 response
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InternalServiceExceptionResponseContent"
+          description: InternalServiceException 500 response
+      tags:
+      - virtual-desktop
+  /res/virtual-desktop/session:
+    get:
+      description: Get a list of sessions
+      x-openapi-router-controller: api.controllers.virtual_desktop_controller
+      operationId: list_sessions
+      parameters:
+      - description: Filter by state
+        explode: true
+        in: query
+        name: state
+        required: false
+        schema:
+          description: Filter by state
+          type: string
+        style: form
+      - description: Filter by baseOs
+        explode: true
+        in: query
+        name: baseOs
+        required: false
+        schema:
+          description: Filter by baseOs
+          type: string
+        style: form
+      - description: Filter by sessionName
+        explode: true
+        in: query
+        name: sessionName
+        required: false
+        schema:
+          description: Filter by sessionName
+          type: string
+        style: form
+      - description: Filter by stackId
+        explode: true
+        in: query
+        name: stackId
+        required: false
+        schema:
+          description: Filter by stackId
+          type: string
+        style: form
+      - description: The attribute name to filter on for date range
+        explode: true
+        in: query
+        name: dateRangeKey
+        required: false
+        schema:
+          description: The attribute name to filter on for date range
+          type: string
+        style: form
+      - description: Start of the date range
+        explode: true
+        in: query
+        name: after
+        required: false
+        schema:
+          description: Start of the date range
+          type: string
+        style: form
+      - description: 'End of the date range '
+        explode: true
+        in: query
+        name: before
+        required: false
+        schema:
+          description: End of the date range
+          type: string
+        style: form
+      - description: Pagination token for next page
+        explode: true
+        in: query
+        name: nextToken
+        required: false
+        schema:
+          description: Pagination token for next page
+          type: string
+        style: form
+      - description: Filter by owner
+        explode: true
+        in: query
+        name: owner
+        required: false
+        schema:
+          description: Filter by owner
+          type: string
+        style: form
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ListSessionsResponseContent"
+          description: ListSessions 200 response
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BadRequestExceptionResponseContent"
+          description: BadRequestException 400 response
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InternalServiceExceptionResponseContent"
+          description: InternalServiceException 500 response
+      tags:
+      - virtual-desktop
+  /res/virtual-desktop/session-permission:
+    get:
+      description: Get a list of session permissions
+      x-openapi-router-controller: api.controllers.virtual_desktop_controller
+      operationId: list_session_permissions
+      parameters:
+      - description: Filter by resSessionId
+        explode: true
+        in: query
+        name: resSessionId
+        required: true
+        schema:
+          description: Filter by resSessionId
+          minLength: 1
+          type: string
+        style: form
+      - description: Pagination token for next page
+        explode: true
+        in: query
+        name: nextToken
+        required: false
+        schema:
+          description: Pagination token for next page
+          type: string
+        style: form
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ListSessionPermissionsResponseContent"
+          description: ListSessionPermissions 200 response
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BadRequestExceptionResponseContent"
+          description: BadRequestException 400 response
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/NotFoundExceptionResponseContent"
+          description: NotFoundException 404 response
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InternalServiceExceptionResponseContent"
+          description: InternalServiceException 500 response
+      tags:
+      - virtual-desktop
+    put:
+      description: Get a list of session permissions
+      x-openapi-router-controller: api.controllers.virtual_desktop_controller
+      operationId: update_session_permissions
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateSessionPermissionsRequestContent"
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UpdateSessionPermissionsResponseContent"
+          description: UpdateSessionPermissions 200 response
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BadRequestExceptionResponseContent"
+          description: BadRequestException 400 response
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InternalServiceExceptionResponseContent"
+          description: InternalServiceException 500 response
+      tags:
+      - virtual-desktop
+  /res/virtual-desktop/session/{resSessionId}:
+    get:
+      description: Get details of a session
+      x-openapi-router-controller: api.controllers.virtual_desktop_controller
+      operationId: get_session
+      parameters:
+      - description: Session identifier
+        explode: false
+        in: path
+        name: resSessionId
+        required: true
+        schema:
+          description: Session identifier
+          minLength: 1
+          type: string
+        style: simple
+      - description: Owner of the session
+        explode: true
+        in: query
+        name: owner
+        required: true
+        schema:
+          description: Owner of the session
+          minLength: 1
+          type: string
+        style: form
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GetSessionResponseContent"
+          description: GetSession 200 response
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BadRequestExceptionResponseContent"
+          description: BadRequestException 400 response
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InternalServiceExceptionResponseContent"
+          description: InternalServiceException 500 response
+      tags:
+      - virtual-desktop
+  /res/virtual-desktop/shared-permissions:
+    get:
+      description: Get a list of shared permissions
+      x-openapi-router-controller: api.controllers.virtual_desktop_controller
+      operationId: list_shared_permissions
+      parameters:
+      - description: Pagination token for next page
+        explode: true
+        in: query
+        name: nextToken
+        required: false
+        schema:
+          description: Pagination token for next page
+          type: string
+        style: form
+      - description: Username of the shared permissions
+        explode: true
+        in: query
+        name: username
+        required: false
+        schema:
+          description: Username of the shared permissions
+          type: string
+        style: form
+      - description: Filter by state
+        explode: true
+        in: query
+        name: state
+        required: false
+        schema:
+          description: Filter by state
+          type: string
+        style: form
+      - description: Filter by baseOs
+        explode: true
+        in: query
+        name: baseOs
+        required: false
+        schema:
+          description: Filter by baseOs
+          type: string
+        style: form
+      - description: Filter by sessionName
+        explode: true
+        in: query
+        name: sessionName
+        required: false
+        schema:
+          description: Filter by sessionName
+          type: string
+        style: form
+      - description: The attribute name to filter on for date range
+        explode: true
+        in: query
+        name: dateRangeKey
+        required: false
+        schema:
+          description: The attribute name to filter on for date range
+          type: string
+        style: form
+      - description: Start of the date range
+        explode: true
+        in: query
+        name: after
+        required: false
+        schema:
+          description: Start of the date range
+          type: string
+        style: form
+      - description: End of the date range
+        explode: true
+        in: query
+        name: before
+        required: false
+        schema:
+          description: End of the date range
+          type: string
+        style: form
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ListSharedPermissionsResponseContent"
+          description: ListSharedPermissions 200 response
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BadRequestExceptionResponseContent"
+          description: BadRequestException 400 response
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InternalServiceExceptionResponseContent"
+          description: InternalServiceException 500 response
+      tags:
+      - virtual-desktop
+  /res/virtual-desktop/software-stack:
+    get:
+      description: Get a list of software stacks
+      x-openapi-router-controller: api.controllers.virtual_desktop_controller
+      operationId: list_software_stacks
+      parameters:
+      - description: Filter by projectId
+        explode: true
+        in: query
+        name: projectId
+        required: false
+        schema:
+          description: Filter by projectId
+          type: string
+        style: form
+      - description: Filter by baseOs
+        explode: true
+        in: query
+        name: baseOs
+        required: false
+        schema:
+          description: Filter by baseOs
+          type: string
+        style: form
+      - description: Filter by softwareStackName
+        explode: true
+        in: query
+        name: softwareStackName
+        required: false
+        schema:
+          description: Filter by softwareStackName
+          type: string
+        style: form
+      - description: Pagination token for next page
+        explode: true
+        in: query
+        name: nextToken
+        required: false
+        schema:
+          description: Pagination token for next page
+          type: string
+        style: form
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ListSoftwareStacksResponseContent"
+          description: ListSoftwareStacks 200 response
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BadRequestExceptionResponseContent"
+          description: BadRequestException 400 response
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InternalServiceExceptionResponseContent"
+          description: InternalServiceException 500 response
+      tags:
+      - virtual-desktop
+    post:
+      description: Create Software Stack
+      x-openapi-router-controller: api.controllers.virtual_desktop_controller
+      operationId: create_software_stack
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateSoftwareStackRequestContent"
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CreateSoftwareStackResponseContent"
+          description: CreateSoftwareStack 200 response
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BadRequestExceptionResponseContent"
+          description: BadRequestException 400 response
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InternalServiceExceptionResponseContent"
+          description: InternalServiceException 500 response
+      tags:
+      - virtual-desktop
+  /res/virtual-desktop/software-stack/{stackId}:
+    delete:
+      description: Delete Software Stack
+      x-openapi-router-controller: api.controllers.virtual_desktop_controller
+      operationId: delete_software_stack
+      parameters:
+      - explode: false
+        in: path
+        name: stackId
+        required: true
+        schema:
+          minLength: 1
+          type: string
+        style: simple
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DeleteSoftwareStackRequestContent"
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DeleteSoftwareStackResponseContent"
+          description: DeleteSoftwareStack 200 response
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BadRequestExceptionResponseContent"
+          description: BadRequestException 400 response
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/NotFoundExceptionResponseContent"
+          description: NotFoundException 404 response
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InternalServiceExceptionResponseContent"
+          description: InternalServiceException 500 response
+      tags:
+      - virtual-desktop
+    get:
+      description: Get details of a software stack
+      x-openapi-router-controller: api.controllers.virtual_desktop_controller
+      operationId: get_software_stack
+      parameters:
+      - description: Software stack identifier
+        explode: false
+        in: path
+        name: stackId
+        required: true
+        schema:
+          description: Software stack identifier
+          minLength: 1
+          type: string
+        style: simple
+      - description: Base operating system for the software stack
+        explode: true
+        in: query
+        name: baseOs
+        required: true
+        schema:
+          $ref: "#/components/schemas/VirtualDesktopBaseOs"
+        style: form
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GetSoftwareStackResponseContent"
+          description: GetSoftwareStack 200 response
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BadRequestExceptionResponseContent"
+          description: BadRequestException 400 response
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InternalServiceExceptionResponseContent"
+          description: InternalServiceException 500 response
+      tags:
+      - virtual-desktop
+    put:
+      description: Update Software Stack
+      x-openapi-router-controller: api.controllers.virtual_desktop_controller
+      operationId: update_software_stack
+      parameters:
+      - explode: false
+        in: path
+        name: stackId
+        required: true
+        schema:
+          minLength: 1
+          type: string
+        style: simple
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateSoftwareStackRequestContent"
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UpdateSoftwareStackResponseContent"
+          description: UpdateSoftwareStack 200 response
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BadRequestExceptionResponseContent"
+          description: BadRequestException 400 response
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/NotFoundExceptionResponseContent"
+          description: NotFoundException 404 response
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InternalServiceExceptionResponseContent"
+          description: InternalServiceException 500 response
+      tags:
+      - virtual-desktop
+components:
+  schemas:
+    BadRequestExceptionResponseContent:
+      description: This exception is thrown when a client calls an API with wrong
+        parameters.
+      example:
+        message: message
+      properties:
+        message:
+          title: message
+          type: string
+      title: BadRequestExceptionResponseContent
+      type: object
+    BatchGetDCVSessionsRequestContent:
+      example:
+        sessions:
+        - owner: owner
+          updated_on: updated_on
+          server:
+            root_volume_size:
+              unit: unit
+              value: 5.637376656633329
+            virtual_session_count: 6
+            idea_session_id: idea_session_id
+            public_ip: public_ip
+            max_concurrent_sessions_per_user: 1
+            public_dns_name: public_dns_name
+            key_pair_name: key_pair_name
+            availability: availability
+            server_id: server_id
+            console_session_count: 0
+            idea_session_owner: idea_session_owner
+            private_ip: private_ip
+            security_groups:
+            - security_groups
+            - security_groups
+            instance_id: instance_id
+            root_volume_iops: 2
+            max_virtual_sessions: 5
+            subnet_id: subnet_id
+            state: state
+            private_dns_name: private_dns_name
+            locked: true
+            instance_type: instance_type
+            unavailability_reason: unavailability_reason
+            instance_profile_arn: instance_profile_arn
+            is_idle: true
+          is_launched_by_admin: true
+          idea_session_id: idea_session_id
+          hibernation_enabled: true
+          description: description
+          project:
+            project_id: project_id
+            name: name
+            description: description
+            title: title
+          failure_reason: failure_reason
+          type: CONSOLE
+          tags:
+          - ""
+          - ""
+          dcv_session_id: dcv_session_id
+          schedule:
+            sunday:
+              idea_session_id: idea_session_id
+              schedule_type: WORKING_HOURS
+              start_up_time: start_up_time
+              shut_down_time: shut_down_time
+              schedule_id: schedule_id
+              idea_session_owner: idea_session_owner
+              day_of_week: monday
+            saturday:
+              idea_session_id: idea_session_id
+              schedule_type: WORKING_HOURS
+              start_up_time: start_up_time
+              shut_down_time: shut_down_time
+              schedule_id: schedule_id
+              idea_session_owner: idea_session_owner
+              day_of_week: monday
+            tuesday:
+              idea_session_id: idea_session_id
+              schedule_type: WORKING_HOURS
+              start_up_time: start_up_time
+              shut_down_time: shut_down_time
+              schedule_id: schedule_id
+              idea_session_owner: idea_session_owner
+              day_of_week: monday
+            wednesday:
+              idea_session_id: idea_session_id
+              schedule_type: WORKING_HOURS
+              start_up_time: start_up_time
+              shut_down_time: shut_down_time
+              schedule_id: schedule_id
+              idea_session_owner: idea_session_owner
+              day_of_week: monday
+            thursday:
+              idea_session_id: idea_session_id
+              schedule_type: WORKING_HOURS
+              start_up_time: start_up_time
+              shut_down_time: shut_down_time
+              schedule_id: schedule_id
+              idea_session_owner: idea_session_owner
+              day_of_week: monday
+            friday:
+              idea_session_id: idea_session_id
+              schedule_type: WORKING_HOURS
+              start_up_time: start_up_time
+              shut_down_time: shut_down_time
+              schedule_id: schedule_id
+              idea_session_owner: idea_session_owner
+              day_of_week: monday
+            monday:
+              idea_session_id: idea_session_id
+              schedule_type: WORKING_HOURS
+              start_up_time: start_up_time
+              shut_down_time: shut_down_time
+              schedule_id: schedule_id
+              idea_session_owner: idea_session_owner
+              day_of_week: monday
+          created_on: created_on
+          connection_count: 9
+          name: name
+          force: true
+          state: PROVISIONING
+          locked: true
+          logins:
+          - logins
+          - logins
+          base_os: amazonlinux2
+          software_stack:
+            updated_on: updated_on
+            projects:
+            - project_id: project_id
+              name: name
+              description: description
+              title: title
+            - project_id: project_id
+              name: name
+              description: description
+              title: title
+            allowed_instance_types:
+            - allowed_instance_types
+            - allowed_instance_types
+            description: description
+            min_storage:
+              unit: unit
+              value: 5.637376656633329
+            ami_id: ami_id
+            failure_reason: failure_reason
+            gpu: NO_GPU
+            version: 7
+            enabled: true
+            created_on: created_on
+            stack_id: stack_id
+            name: name
+            placement:
+              host_resource_group_arn: host_resource_group_arn
+              tenancy: default
+              host_id: host_id
+              affinity: default
+            base_os: null
+            min_ram:
+              unit: unit
+              value: 5.637376656633329
+            architecture: x86_64
+          is_idle: true
+        - owner: owner
+          updated_on: updated_on
+          server:
+            root_volume_size:
+              unit: unit
+              value: 5.637376656633329
+            virtual_session_count: 6
+            idea_session_id: idea_session_id
+            public_ip: public_ip
+            max_concurrent_sessions_per_user: 1
+            public_dns_name: public_dns_name
+            key_pair_name: key_pair_name
+            availability: availability
+            server_id: server_id
+            console_session_count: 0
+            idea_session_owner: idea_session_owner
+            private_ip: private_ip
+            security_groups:
+            - security_groups
+            - security_groups
+            instance_id: instance_id
+            root_volume_iops: 2
+            max_virtual_sessions: 5
+            subnet_id: subnet_id
+            state: state
+            private_dns_name: private_dns_name
+            locked: true
+            instance_type: instance_type
+            unavailability_reason: unavailability_reason
+            instance_profile_arn: instance_profile_arn
+            is_idle: true
+          is_launched_by_admin: true
+          idea_session_id: idea_session_id
+          hibernation_enabled: true
+          description: description
+          project:
+            project_id: project_id
+            name: name
+            description: description
+            title: title
+          failure_reason: failure_reason
+          type: CONSOLE
+          tags:
+          - ""
+          - ""
+          dcv_session_id: dcv_session_id
+          schedule:
+            sunday:
+              idea_session_id: idea_session_id
+              schedule_type: WORKING_HOURS
+              start_up_time: start_up_time
+              shut_down_time: shut_down_time
+              schedule_id: schedule_id
+              idea_session_owner: idea_session_owner
+              day_of_week: monday
+            saturday:
+              idea_session_id: idea_session_id
+              schedule_type: WORKING_HOURS
+              start_up_time: start_up_time
+              shut_down_time: shut_down_time
+              schedule_id: schedule_id
+              idea_session_owner: idea_session_owner
+              day_of_week: monday
+            tuesday:
+              idea_session_id: idea_session_id
+              schedule_type: WORKING_HOURS
+              start_up_time: start_up_time
+              shut_down_time: shut_down_time
+              schedule_id: schedule_id
+              idea_session_owner: idea_session_owner
+              day_of_week: monday
+            wednesday:
+              idea_session_id: idea_session_id
+              schedule_type: WORKING_HOURS
+              start_up_time: start_up_time
+              shut_down_time: shut_down_time
+              schedule_id: schedule_id
+              idea_session_owner: idea_session_owner
+              day_of_week: monday
+            thursday:
+              idea_session_id: idea_session_id
+              schedule_type: WORKING_HOURS
+              start_up_time: start_up_time
+              shut_down_time: shut_down_time
+              schedule_id: schedule_id
+              idea_session_owner: idea_session_owner
+              day_of_week: monday
+            friday:
+              idea_session_id: idea_session_id
+              schedule_type: WORKING_HOURS
+              start_up_time: start_up_time
+              shut_down_time: shut_down_time
+              schedule_id: schedule_id
+              idea_session_owner: idea_session_owner
+              day_of_week: monday
+            monday:
+              idea_session_id: idea_session_id
+              schedule_type: WORKING_HOURS
+              start_up_time: start_up_time
+              shut_down_time: shut_down_time
+              schedule_id: schedule_id
+              idea_session_owner: idea_session_owner
+              day_of_week: monday
+          created_on: created_on
+          connection_count: 9
+          name: name
+          force: true
+          state: PROVISIONING
+          locked: true
+          logins:
+          - logins
+          - logins
+          base_os: amazonlinux2
+          software_stack:
+            updated_on: updated_on
+            projects:
+            - project_id: project_id
+              name: name
+              description: description
+              title: title
+            - project_id: project_id
+              name: name
+              description: description
+              title: title
+            allowed_instance_types:
+            - allowed_instance_types
+            - allowed_instance_types
+            description: description
+            min_storage:
+              unit: unit
+              value: 5.637376656633329
+            ami_id: ami_id
+            failure_reason: failure_reason
+            gpu: NO_GPU
+            version: 7
+            enabled: true
+            created_on: created_on
+            stack_id: stack_id
+            name: name
+            placement:
+              host_resource_group_arn: host_resource_group_arn
+              tenancy: default
+              host_id: host_id
+              affinity: default
+            base_os: null
+            min_ram:
+              unit: unit
+              value: 5.637376656633329
+            architecture: x86_64
+          is_idle: true
+        nextToken: nextToken
+      properties:
+        sessions:
+          description: List of sessions to retrieve DCV sessions of
+          items:
+            $ref: "#/components/schemas/VirtualDesktopSession"
+          title: sessions
+          type: array
+        nextToken:
+          description: Pagination token for next page
+          title: nextToken
+          type: string
+      title: BatchGetDCVSessionsRequestContent
+      type: object
+    BatchGetDCVSessionsResponseContent:
+      example:
+        response: ""
+        nextToken: nextToken
+      properties:
+        response:
+          description: DCV sessions response data
+          title: response
+        nextToken:
+          description: Pagination token for next page
+          title: nextToken
+          type: string
+      title: BatchGetDCVSessionsResponseContent
+      type: object
+    CreatePermissionProfileRequestContent:
+      example:
+        profile:
+          updated_on: updated_on
+          created_on: created_on
+          profile_id: profile_id
+          permissions:
+          - name: name
+            description: description
+            key: key
+            enabled: true
+          - name: name
+            description: description
+            key: key
+            enabled: true
+          description: description
+          title: title
+      properties:
+        profile:
+          $ref: "#/components/schemas/VirtualDesktopPermissionProfile"
+      required:
+      - profile
+      title: CreatePermissionProfileRequestContent
+      type: object
+    CreatePermissionProfileResponseContent:
+      example:
+        profile:
+          updated_on: updated_on
+          created_on: created_on
+          profile_id: profile_id
+          permissions:
+          - name: name
+            description: description
+            key: key
+            enabled: true
+          - name: name
+            description: description
+            key: key
+            enabled: true
+          description: description
+          title: title
+      properties:
+        profile:
+          $ref: "#/components/schemas/VirtualDesktopPermissionProfile"
+      required:
+      - profile
+      title: CreatePermissionProfileResponseContent
+      type: object
+    CreateSoftwareStackRequestContent:
+      example:
+        software_stack:
+          updated_on: updated_on
+          projects:
+          - project_id: project_id
+            name: name
+            description: description
+            title: title
+          - project_id: project_id
+            name: name
+            description: description
+            title: title
+          allowed_instance_types:
+          - allowed_instance_types
+          - allowed_instance_types
+          description: description
+          min_storage:
+            unit: unit
+            value: 5.637376656633329
+          ami_id: ami_id
+          failure_reason: failure_reason
+          gpu: NO_GPU
+          version: 7
+          enabled: true
+          created_on: created_on
+          stack_id: stack_id
+          name: name
+          placement:
+            host_resource_group_arn: host_resource_group_arn
+            tenancy: default
+            host_id: host_id
+            affinity: default
+          base_os: null
+          min_ram:
+            unit: unit
+            value: 5.637376656633329
+          architecture: x86_64
+      properties:
+        software_stack:
+          $ref: "#/components/schemas/VirtualDesktopSoftwareStack"
+      required:
+      - software_stack
+      title: CreateSoftwareStackRequestContent
+      type: object
+    CreateSoftwareStackResponseContent:
+      example:
+        software_stack:
+          updated_on: updated_on
+          projects:
+          - project_id: project_id
+            name: name
+            description: description
+            title: title
+          - project_id: project_id
+            name: name
+            description: description
+            title: title
+          allowed_instance_types:
+          - allowed_instance_types
+          - allowed_instance_types
+          description: description
+          min_storage:
+            unit: unit
+            value: 5.637376656633329
+          ami_id: ami_id
+          failure_reason: failure_reason
+          gpu: NO_GPU
+          version: 7
+          enabled: true
+          created_on: created_on
+          stack_id: stack_id
+          name: name
+          placement:
+            host_resource_group_arn: host_resource_group_arn
+            tenancy: default
+            host_id: host_id
+            affinity: default
+          base_os: null
+          min_ram:
+            unit: unit
+            value: 5.637376656633329
+          architecture: x86_64
+      properties:
+        software_stack:
+          $ref: "#/components/schemas/VirtualDesktopSoftwareStack"
+      required:
+      - software_stack
+      title: CreateSoftwareStackResponseContent
+      type: object
+    DayOfWeek:
+      description: Day of the week
+      enum:
+      - monday
+      - tuesday
+      - wednesday
+      - thursday
+      - friday
+      - saturday
+      - sunday
+      title: DayOfWeek
+      type: string
+    DeletePermissionProfileResponseContent:
+      example:
+        success: true
+      properties:
+        success:
+          title: success
+          type: boolean
+      required:
+      - success
+      title: DeletePermissionProfileResponseContent
+      type: object
+    DeleteSoftwareStackRequestContent:
+      example:
+        base_os: base_os
+      properties:
+        base_os:
+          minLength: 1
+          title: base_os
+          type: string
+      required:
+      - base_os
+      title: DeleteSoftwareStackRequestContent
+      type: object
+    DeleteSoftwareStackResponseContent:
+      example:
+        success: true
+      properties:
+        success:
+          title: success
+          type: boolean
+      required:
+      - success
+      title: DeleteSoftwareStackResponseContent
+      type: object
+    GetPermissionProfileResponseContent:
+      description: Generic listing payload mixin for paginated results
+      example:
+        profile:
+          updated_on: updated_on
+          created_on: created_on
+          profile_id: profile_id
+          permissions:
+          - name: name
+            description: description
+            key: key
+            enabled: true
+          - name: name
+            description: description
+            key: key
+            enabled: true
+          description: description
+          title: title
+        sort_by:
+          key: key
+          order: asc
+        data_range:
+          start: 5.962133916683182
+          end: 5.637376656633329
+          key: key
+        filters:
+        - ends_with: ends_with
+          or:
+          - null
+          - null
+          in:
+            stringValue: stringValue
+          like: like
+          and:
+          - null
+          - null
+          eq: ""
+          value: ""
+          key: key
+          starts_with: starts_with
+        - ends_with: ends_with
+          or:
+          - null
+          - null
+          in:
+            stringValue: stringValue
+          like: like
+          and:
+          - null
+          - null
+          eq: ""
+          value: ""
+          key: key
+          starts_with: starts_with
+        paginator:
+          cursor: cursor
+          total: 0
+          start: 1
+          page_size: 6
+      properties:
+        paginator:
+          $ref: "#/components/schemas/ResPaginator"
+        sort_by:
+          $ref: "#/components/schemas/ResSortBy"
+        data_range:
+          $ref: "#/components/schemas/ResDateRange"
+        filters:
+          description: List of filters applied to the query
+          items:
+            $ref: "#/components/schemas/ResFilter"
+          title: filters
+          type: array
+        profile:
+          $ref: "#/components/schemas/VirtualDesktopPermissionProfile"
+      title: GetPermissionProfileResponseContent
+      type: object
+    GetSessionResponseContent:
+      example:
+        session:
+          owner: owner
+          updated_on: updated_on
+          server:
+            root_volume_size:
+              unit: unit
+              value: 5.637376656633329
+            virtual_session_count: 6
+            idea_session_id: idea_session_id
+            public_ip: public_ip
+            max_concurrent_sessions_per_user: 1
+            public_dns_name: public_dns_name
+            key_pair_name: key_pair_name
+            availability: availability
+            server_id: server_id
+            console_session_count: 0
+            idea_session_owner: idea_session_owner
+            private_ip: private_ip
+            security_groups:
+            - security_groups
+            - security_groups
+            instance_id: instance_id
+            root_volume_iops: 2
+            max_virtual_sessions: 5
+            subnet_id: subnet_id
+            state: state
+            private_dns_name: private_dns_name
+            locked: true
+            instance_type: instance_type
+            unavailability_reason: unavailability_reason
+            instance_profile_arn: instance_profile_arn
+            is_idle: true
+          is_launched_by_admin: true
+          idea_session_id: idea_session_id
+          hibernation_enabled: true
+          description: description
+          project:
+            project_id: project_id
+            name: name
+            description: description
+            title: title
+          failure_reason: failure_reason
+          type: CONSOLE
+          tags:
+          - ""
+          - ""
+          dcv_session_id: dcv_session_id
+          schedule:
+            sunday:
+              idea_session_id: idea_session_id
+              schedule_type: WORKING_HOURS
+              start_up_time: start_up_time
+              shut_down_time: shut_down_time
+              schedule_id: schedule_id
+              idea_session_owner: idea_session_owner
+              day_of_week: monday
+            saturday:
+              idea_session_id: idea_session_id
+              schedule_type: WORKING_HOURS
+              start_up_time: start_up_time
+              shut_down_time: shut_down_time
+              schedule_id: schedule_id
+              idea_session_owner: idea_session_owner
+              day_of_week: monday
+            tuesday:
+              idea_session_id: idea_session_id
+              schedule_type: WORKING_HOURS
+              start_up_time: start_up_time
+              shut_down_time: shut_down_time
+              schedule_id: schedule_id
+              idea_session_owner: idea_session_owner
+              day_of_week: monday
+            wednesday:
+              idea_session_id: idea_session_id
+              schedule_type: WORKING_HOURS
+              start_up_time: start_up_time
+              shut_down_time: shut_down_time
+              schedule_id: schedule_id
+              idea_session_owner: idea_session_owner
+              day_of_week: monday
+            thursday:
+              idea_session_id: idea_session_id
+              schedule_type: WORKING_HOURS
+              start_up_time: start_up_time
+              shut_down_time: shut_down_time
+              schedule_id: schedule_id
+              idea_session_owner: idea_session_owner
+              day_of_week: monday
+            friday:
+              idea_session_id: idea_session_id
+              schedule_type: WORKING_HOURS
+              start_up_time: start_up_time
+              shut_down_time: shut_down_time
+              schedule_id: schedule_id
+              idea_session_owner: idea_session_owner
+              day_of_week: monday
+            monday:
+              idea_session_id: idea_session_id
+              schedule_type: WORKING_HOURS
+              start_up_time: start_up_time
+              shut_down_time: shut_down_time
+              schedule_id: schedule_id
+              idea_session_owner: idea_session_owner
+              day_of_week: monday
+          created_on: created_on
+          connection_count: 9
+          name: name
+          force: true
+          state: PROVISIONING
+          locked: true
+          logins:
+          - logins
+          - logins
+          base_os: amazonlinux2
+          software_stack:
+            updated_on: updated_on
+            projects:
+            - project_id: project_id
+              name: name
+              description: description
+              title: title
+            - project_id: project_id
+              name: name
+              description: description
+              title: title
+            allowed_instance_types:
+            - allowed_instance_types
+            - allowed_instance_types
+            description: description
+            min_storage:
+              unit: unit
+              value: 5.637376656633329
+            ami_id: ami_id
+            failure_reason: failure_reason
+            gpu: NO_GPU
+            version: 7
+            enabled: true
+            created_on: created_on
+            stack_id: stack_id
+            name: name
+            placement:
+              host_resource_group_arn: host_resource_group_arn
+              tenancy: default
+              host_id: host_id
+              affinity: default
+            base_os: null
+            min_ram:
+              unit: unit
+              value: 5.637376656633329
+            architecture: x86_64
+          is_idle: true
+      properties:
+        session:
+          $ref: "#/components/schemas/VirtualDesktopSession"
+      title: GetSessionResponseContent
+      type: object
+    GetSoftwareStackResponseContent:
+      example:
+        softwareStack:
+          updated_on: updated_on
+          projects:
+          - project_id: project_id
+            name: name
+            description: description
+            title: title
+          - project_id: project_id
+            name: name
+            description: description
+            title: title
+          allowed_instance_types:
+          - allowed_instance_types
+          - allowed_instance_types
+          description: description
+          min_storage:
+            unit: unit
+            value: 5.637376656633329
+          ami_id: ami_id
+          failure_reason: failure_reason
+          gpu: NO_GPU
+          version: 7
+          enabled: true
+          created_on: created_on
+          stack_id: stack_id
+          name: name
+          placement:
+            host_resource_group_arn: host_resource_group_arn
+            tenancy: default
+            host_id: host_id
+            affinity: default
+          base_os: null
+          min_ram:
+            unit: unit
+            value: 5.637376656633329
+          architecture: x86_64
+      properties:
+        softwareStack:
+          $ref: "#/components/schemas/VirtualDesktopSoftwareStack"
+      title: GetSoftwareStackResponseContent
+      type: object
+    InternalServiceExceptionResponseContent:
+      description: This exception is thrown on an unhandled service error.
+      example:
+        message: message
+      properties:
+        message:
+          title: message
+          type: string
+      title: InternalServiceExceptionResponseContent
+      type: object
+    ListAllowedInstanceTypesForSessionRequestContent:
+      example:
+        session:
+          owner: owner
+          updated_on: updated_on
+          server:
+            root_volume_size:
+              unit: unit
+              value: 5.637376656633329
+            virtual_session_count: 6
+            idea_session_id: idea_session_id
+            public_ip: public_ip
+            max_concurrent_sessions_per_user: 1
+            public_dns_name: public_dns_name
+            key_pair_name: key_pair_name
+            availability: availability
+            server_id: server_id
+            console_session_count: 0
+            idea_session_owner: idea_session_owner
+            private_ip: private_ip
+            security_groups:
+            - security_groups
+            - security_groups
+            instance_id: instance_id
+            root_volume_iops: 2
+            max_virtual_sessions: 5
+            subnet_id: subnet_id
+            state: state
+            private_dns_name: private_dns_name
+            locked: true
+            instance_type: instance_type
+            unavailability_reason: unavailability_reason
+            instance_profile_arn: instance_profile_arn
+            is_idle: true
+          is_launched_by_admin: true
+          idea_session_id: idea_session_id
+          hibernation_enabled: true
+          description: description
+          project:
+            project_id: project_id
+            name: name
+            description: description
+            title: title
+          failure_reason: failure_reason
+          type: CONSOLE
+          tags:
+          - ""
+          - ""
+          dcv_session_id: dcv_session_id
+          schedule:
+            sunday:
+              idea_session_id: idea_session_id
+              schedule_type: WORKING_HOURS
+              start_up_time: start_up_time
+              shut_down_time: shut_down_time
+              schedule_id: schedule_id
+              idea_session_owner: idea_session_owner
+              day_of_week: monday
+            saturday:
+              idea_session_id: idea_session_id
+              schedule_type: WORKING_HOURS
+              start_up_time: start_up_time
+              shut_down_time: shut_down_time
+              schedule_id: schedule_id
+              idea_session_owner: idea_session_owner
+              day_of_week: monday
+            tuesday:
+              idea_session_id: idea_session_id
+              schedule_type: WORKING_HOURS
+              start_up_time: start_up_time
+              shut_down_time: shut_down_time
+              schedule_id: schedule_id
+              idea_session_owner: idea_session_owner
+              day_of_week: monday
+            wednesday:
+              idea_session_id: idea_session_id
+              schedule_type: WORKING_HOURS
+              start_up_time: start_up_time
+              shut_down_time: shut_down_time
+              schedule_id: schedule_id
+              idea_session_owner: idea_session_owner
+              day_of_week: monday
+            thursday:
+              idea_session_id: idea_session_id
+              schedule_type: WORKING_HOURS
+              start_up_time: start_up_time
+              shut_down_time: shut_down_time
+              schedule_id: schedule_id
+              idea_session_owner: idea_session_owner
+              day_of_week: monday
+            friday:
+              idea_session_id: idea_session_id
+              schedule_type: WORKING_HOURS
+              start_up_time: start_up_time
+              shut_down_time: shut_down_time
+              schedule_id: schedule_id
+              idea_session_owner: idea_session_owner
+              day_of_week: monday
+            monday:
+              idea_session_id: idea_session_id
+              schedule_type: WORKING_HOURS
+              start_up_time: start_up_time
+              shut_down_time: shut_down_time
+              schedule_id: schedule_id
+              idea_session_owner: idea_session_owner
+              day_of_week: monday
+          created_on: created_on
+          connection_count: 9
+          name: name
+          force: true
+          state: PROVISIONING
+          locked: true
+          logins:
+          - logins
+          - logins
+          base_os: amazonlinux2
+          software_stack:
+            updated_on: updated_on
+            projects:
+            - project_id: project_id
+              name: name
+              description: description
+              title: title
+            - project_id: project_id
+              name: name
+              description: description
+              title: title
+            allowed_instance_types:
+            - allowed_instance_types
+            - allowed_instance_types
+            description: description
+            min_storage:
+              unit: unit
+              value: 5.637376656633329
+            ami_id: ami_id
+            failure_reason: failure_reason
+            gpu: NO_GPU
+            version: 7
+            enabled: true
+            created_on: created_on
+            stack_id: stack_id
+            name: name
+            placement:
+              host_resource_group_arn: host_resource_group_arn
+              tenancy: default
+              host_id: host_id
+              affinity: default
+            base_os: null
+            min_ram:
+              unit: unit
+              value: 5.637376656633329
+            architecture: x86_64
+          is_idle: true
+      properties:
+        session:
+          $ref: "#/components/schemas/VirtualDesktopSession"
+      required:
+      - session
+      title: ListAllowedInstanceTypesForSessionRequestContent
+      type: object
+    ListAllowedInstanceTypesForSessionResponseContent:
+      description: Generic listing payload mixin for paginated results
+      example:
+        sort_by:
+          key: key
+          order: asc
+        data_range:
+          start: 5.962133916683182
+          end: 5.637376656633329
+          key: key
+        filters:
+        - ends_with: ends_with
+          or:
+          - null
+          - null
+          in:
+            stringValue: stringValue
+          like: like
+          and:
+          - null
+          - null
+          eq: ""
+          value: ""
+          key: key
+          starts_with: starts_with
+        - ends_with: ends_with
+          or:
+          - null
+          - null
+          in:
+            stringValue: stringValue
+          like: like
+          and:
+          - null
+          - null
+          eq: ""
+          value: ""
+          key: key
+          starts_with: starts_with
+        paginator:
+          cursor: cursor
+          total: 0
+          start: 1
+          page_size: 6
+        listing:
+        - ""
+        - ""
+      properties:
+        paginator:
+          $ref: "#/components/schemas/ResPaginator"
+        sort_by:
+          $ref: "#/components/schemas/ResSortBy"
+        data_range:
+          $ref: "#/components/schemas/ResDateRange"
+        filters:
+          description: List of filters applied to the query
+          items:
+            $ref: "#/components/schemas/ResFilter"
+          title: filters
+          type: array
+        listing:
+          description: List of allowed instance types
+          items: {}
+          title: listing
+          type: array
+      title: ListAllowedInstanceTypesForSessionResponseContent
+      type: object
+    ListAllowedInstanceTypesRequestContent:
+      example:
+        hibernation_support: false
+        software_stack:
+          updated_on: updated_on
+          projects:
+          - project_id: project_id
+            name: name
+            description: description
+            title: title
+          - project_id: project_id
+            name: name
+            description: description
+            title: title
+          allowed_instance_types:
+          - allowed_instance_types
+          - allowed_instance_types
+          description: description
+          min_storage:
+            unit: unit
+            value: 5.637376656633329
+          ami_id: ami_id
+          failure_reason: failure_reason
+          gpu: NO_GPU
+          version: 7
+          enabled: true
+          created_on: created_on
+          stack_id: stack_id
+          name: name
+          placement:
+            host_resource_group_arn: host_resource_group_arn
+            tenancy: default
+            host_id: host_id
+            affinity: default
+          base_os: null
+          min_ram:
+            unit: unit
+            value: 5.637376656633329
+          architecture: x86_64
+      properties:
+        hibernation_support:
+          default: false
+          description: Whether the instance types need to support hibernation
+          title: hibernation_support
+          type: boolean
+        software_stack:
+          $ref: "#/components/schemas/VirtualDesktopSoftwareStack"
+      title: ListAllowedInstanceTypesRequestContent
+      type: object
+    ListAllowedInstanceTypesResponseContent:
+      description: Generic listing payload mixin for paginated results
+      example:
+        sort_by:
+          key: key
+          order: asc
+        data_range:
+          start: 5.962133916683182
+          end: 5.637376656633329
+          key: key
+        filters:
+        - ends_with: ends_with
+          or:
+          - null
+          - null
+          in:
+            stringValue: stringValue
+          like: like
+          and:
+          - null
+          - null
+          eq: ""
+          value: ""
+          key: key
+          starts_with: starts_with
+        - ends_with: ends_with
+          or:
+          - null
+          - null
+          in:
+            stringValue: stringValue
+          like: like
+          and:
+          - null
+          - null
+          eq: ""
+          value: ""
+          key: key
+          starts_with: starts_with
+        paginator:
+          cursor: cursor
+          total: 0
+          start: 1
+          page_size: 6
+        listing:
+        - ""
+        - ""
+      properties:
+        paginator:
+          $ref: "#/components/schemas/ResPaginator"
+        sort_by:
+          $ref: "#/components/schemas/ResSortBy"
+        data_range:
+          $ref: "#/components/schemas/ResDateRange"
+        filters:
+          description: List of filters applied to the query
+          items:
+            $ref: "#/components/schemas/ResFilter"
+          title: filters
+          type: array
+        listing:
+          description: List of allowed instance types
+          items: {}
+          title: listing
+          type: array
+      title: ListAllowedInstanceTypesResponseContent
+      type: object
+    ListDCVServersResponseContent:
+      example:
+        response: ""
+        nextToken: nextToken
+      properties:
+        response:
+          description: DCV servers response data
+          title: response
+        nextToken:
+          description: Pagination token for next page
+          title: nextToken
+          type: string
+      title: ListDCVServersResponseContent
+      type: object
+    ListPermissionProfilesResponseContent:
+      description: Generic listing payload mixin for paginated results
+      example:
+        nextToken: nextToken
+        sort_by:
+          key: key
+          order: asc
+        data_range:
+          start: 5.962133916683182
+          end: 5.637376656633329
+          key: key
+        filters:
+        - ends_with: ends_with
+          or:
+          - null
+          - null
+          in:
+            stringValue: stringValue
+          like: like
+          and:
+          - null
+          - null
+          eq: ""
+          value: ""
+          key: key
+          starts_with: starts_with
+        - ends_with: ends_with
+          or:
+          - null
+          - null
+          in:
+            stringValue: stringValue
+          like: like
+          and:
+          - null
+          - null
+          eq: ""
+          value: ""
+          key: key
+          starts_with: starts_with
+        paginator:
+          cursor: cursor
+          total: 0
+          start: 1
+          page_size: 6
+        listing:
+        - updated_on: updated_on
+          created_on: created_on
+          profile_id: profile_id
+          permissions:
+          - name: name
+            description: description
+            key: key
+            enabled: true
+          - name: name
+            description: description
+            key: key
+            enabled: true
+          description: description
+          title: title
+        - updated_on: updated_on
+          created_on: created_on
+          profile_id: profile_id
+          permissions:
+          - name: name
+            description: description
+            key: key
+            enabled: true
+          - name: name
+            description: description
+            key: key
+            enabled: true
+          description: description
+          title: title
+      properties:
+        paginator:
+          $ref: "#/components/schemas/ResPaginator"
+        sort_by:
+          $ref: "#/components/schemas/ResSortBy"
+        data_range:
+          $ref: "#/components/schemas/ResDateRange"
+        filters:
+          description: List of filters applied to the query
+          items:
+            $ref: "#/components/schemas/ResFilter"
+          title: filters
+          type: array
+        listing:
+          description: List of permission profiles
+          items:
+            $ref: "#/components/schemas/VirtualDesktopPermissionProfile"
+          title: listing
+          type: array
+        nextToken:
+          description: Pagination token for next page
+          title: nextToken
+          type: string
+      title: ListPermissionProfilesResponseContent
+      type: object
+    ListSessionPermissionsResponseContent:
+      description: Generic listing payload mixin for paginated results
+      example:
+        nextToken: nextToken
+        sort_by:
+          key: key
+          order: asc
+        data_range:
+          start: 5.962133916683182
+          end: 5.637376656633329
+          key: key
+        filters:
+        - ends_with: ends_with
+          or:
+          - null
+          - null
+          in:
+            stringValue: stringValue
+          like: like
+          and:
+          - null
+          - null
+          eq: ""
+          value: ""
+          key: key
+          starts_with: starts_with
+        - ends_with: ends_with
+          or:
+          - null
+          - null
+          in:
+            stringValue: stringValue
+          like: like
+          and:
+          - null
+          - null
+          eq: ""
+          value: ""
+          key: key
+          starts_with: starts_with
+        paginator:
+          cursor: cursor
+          total: 0
+          start: 1
+          page_size: 6
+        listing:
+        - updated_on: updated_on
+          idea_session_id: idea_session_id
+          idea_session_state: PROVISIONING
+          actor_type: actor_type
+          expiry_date: expiry_date
+          actor_name: actor_name
+          idea_session_name: idea_session_name
+          idea_session_hibernation_enabled: true
+          failure_reason: failure_reason
+          idea_session_owner: idea_session_owner
+          idea_session_type: CONSOLE
+          idea_session_instance_type: idea_session_instance_type
+          created_on: created_on
+          idea_session_created_on: idea_session_created_on
+          permission_profile:
+            profile_id: profile_id
+          idea_session_base_os: amazonlinux2
+        - updated_on: updated_on
+          idea_session_id: idea_session_id
+          idea_session_state: PROVISIONING
+          actor_type: actor_type
+          expiry_date: expiry_date
+          actor_name: actor_name
+          idea_session_name: idea_session_name
+          idea_session_hibernation_enabled: true
+          failure_reason: failure_reason
+          idea_session_owner: idea_session_owner
+          idea_session_type: CONSOLE
+          idea_session_instance_type: idea_session_instance_type
+          created_on: created_on
+          idea_session_created_on: idea_session_created_on
+          permission_profile:
+            profile_id: profile_id
+          idea_session_base_os: amazonlinux2
+      properties:
+        paginator:
+          $ref: "#/components/schemas/ResPaginator"
+        sort_by:
+          $ref: "#/components/schemas/ResSortBy"
+        data_range:
+          $ref: "#/components/schemas/ResDateRange"
+        filters:
+          description: List of filters applied to the query
+          items:
+            $ref: "#/components/schemas/ResFilter"
+          title: filters
+          type: array
+        listing:
+          description: List of session permissions
+          items:
+            $ref: "#/components/schemas/VirtualDesktopSessionPermission"
+          title: listing
+          type: array
+        nextToken:
+          description: Pagination token for next page
+          title: nextToken
+          type: string
+      title: ListSessionPermissionsResponseContent
+      type: object
+    ListSessionsResponseContent:
+      description: Generic listing payload mixin for paginated results
+      example:
+        nextToken: nextToken
+        sort_by:
+          key: key
+          order: asc
+        data_range:
+          start: 5.962133916683182
+          end: 5.637376656633329
+          key: key
+        filters:
+        - ends_with: ends_with
+          or:
+          - null
+          - null
+          in:
+            stringValue: stringValue
+          like: like
+          and:
+          - null
+          - null
+          eq: ""
+          value: ""
+          key: key
+          starts_with: starts_with
+        - ends_with: ends_with
+          or:
+          - null
+          - null
+          in:
+            stringValue: stringValue
+          like: like
+          and:
+          - null
+          - null
+          eq: ""
+          value: ""
+          key: key
+          starts_with: starts_with
+        paginator:
+          cursor: cursor
+          total: 0
+          start: 1
+          page_size: 6
+        listing:
+        - owner: owner
+          updated_on: updated_on
+          server:
+            root_volume_size:
+              unit: unit
+              value: 5.637376656633329
+            virtual_session_count: 6
+            idea_session_id: idea_session_id
+            public_ip: public_ip
+            max_concurrent_sessions_per_user: 1
+            public_dns_name: public_dns_name
+            key_pair_name: key_pair_name
+            availability: availability
+            server_id: server_id
+            console_session_count: 0
+            idea_session_owner: idea_session_owner
+            private_ip: private_ip
+            security_groups:
+            - security_groups
+            - security_groups
+            instance_id: instance_id
+            root_volume_iops: 2
+            max_virtual_sessions: 5
+            subnet_id: subnet_id
+            state: state
+            private_dns_name: private_dns_name
+            locked: true
+            instance_type: instance_type
+            unavailability_reason: unavailability_reason
+            instance_profile_arn: instance_profile_arn
+            is_idle: true
+          is_launched_by_admin: true
+          idea_session_id: idea_session_id
+          hibernation_enabled: true
+          description: description
+          project:
+            project_id: project_id
+            name: name
+            description: description
+            title: title
+          failure_reason: failure_reason
+          type: CONSOLE
+          tags:
+          - ""
+          - ""
+          dcv_session_id: dcv_session_id
+          schedule:
+            sunday:
+              idea_session_id: idea_session_id
+              schedule_type: WORKING_HOURS
+              start_up_time: start_up_time
+              shut_down_time: shut_down_time
+              schedule_id: schedule_id
+              idea_session_owner: idea_session_owner
+              day_of_week: monday
+            saturday:
+              idea_session_id: idea_session_id
+              schedule_type: WORKING_HOURS
+              start_up_time: start_up_time
+              shut_down_time: shut_down_time
+              schedule_id: schedule_id
+              idea_session_owner: idea_session_owner
+              day_of_week: monday
+            tuesday:
+              idea_session_id: idea_session_id
+              schedule_type: WORKING_HOURS
+              start_up_time: start_up_time
+              shut_down_time: shut_down_time
+              schedule_id: schedule_id
+              idea_session_owner: idea_session_owner
+              day_of_week: monday
+            wednesday:
+              idea_session_id: idea_session_id
+              schedule_type: WORKING_HOURS
+              start_up_time: start_up_time
+              shut_down_time: shut_down_time
+              schedule_id: schedule_id
+              idea_session_owner: idea_session_owner
+              day_of_week: monday
+            thursday:
+              idea_session_id: idea_session_id
+              schedule_type: WORKING_HOURS
+              start_up_time: start_up_time
+              shut_down_time: shut_down_time
+              schedule_id: schedule_id
+              idea_session_owner: idea_session_owner
+              day_of_week: monday
+            friday:
+              idea_session_id: idea_session_id
+              schedule_type: WORKING_HOURS
+              start_up_time: start_up_time
+              shut_down_time: shut_down_time
+              schedule_id: schedule_id
+              idea_session_owner: idea_session_owner
+              day_of_week: monday
+            monday:
+              idea_session_id: idea_session_id
+              schedule_type: WORKING_HOURS
+              start_up_time: start_up_time
+              shut_down_time: shut_down_time
+              schedule_id: schedule_id
+              idea_session_owner: idea_session_owner
+              day_of_week: monday
+          created_on: created_on
+          connection_count: 9
+          name: name
+          force: true
+          state: PROVISIONING
+          locked: true
+          logins:
+          - logins
+          - logins
+          base_os: amazonlinux2
+          software_stack:
+            updated_on: updated_on
+            projects:
+            - project_id: project_id
+              name: name
+              description: description
+              title: title
+            - project_id: project_id
+              name: name
+              description: description
+              title: title
+            allowed_instance_types:
+            - allowed_instance_types
+            - allowed_instance_types
+            description: description
+            min_storage:
+              unit: unit
+              value: 5.637376656633329
+            ami_id: ami_id
+            failure_reason: failure_reason
+            gpu: NO_GPU
+            version: 7
+            enabled: true
+            created_on: created_on
+            stack_id: stack_id
+            name: name
+            placement:
+              host_resource_group_arn: host_resource_group_arn
+              tenancy: default
+              host_id: host_id
+              affinity: default
+            base_os: null
+            min_ram:
+              unit: unit
+              value: 5.637376656633329
+            architecture: x86_64
+          is_idle: true
+        - owner: owner
+          updated_on: updated_on
+          server:
+            root_volume_size:
+              unit: unit
+              value: 5.637376656633329
+            virtual_session_count: 6
+            idea_session_id: idea_session_id
+            public_ip: public_ip
+            max_concurrent_sessions_per_user: 1
+            public_dns_name: public_dns_name
+            key_pair_name: key_pair_name
+            availability: availability
+            server_id: server_id
+            console_session_count: 0
+            idea_session_owner: idea_session_owner
+            private_ip: private_ip
+            security_groups:
+            - security_groups
+            - security_groups
+            instance_id: instance_id
+            root_volume_iops: 2
+            max_virtual_sessions: 5
+            subnet_id: subnet_id
+            state: state
+            private_dns_name: private_dns_name
+            locked: true
+            instance_type: instance_type
+            unavailability_reason: unavailability_reason
+            instance_profile_arn: instance_profile_arn
+            is_idle: true
+          is_launched_by_admin: true
+          idea_session_id: idea_session_id
+          hibernation_enabled: true
+          description: description
+          project:
+            project_id: project_id
+            name: name
+            description: description
+            title: title
+          failure_reason: failure_reason
+          type: CONSOLE
+          tags:
+          - ""
+          - ""
+          dcv_session_id: dcv_session_id
+          schedule:
+            sunday:
+              idea_session_id: idea_session_id
+              schedule_type: WORKING_HOURS
+              start_up_time: start_up_time
+              shut_down_time: shut_down_time
+              schedule_id: schedule_id
+              idea_session_owner: idea_session_owner
+              day_of_week: monday
+            saturday:
+              idea_session_id: idea_session_id
+              schedule_type: WORKING_HOURS
+              start_up_time: start_up_time
+              shut_down_time: shut_down_time
+              schedule_id: schedule_id
+              idea_session_owner: idea_session_owner
+              day_of_week: monday
+            tuesday:
+              idea_session_id: idea_session_id
+              schedule_type: WORKING_HOURS
+              start_up_time: start_up_time
+              shut_down_time: shut_down_time
+              schedule_id: schedule_id
+              idea_session_owner: idea_session_owner
+              day_of_week: monday
+            wednesday:
+              idea_session_id: idea_session_id
+              schedule_type: WORKING_HOURS
+              start_up_time: start_up_time
+              shut_down_time: shut_down_time
+              schedule_id: schedule_id
+              idea_session_owner: idea_session_owner
+              day_of_week: monday
+            thursday:
+              idea_session_id: idea_session_id
+              schedule_type: WORKING_HOURS
+              start_up_time: start_up_time
+              shut_down_time: shut_down_time
+              schedule_id: schedule_id
+              idea_session_owner: idea_session_owner
+              day_of_week: monday
+            friday:
+              idea_session_id: idea_session_id
+              schedule_type: WORKING_HOURS
+              start_up_time: start_up_time
+              shut_down_time: shut_down_time
+              schedule_id: schedule_id
+              idea_session_owner: idea_session_owner
+              day_of_week: monday
+            monday:
+              idea_session_id: idea_session_id
+              schedule_type: WORKING_HOURS
+              start_up_time: start_up_time
+              shut_down_time: shut_down_time
+              schedule_id: schedule_id
+              idea_session_owner: idea_session_owner
+              day_of_week: monday
+          created_on: created_on
+          connection_count: 9
+          name: name
+          force: true
+          state: PROVISIONING
+          locked: true
+          logins:
+          - logins
+          - logins
+          base_os: amazonlinux2
+          software_stack:
+            updated_on: updated_on
+            projects:
+            - project_id: project_id
+              name: name
+              description: description
+              title: title
+            - project_id: project_id
+              name: name
+              description: description
+              title: title
+            allowed_instance_types:
+            - allowed_instance_types
+            - allowed_instance_types
+            description: description
+            min_storage:
+              unit: unit
+              value: 5.637376656633329
+            ami_id: ami_id
+            failure_reason: failure_reason
+            gpu: NO_GPU
+            version: 7
+            enabled: true
+            created_on: created_on
+            stack_id: stack_id
+            name: name
+            placement:
+              host_resource_group_arn: host_resource_group_arn
+              tenancy: default
+              host_id: host_id
+              affinity: default
+            base_os: null
+            min_ram:
+              unit: unit
+              value: 5.637376656633329
+            architecture: x86_64
+          is_idle: true
+      properties:
+        paginator:
+          $ref: "#/components/schemas/ResPaginator"
+        sort_by:
+          $ref: "#/components/schemas/ResSortBy"
+        data_range:
+          $ref: "#/components/schemas/ResDateRange"
+        filters:
+          description: List of filters applied to the query
+          items:
+            $ref: "#/components/schemas/ResFilter"
+          title: filters
+          type: array
+        listing:
+          description: List of sessions
+          items:
+            $ref: "#/components/schemas/VirtualDesktopSession"
+          title: listing
+          type: array
+        nextToken:
+          description: Pagination token for next page
+          title: nextToken
+          type: string
+      title: ListSessionsResponseContent
+      type: object
+    ListSharedPermissionsResponseContent:
+      description: Generic listing payload mixin for paginated results
+      example:
+        nextToken: nextToken
+        sort_by:
+          key: key
+          order: asc
+        data_range:
+          start: 5.962133916683182
+          end: 5.637376656633329
+          key: key
+        filters:
+        - ends_with: ends_with
+          or:
+          - null
+          - null
+          in:
+            stringValue: stringValue
+          like: like
+          and:
+          - null
+          - null
+          eq: ""
+          value: ""
+          key: key
+          starts_with: starts_with
+        - ends_with: ends_with
+          or:
+          - null
+          - null
+          in:
+            stringValue: stringValue
+          like: like
+          and:
+          - null
+          - null
+          eq: ""
+          value: ""
+          key: key
+          starts_with: starts_with
+        paginator:
+          cursor: cursor
+          total: 0
+          start: 1
+          page_size: 6
+        listing:
+        - updated_on: updated_on
+          idea_session_id: idea_session_id
+          idea_session_state: PROVISIONING
+          actor_type: actor_type
+          expiry_date: expiry_date
+          actor_name: actor_name
+          idea_session_name: idea_session_name
+          idea_session_hibernation_enabled: true
+          failure_reason: failure_reason
+          idea_session_owner: idea_session_owner
+          idea_session_type: CONSOLE
+          idea_session_instance_type: idea_session_instance_type
+          created_on: created_on
+          idea_session_created_on: idea_session_created_on
+          permission_profile:
+            profile_id: profile_id
+          idea_session_base_os: amazonlinux2
+        - updated_on: updated_on
+          idea_session_id: idea_session_id
+          idea_session_state: PROVISIONING
+          actor_type: actor_type
+          expiry_date: expiry_date
+          actor_name: actor_name
+          idea_session_name: idea_session_name
+          idea_session_hibernation_enabled: true
+          failure_reason: failure_reason
+          idea_session_owner: idea_session_owner
+          idea_session_type: CONSOLE
+          idea_session_instance_type: idea_session_instance_type
+          created_on: created_on
+          idea_session_created_on: idea_session_created_on
+          permission_profile:
+            profile_id: profile_id
+          idea_session_base_os: amazonlinux2
+      properties:
+        paginator:
+          $ref: "#/components/schemas/ResPaginator"
+        sort_by:
+          $ref: "#/components/schemas/ResSortBy"
+        data_range:
+          $ref: "#/components/schemas/ResDateRange"
+        filters:
+          description: List of filters applied to the query
+          items:
+            $ref: "#/components/schemas/ResFilter"
+          title: filters
+          type: array
+        listing:
+          description: List of shared permissions
+          items:
+            $ref: "#/components/schemas/VirtualDesktopSessionPermission"
+          title: listing
+          type: array
+        nextToken:
+          description: Pagination token for next page
+          title: nextToken
+          type: string
+      title: ListSharedPermissionsResponseContent
+      type: object
+    ListSoftwareStacksResponseContent:
+      description: Generic listing payload mixin for paginated results
+      example:
+        nextToken: nextToken
+        sort_by:
+          key: key
+          order: asc
+        data_range:
+          start: 5.962133916683182
+          end: 5.637376656633329
+          key: key
+        filters:
+        - ends_with: ends_with
+          or:
+          - null
+          - null
+          in:
+            stringValue: stringValue
+          like: like
+          and:
+          - null
+          - null
+          eq: ""
+          value: ""
+          key: key
+          starts_with: starts_with
+        - ends_with: ends_with
+          or:
+          - null
+          - null
+          in:
+            stringValue: stringValue
+          like: like
+          and:
+          - null
+          - null
+          eq: ""
+          value: ""
+          key: key
+          starts_with: starts_with
+        paginator:
+          cursor: cursor
+          total: 0
+          start: 1
+          page_size: 6
+        listing:
+        - updated_on: updated_on
+          projects:
+          - project_id: project_id
+            name: name
+            description: description
+            title: title
+          - project_id: project_id
+            name: name
+            description: description
+            title: title
+          allowed_instance_types:
+          - allowed_instance_types
+          - allowed_instance_types
+          description: description
+          min_storage:
+            unit: unit
+            value: 5.637376656633329
+          ami_id: ami_id
+          failure_reason: failure_reason
+          gpu: NO_GPU
+          version: 7
+          enabled: true
+          created_on: created_on
+          stack_id: stack_id
+          name: name
+          placement:
+            host_resource_group_arn: host_resource_group_arn
+            tenancy: default
+            host_id: host_id
+            affinity: default
+          base_os: null
+          min_ram:
+            unit: unit
+            value: 5.637376656633329
+          architecture: x86_64
+        - updated_on: updated_on
+          projects:
+          - project_id: project_id
+            name: name
+            description: description
+            title: title
+          - project_id: project_id
+            name: name
+            description: description
+            title: title
+          allowed_instance_types:
+          - allowed_instance_types
+          - allowed_instance_types
+          description: description
+          min_storage:
+            unit: unit
+            value: 5.637376656633329
+          ami_id: ami_id
+          failure_reason: failure_reason
+          gpu: NO_GPU
+          version: 7
+          enabled: true
+          created_on: created_on
+          stack_id: stack_id
+          name: name
+          placement:
+            host_resource_group_arn: host_resource_group_arn
+            tenancy: default
+            host_id: host_id
+            affinity: default
+          base_os: null
+          min_ram:
+            unit: unit
+            value: 5.637376656633329
+          architecture: x86_64
+      properties:
+        paginator:
+          $ref: "#/components/schemas/ResPaginator"
+        sort_by:
+          $ref: "#/components/schemas/ResSortBy"
+        data_range:
+          $ref: "#/components/schemas/ResDateRange"
+        filters:
+          description: List of filters applied to the query
+          items:
+            $ref: "#/components/schemas/ResFilter"
+          title: filters
+          type: array
+        listing:
+          description: List of software stacks
+          items:
+            $ref: "#/components/schemas/VirtualDesktopSoftwareStack"
+          title: listing
+          type: array
+        nextToken:
+          description: Pagination token for next page
+          title: nextToken
+          type: string
+      title: ListSoftwareStacksResponseContent
+      type: object
+    NotFoundExceptionResponseContent:
+      description: The requested entity is not found.
+      example:
+        message: message
+      properties:
+        message:
+          title: message
+          type: string
+      title: NotFoundExceptionResponseContent
+      type: object
+    PermissionProfile:
+      example:
+        profile_id: profile_id
+      properties:
+        profile_id:
+          title: profile_id
+          type: string
+      required:
+      - profile_id
+      title: PermissionProfile
+      type: object
+    Project:
+      description: Project information structure
+      example:
+        project_id: project_id
+        name: name
+        description: description
+        title: title
+      properties:
+        project_id:
+          description: Project identifier
+          title: project_id
+          type: string
+        name:
+          description: Project name
+          title: name
+          type: string
+        title:
+          description: Project title
+          title: title
+          type: string
+        description:
+          description: Project description
+          title: description
+          type: string
+      title: Project
+      type: object
+    ResDateRange:
+      description: Date range filter for queries
+      example:
+        start: 5.962133916683182
+        end: 5.637376656633329
+        key: key
+      properties:
+        key:
+          description: The key identifier for the date range
+          title: key
+          type: string
+        start:
+          description: Start date/time for the range
+          format: double
+          title: start
+          type: number
+        end:
+          description: End date/time for the range
+          format: double
+          title: end
+          type: number
+      title: ResDateRange
+      type: object
+    ResFilter:
+      description: Filter specification for queries
+      example:
+        ends_with: ends_with
+        or:
+        - null
+        - null
+        in:
+          stringValue: stringValue
+        like: like
+        and:
+        - null
+        - null
+        eq: ""
+        value: ""
+        key: key
+        starts_with: starts_with
+      properties:
+        key:
+          description: The field key to filter on
+          title: key
+          type: string
+        value:
+          description: Generic value for the filter
+          title: value
+        eq:
+          description: Equality filter value
+          title: eq
+        in:
+          $ref: "#/components/schemas/ResFilterValueStringOrList"
+        like:
+          description: Like pattern for string matching
+          title: like
+          type: string
+        starts_with:
+          description: Starts with pattern for string matching
+          title: starts_with
+          type: string
+        ends_with:
+          description: Ends with pattern for string matching
+          title: ends_with
+          type: string
+        and:
+          description: AND operation with nested filters
+          items:
+            $ref: "#/components/schemas/ResFilter"
+          title: and
+          type: array
+        or:
+          description: OR operation with nested filters
+          items:
+            $ref: "#/components/schemas/ResFilter"
+          title: or
+          type: array
+      title: ResFilter
+      type: object
+    ResFilterValueStringOrList:
+      description: A single string or a list of filter values
+      oneOf:
+      - $ref: "#/components/schemas/stringValue"
+      - $ref: "#/components/schemas/listValue"
+      title: ResFilterValueStringOrList
+    ResMemory:
+      description: Memory specification structure
+      example:
+        unit: unit
+        value: 5.637376656633329
+      properties:
+        value:
+          description: Memory value
+          format: double
+          title: value
+          type: number
+        unit:
+          description: "Memory unit (e.g., GB, MB)"
+          title: unit
+          type: string
+      title: ResMemory
+      type: object
+    ResPaginator:
+      description: Pagination configuration for listing operations
+      example:
+        cursor: cursor
+        total: 0
+        start: 1
+        page_size: 6
+      properties:
+        total:
+          description: Total number of items available
+          format: int32
+          title: total
+          type: integer
+        page_size:
+          description: Number of items per page
+          format: int32
+          title: page_size
+          type: integer
+        start:
+          description: Starting index for pagination
+          format: int32
+          title: start
+          type: integer
+        cursor:
+          description: Cursor for pagination
+          title: cursor
+          type: string
+      title: ResPaginator
+      type: object
+    ResSortBy:
+      description: Sort specification for query results
+      example:
+        key: key
+        order: asc
+      properties:
+        key:
+          description: The field key to sort by
+          title: key
+          type: string
+        order:
+          $ref: "#/components/schemas/ResSortOrder"
+      title: ResSortBy
+      type: object
+    ResSortOrder:
+      description: Sort order enumeration
+      enum:
+      - asc
+      - desc
+      title: ResSortOrder
+      type: string
+    UpdatePermissionProfileRequestContent:
+      example:
+        profile:
+          updated_on: updated_on
+          created_on: created_on
+          profile_id: profile_id
+          permissions:
+          - name: name
+            description: description
+            key: key
+            enabled: true
+          - name: name
+            description: description
+            key: key
+            enabled: true
+          description: description
+          title: title
+      properties:
+        profile:
+          $ref: "#/components/schemas/VirtualDesktopPermissionProfile"
+      required:
+      - profile
+      title: UpdatePermissionProfileRequestContent
+      type: object
+    UpdatePermissionProfileResponseContent:
+      example:
+        profile:
+          updated_on: updated_on
+          created_on: created_on
+          profile_id: profile_id
+          permissions:
+          - name: name
+            description: description
+            key: key
+            enabled: true
+          - name: name
+            description: description
+            key: key
+            enabled: true
+          description: description
+          title: title
+      properties:
+        profile:
+          $ref: "#/components/schemas/VirtualDesktopPermissionProfile"
+      required:
+      - profile
+      title: UpdatePermissionProfileResponseContent
+      type: object
+    UpdateSessionPermissionsRequestContent:
+      example:
+        create:
+        - updated_on: updated_on
+          idea_session_id: idea_session_id
+          idea_session_state: PROVISIONING
+          actor_type: actor_type
+          expiry_date: expiry_date
+          actor_name: actor_name
+          idea_session_name: idea_session_name
+          idea_session_hibernation_enabled: true
+          failure_reason: failure_reason
+          idea_session_owner: idea_session_owner
+          idea_session_type: CONSOLE
+          idea_session_instance_type: idea_session_instance_type
+          created_on: created_on
+          idea_session_created_on: idea_session_created_on
+          permission_profile:
+            profile_id: profile_id
+          idea_session_base_os: amazonlinux2
+        - updated_on: updated_on
+          idea_session_id: idea_session_id
+          idea_session_state: PROVISIONING
+          actor_type: actor_type
+          expiry_date: expiry_date
+          actor_name: actor_name
+          idea_session_name: idea_session_name
+          idea_session_hibernation_enabled: true
+          failure_reason: failure_reason
+          idea_session_owner: idea_session_owner
+          idea_session_type: CONSOLE
+          idea_session_instance_type: idea_session_instance_type
+          created_on: created_on
+          idea_session_created_on: idea_session_created_on
+          permission_profile:
+            profile_id: profile_id
+          idea_session_base_os: amazonlinux2
+        update:
+        - updated_on: updated_on
+          idea_session_id: idea_session_id
+          idea_session_state: PROVISIONING
+          actor_type: actor_type
+          expiry_date: expiry_date
+          actor_name: actor_name
+          idea_session_name: idea_session_name
+          idea_session_hibernation_enabled: true
+          failure_reason: failure_reason
+          idea_session_owner: idea_session_owner
+          idea_session_type: CONSOLE
+          idea_session_instance_type: idea_session_instance_type
+          created_on: created_on
+          idea_session_created_on: idea_session_created_on
+          permission_profile:
+            profile_id: profile_id
+          idea_session_base_os: amazonlinux2
+        - updated_on: updated_on
+          idea_session_id: idea_session_id
+          idea_session_state: PROVISIONING
+          actor_type: actor_type
+          expiry_date: expiry_date
+          actor_name: actor_name
+          idea_session_name: idea_session_name
+          idea_session_hibernation_enabled: true
+          failure_reason: failure_reason
+          idea_session_owner: idea_session_owner
+          idea_session_type: CONSOLE
+          idea_session_instance_type: idea_session_instance_type
+          created_on: created_on
+          idea_session_created_on: idea_session_created_on
+          permission_profile:
+            profile_id: profile_id
+          idea_session_base_os: amazonlinux2
+        delete:
+        - updated_on: updated_on
+          idea_session_id: idea_session_id
+          idea_session_state: PROVISIONING
+          actor_type: actor_type
+          expiry_date: expiry_date
+          actor_name: actor_name
+          idea_session_name: idea_session_name
+          idea_session_hibernation_enabled: true
+          failure_reason: failure_reason
+          idea_session_owner: idea_session_owner
+          idea_session_type: CONSOLE
+          idea_session_instance_type: idea_session_instance_type
+          created_on: created_on
+          idea_session_created_on: idea_session_created_on
+          permission_profile:
+            profile_id: profile_id
+          idea_session_base_os: amazonlinux2
+        - updated_on: updated_on
+          idea_session_id: idea_session_id
+          idea_session_state: PROVISIONING
+          actor_type: actor_type
+          expiry_date: expiry_date
+          actor_name: actor_name
+          idea_session_name: idea_session_name
+          idea_session_hibernation_enabled: true
+          failure_reason: failure_reason
+          idea_session_owner: idea_session_owner
+          idea_session_type: CONSOLE
+          idea_session_instance_type: idea_session_instance_type
+          created_on: created_on
+          idea_session_created_on: idea_session_created_on
+          permission_profile:
+            profile_id: profile_id
+          idea_session_base_os: amazonlinux2
+      properties:
+        create:
+          description: List of session permissions to create
+          items:
+            $ref: "#/components/schemas/VirtualDesktopSessionPermission"
+          title: create
+          type: array
+        update:
+          description: List of session permissions to update
+          items:
+            $ref: "#/components/schemas/VirtualDesktopSessionPermission"
+          title: update
+          type: array
+        delete:
+          description: List of session permissions to delete
+          items:
+            $ref: "#/components/schemas/VirtualDesktopSessionPermission"
+          title: delete
+          type: array
+      title: UpdateSessionPermissionsRequestContent
+      type: object
+    UpdateSessionPermissionsResponseContent:
+      example:
+        permissions:
+        - updated_on: updated_on
+          idea_session_id: idea_session_id
+          idea_session_state: PROVISIONING
+          actor_type: actor_type
+          expiry_date: expiry_date
+          actor_name: actor_name
+          idea_session_name: idea_session_name
+          idea_session_hibernation_enabled: true
+          failure_reason: failure_reason
+          idea_session_owner: idea_session_owner
+          idea_session_type: CONSOLE
+          idea_session_instance_type: idea_session_instance_type
+          created_on: created_on
+          idea_session_created_on: idea_session_created_on
+          permission_profile:
+            profile_id: profile_id
+          idea_session_base_os: amazonlinux2
+        - updated_on: updated_on
+          idea_session_id: idea_session_id
+          idea_session_state: PROVISIONING
+          actor_type: actor_type
+          expiry_date: expiry_date
+          actor_name: actor_name
+          idea_session_name: idea_session_name
+          idea_session_hibernation_enabled: true
+          failure_reason: failure_reason
+          idea_session_owner: idea_session_owner
+          idea_session_type: CONSOLE
+          idea_session_instance_type: idea_session_instance_type
+          created_on: created_on
+          idea_session_created_on: idea_session_created_on
+          permission_profile:
+            profile_id: profile_id
+          idea_session_base_os: amazonlinux2
+      properties:
+        permissions:
+          description: List of session permissions that where create/updated
+          items:
+            $ref: "#/components/schemas/VirtualDesktopSessionPermission"
+          title: permissions
+          type: array
+      title: UpdateSessionPermissionsResponseContent
+      type: object
+    UpdateSoftwareStackRequestContent:
+      example:
+        software_stack:
+          updated_on: updated_on
+          projects:
+          - project_id: project_id
+            name: name
+            description: description
+            title: title
+          - project_id: project_id
+            name: name
+            description: description
+            title: title
+          allowed_instance_types:
+          - allowed_instance_types
+          - allowed_instance_types
+          description: description
+          min_storage:
+            unit: unit
+            value: 5.637376656633329
+          ami_id: ami_id
+          failure_reason: failure_reason
+          gpu: NO_GPU
+          version: 7
+          enabled: true
+          created_on: created_on
+          stack_id: stack_id
+          name: name
+          placement:
+            host_resource_group_arn: host_resource_group_arn
+            tenancy: default
+            host_id: host_id
+            affinity: default
+          base_os: null
+          min_ram:
+            unit: unit
+            value: 5.637376656633329
+          architecture: x86_64
+      properties:
+        software_stack:
+          $ref: "#/components/schemas/VirtualDesktopSoftwareStack"
+      required:
+      - software_stack
+      title: UpdateSoftwareStackRequestContent
+      type: object
+    UpdateSoftwareStackResponseContent:
+      example:
+        software_stack:
+          updated_on: updated_on
+          projects:
+          - project_id: project_id
+            name: name
+            description: description
+            title: title
+          - project_id: project_id
+            name: name
+            description: description
+            title: title
+          allowed_instance_types:
+          - allowed_instance_types
+          - allowed_instance_types
+          description: description
+          min_storage:
+            unit: unit
+            value: 5.637376656633329
+          ami_id: ami_id
+          failure_reason: failure_reason
+          gpu: NO_GPU
+          version: 7
+          enabled: true
+          created_on: created_on
+          stack_id: stack_id
+          name: name
+          placement:
+            host_resource_group_arn: host_resource_group_arn
+            tenancy: default
+            host_id: host_id
+            affinity: default
+          base_os: null
+          min_ram:
+            unit: unit
+            value: 5.637376656633329
+          architecture: x86_64
+      properties:
+        software_stack:
+          $ref: "#/components/schemas/VirtualDesktopSoftwareStack"
+      required:
+      - software_stack
+      title: UpdateSoftwareStackResponseContent
+      type: object
+    VirtualDesktopAffinity:
+      description: Virtual desktop affinity options
+      enum:
+      - default
+      - host
+      title: VirtualDesktopAffinity
+      type: string
+    VirtualDesktopArchitecture:
+      description: Supported architectures for virtual desktops
+      enum:
+      - x86_64
+      - arm64
+      title: VirtualDesktopArchitecture
+      type: string
+    VirtualDesktopBaseOs:
+      description: Supported base operating systems for virtual desktops
+      enum:
+      - amazonlinux2
+      - amzn2023
+      - rhel8
+      - rhel9
+      - ubuntu2204
+      - ubuntu2404
+      - rocky9
+      - windows
+      title: VirtualDesktopBaseOs
+      type: string
+    VirtualDesktopGpu:
+      description: Supported GPUs for virtual desktops
+      enum:
+      - NO_GPU
+      - NVIDIA
+      - AMD
+      title: VirtualDesktopGpu
+      type: string
+    VirtualDesktopPermission:
+      example:
+        name: name
+        description: description
+        key: key
+        enabled: true
+      properties:
+        key:
+          description: Permission key identifier
+          title: key
+          type: string
+        name:
+          description: Permission display name
+          title: name
+          type: string
+        description:
+          description: Permission description
+          title: description
+          type: string
+        enabled:
+          description: Whether the permission is enabled
+          title: enabled
+          type: boolean
+      title: VirtualDesktopPermission
+      type: object
+    VirtualDesktopPermissionProfile:
+      example:
+        updated_on: updated_on
+        created_on: created_on
+        profile_id: profile_id
+        permissions:
+        - name: name
+          description: description
+          key: key
+          enabled: true
+        - name: name
+          description: description
+          key: key
+          enabled: true
+        description: description
+        title: title
+      properties:
+        profile_id:
+          description: Profile identifier
+          minLength: 1
+          title: profile_id
+          type: string
+        title:
+          description: Profile title
+          minLength: 1
+          title: title
+          type: string
+        description:
+          description: Profile description
+          title: description
+          type: string
+        permissions:
+          description: List of permissions
+          items:
+            $ref: "#/components/schemas/VirtualDesktopPermission"
+          title: permissions
+          type: array
+        created_on:
+          description: Creation timestamp
+          title: created_on
+          type: string
+        updated_on:
+          description: Last update timestamp
+          title: updated_on
+          type: string
+      required:
+      - profile_id
+      - title
+      title: VirtualDesktopPermissionProfile
+      type: object
+    VirtualDesktopPlacement:
+      description: Virtual desktop placement configuration
+      example:
+        host_resource_group_arn: host_resource_group_arn
+        tenancy: default
+        host_id: host_id
+        affinity: default
+      properties:
+        affinity:
+          $ref: "#/components/schemas/VirtualDesktopAffinity"
+        tenancy:
+          $ref: "#/components/schemas/VirtualDesktopTenancy"
+        host_id:
+          description: Dedicated host ID
+          title: host_id
+          type: string
+        host_resource_group_arn:
+          description: Host resource group ARN
+          title: host_resource_group_arn
+          type: string
+      title: VirtualDesktopPlacement
+      type: object
+    VirtualDesktopSchedule:
+      description: Virtual desktop schedule for a specific day
+      example:
+        idea_session_id: idea_session_id
+        schedule_type: WORKING_HOURS
+        start_up_time: start_up_time
+        shut_down_time: shut_down_time
+        schedule_id: schedule_id
+        idea_session_owner: idea_session_owner
+        day_of_week: monday
+      properties:
+        schedule_id:
+          description: Schedule identifier
+          title: schedule_id
+          type: string
+        idea_session_id:
+          description: IDEA session ID
+          title: idea_session_id
+          type: string
+        idea_session_owner:
+          description: Session owner
+          title: idea_session_owner
+          type: string
+        day_of_week:
+          $ref: "#/components/schemas/DayOfWeek"
+        start_up_time:
+          description: Start up time of day (e.g. 09:00)
+          title: start_up_time
+          type: string
+        shut_down_time:
+          description: Shut down time of day (e.g. 17:30)
+          title: shut_down_time
+          type: string
+        schedule_type:
+          $ref: "#/components/schemas/VirtualDesktopScheduleType"
+      title: VirtualDesktopSchedule
+      type: object
+    VirtualDesktopScheduleType:
+      description: Virtual desktop schedule types
+      enum:
+      - WORKING_HOURS
+      - STOP_ALL_DAY
+      - START_ALL_DAY
+      - CUSTOM_SCHEDULE
+      - NO_SCHEDULE
+      title: VirtualDesktopScheduleType
+      type: string
+    VirtualDesktopServer:
+      description: Virtual desktop server configuration
+      example:
+        root_volume_size:
+          unit: unit
+          value: 5.637376656633329
+        virtual_session_count: 6
+        idea_session_id: idea_session_id
+        public_ip: public_ip
+        max_concurrent_sessions_per_user: 1
+        public_dns_name: public_dns_name
+        key_pair_name: key_pair_name
+        availability: availability
+        server_id: server_id
+        console_session_count: 0
+        idea_session_owner: idea_session_owner
+        private_ip: private_ip
+        security_groups:
+        - security_groups
+        - security_groups
+        instance_id: instance_id
+        root_volume_iops: 2
+        max_virtual_sessions: 5
+        subnet_id: subnet_id
+        state: state
+        private_dns_name: private_dns_name
+        locked: true
+        instance_type: instance_type
+        unavailability_reason: unavailability_reason
+        instance_profile_arn: instance_profile_arn
+        is_idle: true
+      properties:
+        server_id:
+          description: Unique server identifier
+          title: server_id
+          type: string
+        idea_session_id:
+          description: IDEA session ID associated with this server
+          title: idea_session_id
+          type: string
+        idea_session_owner:
+          description: Session owner
+          title: idea_session_owner
+          type: string
+        instance_id:
+          description: EC2 instance ID
+          title: instance_id
+          type: string
+        instance_type:
+          description: EC2 instance type
+          title: instance_type
+          type: string
+        private_ip:
+          description: Private IP address
+          title: private_ip
+          type: string
+        private_dns_name:
+          description: Private DNS name
+          title: private_dns_name
+          type: string
+        public_ip:
+          description: Public IP address
+          title: public_ip
+          type: string
+        public_dns_name:
+          description: Public DNS name
+          title: public_dns_name
+          type: string
+        availability:
+          description: Server availability status
+          title: availability
+          type: string
+        unavailability_reason:
+          description: Reason for server unavailability
+          title: unavailability_reason
+          type: string
+        console_session_count:
+          description: Number of console sessions
+          format: int32
+          title: console_session_count
+          type: integer
+        virtual_session_count:
+          description: Number of virtual sessions
+          format: int32
+          title: virtual_session_count
+          type: integer
+        max_concurrent_sessions_per_user:
+          description: Maximum concurrent sessions per user
+          format: int32
+          title: max_concurrent_sessions_per_user
+          type: integer
+        max_virtual_sessions:
+          description: Maximum virtual sessions
+          format: int32
+          title: max_virtual_sessions
+          type: integer
+        state:
+          description: Server state
+          title: state
+          type: string
+        locked:
+          description: Whether the server is locked
+          title: locked
+          type: boolean
+        root_volume_size:
+          $ref: "#/components/schemas/ResMemory"
+        root_volume_iops:
+          description: Root volume IOPS
+          format: int32
+          title: root_volume_iops
+          type: integer
+        instance_profile_arn:
+          description: Instance profile ARN
+          title: instance_profile_arn
+          type: string
+        security_groups:
+          description: Security group IDs
+          items:
+            type: string
+          title: security_groups
+          type: array
+        subnet_id:
+          description: Subnet ID
+          title: subnet_id
+          type: string
+        key_pair_name:
+          description: Key pair name
+          title: key_pair_name
+          type: string
+        is_idle:
+          description: Whether the server is idle
+          title: is_idle
+          type: boolean
+      title: VirtualDesktopServer
+      type: object
+    VirtualDesktopSession:
+      description: Virtual desktop session
+      example:
+        owner: owner
+        updated_on: updated_on
+        server:
+          root_volume_size:
+            unit: unit
+            value: 5.637376656633329
+          virtual_session_count: 6
+          idea_session_id: idea_session_id
+          public_ip: public_ip
+          max_concurrent_sessions_per_user: 1
+          public_dns_name: public_dns_name
+          key_pair_name: key_pair_name
+          availability: availability
+          server_id: server_id
+          console_session_count: 0
+          idea_session_owner: idea_session_owner
+          private_ip: private_ip
+          security_groups:
+          - security_groups
+          - security_groups
+          instance_id: instance_id
+          root_volume_iops: 2
+          max_virtual_sessions: 5
+          subnet_id: subnet_id
+          state: state
+          private_dns_name: private_dns_name
+          locked: true
+          instance_type: instance_type
+          unavailability_reason: unavailability_reason
+          instance_profile_arn: instance_profile_arn
+          is_idle: true
+        is_launched_by_admin: true
+        idea_session_id: idea_session_id
+        hibernation_enabled: true
+        description: description
+        project:
+          project_id: project_id
+          name: name
+          description: description
+          title: title
+        failure_reason: failure_reason
+        type: CONSOLE
+        tags:
+        - ""
+        - ""
+        dcv_session_id: dcv_session_id
+        schedule:
+          sunday:
+            idea_session_id: idea_session_id
+            schedule_type: WORKING_HOURS
+            start_up_time: start_up_time
+            shut_down_time: shut_down_time
+            schedule_id: schedule_id
+            idea_session_owner: idea_session_owner
+            day_of_week: monday
+          saturday:
+            idea_session_id: idea_session_id
+            schedule_type: WORKING_HOURS
+            start_up_time: start_up_time
+            shut_down_time: shut_down_time
+            schedule_id: schedule_id
+            idea_session_owner: idea_session_owner
+            day_of_week: monday
+          tuesday:
+            idea_session_id: idea_session_id
+            schedule_type: WORKING_HOURS
+            start_up_time: start_up_time
+            shut_down_time: shut_down_time
+            schedule_id: schedule_id
+            idea_session_owner: idea_session_owner
+            day_of_week: monday
+          wednesday:
+            idea_session_id: idea_session_id
+            schedule_type: WORKING_HOURS
+            start_up_time: start_up_time
+            shut_down_time: shut_down_time
+            schedule_id: schedule_id
+            idea_session_owner: idea_session_owner
+            day_of_week: monday
+          thursday:
+            idea_session_id: idea_session_id
+            schedule_type: WORKING_HOURS
+            start_up_time: start_up_time
+            shut_down_time: shut_down_time
+            schedule_id: schedule_id
+            idea_session_owner: idea_session_owner
+            day_of_week: monday
+          friday:
+            idea_session_id: idea_session_id
+            schedule_type: WORKING_HOURS
+            start_up_time: start_up_time
+            shut_down_time: shut_down_time
+            schedule_id: schedule_id
+            idea_session_owner: idea_session_owner
+            day_of_week: monday
+          monday:
+            idea_session_id: idea_session_id
+            schedule_type: WORKING_HOURS
+            start_up_time: start_up_time
+            shut_down_time: shut_down_time
+            schedule_id: schedule_id
+            idea_session_owner: idea_session_owner
+            day_of_week: monday
+        created_on: created_on
+        connection_count: 9
+        name: name
+        force: true
+        state: PROVISIONING
+        locked: true
+        logins:
+        - logins
+        - logins
+        base_os: amazonlinux2
+        software_stack:
+          updated_on: updated_on
+          projects:
+          - project_id: project_id
+            name: name
+            description: description
+            title: title
+          - project_id: project_id
+            name: name
+            description: description
+            title: title
+          allowed_instance_types:
+          - allowed_instance_types
+          - allowed_instance_types
+          description: description
+          min_storage:
+            unit: unit
+            value: 5.637376656633329
+          ami_id: ami_id
+          failure_reason: failure_reason
+          gpu: NO_GPU
+          version: 7
+          enabled: true
+          created_on: created_on
+          stack_id: stack_id
+          name: name
+          placement:
+            host_resource_group_arn: host_resource_group_arn
+            tenancy: default
+            host_id: host_id
+            affinity: default
+          base_os: null
+          min_ram:
+            unit: unit
+            value: 5.637376656633329
+          architecture: x86_64
+        is_idle: true
+      properties:
+        dcv_session_id:
+          description: DCV session identifier
+          title: dcv_session_id
+          type: string
+        idea_session_id:
+          description: IDEA session identifier
+          title: idea_session_id
+          type: string
+        base_os:
+          $ref: "#/components/schemas/VirtualDesktopBaseOs"
+        name:
+          description: Session name
+          title: name
+          type: string
+        owner:
+          description: Session owner
+          title: owner
+          type: string
+        type:
+          $ref: "#/components/schemas/VirtualDesktopSessionType"
+        server:
+          $ref: "#/components/schemas/VirtualDesktopServer"
+        created_on:
+          description: Timestamp when the session was created
+          title: created_on
+          type: string
+        updated_on:
+          description: Timestamp when the session was last updated
+          title: updated_on
+          type: string
+        state:
+          $ref: "#/components/schemas/VirtualDesktopSessionState"
+        description:
+          description: Session description
+          title: description
+          type: string
+        software_stack:
+          $ref: "#/components/schemas/VirtualDesktopSoftwareStack"
+        project:
+          $ref: "#/components/schemas/Project"
+        schedule:
+          $ref: "#/components/schemas/VirtualDesktopWeekSchedule"
+        connection_count:
+          description: Number of active connections
+          format: int32
+          title: connection_count
+          type: integer
+        force:
+          description: Force flag
+          title: force
+          type: boolean
+        hibernation_enabled:
+          description: Whether hibernation is enabled
+          title: hibernation_enabled
+          type: boolean
+        is_launched_by_admin:
+          description: Whether the session was launched by an admin
+          title: is_launched_by_admin
+          type: boolean
+        locked:
+          description: Whether the session is locked
+          title: locked
+          type: boolean
+        tags:
+          description: Session tags
+          items: {}
+          title: tags
+          type: array
+        logins:
+          description: List of allowed logins
+          items:
+            type: string
+          title: logins
+          type: array
+        is_idle:
+          description: Whether the session is idle
+          title: is_idle
+          type: boolean
+        failure_reason:
+          description: Failure reason for transient API responses
+          title: failure_reason
+          type: string
+      required:
+      - hibernation_enabled
+      - software_stack
+      title: VirtualDesktopSession
+      type: object
+    VirtualDesktopSessionPermission:
+      example:
+        updated_on: updated_on
+        idea_session_id: idea_session_id
+        idea_session_state: PROVISIONING
+        actor_type: actor_type
+        expiry_date: expiry_date
+        actor_name: actor_name
+        idea_session_name: idea_session_name
+        idea_session_hibernation_enabled: true
+        failure_reason: failure_reason
+        idea_session_owner: idea_session_owner
+        idea_session_type: CONSOLE
+        idea_session_instance_type: idea_session_instance_type
+        created_on: created_on
+        idea_session_created_on: idea_session_created_on
+        permission_profile:
+          profile_id: profile_id
+        idea_session_base_os: amazonlinux2
+      properties:
+        idea_session_id:
+          minLength: 1
+          title: idea_session_id
+          type: string
+        idea_session_owner:
+          minLength: 1
+          title: idea_session_owner
+          type: string
+        idea_session_name:
+          minLength: 1
+          title: idea_session_name
+          type: string
+        idea_session_instance_type:
+          minLength: 1
+          title: idea_session_instance_type
+          type: string
+        idea_session_state:
+          $ref: "#/components/schemas/VirtualDesktopSessionState"
+        idea_session_base_os:
+          $ref: "#/components/schemas/VirtualDesktopBaseOs"
+        idea_session_hibernation_enabled:
+          title: idea_session_hibernation_enabled
+          type: boolean
+        idea_session_type:
+          $ref: "#/components/schemas/VirtualDesktopSessionType"
+        permission_profile:
+          $ref: "#/components/schemas/PermissionProfile"
+        actor_type:
+          minLength: 1
+          title: actor_type
+          type: string
+        actor_name:
+          minLength: 1
+          title: actor_name
+          type: string
+        created_on:
+          description: Creation timestamp
+          title: created_on
+          type: string
+        idea_session_created_on:
+          description: Creation time for session
+          minLength: 1
+          title: idea_session_created_on
+          type: string
+        updated_on:
+          description: Last update timestamp
+          title: updated_on
+          type: string
+        expiry_date:
+          description: Expiry date
+          title: expiry_date
+          type: string
+        failure_reason:
+          description: Reason for any failure in session permission creation or update
+          title: failure_reason
+          type: string
+      required:
+      - actor_name
+      - actor_type
+      - idea_session_base_os
+      - idea_session_created_on
+      - idea_session_hibernation_enabled
+      - idea_session_id
+      - idea_session_instance_type
+      - idea_session_name
+      - idea_session_owner
+      - idea_session_state
+      - idea_session_type
+      - permission_profile
+      title: VirtualDesktopSessionPermission
+      type: object
+    VirtualDesktopSessionState:
+      description: Virtual desktop session state
+      enum:
+      - PROVISIONING
+      - CREATING
+      - INITIALIZING
+      - READY
+      - RESUMING
+      - STOPPING
+      - STOPPED
+      - STOPPED_IDLE
+      - ERROR
+      - DELETING
+      - DELETED
+      title: VirtualDesktopSessionState
+      type: string
+    VirtualDesktopSessionType:
+      description: Virtual desktop session type
+      enum:
+      - CONSOLE
+      - VIRTUAL
+      title: VirtualDesktopSessionType
+      type: string
+    VirtualDesktopSoftwareStack:
+      description: Virtual desktop software stack configuration
+      example:
+        updated_on: updated_on
+        projects:
+        - project_id: project_id
+          name: name
+          description: description
+          title: title
+        - project_id: project_id
+          name: name
+          description: description
+          title: title
+        allowed_instance_types:
+        - allowed_instance_types
+        - allowed_instance_types
+        description: description
+        min_storage:
+          unit: unit
+          value: 5.637376656633329
+        ami_id: ami_id
+        failure_reason: failure_reason
+        gpu: NO_GPU
+        version: 7
+        enabled: true
+        created_on: created_on
+        stack_id: stack_id
+        name: name
+        placement:
+          host_resource_group_arn: host_resource_group_arn
+          tenancy: default
+          host_id: host_id
+          affinity: default
+        base_os: null
+        min_ram:
+          unit: unit
+          value: 5.637376656633329
+        architecture: x86_64
+      properties:
+        stack_id:
+          description: Unique identifier for the software stack
+          title: stack_id
+          type: string
+        base_os:
+          $ref: "#/components/schemas/VirtualDesktopBaseOs"
+        name:
+          description: Human-readable name for the software stack
+          title: name
+          type: string
+        description:
+          description: Description of the software stack
+          title: description
+          type: string
+        created_on:
+          description: Timestamp when the stack was created
+          title: created_on
+          type: string
+        updated_on:
+          description: Timestamp when the stack was last updated
+          title: updated_on
+          type: string
+        ami_id:
+          description: Amazon Machine Image (AMI) ID
+          title: ami_id
+          type: string
+        failure_reason:
+          description: Reason for any failure in stack creation or update
+          title: failure_reason
+          type: string
+        enabled:
+          description: Whether the software stack is enabled
+          title: enabled
+          type: boolean
+        min_storage:
+          $ref: "#/components/schemas/ResMemory"
+        min_ram:
+          $ref: "#/components/schemas/ResMemory"
+        architecture:
+          $ref: "#/components/schemas/VirtualDesktopArchitecture"
+        gpu:
+          $ref: "#/components/schemas/VirtualDesktopGpu"
+        placement:
+          $ref: "#/components/schemas/VirtualDesktopPlacement"
+        version:
+          description: Version number of the software stack
+          format: int32
+          title: version
+          type: integer
+        projects:
+          description: List of projects associated with this software stack
+          items:
+            $ref: "#/components/schemas/Project"
+          title: projects
+          type: array
+        allowed_instance_types:
+          description: List of allowed EC2 instance types
+          items:
+            type: string
+          title: allowed_instance_types
+          type: array
+      required:
+      - ami_id
+      - base_os
+      - gpu
+      - min_ram
+      - min_storage
+      - name
+      title: VirtualDesktopSoftwareStack
+      type: object
+    VirtualDesktopTenancy:
+      description: Virtual desktop tenancy options
+      enum:
+      - default
+      - dedicated
+      - host
+      title: VirtualDesktopTenancy
+      type: string
+    VirtualDesktopWeekSchedule:
+      description: Virtual desktop week schedule
+      example:
+        sunday:
+          idea_session_id: idea_session_id
+          schedule_type: WORKING_HOURS
+          start_up_time: start_up_time
+          shut_down_time: shut_down_time
+          schedule_id: schedule_id
+          idea_session_owner: idea_session_owner
+          day_of_week: monday
+        saturday:
+          idea_session_id: idea_session_id
+          schedule_type: WORKING_HOURS
+          start_up_time: start_up_time
+          shut_down_time: shut_down_time
+          schedule_id: schedule_id
+          idea_session_owner: idea_session_owner
+          day_of_week: monday
+        tuesday:
+          idea_session_id: idea_session_id
+          schedule_type: WORKING_HOURS
+          start_up_time: start_up_time
+          shut_down_time: shut_down_time
+          schedule_id: schedule_id
+          idea_session_owner: idea_session_owner
+          day_of_week: monday
+        wednesday:
+          idea_session_id: idea_session_id
+          schedule_type: WORKING_HOURS
+          start_up_time: start_up_time
+          shut_down_time: shut_down_time
+          schedule_id: schedule_id
+          idea_session_owner: idea_session_owner
+          day_of_week: monday
+        thursday:
+          idea_session_id: idea_session_id
+          schedule_type: WORKING_HOURS
+          start_up_time: start_up_time
+          shut_down_time: shut_down_time
+          schedule_id: schedule_id
+          idea_session_owner: idea_session_owner
+          day_of_week: monday
+        friday:
+          idea_session_id: idea_session_id
+          schedule_type: WORKING_HOURS
+          start_up_time: start_up_time
+          shut_down_time: shut_down_time
+          schedule_id: schedule_id
+          idea_session_owner: idea_session_owner
+          day_of_week: monday
+        monday:
+          idea_session_id: idea_session_id
+          schedule_type: WORKING_HOURS
+          start_up_time: start_up_time
+          shut_down_time: shut_down_time
+          schedule_id: schedule_id
+          idea_session_owner: idea_session_owner
+          day_of_week: monday
+      properties:
+        monday:
+          $ref: "#/components/schemas/VirtualDesktopSchedule"
+        tuesday:
+          $ref: "#/components/schemas/VirtualDesktopSchedule"
+        wednesday:
+          $ref: "#/components/schemas/VirtualDesktopSchedule"
+        thursday:
+          $ref: "#/components/schemas/VirtualDesktopSchedule"
+        friday:
+          $ref: "#/components/schemas/VirtualDesktopSchedule"
+        saturday:
+          $ref: "#/components/schemas/VirtualDesktopSchedule"
+        sunday:
+          $ref: "#/components/schemas/VirtualDesktopSchedule"
+      title: VirtualDesktopWeekSchedule
+      type: object
+    stringValue:
+      example:
+        stringValue: stringValue
+      properties:
+        stringValue:
+          title: stringValue
+          type: string
+      required:
+      - stringValue
+      title: stringValue
+      type: object
+    listValue:
+      properties:
+        listValue:
+          description: List of filter values
+          items: {}
+          title: listValue
+          type: array
+      required:
+      - listValue
+      title: listValue
+      type: object
+  securitySchemes:
+    smithy.api.httpBearerAuth:
+      description: HTTP Bearer authentication
+      x-bearerInfoFunc: api.controllers.security_controller.bearer_auth
+      scheme: Bearer
+      type: http

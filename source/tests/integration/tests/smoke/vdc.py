@@ -32,6 +32,7 @@ from ideadatamodel import (  # type: ignore
     VirtualDesktopSoftwareStack,
     VirtualDesktopWeekSchedule,
 )
+from tests.integration.framework.client.api_client import ApiClient
 from tests.integration.framework.client.res_client import ResClient
 from tests.integration.framework.fixtures.fixture_request import FixtureRequest
 from tests.integration.framework.fixtures.project import project
@@ -147,5 +148,6 @@ class TestsVDC(object):
         logger.info(f"Starting stop idle integ test for {session.name}...")
         api_invoker_type = request.config.getoption("--api-invoker-type")
         client = ResClient(res_environment, non_admin, api_invoker_type)
+        api_client = ApiClient(res_environment, non_admin)
         force_idle_session(region, session, res_environment._environment_name)
-        wait_for_stopped_idle_session(client, session)
+        wait_for_stopped_idle_session(api_client, session)

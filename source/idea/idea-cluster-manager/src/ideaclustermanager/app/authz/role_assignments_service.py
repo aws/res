@@ -93,7 +93,7 @@ class RoleAssignmentsService:
             
             role_ids = [role.role_id for role in self.roles_dao.list_roles(False, "", []).listing]
             if request.role_id not in role_ids:
-                raise exceptions.invalid_params('role_id value is not recognized')
+                raise exceptions.invalid_params(constants.INVALID_ROLE_ASSIGNMENT_ROLE_ID)
             
             ApiUtils.validate_input(request.actor_id, constants.ROLE_ASSIGNMENT_ACTOR_ID_REGEX, constants.ROLE_ASSIGNMENT_ACTOR_ID_ERROR_MESSAGE)
             ApiUtils.validate_input(request.resource_id, constants.ROLE_ASSIGNMENT_RESOURCE_ID_REGEX, constants.ROLE_ASSIGNMENT_RESOURCE_ID_ERROR_MESSAGE)

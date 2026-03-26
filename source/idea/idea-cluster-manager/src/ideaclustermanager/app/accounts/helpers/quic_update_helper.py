@@ -196,7 +196,25 @@ class QuicUpdateHelper:
                     'TargetGroupArn': target_group_arn
                 }
             ],
-            Tags=custom_tags,
+            Tags=[
+                {
+                    'Key': 'res:EnvironmentName',
+                    'Value': self.cluster_name
+                },
+                {
+                    'Key': 'res:ModuleId',
+                    'Value': 'vdc'
+                },
+                {
+                    'Key': 'res:ModuleName',
+                    'Value': 'virtual-desktop-controller'
+                },
+                {
+                    'Key': 'res:ModuleVersion',
+                    'Value': self.context.module_version()
+                },
+                *custom_tags
+            ]
         ).get('Listeners', [None])[0]['ListenerArn']
 
     def create_target_group(self, target_group_name: str, protocol: str, vpc_id: str):

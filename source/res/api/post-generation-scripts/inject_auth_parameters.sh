@@ -46,7 +46,7 @@ find "$GENERATED_DIR" -name "*controller*.py" -not -name "*security_controller*.
 # Add parameter descriptions for user and token_info in controller docstrings
 find "$GENERATED_DIR" -name "*controller*.py" -not -name "*security_controller*.py" -exec sed -i '' '/^    :rtype:/i\
     :param user: The authenticated user information\
-    :type user: dict\
+    :type user: str\
     :param token_info: The token information from authentication\
     :type token_info: dict
 ' {} \;

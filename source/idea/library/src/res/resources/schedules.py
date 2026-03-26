@@ -2,6 +2,7 @@
 #  SPDX-License-Identifier: Apache-2.0
 
 import uuid
+from enum import Enum
 from typing import Any, Dict
 
 from res.clients.events import events_client
@@ -11,17 +12,20 @@ SCHEDULE_DB_HASH_KEY = "day_of_week"
 SCHEDULE_DB_RANGE_KEY = "schedule_id"
 SCHEDULE_DB_SCHEDULE_TYPE_KEY = "schedule_type"
 SCHEDULE_DB_TABLE_NAME = "vdc.controller.schedules"
-SCHEDULE_DAYS = [
-    "monday",
-    "tuesday",
-    "wednesday",
-    "thursday",
-    "friday",
-    "saturday",
-    "sunday",
-]
 
 logger = logging_utils.get_logger(SCHEDULE_DB_TABLE_NAME)
+
+
+class DayOfWeek(str, Enum):
+    """Days of the week"""
+
+    MONDAY = "monday"
+    TUESDAY = "tuesday"
+    WEDNESDAY = "wednesday"
+    THURSDAY = "thursday"
+    FRIDAY = "friday"
+    SATURDAY = "saturday"
+    SUNDAY = "sunday"
 
 
 def create_schedule(schedule: Dict[str, Any]) -> Dict[str, Any]:

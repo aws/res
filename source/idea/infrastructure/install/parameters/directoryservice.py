@@ -92,7 +92,7 @@ class DirectoryServiceParameters(Base):
             id=DirectoryServiceKey.SERVICE_ACCOUNT_CREDENTIALS_SECRET_ARN,
             type="String",
             description="Directory Service Root (Service Account) Credentials Secret ARN. The username and password for the Active Directory ServiceAccount user formatted as a username:password key/value pair.",
-            allowed_pattern="^$|^(?:arn:(?:aws|aws-us-gov|aws-cn):secretsmanager:[a-z0-9-]+:[0-9]{12}:secret:[A-Za-z0-9\-\_\+\=\/\.\@]{1,519})?$",
+            allowed_pattern=r"^$|^(?:arn:(?:aws|aws-us-gov|aws-cn):secretsmanager:[a-z0-9-]+:[0-9]{12}:secret:[A-Za-z0-9_+=/.@-]{1,519})?$",
             # Secret name can be 512 characters long and may include letters, numbers, and the following characters: /_+=.@-.
             # Secrets Manager automatically adds a hyphen and six random characters after the secret name at the end of the ARN.
             # https://docs.aws.amazon.com/secretsmanager/latest/apireference/API_CreateSecret.html#SecretsManager-CreateSecret-request-Name
@@ -140,62 +140,62 @@ class DirectoryServiceParameterGroups:
             "default": f"Active Directory details{OPTIONAL_INPUT_PARAMETER_LABEL_SUFFIX}"
         },
         "Parameters": [
-            DirectoryServiceKey.NAME,
-            DirectoryServiceKey.AD_SHORT_NAME,
-            DirectoryServiceKey.LDAP_BASE,
-            DirectoryServiceKey.LDAP_CONNECTION_URI,
-            DirectoryServiceKey.SERVICE_ACCOUNT_CREDENTIALS_SECRET_ARN,
-            DirectoryServiceKey.USERS_OU,
-            DirectoryServiceKey.GROUPS_OU,
-            DirectoryServiceKey.SUDOERS_GROUP_NAME,
-            DirectoryServiceKey.COMPUTERS_OU,
-            DirectoryServiceKey.DOMAIN_TLS_CERTIFICATE_SECRET_ARN,
-            DirectoryServiceKey.ENABLE_LDAP_ID_MAPPING,
-            DirectoryServiceKey.DISABLE_AD_JOIN,
-            DirectoryServiceKey.ROOT_USER_DN,
+            DirectoryServiceKey.NAME.value,
+            DirectoryServiceKey.AD_SHORT_NAME.value,
+            DirectoryServiceKey.LDAP_BASE.value,
+            DirectoryServiceKey.LDAP_CONNECTION_URI.value,
+            DirectoryServiceKey.SERVICE_ACCOUNT_CREDENTIALS_SECRET_ARN.value,
+            DirectoryServiceKey.USERS_OU.value,
+            DirectoryServiceKey.GROUPS_OU.value,
+            DirectoryServiceKey.SUDOERS_GROUP_NAME.value,
+            DirectoryServiceKey.COMPUTERS_OU.value,
+            DirectoryServiceKey.DOMAIN_TLS_CERTIFICATE_SECRET_ARN.value,
+            DirectoryServiceKey.ENABLE_LDAP_ID_MAPPING.value,
+            DirectoryServiceKey.DISABLE_AD_JOIN.value,
+            DirectoryServiceKey.ROOT_USER_DN.value,
         ],
     }
 
 
 class DirectoryServiceParameterLabels:
     parameter_labels_for_directory_service: dict[str, Any] = {
-        DirectoryServiceKey.NAME: {
-            "default": f"{DirectoryServiceKey.NAME}{OPTIONAL_INPUT_PARAMETER_LABEL_SUFFIX}"
+        DirectoryServiceKey.NAME.value: {
+            "default": f"{DirectoryServiceKey.NAME.value}{OPTIONAL_INPUT_PARAMETER_LABEL_SUFFIX}"
         },
-        DirectoryServiceKey.AD_SHORT_NAME: {
-            "default": f"{DirectoryServiceKey.AD_SHORT_NAME}{OPTIONAL_INPUT_PARAMETER_LABEL_SUFFIX}"
+        DirectoryServiceKey.AD_SHORT_NAME.value: {
+            "default": f"{DirectoryServiceKey.AD_SHORT_NAME.value}{OPTIONAL_INPUT_PARAMETER_LABEL_SUFFIX}"
         },
-        DirectoryServiceKey.LDAP_BASE: {
-            "default": f"{DirectoryServiceKey.LDAP_BASE}{OPTIONAL_INPUT_PARAMETER_LABEL_SUFFIX}"
+        DirectoryServiceKey.LDAP_BASE.value: {
+            "default": f"{DirectoryServiceKey.LDAP_BASE.value}{OPTIONAL_INPUT_PARAMETER_LABEL_SUFFIX}"
         },
-        DirectoryServiceKey.LDAP_CONNECTION_URI: {
-            "default": f"{DirectoryServiceKey.LDAP_CONNECTION_URI}{OPTIONAL_INPUT_PARAMETER_LABEL_SUFFIX}"
+        DirectoryServiceKey.LDAP_CONNECTION_URI.value: {
+            "default": f"{DirectoryServiceKey.LDAP_CONNECTION_URI.value}{OPTIONAL_INPUT_PARAMETER_LABEL_SUFFIX}"
         },
-        DirectoryServiceKey.SERVICE_ACCOUNT_CREDENTIALS_SECRET_ARN: {
-            "default": f"{DirectoryServiceKey.SERVICE_ACCOUNT_CREDENTIALS_SECRET_ARN}{OPTIONAL_INPUT_PARAMETER_LABEL_SUFFIX}"
+        DirectoryServiceKey.SERVICE_ACCOUNT_CREDENTIALS_SECRET_ARN.value: {
+            "default": f"{DirectoryServiceKey.SERVICE_ACCOUNT_CREDENTIALS_SECRET_ARN.value}{OPTIONAL_INPUT_PARAMETER_LABEL_SUFFIX}"
         },
-        DirectoryServiceKey.USERS_OU: {
-            "default": f"{DirectoryServiceKey.USERS_OU}{OPTIONAL_INPUT_PARAMETER_LABEL_SUFFIX}"
+        DirectoryServiceKey.USERS_OU.value: {
+            "default": f"{DirectoryServiceKey.USERS_OU.value}{OPTIONAL_INPUT_PARAMETER_LABEL_SUFFIX}"
         },
-        DirectoryServiceKey.GROUPS_OU: {
-            "default": f"{DirectoryServiceKey.GROUPS_OU}{OPTIONAL_INPUT_PARAMETER_LABEL_SUFFIX}"
+        DirectoryServiceKey.GROUPS_OU.value: {
+            "default": f"{DirectoryServiceKey.GROUPS_OU.value}{OPTIONAL_INPUT_PARAMETER_LABEL_SUFFIX}"
         },
-        DirectoryServiceKey.SUDOERS_GROUP_NAME: {
-            "default": f"{DirectoryServiceKey.SUDOERS_GROUP_NAME}{OPTIONAL_INPUT_PARAMETER_LABEL_SUFFIX}"
+        DirectoryServiceKey.SUDOERS_GROUP_NAME.value: {
+            "default": f"{DirectoryServiceKey.SUDOERS_GROUP_NAME.value}{OPTIONAL_INPUT_PARAMETER_LABEL_SUFFIX}"
         },
-        DirectoryServiceKey.COMPUTERS_OU: {
-            "default": f"{DirectoryServiceKey.COMPUTERS_OU}{OPTIONAL_INPUT_PARAMETER_LABEL_SUFFIX}"
+        DirectoryServiceKey.COMPUTERS_OU.value: {
+            "default": f"{DirectoryServiceKey.COMPUTERS_OU.value}{OPTIONAL_INPUT_PARAMETER_LABEL_SUFFIX}"
         },
-        DirectoryServiceKey.DOMAIN_TLS_CERTIFICATE_SECRET_ARN: {
-            "default": f"{DirectoryServiceKey.DOMAIN_TLS_CERTIFICATE_SECRET_ARN}{OPTIONAL_INPUT_PARAMETER_LABEL_SUFFIX}"
+        DirectoryServiceKey.DOMAIN_TLS_CERTIFICATE_SECRET_ARN.value: {
+            "default": f"{DirectoryServiceKey.DOMAIN_TLS_CERTIFICATE_SECRET_ARN.value}{OPTIONAL_INPUT_PARAMETER_LABEL_SUFFIX}"
         },
-        DirectoryServiceKey.ENABLE_LDAP_ID_MAPPING: {
-            "default": f"{DirectoryServiceKey.ENABLE_LDAP_ID_MAPPING}{OPTIONAL_INPUT_PARAMETER_LABEL_SUFFIX}"
+        DirectoryServiceKey.ENABLE_LDAP_ID_MAPPING.value: {
+            "default": f"{DirectoryServiceKey.ENABLE_LDAP_ID_MAPPING.value}{OPTIONAL_INPUT_PARAMETER_LABEL_SUFFIX}"
         },
-        DirectoryServiceKey.DISABLE_AD_JOIN: {
-            "default": f"{DirectoryServiceKey.DISABLE_AD_JOIN}{OPTIONAL_INPUT_PARAMETER_LABEL_SUFFIX}"
+        DirectoryServiceKey.DISABLE_AD_JOIN.value: {
+            "default": f"{DirectoryServiceKey.DISABLE_AD_JOIN.value}{OPTIONAL_INPUT_PARAMETER_LABEL_SUFFIX}"
         },
-        DirectoryServiceKey.ROOT_USER_DN: {
-            "default": f"{DirectoryServiceKey.ROOT_USER_DN}{OPTIONAL_INPUT_PARAMETER_LABEL_SUFFIX}"
+        DirectoryServiceKey.ROOT_USER_DN.value: {
+            "default": f"{DirectoryServiceKey.ROOT_USER_DN.value}{OPTIONAL_INPUT_PARAMETER_LABEL_SUFFIX}"
         },
     }

@@ -12,7 +12,7 @@
  */
 import VirtualDesktopBaseChart from "./virtual-desktop-base-chart";
 import { BarChart, Box, Container, Header } from "@cloudscape-design/components";
-import { VirtualDesktopSession } from '../../../client/data-model'
+import { VirtualDesktopSession } from "../../../client/generated/api";
 
 export interface VirtualDesktopSoftwareStackChartProps {
     loading: boolean

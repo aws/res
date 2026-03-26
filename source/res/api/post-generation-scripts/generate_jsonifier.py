@@ -33,7 +33,7 @@ def generate_custom_jsonifier(generated_dir):
 import json
 import logging
 from datetime import datetime, date
-from api.models.base_model import Model
+from datamodel.models.base_model import Model
 
 # Try to import the base jsonifier class if it exists
 try:

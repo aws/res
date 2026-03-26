@@ -13,7 +13,7 @@
 Test Cases for AccountsService
 """
 
-from unittest.mock import patch
+from unittest.mock import call, patch
 
 import pytest
 from ideaclustermanager import AppContext
@@ -174,12 +174,12 @@ def test_create_identity_provider_saml(
         AttributeMapping={"email": saml_payload.provider_email_attribute},
         IdpIdentifiers=["single-sign-on-identity-provider"],
     )
-    mock_update_config.has_calls(
+    mock_update_config.assert_has_calls(
         [
-            ("cognito.sso_idp_provider_name", saml_payload.provider_name),
-            ("cognito.sso_idp_provider_type", saml_payload.provider_type),
-            ("cognito.sso_idp_identifier", "single-sign-on-identity-provider"),
-            (
+            call("cognito.sso_idp_provider_name", saml_payload.provider_name),
+            call("cognito.sso_idp_provider_type", saml_payload.provider_type),
+            call("cognito.sso_idp_identifier", "single-sign-on-identity-provider"),
+            call(
                 "cognito.sso_idp_provider_email_attribute",
                 saml_payload.provider_email_attribute,
             ),
@@ -214,12 +214,12 @@ def test_create_identity_provider_oidc(
         AttributeMapping={"email": oidc_payload.provider_email_attribute},
         IdpIdentifiers=["single-sign-on-identity-provider"],
     )
-    mock_update_config.has_calls(
+    mock_update_config.assert_has_calls(
         [
-            ("cognito.sso_idp_provider_name", oidc_payload.provider_name),
-            ("cognito.sso_idp_provider_type", oidc_payload.provider_type),
-            ("cognito.sso_idp_identifier", "single-sign-on-identity-provider"),
-            (
+            call("cognito.sso_idp_provider_name", oidc_payload.provider_name),
+            call("cognito.sso_idp_provider_type", oidc_payload.provider_type),
+            call("cognito.sso_idp_identifier", "single-sign-on-identity-provider"),
+            call(
                 "cognito.sso_idp_provider_email_attribute",
                 oidc_payload.provider_email_attribute,
             ),
@@ -260,12 +260,12 @@ def test_update_identity_provider_oidc(
         AttributeMapping={"email": oidc_payload.provider_email_attribute},
         IdpIdentifiers=["single-sign-on-identity-provider"],
     )
-    mock_update_config.has_calls(
+    mock_update_config.assert_has_calls(
         [
-            ("cognito.sso_idp_provider_name", oidc_payload.provider_name),
-            ("cognito.sso_idp_provider_type", oidc_payload.provider_type),
-            ("cognito.sso_idp_identifier", "single-sign-on-identity-provider"),
-            (
+            call("cognito.sso_idp_provider_name", oidc_payload.provider_name),
+            call("cognito.sso_idp_provider_type", oidc_payload.provider_type),
+            call("cognito.sso_idp_identifier", "single-sign-on-identity-provider"),
+            call(
                 "cognito.sso_idp_provider_email_attribute",
                 oidc_payload.provider_email_attribute,
             ),
@@ -314,12 +314,12 @@ def test_recreate_identity_provider_oidc(
         ),
         ProviderName=saml_payload.provider_name,
     )
-    mock_update_config.has_calls(
+    mock_update_config.assert_has_calls(
         [
-            ("cognito.sso_idp_provider_name", oidc_payload.provider_name),
-            ("cognito.sso_idp_provider_type", oidc_payload.provider_type),
-            ("cognito.sso_idp_identifier", "single-sign-on-identity-provider"),
-            (
+            call("cognito.sso_idp_provider_name", oidc_payload.provider_name),
+            call("cognito.sso_idp_provider_type", oidc_payload.provider_type),
+            call("cognito.sso_idp_identifier", "single-sign-on-identity-provider"),
+            call(
                 "cognito.sso_idp_provider_email_attribute",
                 oidc_payload.provider_email_attribute,
             ),
@@ -372,28 +372,27 @@ def test_create_user_pool_client(
     )
     describe_secret_result = context.aws().secretsmanager().describe_secret.return_value
     assert describe_secret_result == None
-    secret_arn = (
-        context.aws()
-        .secretsmanager()
-        .create_secret.assert_called_with(
-            **{
-                "Name": secret_name,
-                "Description": f"Single Sign-On OAuth2 Client Secret for Cluster: {context._options.cluster_name}",
-                "Tags": secret_tags,
-                "SecretString": create_user_pool_client_result["UserPoolClient"][
-                    "ClientSecret"
-                ],
-            }
-        )
+    context.aws().secretsmanager().create_secret.assert_called_with(
+        **{
+            "Name": secret_name,
+            "Description": f"Single Sign-On OAuth2 Client Secret for Cluster: {context._options.cluster_name}",
+            "Tags": secret_tags,
+            "SecretString": create_user_pool_client_result["UserPoolClient"][
+                "ClientSecret"
+            ],
+        }
     )
 
-    mock_update_config.has_calls(
+    mock_update_config.assert_has_calls(
         [
-            (
+            call(
                 "cognito.sso_client_id",
-                create_user_pool_client_result["UserPoolClient"]["ClientSecret"],
+                create_user_pool_client_result["UserPoolClient"]["ClientId"],
             ),
-            ("cognito.sso_client_secret", secret_arn),
+            call(
+                "cognito.sso_client_secret",
+                context.aws().secretsmanager().create_secret.return_value["ARN"],
+            ),
         ]
     )
 

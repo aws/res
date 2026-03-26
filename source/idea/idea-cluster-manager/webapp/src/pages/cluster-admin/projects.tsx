@@ -565,7 +565,9 @@ class Projects extends Component<ProjectsProps, ProjectsState> {
                         text: "Delete Project",
                         onClick: () => {
                             this.showDeleteProjectConfirmModal();
-                        }
+                        },
+                        // based on if the user is admin
+                        disabled: !this.isAdmin(),
                     }
                 ]}
                 showPaginator={true}

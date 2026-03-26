@@ -38,6 +38,7 @@ class ClusterSettingsAPI(BaseAPI):
 
     def __init__(self, context: ideaclustermanager.AppContext):
         self.context = context
+        self.logger = context.logger('cluster-settings')
 
         self.SCOPE_WRITE = f'{self.context.cluster_name()}-{self.context.module_id()}/write'
         self.SCOPE_READ = f'{self.context.cluster_name()}-{self.context.module_id()}/read'
@@ -132,6 +133,14 @@ class ClusterSettingsAPI(BaseAPI):
         for setting in settings:
             self.config.put(f'{module_id}.{setting}', settings[setting])
 
+        if module_id == res_constants.MODULE_ID_IDENTITY_PROVIDER:
+            enable_self_sign_up = settings.get("cognito.enable_self_sign_up")
+            if enable_self_sign_up is not None:
+                if enable_self_sign_up:
+                    self._toggle_cognito_self_signup(True)
+                else:
+                    self._toggle_cognito_self_signup(False)
+                    
         context.success(UpdateModuleSettingsResult())
 
     def describe_instance_types(self, context: ApiInvocationContext):
@@ -168,6 +177,33 @@ class ClusterSettingsAPI(BaseAPI):
         default_allowed_sessions_per_user_per_project = self.config.db.get_config_entry("vdc.dcv_session.default_allowed_sessions_per_user_per_project")
 
         context.success(GetDefaultAllowedSessionsPerUserPerProjectResult(default_allowed_sessions_per_user_per_project=Utils.get_value_as_int("value", allowed_sessions_per_user_per_project, 0)))
+
+    def _toggle_cognito_self_signup(self, enable: bool):
+        """
+        Toggle self-signup on Cognito User Pool.
+        :param enable: True to enable self-signup, False to disable
+        """
+        user_pool_id = self.context.config().get_string('identity-provider.cognito.user_pool_id', required=True)
+        
+        try:
+            update_params = {
+                'UserPoolId': user_pool_id,
+                'AdminCreateUserConfig': {
+                    'AllowAdminCreateUserOnly': not enable
+                }
+            }
+
+            if enable:
+                update_params['AutoVerifiedAttributes'] = ['email']
+                update_params['VerificationMessageTemplate'] = {
+                    'DefaultEmailOption': 'CONFIRM_WITH_CODE',
+                    'EmailSubject': 'Verify your email for RES',
+                }
+
+            self.context.aws().cognito_idp().update_user_pool(**update_params)
+            self.logger.info(f"Successfully toggled Cognito self-signup to {'ON' if enable else 'OFF'} for user pool: {user_pool_id}")
+        except Exception as e:
+            self.logger.error(f"Failed to toggle Cognito self-signup for user pool {user_pool_id}: {e}")
 
     def update_quic(self, context: ApiInvocationContext):
         request = context.get_request_payload_as(UpdateQuicConfigRequest)

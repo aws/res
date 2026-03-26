@@ -48,9 +48,9 @@ class BootstrapUserDataBuilder:
         )
 
     def _build_windows_userdata(self) -> str:
-        userdata = f"""
+        userdata = rf"""
 <powershell>
- $BootstrapDir = "C`:\\Users\\Administrator\\RES\\Bootstrap"
+ $BootstrapDir = "C`:\Users\Administrator\RES\Bootstrap"
  function Install-AWSCLI {{
     $AWSCLIInstalled = $false
     try {{
@@ -89,11 +89,11 @@ class BootstrapUserDataBuilder:
         $urlParts = $PackageDownloadURI -Split "/", 4
         $bucketName = $urlParts[2]
         $key = $urlParts[3]
-        Copy-S3Object -BucketName $bucketName -Key $key -LocalFile "$BootstrapDir\\$PackageArchive" -Force
+        Copy-S3Object -BucketName $bucketName -Key $key -LocalFile "$BootstrapDir\$PackageArchive" -Force
      }} else {{
-        Copy-Item -Path $PackageDownloadURI -Destination "$BootstrapDir\\$PackageArchive"
+        Copy-Item -Path $PackageDownloadURI -Destination "$BootstrapDir\$PackageArchive"
      }}
-     Tar -xf "$BootstrapDir\\$PackageArchive"
+     Tar -xf "$BootstrapDir\$PackageArchive"
  }}
  $AWSPowerShellVersion = "4.1.648"
  $AWSPowerShellModule = Get-Module AWSPowerShell -ListAvailable

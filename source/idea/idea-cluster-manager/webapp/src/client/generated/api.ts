@@ -63,6 +63,18 @@ export interface BatchGetDCVSessionsResponseContent {
      */
     'nextToken'?: string;
 }
+export interface CreatePermissionProfileRequestContent {
+    'profile': VirtualDesktopPermissionProfile;
+}
+export interface CreatePermissionProfileResponseContent {
+    'profile': VirtualDesktopPermissionProfile;
+}
+export interface CreateSoftwareStackRequestContent {
+    'software_stack': VirtualDesktopSoftwareStack;
+}
+export interface CreateSoftwareStackResponseContent {
+    'software_stack': VirtualDesktopSoftwareStack;
+}
 /**
  * Day of the week
  */
@@ -80,6 +92,15 @@ export const DayOfWeek = {
 export type DayOfWeek = typeof DayOfWeek[keyof typeof DayOfWeek];
 
 
+export interface DeletePermissionProfileResponseContent {
+    'success': boolean;
+}
+export interface DeleteSoftwareStackRequestContent {
+    'base_os': string;
+}
+export interface DeleteSoftwareStackResponseContent {
+    'success': boolean;
+}
 /**
  * Generic listing payload mixin for paginated results
  */
@@ -92,6 +113,12 @@ export interface GetPermissionProfileResponseContent {
      */
     'filters'?: Array<ResFilter>;
     'profile'?: VirtualDesktopPermissionProfile;
+}
+export interface GetSessionResponseContent {
+    'session'?: VirtualDesktopSession;
+}
+export interface GetSoftwareStackResponseContent {
+    'softwareStack'?: VirtualDesktopSoftwareStack;
 }
 /**
  * This exception is thrown on an unhandled service error.
@@ -174,7 +201,7 @@ export interface ListPermissionProfilesResponseContent {
 /**
  * Generic listing payload mixin for paginated results
  */
-export interface ListScheduleTypesResponseContent {
+export interface ListSessionPermissionsResponseContent {
     'paginator'?: ResPaginator;
     'sort_by'?: ResSortBy;
     'data_range'?: ResDateRange;
@@ -183,14 +210,18 @@ export interface ListScheduleTypesResponseContent {
      */
     'filters'?: Array<ResFilter>;
     /**
-     * List of available schedule types for virtual desktops
+     * List of session permissions
      */
-    'listing'?: Array<VirtualDesktopScheduleType>;
+    'listing'?: Array<VirtualDesktopSessionPermission>;
+    /**
+     * Pagination token for next page
+     */
+    'nextToken'?: string;
 }
 /**
  * Generic listing payload mixin for paginated results
  */
-export interface ListSupportedGpusResponseContent {
+export interface ListSessionsResponseContent {
     'paginator'?: ResPaginator;
     'sort_by'?: ResSortBy;
     'data_range'?: ResDateRange;
@@ -199,14 +230,18 @@ export interface ListSupportedGpusResponseContent {
      */
     'filters'?: Array<ResFilter>;
     /**
-     * List of available GPUs for virtual desktops
+     * List of sessions
      */
-    'listing'?: Array<VirtualDesktopGpu>;
+    'listing'?: Array<VirtualDesktopSession>;
+    /**
+     * Pagination token for next page
+     */
+    'nextToken'?: string;
 }
 /**
  * Generic listing payload mixin for paginated results
  */
-export interface ListSupportedOsesResponseContent {
+export interface ListSharedPermissionsResponseContent {
     'paginator'?: ResPaginator;
     'sort_by'?: ResSortBy;
     'data_range'?: ResDateRange;
@@ -215,15 +250,48 @@ export interface ListSupportedOsesResponseContent {
      */
     'filters'?: Array<ResFilter>;
     /**
-     * List of available base operating systems for virtual desktops
+     * List of shared permissions
      */
-    'listing'?: Array<VirtualDesktopBaseOs>;
+    'listing'?: Array<VirtualDesktopSessionPermission>;
+    /**
+     * Pagination token for next page
+     */
+    'nextToken'?: string;
+}
+/**
+ * Generic listing payload mixin for paginated results
+ */
+export interface ListSoftwareStacksResponseContent {
+    'paginator'?: ResPaginator;
+    'sort_by'?: ResSortBy;
+    'data_range'?: ResDateRange;
+    /**
+     * List of filters applied to the query
+     */
+    'filters'?: Array<ResFilter>;
+    /**
+     * List of software stacks
+     */
+    'listing'?: Array<VirtualDesktopSoftwareStack>;
+    /**
+     * Pagination token for next page
+     */
+    'nextToken'?: string;
 }
 export interface ListValue {
     /**
      * List of filter values
      */
     'listValue': Array<any>;
+}
+/**
+ * The requested entity is not found.
+ */
+export interface NotFoundExceptionResponseContent {
+    'message'?: string;
+}
+export interface PermissionProfile {
+    'profile_id': string;
 }
 /**
  * Project information structure
@@ -237,6 +305,10 @@ export interface Project {
      * Project name
      */
     'name'?: string;
+    /**
+     * Project title
+     */
+    'title'?: string;
     /**
      * Project description
      */
@@ -364,6 +436,38 @@ export type ResSortOrder = typeof ResSortOrder[keyof typeof ResSortOrder];
 export interface StringValue {
     'stringValue': string;
 }
+export interface UpdatePermissionProfileRequestContent {
+    'profile': VirtualDesktopPermissionProfile;
+}
+export interface UpdatePermissionProfileResponseContent {
+    'profile': VirtualDesktopPermissionProfile;
+}
+export interface UpdateSessionPermissionsRequestContent {
+    /**
+     * List of session permissions to create
+     */
+    'create'?: Array<VirtualDesktopSessionPermission>;
+    /**
+     * List of session permissions to update
+     */
+    'update'?: Array<VirtualDesktopSessionPermission>;
+    /**
+     * List of session permissions to delete
+     */
+    'delete'?: Array<VirtualDesktopSessionPermission>;
+}
+export interface UpdateSessionPermissionsResponseContent {
+    /**
+     * List of session permissions that where create/updated
+     */
+    'permissions'?: Array<VirtualDesktopSessionPermission>;
+}
+export interface UpdateSoftwareStackRequestContent {
+    'software_stack': VirtualDesktopSoftwareStack;
+}
+export interface UpdateSoftwareStackResponseContent {
+    'software_stack': VirtualDesktopSoftwareStack;
+}
 /**
  * Virtual desktop affinity options
  */
@@ -441,11 +545,11 @@ export interface VirtualDesktopPermissionProfile {
     /**
      * Profile identifier
      */
-    'profile_id'?: string;
+    'profile_id': string;
     /**
      * Profile title
      */
-    'title'?: string;
+    'title': string;
     /**
      * Profile description
      */
@@ -700,6 +804,41 @@ export interface VirtualDesktopSession {
 }
 
 
+export interface VirtualDesktopSessionPermission {
+    'idea_session_id': string;
+    'idea_session_owner': string;
+    'idea_session_name': string;
+    'idea_session_instance_type': string;
+    'idea_session_state': VirtualDesktopSessionState;
+    'idea_session_base_os': VirtualDesktopBaseOs;
+    'idea_session_hibernation_enabled': boolean;
+    'idea_session_type': VirtualDesktopSessionType;
+    'permission_profile': PermissionProfile;
+    'actor_type': string;
+    'actor_name': string;
+    /**
+     * Creation timestamp
+     */
+    'created_on'?: string;
+    /**
+     * Creation time for session
+     */
+    'idea_session_created_on': string;
+    /**
+     * Last update timestamp
+     */
+    'updated_on'?: string;
+    /**
+     * Expiry date
+     */
+    'expiry_date'?: string;
+    /**
+     * Reason for any failure in session permission creation or update
+     */
+    'failure_reason'?: string;
+}
+
+
 /**
  * Virtual desktop session state
  */
@@ -741,11 +880,11 @@ export interface VirtualDesktopSoftwareStack {
      * Unique identifier for the software stack
      */
     'stack_id'?: string;
-    'base_os'?: VirtualDesktopBaseOs;
+    'base_os': VirtualDesktopBaseOs;
     /**
      * Human-readable name for the software stack
      */
-    'name'?: string;
+    'name': string;
     /**
      * Description of the software stack
      */
@@ -770,10 +909,10 @@ export interface VirtualDesktopSoftwareStack {
      * Whether the software stack is enabled
      */
     'enabled'?: boolean;
-    'min_storage'?: ResMemory;
-    'min_ram'?: ResMemory;
+    'min_storage': ResMemory;
+    'min_ram': ResMemory;
     'architecture'?: VirtualDesktopArchitecture;
-    'gpu'?: VirtualDesktopGpu;
+    'gpu': VirtualDesktopGpu;
     'placement'?: VirtualDesktopPlacement;
     /**
      * Version number of the software stack
@@ -815,6 +954,1414 @@ export interface VirtualDesktopWeekSchedule {
     'saturday'?: VirtualDesktopSchedule;
     'sunday'?: VirtualDesktopSchedule;
 }
+
+/**
+ * VirtualDesktopApi - axios parameter creator
+ */
+export const VirtualDesktopApiAxiosParamCreator = function (configuration?: Configuration) {
+    return {
+        /**
+         * Create Permission Profile
+         * @param {CreatePermissionProfileRequestContent} createPermissionProfileRequestContent 
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        createPermissionProfile: async (createPermissionProfileRequestContent: CreatePermissionProfileRequestContent, options: RawAxiosRequestConfig = {}): Promise<RequestArgs> => {
+            // verify required parameter 'createPermissionProfileRequestContent' is not null or undefined
+            assertParamExists('createPermissionProfile', 'createPermissionProfileRequestContent', createPermissionProfileRequestContent)
+            const localVarPath = `/res/virtual-desktop/permission-profile`;
+            // use dummy base URL string because the URL constructor only accepts absolute URLs.
+            const localVarUrlObj = new URL(localVarPath, DUMMY_BASE_URL);
+            let baseOptions;
+            if (configuration) {
+                baseOptions = configuration.baseOptions;
+            }
+
+            const localVarRequestOptions = { method: 'POST', ...baseOptions, ...options};
+            const localVarHeaderParameter = {} as any;
+            const localVarQueryParameter = {} as any;
+
+            // authentication smithy.api.httpBearerAuth required
+            // http bearer authentication required
+            await setBearerAuthToObject(localVarHeaderParameter, configuration)
+
+
+    
+            localVarHeaderParameter['Content-Type'] = 'application/json';
+
+            setSearchParams(localVarUrlObj, localVarQueryParameter);
+            let headersFromBaseOptions = baseOptions && baseOptions.headers ? baseOptions.headers : {};
+            localVarRequestOptions.headers = {...localVarHeaderParameter, ...headersFromBaseOptions, ...options.headers};
+            localVarRequestOptions.data = serializeDataIfNeeded(createPermissionProfileRequestContent, localVarRequestOptions, configuration)
+
+            return {
+                url: toPathString(localVarUrlObj),
+                options: localVarRequestOptions,
+            };
+        },
+        /**
+         * Create Software Stack
+         * @param {CreateSoftwareStackRequestContent} createSoftwareStackRequestContent 
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        createSoftwareStack: async (createSoftwareStackRequestContent: CreateSoftwareStackRequestContent, options: RawAxiosRequestConfig = {}): Promise<RequestArgs> => {
+            // verify required parameter 'createSoftwareStackRequestContent' is not null or undefined
+            assertParamExists('createSoftwareStack', 'createSoftwareStackRequestContent', createSoftwareStackRequestContent)
+            const localVarPath = `/res/virtual-desktop/software-stack`;
+            // use dummy base URL string because the URL constructor only accepts absolute URLs.
+            const localVarUrlObj = new URL(localVarPath, DUMMY_BASE_URL);
+            let baseOptions;
+            if (configuration) {
+                baseOptions = configuration.baseOptions;
+            }
+
+            const localVarRequestOptions = { method: 'POST', ...baseOptions, ...options};
+            const localVarHeaderParameter = {} as any;
+            const localVarQueryParameter = {} as any;
+
+            // authentication smithy.api.httpBearerAuth required
+            // http bearer authentication required
+            await setBearerAuthToObject(localVarHeaderParameter, configuration)
+
+
+    
+            localVarHeaderParameter['Content-Type'] = 'application/json';
+
+            setSearchParams(localVarUrlObj, localVarQueryParameter);
+            let headersFromBaseOptions = baseOptions && baseOptions.headers ? baseOptions.headers : {};
+            localVarRequestOptions.headers = {...localVarHeaderParameter, ...headersFromBaseOptions, ...options.headers};
+            localVarRequestOptions.data = serializeDataIfNeeded(createSoftwareStackRequestContent, localVarRequestOptions, configuration)
+
+            return {
+                url: toPathString(localVarUrlObj),
+                options: localVarRequestOptions,
+            };
+        },
+        /**
+         * Delete Permission Profile
+         * @param {string} profileId 
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        deletePermissionProfile: async (profileId: string, options: RawAxiosRequestConfig = {}): Promise<RequestArgs> => {
+            // verify required parameter 'profileId' is not null or undefined
+            assertParamExists('deletePermissionProfile', 'profileId', profileId)
+            const localVarPath = `/res/virtual-desktop/permission-profile/{profileId}`
+                .replace(`{${"profileId"}}`, encodeURIComponent(String(profileId)));
+            // use dummy base URL string because the URL constructor only accepts absolute URLs.
+            const localVarUrlObj = new URL(localVarPath, DUMMY_BASE_URL);
+            let baseOptions;
+            if (configuration) {
+                baseOptions = configuration.baseOptions;
+            }
+
+            const localVarRequestOptions = { method: 'DELETE', ...baseOptions, ...options};
+            const localVarHeaderParameter = {} as any;
+            const localVarQueryParameter = {} as any;
+
+            // authentication smithy.api.httpBearerAuth required
+            // http bearer authentication required
+            await setBearerAuthToObject(localVarHeaderParameter, configuration)
+
+
+    
+            setSearchParams(localVarUrlObj, localVarQueryParameter);
+            let headersFromBaseOptions = baseOptions && baseOptions.headers ? baseOptions.headers : {};
+            localVarRequestOptions.headers = {...localVarHeaderParameter, ...headersFromBaseOptions, ...options.headers};
+
+            return {
+                url: toPathString(localVarUrlObj),
+                options: localVarRequestOptions,
+            };
+        },
+        /**
+         * Delete Software Stack
+         * @param {string} stackId 
+         * @param {DeleteSoftwareStackRequestContent} deleteSoftwareStackRequestContent 
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        deleteSoftwareStack: async (stackId: string, deleteSoftwareStackRequestContent: DeleteSoftwareStackRequestContent, options: RawAxiosRequestConfig = {}): Promise<RequestArgs> => {
+            // verify required parameter 'stackId' is not null or undefined
+            assertParamExists('deleteSoftwareStack', 'stackId', stackId)
+            // verify required parameter 'deleteSoftwareStackRequestContent' is not null or undefined
+            assertParamExists('deleteSoftwareStack', 'deleteSoftwareStackRequestContent', deleteSoftwareStackRequestContent)
+            const localVarPath = `/res/virtual-desktop/software-stack/{stackId}`
+                .replace(`{${"stackId"}}`, encodeURIComponent(String(stackId)));
+            // use dummy base URL string because the URL constructor only accepts absolute URLs.
+            const localVarUrlObj = new URL(localVarPath, DUMMY_BASE_URL);
+            let baseOptions;
+            if (configuration) {
+                baseOptions = configuration.baseOptions;
+            }
+
+            const localVarRequestOptions = { method: 'DELETE', ...baseOptions, ...options};
+            const localVarHeaderParameter = {} as any;
+            const localVarQueryParameter = {} as any;
+
+            // authentication smithy.api.httpBearerAuth required
+            // http bearer authentication required
+            await setBearerAuthToObject(localVarHeaderParameter, configuration)
+
+
+    
+            localVarHeaderParameter['Content-Type'] = 'application/json';
+
+            setSearchParams(localVarUrlObj, localVarQueryParameter);
+            let headersFromBaseOptions = baseOptions && baseOptions.headers ? baseOptions.headers : {};
+            localVarRequestOptions.headers = {...localVarHeaderParameter, ...headersFromBaseOptions, ...options.headers};
+            localVarRequestOptions.data = serializeDataIfNeeded(deleteSoftwareStackRequestContent, localVarRequestOptions, configuration)
+
+            return {
+                url: toPathString(localVarUrlObj),
+                options: localVarRequestOptions,
+            };
+        },
+        /**
+         * Get details of a session
+         * @param {string} resSessionId Session identifier
+         * @param {string} owner Owner of the session
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        getSession: async (resSessionId: string, owner: string, options: RawAxiosRequestConfig = {}): Promise<RequestArgs> => {
+            // verify required parameter 'resSessionId' is not null or undefined
+            assertParamExists('getSession', 'resSessionId', resSessionId)
+            // verify required parameter 'owner' is not null or undefined
+            assertParamExists('getSession', 'owner', owner)
+            const localVarPath = `/res/virtual-desktop/session/{resSessionId}`
+                .replace(`{${"resSessionId"}}`, encodeURIComponent(String(resSessionId)));
+            // use dummy base URL string because the URL constructor only accepts absolute URLs.
+            const localVarUrlObj = new URL(localVarPath, DUMMY_BASE_URL);
+            let baseOptions;
+            if (configuration) {
+                baseOptions = configuration.baseOptions;
+            }
+
+            const localVarRequestOptions = { method: 'GET', ...baseOptions, ...options};
+            const localVarHeaderParameter = {} as any;
+            const localVarQueryParameter = {} as any;
+
+            // authentication smithy.api.httpBearerAuth required
+            // http bearer authentication required
+            await setBearerAuthToObject(localVarHeaderParameter, configuration)
+
+            if (owner !== undefined) {
+                localVarQueryParameter['owner'] = owner;
+            }
+
+
+    
+            setSearchParams(localVarUrlObj, localVarQueryParameter);
+            let headersFromBaseOptions = baseOptions && baseOptions.headers ? baseOptions.headers : {};
+            localVarRequestOptions.headers = {...localVarHeaderParameter, ...headersFromBaseOptions, ...options.headers};
+
+            return {
+                url: toPathString(localVarUrlObj),
+                options: localVarRequestOptions,
+            };
+        },
+        /**
+         * Get details of a software stack
+         * @param {string} stackId Software stack identifier
+         * @param {VirtualDesktopBaseOs} baseOs Base operating system for the software stack
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        getSoftwareStack: async (stackId: string, baseOs: VirtualDesktopBaseOs, options: RawAxiosRequestConfig = {}): Promise<RequestArgs> => {
+            // verify required parameter 'stackId' is not null or undefined
+            assertParamExists('getSoftwareStack', 'stackId', stackId)
+            // verify required parameter 'baseOs' is not null or undefined
+            assertParamExists('getSoftwareStack', 'baseOs', baseOs)
+            const localVarPath = `/res/virtual-desktop/software-stack/{stackId}`
+                .replace(`{${"stackId"}}`, encodeURIComponent(String(stackId)));
+            // use dummy base URL string because the URL constructor only accepts absolute URLs.
+            const localVarUrlObj = new URL(localVarPath, DUMMY_BASE_URL);
+            let baseOptions;
+            if (configuration) {
+                baseOptions = configuration.baseOptions;
+            }
+
+            const localVarRequestOptions = { method: 'GET', ...baseOptions, ...options};
+            const localVarHeaderParameter = {} as any;
+            const localVarQueryParameter = {} as any;
+
+            // authentication smithy.api.httpBearerAuth required
+            // http bearer authentication required
+            await setBearerAuthToObject(localVarHeaderParameter, configuration)
+
+            if (baseOs !== undefined) {
+                localVarQueryParameter['baseOs'] = baseOs;
+            }
+
+
+    
+            setSearchParams(localVarUrlObj, localVarQueryParameter);
+            let headersFromBaseOptions = baseOptions && baseOptions.headers ? baseOptions.headers : {};
+            localVarRequestOptions.headers = {...localVarHeaderParameter, ...headersFromBaseOptions, ...options.headers};
+
+            return {
+                url: toPathString(localVarUrlObj),
+                options: localVarRequestOptions,
+            };
+        },
+        /**
+         * Get a list of session permissions
+         * @param {string} resSessionId Filter by resSessionId
+         * @param {string} [nextToken] Pagination token for next page
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        listSessionPermissions: async (resSessionId: string, nextToken?: string, options: RawAxiosRequestConfig = {}): Promise<RequestArgs> => {
+            // verify required parameter 'resSessionId' is not null or undefined
+            assertParamExists('listSessionPermissions', 'resSessionId', resSessionId)
+            const localVarPath = `/res/virtual-desktop/session-permission`;
+            // use dummy base URL string because the URL constructor only accepts absolute URLs.
+            const localVarUrlObj = new URL(localVarPath, DUMMY_BASE_URL);
+            let baseOptions;
+            if (configuration) {
+                baseOptions = configuration.baseOptions;
+            }
+
+            const localVarRequestOptions = { method: 'GET', ...baseOptions, ...options};
+            const localVarHeaderParameter = {} as any;
+            const localVarQueryParameter = {} as any;
+
+            // authentication smithy.api.httpBearerAuth required
+            // http bearer authentication required
+            await setBearerAuthToObject(localVarHeaderParameter, configuration)
+
+            if (resSessionId !== undefined) {
+                localVarQueryParameter['resSessionId'] = resSessionId;
+            }
+
+            if (nextToken !== undefined) {
+                localVarQueryParameter['nextToken'] = nextToken;
+            }
+
+
+    
+            setSearchParams(localVarUrlObj, localVarQueryParameter);
+            let headersFromBaseOptions = baseOptions && baseOptions.headers ? baseOptions.headers : {};
+            localVarRequestOptions.headers = {...localVarHeaderParameter, ...headersFromBaseOptions, ...options.headers};
+
+            return {
+                url: toPathString(localVarUrlObj),
+                options: localVarRequestOptions,
+            };
+        },
+        /**
+         * Get a list of sessions
+         * @param {string} [state] Filter by state
+         * @param {string} [baseOs] Filter by baseOs
+         * @param {string} [sessionName] Filter by sessionName
+         * @param {string} [stackId] Filter by stackId
+         * @param {string} [dateRangeKey] The attribute name to filter on for date range
+         * @param {string} [after] Start of the date range
+         * @param {string} [before] End of the date range 
+         * @param {string} [nextToken] Pagination token for next page
+         * @param {string} [owner] Filter by owner
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        listSessions: async (state?: string, baseOs?: string, sessionName?: string, stackId?: string, dateRangeKey?: string, after?: string, before?: string, nextToken?: string, owner?: string, options: RawAxiosRequestConfig = {}): Promise<RequestArgs> => {
+            const localVarPath = `/res/virtual-desktop/session`;
+            // use dummy base URL string because the URL constructor only accepts absolute URLs.
+            const localVarUrlObj = new URL(localVarPath, DUMMY_BASE_URL);
+            let baseOptions;
+            if (configuration) {
+                baseOptions = configuration.baseOptions;
+            }
+
+            const localVarRequestOptions = { method: 'GET', ...baseOptions, ...options};
+            const localVarHeaderParameter = {} as any;
+            const localVarQueryParameter = {} as any;
+
+            // authentication smithy.api.httpBearerAuth required
+            // http bearer authentication required
+            await setBearerAuthToObject(localVarHeaderParameter, configuration)
+
+            if (state !== undefined) {
+                localVarQueryParameter['state'] = state;
+            }
+
+            if (baseOs !== undefined) {
+                localVarQueryParameter['baseOs'] = baseOs;
+            }
+
+            if (sessionName !== undefined) {
+                localVarQueryParameter['sessionName'] = sessionName;
+            }
+
+            if (stackId !== undefined) {
+                localVarQueryParameter['stackId'] = stackId;
+            }
+
+            if (dateRangeKey !== undefined) {
+                localVarQueryParameter['dateRangeKey'] = dateRangeKey;
+            }
+
+            if (after !== undefined) {
+                localVarQueryParameter['after'] = after;
+            }
+
+            if (before !== undefined) {
+                localVarQueryParameter['before'] = before;
+            }
+
+            if (nextToken !== undefined) {
+                localVarQueryParameter['nextToken'] = nextToken;
+            }
+
+            if (owner !== undefined) {
+                localVarQueryParameter['owner'] = owner;
+            }
+
+
+    
+            setSearchParams(localVarUrlObj, localVarQueryParameter);
+            let headersFromBaseOptions = baseOptions && baseOptions.headers ? baseOptions.headers : {};
+            localVarRequestOptions.headers = {...localVarHeaderParameter, ...headersFromBaseOptions, ...options.headers};
+
+            return {
+                url: toPathString(localVarUrlObj),
+                options: localVarRequestOptions,
+            };
+        },
+        /**
+         * Get a list of shared permissions
+         * @param {string} [nextToken] Pagination token for next page
+         * @param {string} [username] Username of the shared permissions
+         * @param {string} [state] Filter by state
+         * @param {string} [baseOs] Filter by baseOs
+         * @param {string} [sessionName] Filter by sessionName
+         * @param {string} [dateRangeKey] The attribute name to filter on for date range
+         * @param {string} [after] Start of the date range
+         * @param {string} [before] End of the date range
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        listSharedPermissions: async (nextToken?: string, username?: string, state?: string, baseOs?: string, sessionName?: string, dateRangeKey?: string, after?: string, before?: string, options: RawAxiosRequestConfig = {}): Promise<RequestArgs> => {
+            const localVarPath = `/res/virtual-desktop/shared-permissions`;
+            // use dummy base URL string because the URL constructor only accepts absolute URLs.
+            const localVarUrlObj = new URL(localVarPath, DUMMY_BASE_URL);
+            let baseOptions;
+            if (configuration) {
+                baseOptions = configuration.baseOptions;
+            }
+
+            const localVarRequestOptions = { method: 'GET', ...baseOptions, ...options};
+            const localVarHeaderParameter = {} as any;
+            const localVarQueryParameter = {} as any;
+
+            // authentication smithy.api.httpBearerAuth required
+            // http bearer authentication required
+            await setBearerAuthToObject(localVarHeaderParameter, configuration)
+
+            if (nextToken !== undefined) {
+                localVarQueryParameter['nextToken'] = nextToken;
+            }
+
+            if (username !== undefined) {
+                localVarQueryParameter['username'] = username;
+            }
+
+            if (state !== undefined) {
+                localVarQueryParameter['state'] = state;
+            }
+
+            if (baseOs !== undefined) {
+                localVarQueryParameter['baseOs'] = baseOs;
+            }
+
+            if (sessionName !== undefined) {
+                localVarQueryParameter['sessionName'] = sessionName;
+            }
+
+            if (dateRangeKey !== undefined) {
+                localVarQueryParameter['dateRangeKey'] = dateRangeKey;
+            }
+
+            if (after !== undefined) {
+                localVarQueryParameter['after'] = after;
+            }
+
+            if (before !== undefined) {
+                localVarQueryParameter['before'] = before;
+            }
+
+
+    
+            setSearchParams(localVarUrlObj, localVarQueryParameter);
+            let headersFromBaseOptions = baseOptions && baseOptions.headers ? baseOptions.headers : {};
+            localVarRequestOptions.headers = {...localVarHeaderParameter, ...headersFromBaseOptions, ...options.headers};
+
+            return {
+                url: toPathString(localVarUrlObj),
+                options: localVarRequestOptions,
+            };
+        },
+        /**
+         * Get a list of software stacks
+         * @param {string} [projectId] Filter by projectId
+         * @param {string} [baseOs] Filter by baseOs
+         * @param {string} [softwareStackName] Filter by softwareStackName
+         * @param {string} [nextToken] Pagination token for next page
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        listSoftwareStacks: async (projectId?: string, baseOs?: string, softwareStackName?: string, nextToken?: string, options: RawAxiosRequestConfig = {}): Promise<RequestArgs> => {
+            const localVarPath = `/res/virtual-desktop/software-stack`;
+            // use dummy base URL string because the URL constructor only accepts absolute URLs.
+            const localVarUrlObj = new URL(localVarPath, DUMMY_BASE_URL);
+            let baseOptions;
+            if (configuration) {
+                baseOptions = configuration.baseOptions;
+            }
+
+            const localVarRequestOptions = { method: 'GET', ...baseOptions, ...options};
+            const localVarHeaderParameter = {} as any;
+            const localVarQueryParameter = {} as any;
+
+            // authentication smithy.api.httpBearerAuth required
+            // http bearer authentication required
+            await setBearerAuthToObject(localVarHeaderParameter, configuration)
+
+            if (projectId !== undefined) {
+                localVarQueryParameter['projectId'] = projectId;
+            }
+
+            if (baseOs !== undefined) {
+                localVarQueryParameter['baseOs'] = baseOs;
+            }
+
+            if (softwareStackName !== undefined) {
+                localVarQueryParameter['softwareStackName'] = softwareStackName;
+            }
+
+            if (nextToken !== undefined) {
+                localVarQueryParameter['nextToken'] = nextToken;
+            }
+
+
+    
+            setSearchParams(localVarUrlObj, localVarQueryParameter);
+            let headersFromBaseOptions = baseOptions && baseOptions.headers ? baseOptions.headers : {};
+            localVarRequestOptions.headers = {...localVarHeaderParameter, ...headersFromBaseOptions, ...options.headers};
+
+            return {
+                url: toPathString(localVarUrlObj),
+                options: localVarRequestOptions,
+            };
+        },
+        /**
+         * Update Permission Profile
+         * @param {string} profileId 
+         * @param {UpdatePermissionProfileRequestContent} updatePermissionProfileRequestContent 
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        updatePermissionProfile: async (profileId: string, updatePermissionProfileRequestContent: UpdatePermissionProfileRequestContent, options: RawAxiosRequestConfig = {}): Promise<RequestArgs> => {
+            // verify required parameter 'profileId' is not null or undefined
+            assertParamExists('updatePermissionProfile', 'profileId', profileId)
+            // verify required parameter 'updatePermissionProfileRequestContent' is not null or undefined
+            assertParamExists('updatePermissionProfile', 'updatePermissionProfileRequestContent', updatePermissionProfileRequestContent)
+            const localVarPath = `/res/virtual-desktop/permission-profile/{profileId}`
+                .replace(`{${"profileId"}}`, encodeURIComponent(String(profileId)));
+            // use dummy base URL string because the URL constructor only accepts absolute URLs.
+            const localVarUrlObj = new URL(localVarPath, DUMMY_BASE_URL);
+            let baseOptions;
+            if (configuration) {
+                baseOptions = configuration.baseOptions;
+            }
+
+            const localVarRequestOptions = { method: 'PUT', ...baseOptions, ...options};
+            const localVarHeaderParameter = {} as any;
+            const localVarQueryParameter = {} as any;
+
+            // authentication smithy.api.httpBearerAuth required
+            // http bearer authentication required
+            await setBearerAuthToObject(localVarHeaderParameter, configuration)
+
+
+    
+            localVarHeaderParameter['Content-Type'] = 'application/json';
+
+            setSearchParams(localVarUrlObj, localVarQueryParameter);
+            let headersFromBaseOptions = baseOptions && baseOptions.headers ? baseOptions.headers : {};
+            localVarRequestOptions.headers = {...localVarHeaderParameter, ...headersFromBaseOptions, ...options.headers};
+            localVarRequestOptions.data = serializeDataIfNeeded(updatePermissionProfileRequestContent, localVarRequestOptions, configuration)
+
+            return {
+                url: toPathString(localVarUrlObj),
+                options: localVarRequestOptions,
+            };
+        },
+        /**
+         * Get a list of session permissions
+         * @param {UpdateSessionPermissionsRequestContent} [updateSessionPermissionsRequestContent] 
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        updateSessionPermissions: async (updateSessionPermissionsRequestContent?: UpdateSessionPermissionsRequestContent, options: RawAxiosRequestConfig = {}): Promise<RequestArgs> => {
+            const localVarPath = `/res/virtual-desktop/session-permission`;
+            // use dummy base URL string because the URL constructor only accepts absolute URLs.
+            const localVarUrlObj = new URL(localVarPath, DUMMY_BASE_URL);
+            let baseOptions;
+            if (configuration) {
+                baseOptions = configuration.baseOptions;
+            }
+
+            const localVarRequestOptions = { method: 'PUT', ...baseOptions, ...options};
+            const localVarHeaderParameter = {} as any;
+            const localVarQueryParameter = {} as any;
+
+            // authentication smithy.api.httpBearerAuth required
+            // http bearer authentication required
+            await setBearerAuthToObject(localVarHeaderParameter, configuration)
+
+
+    
+            localVarHeaderParameter['Content-Type'] = 'application/json';
+
+            setSearchParams(localVarUrlObj, localVarQueryParameter);
+            let headersFromBaseOptions = baseOptions && baseOptions.headers ? baseOptions.headers : {};
+            localVarRequestOptions.headers = {...localVarHeaderParameter, ...headersFromBaseOptions, ...options.headers};
+            localVarRequestOptions.data = serializeDataIfNeeded(updateSessionPermissionsRequestContent, localVarRequestOptions, configuration)
+
+            return {
+                url: toPathString(localVarUrlObj),
+                options: localVarRequestOptions,
+            };
+        },
+        /**
+         * Update Software Stack
+         * @param {string} stackId 
+         * @param {UpdateSoftwareStackRequestContent} updateSoftwareStackRequestContent 
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        updateSoftwareStack: async (stackId: string, updateSoftwareStackRequestContent: UpdateSoftwareStackRequestContent, options: RawAxiosRequestConfig = {}): Promise<RequestArgs> => {
+            // verify required parameter 'stackId' is not null or undefined
+            assertParamExists('updateSoftwareStack', 'stackId', stackId)
+            // verify required parameter 'updateSoftwareStackRequestContent' is not null or undefined
+            assertParamExists('updateSoftwareStack', 'updateSoftwareStackRequestContent', updateSoftwareStackRequestContent)
+            const localVarPath = `/res/virtual-desktop/software-stack/{stackId}`
+                .replace(`{${"stackId"}}`, encodeURIComponent(String(stackId)));
+            // use dummy base URL string because the URL constructor only accepts absolute URLs.
+            const localVarUrlObj = new URL(localVarPath, DUMMY_BASE_URL);
+            let baseOptions;
+            if (configuration) {
+                baseOptions = configuration.baseOptions;
+            }
+
+            const localVarRequestOptions = { method: 'PUT', ...baseOptions, ...options};
+            const localVarHeaderParameter = {} as any;
+            const localVarQueryParameter = {} as any;
+
+            // authentication smithy.api.httpBearerAuth required
+            // http bearer authentication required
+            await setBearerAuthToObject(localVarHeaderParameter, configuration)
+
+
+    
+            localVarHeaderParameter['Content-Type'] = 'application/json';
+
+            setSearchParams(localVarUrlObj, localVarQueryParameter);
+            let headersFromBaseOptions = baseOptions && baseOptions.headers ? baseOptions.headers : {};
+            localVarRequestOptions.headers = {...localVarHeaderParameter, ...headersFromBaseOptions, ...options.headers};
+            localVarRequestOptions.data = serializeDataIfNeeded(updateSoftwareStackRequestContent, localVarRequestOptions, configuration)
+
+            return {
+                url: toPathString(localVarUrlObj),
+                options: localVarRequestOptions,
+            };
+        },
+    }
+};
+
+/**
+ * VirtualDesktopApi - functional programming interface
+ */
+export const VirtualDesktopApiFp = function(configuration?: Configuration) {
+    const localVarAxiosParamCreator = VirtualDesktopApiAxiosParamCreator(configuration)
+    return {
+        /**
+         * Create Permission Profile
+         * @param {CreatePermissionProfileRequestContent} createPermissionProfileRequestContent 
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        async createPermissionProfile(createPermissionProfileRequestContent: CreatePermissionProfileRequestContent, options?: RawAxiosRequestConfig): Promise<(axios?: AxiosInstance, basePath?: string) => AxiosPromise<CreatePermissionProfileResponseContent>> {
+            const localVarAxiosArgs = await localVarAxiosParamCreator.createPermissionProfile(createPermissionProfileRequestContent, options);
+            const localVarOperationServerIndex = configuration?.serverIndex ?? 0;
+            const localVarOperationServerBasePath = operationServerMap['VirtualDesktopApi.createPermissionProfile']?.[localVarOperationServerIndex]?.url;
+            return (axios, basePath) => createRequestFunction(localVarAxiosArgs, globalAxios, BASE_PATH, configuration)(axios, localVarOperationServerBasePath || basePath);
+        },
+        /**
+         * Create Software Stack
+         * @param {CreateSoftwareStackRequestContent} createSoftwareStackRequestContent 
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        async createSoftwareStack(createSoftwareStackRequestContent: CreateSoftwareStackRequestContent, options?: RawAxiosRequestConfig): Promise<(axios?: AxiosInstance, basePath?: string) => AxiosPromise<CreateSoftwareStackResponseContent>> {
+            const localVarAxiosArgs = await localVarAxiosParamCreator.createSoftwareStack(createSoftwareStackRequestContent, options);
+            const localVarOperationServerIndex = configuration?.serverIndex ?? 0;
+            const localVarOperationServerBasePath = operationServerMap['VirtualDesktopApi.createSoftwareStack']?.[localVarOperationServerIndex]?.url;
+            return (axios, basePath) => createRequestFunction(localVarAxiosArgs, globalAxios, BASE_PATH, configuration)(axios, localVarOperationServerBasePath || basePath);
+        },
+        /**
+         * Delete Permission Profile
+         * @param {string} profileId 
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        async deletePermissionProfile(profileId: string, options?: RawAxiosRequestConfig): Promise<(axios?: AxiosInstance, basePath?: string) => AxiosPromise<DeletePermissionProfileResponseContent>> {
+            const localVarAxiosArgs = await localVarAxiosParamCreator.deletePermissionProfile(profileId, options);
+            const localVarOperationServerIndex = configuration?.serverIndex ?? 0;
+            const localVarOperationServerBasePath = operationServerMap['VirtualDesktopApi.deletePermissionProfile']?.[localVarOperationServerIndex]?.url;
+            return (axios, basePath) => createRequestFunction(localVarAxiosArgs, globalAxios, BASE_PATH, configuration)(axios, localVarOperationServerBasePath || basePath);
+        },
+        /**
+         * Delete Software Stack
+         * @param {string} stackId 
+         * @param {DeleteSoftwareStackRequestContent} deleteSoftwareStackRequestContent 
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        async deleteSoftwareStack(stackId: string, deleteSoftwareStackRequestContent: DeleteSoftwareStackRequestContent, options?: RawAxiosRequestConfig): Promise<(axios?: AxiosInstance, basePath?: string) => AxiosPromise<DeleteSoftwareStackResponseContent>> {
+            const localVarAxiosArgs = await localVarAxiosParamCreator.deleteSoftwareStack(stackId, deleteSoftwareStackRequestContent, options);
+            const localVarOperationServerIndex = configuration?.serverIndex ?? 0;
+            const localVarOperationServerBasePath = operationServerMap['VirtualDesktopApi.deleteSoftwareStack']?.[localVarOperationServerIndex]?.url;
+            return (axios, basePath) => createRequestFunction(localVarAxiosArgs, globalAxios, BASE_PATH, configuration)(axios, localVarOperationServerBasePath || basePath);
+        },
+        /**
+         * Get details of a session
+         * @param {string} resSessionId Session identifier
+         * @param {string} owner Owner of the session
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        async getSession(resSessionId: string, owner: string, options?: RawAxiosRequestConfig): Promise<(axios?: AxiosInstance, basePath?: string) => AxiosPromise<GetSessionResponseContent>> {
+            const localVarAxiosArgs = await localVarAxiosParamCreator.getSession(resSessionId, owner, options);
+            const localVarOperationServerIndex = configuration?.serverIndex ?? 0;
+            const localVarOperationServerBasePath = operationServerMap['VirtualDesktopApi.getSession']?.[localVarOperationServerIndex]?.url;
+            return (axios, basePath) => createRequestFunction(localVarAxiosArgs, globalAxios, BASE_PATH, configuration)(axios, localVarOperationServerBasePath || basePath);
+        },
+        /**
+         * Get details of a software stack
+         * @param {string} stackId Software stack identifier
+         * @param {VirtualDesktopBaseOs} baseOs Base operating system for the software stack
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        async getSoftwareStack(stackId: string, baseOs: VirtualDesktopBaseOs, options?: RawAxiosRequestConfig): Promise<(axios?: AxiosInstance, basePath?: string) => AxiosPromise<GetSoftwareStackResponseContent>> {
+            const localVarAxiosArgs = await localVarAxiosParamCreator.getSoftwareStack(stackId, baseOs, options);
+            const localVarOperationServerIndex = configuration?.serverIndex ?? 0;
+            const localVarOperationServerBasePath = operationServerMap['VirtualDesktopApi.getSoftwareStack']?.[localVarOperationServerIndex]?.url;
+            return (axios, basePath) => createRequestFunction(localVarAxiosArgs, globalAxios, BASE_PATH, configuration)(axios, localVarOperationServerBasePath || basePath);
+        },
+        /**
+         * Get a list of session permissions
+         * @param {string} resSessionId Filter by resSessionId
+         * @param {string} [nextToken] Pagination token for next page
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        async listSessionPermissions(resSessionId: string, nextToken?: string, options?: RawAxiosRequestConfig): Promise<(axios?: AxiosInstance, basePath?: string) => AxiosPromise<ListSessionPermissionsResponseContent>> {
+            const localVarAxiosArgs = await localVarAxiosParamCreator.listSessionPermissions(resSessionId, nextToken, options);
+            const localVarOperationServerIndex = configuration?.serverIndex ?? 0;
+            const localVarOperationServerBasePath = operationServerMap['VirtualDesktopApi.listSessionPermissions']?.[localVarOperationServerIndex]?.url;
+            return (axios, basePath) => createRequestFunction(localVarAxiosArgs, globalAxios, BASE_PATH, configuration)(axios, localVarOperationServerBasePath || basePath);
+        },
+        /**
+         * Get a list of sessions
+         * @param {string} [state] Filter by state
+         * @param {string} [baseOs] Filter by baseOs
+         * @param {string} [sessionName] Filter by sessionName
+         * @param {string} [stackId] Filter by stackId
+         * @param {string} [dateRangeKey] The attribute name to filter on for date range
+         * @param {string} [after] Start of the date range
+         * @param {string} [before] End of the date range 
+         * @param {string} [nextToken] Pagination token for next page
+         * @param {string} [owner] Filter by owner
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        async listSessions(state?: string, baseOs?: string, sessionName?: string, stackId?: string, dateRangeKey?: string, after?: string, before?: string, nextToken?: string, owner?: string, options?: RawAxiosRequestConfig): Promise<(axios?: AxiosInstance, basePath?: string) => AxiosPromise<ListSessionsResponseContent>> {
+            const localVarAxiosArgs = await localVarAxiosParamCreator.listSessions(state, baseOs, sessionName, stackId, dateRangeKey, after, before, nextToken, owner, options);
+            const localVarOperationServerIndex = configuration?.serverIndex ?? 0;
+            const localVarOperationServerBasePath = operationServerMap['VirtualDesktopApi.listSessions']?.[localVarOperationServerIndex]?.url;
+            return (axios, basePath) => createRequestFunction(localVarAxiosArgs, globalAxios, BASE_PATH, configuration)(axios, localVarOperationServerBasePath || basePath);
+        },
+        /**
+         * Get a list of shared permissions
+         * @param {string} [nextToken] Pagination token for next page
+         * @param {string} [username] Username of the shared permissions
+         * @param {string} [state] Filter by state
+         * @param {string} [baseOs] Filter by baseOs
+         * @param {string} [sessionName] Filter by sessionName
+         * @param {string} [dateRangeKey] The attribute name to filter on for date range
+         * @param {string} [after] Start of the date range
+         * @param {string} [before] End of the date range
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        async listSharedPermissions(nextToken?: string, username?: string, state?: string, baseOs?: string, sessionName?: string, dateRangeKey?: string, after?: string, before?: string, options?: RawAxiosRequestConfig): Promise<(axios?: AxiosInstance, basePath?: string) => AxiosPromise<ListSharedPermissionsResponseContent>> {
+            const localVarAxiosArgs = await localVarAxiosParamCreator.listSharedPermissions(nextToken, username, state, baseOs, sessionName, dateRangeKey, after, before, options);
+            const localVarOperationServerIndex = configuration?.serverIndex ?? 0;
+            const localVarOperationServerBasePath = operationServerMap['VirtualDesktopApi.listSharedPermissions']?.[localVarOperationServerIndex]?.url;
+            return (axios, basePath) => createRequestFunction(localVarAxiosArgs, globalAxios, BASE_PATH, configuration)(axios, localVarOperationServerBasePath || basePath);
+        },
+        /**
+         * Get a list of software stacks
+         * @param {string} [projectId] Filter by projectId
+         * @param {string} [baseOs] Filter by baseOs
+         * @param {string} [softwareStackName] Filter by softwareStackName
+         * @param {string} [nextToken] Pagination token for next page
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        async listSoftwareStacks(projectId?: string, baseOs?: string, softwareStackName?: string, nextToken?: string, options?: RawAxiosRequestConfig): Promise<(axios?: AxiosInstance, basePath?: string) => AxiosPromise<ListSoftwareStacksResponseContent>> {
+            const localVarAxiosArgs = await localVarAxiosParamCreator.listSoftwareStacks(projectId, baseOs, softwareStackName, nextToken, options);
+            const localVarOperationServerIndex = configuration?.serverIndex ?? 0;
+            const localVarOperationServerBasePath = operationServerMap['VirtualDesktopApi.listSoftwareStacks']?.[localVarOperationServerIndex]?.url;
+            return (axios, basePath) => createRequestFunction(localVarAxiosArgs, globalAxios, BASE_PATH, configuration)(axios, localVarOperationServerBasePath || basePath);
+        },
+        /**
+         * Update Permission Profile
+         * @param {string} profileId 
+         * @param {UpdatePermissionProfileRequestContent} updatePermissionProfileRequestContent 
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        async updatePermissionProfile(profileId: string, updatePermissionProfileRequestContent: UpdatePermissionProfileRequestContent, options?: RawAxiosRequestConfig): Promise<(axios?: AxiosInstance, basePath?: string) => AxiosPromise<UpdatePermissionProfileResponseContent>> {
+            const localVarAxiosArgs = await localVarAxiosParamCreator.updatePermissionProfile(profileId, updatePermissionProfileRequestContent, options);
+            const localVarOperationServerIndex = configuration?.serverIndex ?? 0;
+            const localVarOperationServerBasePath = operationServerMap['VirtualDesktopApi.updatePermissionProfile']?.[localVarOperationServerIndex]?.url;
+            return (axios, basePath) => createRequestFunction(localVarAxiosArgs, globalAxios, BASE_PATH, configuration)(axios, localVarOperationServerBasePath || basePath);
+        },
+        /**
+         * Get a list of session permissions
+         * @param {UpdateSessionPermissionsRequestContent} [updateSessionPermissionsRequestContent] 
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        async updateSessionPermissions(updateSessionPermissionsRequestContent?: UpdateSessionPermissionsRequestContent, options?: RawAxiosRequestConfig): Promise<(axios?: AxiosInstance, basePath?: string) => AxiosPromise<UpdateSessionPermissionsResponseContent>> {
+            const localVarAxiosArgs = await localVarAxiosParamCreator.updateSessionPermissions(updateSessionPermissionsRequestContent, options);
+            const localVarOperationServerIndex = configuration?.serverIndex ?? 0;
+            const localVarOperationServerBasePath = operationServerMap['VirtualDesktopApi.updateSessionPermissions']?.[localVarOperationServerIndex]?.url;
+            return (axios, basePath) => createRequestFunction(localVarAxiosArgs, globalAxios, BASE_PATH, configuration)(axios, localVarOperationServerBasePath || basePath);
+        },
+        /**
+         * Update Software Stack
+         * @param {string} stackId 
+         * @param {UpdateSoftwareStackRequestContent} updateSoftwareStackRequestContent 
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        async updateSoftwareStack(stackId: string, updateSoftwareStackRequestContent: UpdateSoftwareStackRequestContent, options?: RawAxiosRequestConfig): Promise<(axios?: AxiosInstance, basePath?: string) => AxiosPromise<UpdateSoftwareStackResponseContent>> {
+            const localVarAxiosArgs = await localVarAxiosParamCreator.updateSoftwareStack(stackId, updateSoftwareStackRequestContent, options);
+            const localVarOperationServerIndex = configuration?.serverIndex ?? 0;
+            const localVarOperationServerBasePath = operationServerMap['VirtualDesktopApi.updateSoftwareStack']?.[localVarOperationServerIndex]?.url;
+            return (axios, basePath) => createRequestFunction(localVarAxiosArgs, globalAxios, BASE_PATH, configuration)(axios, localVarOperationServerBasePath || basePath);
+        },
+    }
+};
+
+/**
+ * VirtualDesktopApi - factory interface
+ */
+export const VirtualDesktopApiFactory = function (configuration?: Configuration, basePath?: string, axios?: AxiosInstance) {
+    const localVarFp = VirtualDesktopApiFp(configuration)
+    return {
+        /**
+         * Create Permission Profile
+         * @param {VirtualDesktopApiCreatePermissionProfileRequest} requestParameters Request parameters.
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        createPermissionProfile(requestParameters: VirtualDesktopApiCreatePermissionProfileRequest, options?: RawAxiosRequestConfig): AxiosPromise<CreatePermissionProfileResponseContent> {
+            return localVarFp.createPermissionProfile(requestParameters.createPermissionProfileRequestContent, options).then((request) => request(axios, basePath));
+        },
+        /**
+         * Create Software Stack
+         * @param {VirtualDesktopApiCreateSoftwareStackRequest} requestParameters Request parameters.
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        createSoftwareStack(requestParameters: VirtualDesktopApiCreateSoftwareStackRequest, options?: RawAxiosRequestConfig): AxiosPromise<CreateSoftwareStackResponseContent> {
+            return localVarFp.createSoftwareStack(requestParameters.createSoftwareStackRequestContent, options).then((request) => request(axios, basePath));
+        },
+        /**
+         * Delete Permission Profile
+         * @param {VirtualDesktopApiDeletePermissionProfileRequest} requestParameters Request parameters.
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        deletePermissionProfile(requestParameters: VirtualDesktopApiDeletePermissionProfileRequest, options?: RawAxiosRequestConfig): AxiosPromise<DeletePermissionProfileResponseContent> {
+            return localVarFp.deletePermissionProfile(requestParameters.profileId, options).then((request) => request(axios, basePath));
+        },
+        /**
+         * Delete Software Stack
+         * @param {VirtualDesktopApiDeleteSoftwareStackRequest} requestParameters Request parameters.
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        deleteSoftwareStack(requestParameters: VirtualDesktopApiDeleteSoftwareStackRequest, options?: RawAxiosRequestConfig): AxiosPromise<DeleteSoftwareStackResponseContent> {
+            return localVarFp.deleteSoftwareStack(requestParameters.stackId, requestParameters.deleteSoftwareStackRequestContent, options).then((request) => request(axios, basePath));
+        },
+        /**
+         * Get details of a session
+         * @param {VirtualDesktopApiGetSessionRequest} requestParameters Request parameters.
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        getSession(requestParameters: VirtualDesktopApiGetSessionRequest, options?: RawAxiosRequestConfig): AxiosPromise<GetSessionResponseContent> {
+            return localVarFp.getSession(requestParameters.resSessionId, requestParameters.owner, options).then((request) => request(axios, basePath));
+        },
+        /**
+         * Get details of a software stack
+         * @param {VirtualDesktopApiGetSoftwareStackRequest} requestParameters Request parameters.
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        getSoftwareStack(requestParameters: VirtualDesktopApiGetSoftwareStackRequest, options?: RawAxiosRequestConfig): AxiosPromise<GetSoftwareStackResponseContent> {
+            return localVarFp.getSoftwareStack(requestParameters.stackId, requestParameters.baseOs, options).then((request) => request(axios, basePath));
+        },
+        /**
+         * Get a list of session permissions
+         * @param {VirtualDesktopApiListSessionPermissionsRequest} requestParameters Request parameters.
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        listSessionPermissions(requestParameters: VirtualDesktopApiListSessionPermissionsRequest, options?: RawAxiosRequestConfig): AxiosPromise<ListSessionPermissionsResponseContent> {
+            return localVarFp.listSessionPermissions(requestParameters.resSessionId, requestParameters.nextToken, options).then((request) => request(axios, basePath));
+        },
+        /**
+         * Get a list of sessions
+         * @param {VirtualDesktopApiListSessionsRequest} requestParameters Request parameters.
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        listSessions(requestParameters: VirtualDesktopApiListSessionsRequest = {}, options?: RawAxiosRequestConfig): AxiosPromise<ListSessionsResponseContent> {
+            return localVarFp.listSessions(requestParameters.state, requestParameters.baseOs, requestParameters.sessionName, requestParameters.stackId, requestParameters.dateRangeKey, requestParameters.after, requestParameters.before, requestParameters.nextToken, requestParameters.owner, options).then((request) => request(axios, basePath));
+        },
+        /**
+         * Get a list of shared permissions
+         * @param {VirtualDesktopApiListSharedPermissionsRequest} requestParameters Request parameters.
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        listSharedPermissions(requestParameters: VirtualDesktopApiListSharedPermissionsRequest = {}, options?: RawAxiosRequestConfig): AxiosPromise<ListSharedPermissionsResponseContent> {
+            return localVarFp.listSharedPermissions(requestParameters.nextToken, requestParameters.username, requestParameters.state, requestParameters.baseOs, requestParameters.sessionName, requestParameters.dateRangeKey, requestParameters.after, requestParameters.before, options).then((request) => request(axios, basePath));
+        },
+        /**
+         * Get a list of software stacks
+         * @param {VirtualDesktopApiListSoftwareStacksRequest} requestParameters Request parameters.
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        listSoftwareStacks(requestParameters: VirtualDesktopApiListSoftwareStacksRequest = {}, options?: RawAxiosRequestConfig): AxiosPromise<ListSoftwareStacksResponseContent> {
+            return localVarFp.listSoftwareStacks(requestParameters.projectId, requestParameters.baseOs, requestParameters.softwareStackName, requestParameters.nextToken, options).then((request) => request(axios, basePath));
+        },
+        /**
+         * Update Permission Profile
+         * @param {VirtualDesktopApiUpdatePermissionProfileRequest} requestParameters Request parameters.
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        updatePermissionProfile(requestParameters: VirtualDesktopApiUpdatePermissionProfileRequest, options?: RawAxiosRequestConfig): AxiosPromise<UpdatePermissionProfileResponseContent> {
+            return localVarFp.updatePermissionProfile(requestParameters.profileId, requestParameters.updatePermissionProfileRequestContent, options).then((request) => request(axios, basePath));
+        },
+        /**
+         * Get a list of session permissions
+         * @param {VirtualDesktopApiUpdateSessionPermissionsRequest} requestParameters Request parameters.
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        updateSessionPermissions(requestParameters: VirtualDesktopApiUpdateSessionPermissionsRequest = {}, options?: RawAxiosRequestConfig): AxiosPromise<UpdateSessionPermissionsResponseContent> {
+            return localVarFp.updateSessionPermissions(requestParameters.updateSessionPermissionsRequestContent, options).then((request) => request(axios, basePath));
+        },
+        /**
+         * Update Software Stack
+         * @param {VirtualDesktopApiUpdateSoftwareStackRequest} requestParameters Request parameters.
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        updateSoftwareStack(requestParameters: VirtualDesktopApiUpdateSoftwareStackRequest, options?: RawAxiosRequestConfig): AxiosPromise<UpdateSoftwareStackResponseContent> {
+            return localVarFp.updateSoftwareStack(requestParameters.stackId, requestParameters.updateSoftwareStackRequestContent, options).then((request) => request(axios, basePath));
+        },
+    };
+};
+
+/**
+ * VirtualDesktopApi - interface
+ */
+export interface VirtualDesktopApiInterface {
+    /**
+     * Create Permission Profile
+     * @param {VirtualDesktopApiCreatePermissionProfileRequest} requestParameters Request parameters.
+     * @param {*} [options] Override http request option.
+     * @throws {RequiredError}
+     */
+    createPermissionProfile(requestParameters: VirtualDesktopApiCreatePermissionProfileRequest, options?: RawAxiosRequestConfig): AxiosPromise<CreatePermissionProfileResponseContent>;
+
+    /**
+     * Create Software Stack
+     * @param {VirtualDesktopApiCreateSoftwareStackRequest} requestParameters Request parameters.
+     * @param {*} [options] Override http request option.
+     * @throws {RequiredError}
+     */
+    createSoftwareStack(requestParameters: VirtualDesktopApiCreateSoftwareStackRequest, options?: RawAxiosRequestConfig): AxiosPromise<CreateSoftwareStackResponseContent>;
+
+    /**
+     * Delete Permission Profile
+     * @param {VirtualDesktopApiDeletePermissionProfileRequest} requestParameters Request parameters.
+     * @param {*} [options] Override http request option.
+     * @throws {RequiredError}
+     */
+    deletePermissionProfile(requestParameters: VirtualDesktopApiDeletePermissionProfileRequest, options?: RawAxiosRequestConfig): AxiosPromise<DeletePermissionProfileResponseContent>;
+
+    /**
+     * Delete Software Stack
+     * @param {VirtualDesktopApiDeleteSoftwareStackRequest} requestParameters Request parameters.
+     * @param {*} [options] Override http request option.
+     * @throws {RequiredError}
+     */
+    deleteSoftwareStack(requestParameters: VirtualDesktopApiDeleteSoftwareStackRequest, options?: RawAxiosRequestConfig): AxiosPromise<DeleteSoftwareStackResponseContent>;
+
+    /**
+     * Get details of a session
+     * @param {VirtualDesktopApiGetSessionRequest} requestParameters Request parameters.
+     * @param {*} [options] Override http request option.
+     * @throws {RequiredError}
+     */
+    getSession(requestParameters: VirtualDesktopApiGetSessionRequest, options?: RawAxiosRequestConfig): AxiosPromise<GetSessionResponseContent>;
+
+    /**
+     * Get details of a software stack
+     * @param {VirtualDesktopApiGetSoftwareStackRequest} requestParameters Request parameters.
+     * @param {*} [options] Override http request option.
+     * @throws {RequiredError}
+     */
+    getSoftwareStack(requestParameters: VirtualDesktopApiGetSoftwareStackRequest, options?: RawAxiosRequestConfig): AxiosPromise<GetSoftwareStackResponseContent>;
+
+    /**
+     * Get a list of session permissions
+     * @param {VirtualDesktopApiListSessionPermissionsRequest} requestParameters Request parameters.
+     * @param {*} [options] Override http request option.
+     * @throws {RequiredError}
+     */
+    listSessionPermissions(requestParameters: VirtualDesktopApiListSessionPermissionsRequest, options?: RawAxiosRequestConfig): AxiosPromise<ListSessionPermissionsResponseContent>;
+
+    /**
+     * Get a list of sessions
+     * @param {VirtualDesktopApiListSessionsRequest} requestParameters Request parameters.
+     * @param {*} [options] Override http request option.
+     * @throws {RequiredError}
+     */
+    listSessions(requestParameters?: VirtualDesktopApiListSessionsRequest, options?: RawAxiosRequestConfig): AxiosPromise<ListSessionsResponseContent>;
+
+    /**
+     * Get a list of shared permissions
+     * @param {VirtualDesktopApiListSharedPermissionsRequest} requestParameters Request parameters.
+     * @param {*} [options] Override http request option.
+     * @throws {RequiredError}
+     */
+    listSharedPermissions(requestParameters?: VirtualDesktopApiListSharedPermissionsRequest, options?: RawAxiosRequestConfig): AxiosPromise<ListSharedPermissionsResponseContent>;
+
+    /**
+     * Get a list of software stacks
+     * @param {VirtualDesktopApiListSoftwareStacksRequest} requestParameters Request parameters.
+     * @param {*} [options] Override http request option.
+     * @throws {RequiredError}
+     */
+    listSoftwareStacks(requestParameters?: VirtualDesktopApiListSoftwareStacksRequest, options?: RawAxiosRequestConfig): AxiosPromise<ListSoftwareStacksResponseContent>;
+
+    /**
+     * Update Permission Profile
+     * @param {VirtualDesktopApiUpdatePermissionProfileRequest} requestParameters Request parameters.
+     * @param {*} [options] Override http request option.
+     * @throws {RequiredError}
+     */
+    updatePermissionProfile(requestParameters: VirtualDesktopApiUpdatePermissionProfileRequest, options?: RawAxiosRequestConfig): AxiosPromise<UpdatePermissionProfileResponseContent>;
+
+    /**
+     * Get a list of session permissions
+     * @param {VirtualDesktopApiUpdateSessionPermissionsRequest} requestParameters Request parameters.
+     * @param {*} [options] Override http request option.
+     * @throws {RequiredError}
+     */
+    updateSessionPermissions(requestParameters?: VirtualDesktopApiUpdateSessionPermissionsRequest, options?: RawAxiosRequestConfig): AxiosPromise<UpdateSessionPermissionsResponseContent>;
+
+    /**
+     * Update Software Stack
+     * @param {VirtualDesktopApiUpdateSoftwareStackRequest} requestParameters Request parameters.
+     * @param {*} [options] Override http request option.
+     * @throws {RequiredError}
+     */
+    updateSoftwareStack(requestParameters: VirtualDesktopApiUpdateSoftwareStackRequest, options?: RawAxiosRequestConfig): AxiosPromise<UpdateSoftwareStackResponseContent>;
+
+}
+
+/**
+ * Request parameters for createPermissionProfile operation in VirtualDesktopApi.
+ */
+export interface VirtualDesktopApiCreatePermissionProfileRequest {
+    readonly createPermissionProfileRequestContent: CreatePermissionProfileRequestContent
+}
+
+/**
+ * Request parameters for createSoftwareStack operation in VirtualDesktopApi.
+ */
+export interface VirtualDesktopApiCreateSoftwareStackRequest {
+    readonly createSoftwareStackRequestContent: CreateSoftwareStackRequestContent
+}
+
+/**
+ * Request parameters for deletePermissionProfile operation in VirtualDesktopApi.
+ */
+export interface VirtualDesktopApiDeletePermissionProfileRequest {
+    readonly profileId: string
+}
+
+/**
+ * Request parameters for deleteSoftwareStack operation in VirtualDesktopApi.
+ */
+export interface VirtualDesktopApiDeleteSoftwareStackRequest {
+    readonly stackId: string
+
+    readonly deleteSoftwareStackRequestContent: DeleteSoftwareStackRequestContent
+}
+
+/**
+ * Request parameters for getSession operation in VirtualDesktopApi.
+ */
+export interface VirtualDesktopApiGetSessionRequest {
+    /**
+     * Session identifier
+     */
+    readonly resSessionId: string
+
+    /**
+     * Owner of the session
+     */
+    readonly owner: string
+}
+
+/**
+ * Request parameters for getSoftwareStack operation in VirtualDesktopApi.
+ */
+export interface VirtualDesktopApiGetSoftwareStackRequest {
+    /**
+     * Software stack identifier
+     */
+    readonly stackId: string
+
+    /**
+     * Base operating system for the software stack
+     */
+    readonly baseOs: VirtualDesktopBaseOs
+}
+
+/**
+ * Request parameters for listSessionPermissions operation in VirtualDesktopApi.
+ */
+export interface VirtualDesktopApiListSessionPermissionsRequest {
+    /**
+     * Filter by resSessionId
+     */
+    readonly resSessionId: string
+
+    /**
+     * Pagination token for next page
+     */
+    readonly nextToken?: string
+}
+
+/**
+ * Request parameters for listSessions operation in VirtualDesktopApi.
+ */
+export interface VirtualDesktopApiListSessionsRequest {
+    /**
+     * Filter by state
+     */
+    readonly state?: string
+
+    /**
+     * Filter by baseOs
+     */
+    readonly baseOs?: string
+
+    /**
+     * Filter by sessionName
+     */
+    readonly sessionName?: string
+
+    /**
+     * Filter by stackId
+     */
+    readonly stackId?: string
+
+    /**
+     * The attribute name to filter on for date range
+     */
+    readonly dateRangeKey?: string
+
+    /**
+     * Start of the date range
+     */
+    readonly after?: string
+
+    /**
+     * End of the date range 
+     */
+    readonly before?: string
+
+    /**
+     * Pagination token for next page
+     */
+    readonly nextToken?: string
+
+    /**
+     * Filter by owner
+     */
+    readonly owner?: string
+}
+
+/**
+ * Request parameters for listSharedPermissions operation in VirtualDesktopApi.
+ */
+export interface VirtualDesktopApiListSharedPermissionsRequest {
+    /**
+     * Pagination token for next page
+     */
+    readonly nextToken?: string
+
+    /**
+     * Username of the shared permissions
+     */
+    readonly username?: string
+
+    /**
+     * Filter by state
+     */
+    readonly state?: string
+
+    /**
+     * Filter by baseOs
+     */
+    readonly baseOs?: string
+
+    /**
+     * Filter by sessionName
+     */
+    readonly sessionName?: string
+
+    /**
+     * The attribute name to filter on for date range
+     */
+    readonly dateRangeKey?: string
+
+    /**
+     * Start of the date range
+     */
+    readonly after?: string
+
+    /**
+     * End of the date range
+     */
+    readonly before?: string
+}
+
+/**
+ * Request parameters for listSoftwareStacks operation in VirtualDesktopApi.
+ */
+export interface VirtualDesktopApiListSoftwareStacksRequest {
+    /**
+     * Filter by projectId
+     */
+    readonly projectId?: string
+
+    /**
+     * Filter by baseOs
+     */
+    readonly baseOs?: string
+
+    /**
+     * Filter by softwareStackName
+     */
+    readonly softwareStackName?: string
+
+    /**
+     * Pagination token for next page
+     */
+    readonly nextToken?: string
+}
+
+/**
+ * Request parameters for updatePermissionProfile operation in VirtualDesktopApi.
+ */
+export interface VirtualDesktopApiUpdatePermissionProfileRequest {
+    readonly profileId: string
+
+    readonly updatePermissionProfileRequestContent: UpdatePermissionProfileRequestContent
+}
+
+/**
+ * Request parameters for updateSessionPermissions operation in VirtualDesktopApi.
+ */
+export interface VirtualDesktopApiUpdateSessionPermissionsRequest {
+    readonly updateSessionPermissionsRequestContent?: UpdateSessionPermissionsRequestContent
+}
+
+/**
+ * Request parameters for updateSoftwareStack operation in VirtualDesktopApi.
+ */
+export interface VirtualDesktopApiUpdateSoftwareStackRequest {
+    readonly stackId: string
+
+    readonly updateSoftwareStackRequestContent: UpdateSoftwareStackRequestContent
+}
+
+/**
+ * VirtualDesktopApi - object-oriented interface
+ */
+export class VirtualDesktopApi extends BaseAPI implements VirtualDesktopApiInterface {
+    /**
+     * Create Permission Profile
+     * @param {VirtualDesktopApiCreatePermissionProfileRequest} requestParameters Request parameters.
+     * @param {*} [options] Override http request option.
+     * @throws {RequiredError}
+     */
+    public createPermissionProfile(requestParameters: VirtualDesktopApiCreatePermissionProfileRequest, options?: RawAxiosRequestConfig) {
+        return VirtualDesktopApiFp(this.configuration).createPermissionProfile(requestParameters.createPermissionProfileRequestContent, options).then((request) => request(this.axios, this.basePath));
+    }
+
+    /**
+     * Create Software Stack
+     * @param {VirtualDesktopApiCreateSoftwareStackRequest} requestParameters Request parameters.
+     * @param {*} [options] Override http request option.
+     * @throws {RequiredError}
+     */
+    public createSoftwareStack(requestParameters: VirtualDesktopApiCreateSoftwareStackRequest, options?: RawAxiosRequestConfig) {
+        return VirtualDesktopApiFp(this.configuration).createSoftwareStack(requestParameters.createSoftwareStackRequestContent, options).then((request) => request(this.axios, this.basePath));
+    }
+
+    /**
+     * Delete Permission Profile
+     * @param {VirtualDesktopApiDeletePermissionProfileRequest} requestParameters Request parameters.
+     * @param {*} [options] Override http request option.
+     * @throws {RequiredError}
+     */
+    public deletePermissionProfile(requestParameters: VirtualDesktopApiDeletePermissionProfileRequest, options?: RawAxiosRequestConfig) {
+        return VirtualDesktopApiFp(this.configuration).deletePermissionProfile(requestParameters.profileId, options).then((request) => request(this.axios, this.basePath));
+    }
+
+    /**
+     * Delete Software Stack
+     * @param {VirtualDesktopApiDeleteSoftwareStackRequest} requestParameters Request parameters.
+     * @param {*} [options] Override http request option.
+     * @throws {RequiredError}
+     */
+    public deleteSoftwareStack(requestParameters: VirtualDesktopApiDeleteSoftwareStackRequest, options?: RawAxiosRequestConfig) {
+        return VirtualDesktopApiFp(this.configuration).deleteSoftwareStack(requestParameters.stackId, requestParameters.deleteSoftwareStackRequestContent, options).then((request) => request(this.axios, this.basePath));
+    }
+
+    /**
+     * Get details of a session
+     * @param {VirtualDesktopApiGetSessionRequest} requestParameters Request parameters.
+     * @param {*} [options] Override http request option.
+     * @throws {RequiredError}
+     */
+    public getSession(requestParameters: VirtualDesktopApiGetSessionRequest, options?: RawAxiosRequestConfig) {
+        return VirtualDesktopApiFp(this.configuration).getSession(requestParameters.resSessionId, requestParameters.owner, options).then((request) => request(this.axios, this.basePath));
+    }
+
+    /**
+     * Get details of a software stack
+     * @param {VirtualDesktopApiGetSoftwareStackRequest} requestParameters Request parameters.
+     * @param {*} [options] Override http request option.
+     * @throws {RequiredError}
+     */
+    public getSoftwareStack(requestParameters: VirtualDesktopApiGetSoftwareStackRequest, options?: RawAxiosRequestConfig) {
+        return VirtualDesktopApiFp(this.configuration).getSoftwareStack(requestParameters.stackId, requestParameters.baseOs, options).then((request) => request(this.axios, this.basePath));
+    }
+
+    /**
+     * Get a list of session permissions
+     * @param {VirtualDesktopApiListSessionPermissionsRequest} requestParameters Request parameters.
+     * @param {*} [options] Override http request option.
+     * @throws {RequiredError}
+     */
+    public listSessionPermissions(requestParameters: VirtualDesktopApiListSessionPermissionsRequest, options?: RawAxiosRequestConfig) {
+        return VirtualDesktopApiFp(this.configuration).listSessionPermissions(requestParameters.resSessionId, requestParameters.nextToken, options).then((request) => request(this.axios, this.basePath));
+    }
+
+    /**
+     * Get a list of sessions
+     * @param {VirtualDesktopApiListSessionsRequest} requestParameters Request parameters.
+     * @param {*} [options] Override http request option.
+     * @throws {RequiredError}
+     */
+    public listSessions(requestParameters: VirtualDesktopApiListSessionsRequest = {}, options?: RawAxiosRequestConfig) {
+        return VirtualDesktopApiFp(this.configuration).listSessions(requestParameters.state, requestParameters.baseOs, requestParameters.sessionName, requestParameters.stackId, requestParameters.dateRangeKey, requestParameters.after, requestParameters.before, requestParameters.nextToken, requestParameters.owner, options).then((request) => request(this.axios, this.basePath));
+    }
+
+    /**
+     * Get a list of shared permissions
+     * @param {VirtualDesktopApiListSharedPermissionsRequest} requestParameters Request parameters.
+     * @param {*} [options] Override http request option.
+     * @throws {RequiredError}
+     */
+    public listSharedPermissions(requestParameters: VirtualDesktopApiListSharedPermissionsRequest = {}, options?: RawAxiosRequestConfig) {
+        return VirtualDesktopApiFp(this.configuration).listSharedPermissions(requestParameters.nextToken, requestParameters.username, requestParameters.state, requestParameters.baseOs, requestParameters.sessionName, requestParameters.dateRangeKey, requestParameters.after, requestParameters.before, options).then((request) => request(this.axios, this.basePath));
+    }
+
+    /**
+     * Get a list of software stacks
+     * @param {VirtualDesktopApiListSoftwareStacksRequest} requestParameters Request parameters.
+     * @param {*} [options] Override http request option.
+     * @throws {RequiredError}
+     */
+    public listSoftwareStacks(requestParameters: VirtualDesktopApiListSoftwareStacksRequest = {}, options?: RawAxiosRequestConfig) {
+        return VirtualDesktopApiFp(this.configuration).listSoftwareStacks(requestParameters.projectId, requestParameters.baseOs, requestParameters.softwareStackName, requestParameters.nextToken, options).then((request) => request(this.axios, this.basePath));
+    }
+
+    /**
+     * Update Permission Profile
+     * @param {VirtualDesktopApiUpdatePermissionProfileRequest} requestParameters Request parameters.
+     * @param {*} [options] Override http request option.
+     * @throws {RequiredError}
+     */
+    public updatePermissionProfile(requestParameters: VirtualDesktopApiUpdatePermissionProfileRequest, options?: RawAxiosRequestConfig) {
+        return VirtualDesktopApiFp(this.configuration).updatePermissionProfile(requestParameters.profileId, requestParameters.updatePermissionProfileRequestContent, options).then((request) => request(this.axios, this.basePath));
+    }
+
+    /**
+     * Get a list of session permissions
+     * @param {VirtualDesktopApiUpdateSessionPermissionsRequest} requestParameters Request parameters.
+     * @param {*} [options] Override http request option.
+     * @throws {RequiredError}
+     */
+    public updateSessionPermissions(requestParameters: VirtualDesktopApiUpdateSessionPermissionsRequest = {}, options?: RawAxiosRequestConfig) {
+        return VirtualDesktopApiFp(this.configuration).updateSessionPermissions(requestParameters.updateSessionPermissionsRequestContent, options).then((request) => request(this.axios, this.basePath));
+    }
+
+    /**
+     * Update Software Stack
+     * @param {VirtualDesktopApiUpdateSoftwareStackRequest} requestParameters Request parameters.
+     * @param {*} [options] Override http request option.
+     * @throws {RequiredError}
+     */
+    public updateSoftwareStack(requestParameters: VirtualDesktopApiUpdateSoftwareStackRequest, options?: RawAxiosRequestConfig) {
+        return VirtualDesktopApiFp(this.configuration).updateSoftwareStack(requestParameters.stackId, requestParameters.updateSoftwareStackRequestContent, options).then((request) => request(this.axios, this.basePath));
+    }
+}
+
+
 
 /**
  * VirtualDesktopDcvApi - axios parameter creator
@@ -1186,105 +2733,6 @@ export const VirtualDesktopUtilsApiAxiosParamCreator = function (configuration?:
                 options: localVarRequestOptions,
             };
         },
-        /**
-         * List available schedule types for virtual desktops
-         * @param {*} [options] Override http request option.
-         * @throws {RequiredError}
-         */
-        listScheduleTypes: async (options: RawAxiosRequestConfig = {}): Promise<RequestArgs> => {
-            const localVarPath = `/res/virtual-desktop-utils/schedule-type`;
-            // use dummy base URL string because the URL constructor only accepts absolute URLs.
-            const localVarUrlObj = new URL(localVarPath, DUMMY_BASE_URL);
-            let baseOptions;
-            if (configuration) {
-                baseOptions = configuration.baseOptions;
-            }
-
-            const localVarRequestOptions = { method: 'GET', ...baseOptions, ...options};
-            const localVarHeaderParameter = {} as any;
-            const localVarQueryParameter = {} as any;
-
-            // authentication smithy.api.httpBearerAuth required
-            // http bearer authentication required
-            await setBearerAuthToObject(localVarHeaderParameter, configuration)
-
-
-    
-            setSearchParams(localVarUrlObj, localVarQueryParameter);
-            let headersFromBaseOptions = baseOptions && baseOptions.headers ? baseOptions.headers : {};
-            localVarRequestOptions.headers = {...localVarHeaderParameter, ...headersFromBaseOptions, ...options.headers};
-
-            return {
-                url: toPathString(localVarUrlObj),
-                options: localVarRequestOptions,
-            };
-        },
-        /**
-         * List supported GPUs for virtual desktops
-         * @param {*} [options] Override http request option.
-         * @throws {RequiredError}
-         */
-        listSupportedGpus: async (options: RawAxiosRequestConfig = {}): Promise<RequestArgs> => {
-            const localVarPath = `/res/virtual-desktop-utils/supported-gpu`;
-            // use dummy base URL string because the URL constructor only accepts absolute URLs.
-            const localVarUrlObj = new URL(localVarPath, DUMMY_BASE_URL);
-            let baseOptions;
-            if (configuration) {
-                baseOptions = configuration.baseOptions;
-            }
-
-            const localVarRequestOptions = { method: 'GET', ...baseOptions, ...options};
-            const localVarHeaderParameter = {} as any;
-            const localVarQueryParameter = {} as any;
-
-            // authentication smithy.api.httpBearerAuth required
-            // http bearer authentication required
-            await setBearerAuthToObject(localVarHeaderParameter, configuration)
-
-
-    
-            setSearchParams(localVarUrlObj, localVarQueryParameter);
-            let headersFromBaseOptions = baseOptions && baseOptions.headers ? baseOptions.headers : {};
-            localVarRequestOptions.headers = {...localVarHeaderParameter, ...headersFromBaseOptions, ...options.headers};
-
-            return {
-                url: toPathString(localVarUrlObj),
-                options: localVarRequestOptions,
-            };
-        },
-        /**
-         * List supported operating systems for virtual desktops
-         * @param {*} [options] Override http request option.
-         * @throws {RequiredError}
-         */
-        listSupportedOses: async (options: RawAxiosRequestConfig = {}): Promise<RequestArgs> => {
-            const localVarPath = `/res/virtual-desktop-utils/supported-os`;
-            // use dummy base URL string because the URL constructor only accepts absolute URLs.
-            const localVarUrlObj = new URL(localVarPath, DUMMY_BASE_URL);
-            let baseOptions;
-            if (configuration) {
-                baseOptions = configuration.baseOptions;
-            }
-
-            const localVarRequestOptions = { method: 'GET', ...baseOptions, ...options};
-            const localVarHeaderParameter = {} as any;
-            const localVarQueryParameter = {} as any;
-
-            // authentication smithy.api.httpBearerAuth required
-            // http bearer authentication required
-            await setBearerAuthToObject(localVarHeaderParameter, configuration)
-
-
-    
-            setSearchParams(localVarUrlObj, localVarQueryParameter);
-            let headersFromBaseOptions = baseOptions && baseOptions.headers ? baseOptions.headers : {};
-            localVarRequestOptions.headers = {...localVarHeaderParameter, ...headersFromBaseOptions, ...options.headers};
-
-            return {
-                url: toPathString(localVarUrlObj),
-                options: localVarRequestOptions,
-            };
-        },
     }
 };
 
@@ -1343,39 +2791,6 @@ export const VirtualDesktopUtilsApiFp = function(configuration?: Configuration) 
             const localVarOperationServerBasePath = operationServerMap['VirtualDesktopUtilsApi.listPermissionProfiles']?.[localVarOperationServerIndex]?.url;
             return (axios, basePath) => createRequestFunction(localVarAxiosArgs, globalAxios, BASE_PATH, configuration)(axios, localVarOperationServerBasePath || basePath);
         },
-        /**
-         * List available schedule types for virtual desktops
-         * @param {*} [options] Override http request option.
-         * @throws {RequiredError}
-         */
-        async listScheduleTypes(options?: RawAxiosRequestConfig): Promise<(axios?: AxiosInstance, basePath?: string) => AxiosPromise<ListScheduleTypesResponseContent>> {
-            const localVarAxiosArgs = await localVarAxiosParamCreator.listScheduleTypes(options);
-            const localVarOperationServerIndex = configuration?.serverIndex ?? 0;
-            const localVarOperationServerBasePath = operationServerMap['VirtualDesktopUtilsApi.listScheduleTypes']?.[localVarOperationServerIndex]?.url;
-            return (axios, basePath) => createRequestFunction(localVarAxiosArgs, globalAxios, BASE_PATH, configuration)(axios, localVarOperationServerBasePath || basePath);
-        },
-        /**
-         * List supported GPUs for virtual desktops
-         * @param {*} [options] Override http request option.
-         * @throws {RequiredError}
-         */
-        async listSupportedGpus(options?: RawAxiosRequestConfig): Promise<(axios?: AxiosInstance, basePath?: string) => AxiosPromise<ListSupportedGpusResponseContent>> {
-            const localVarAxiosArgs = await localVarAxiosParamCreator.listSupportedGpus(options);
-            const localVarOperationServerIndex = configuration?.serverIndex ?? 0;
-            const localVarOperationServerBasePath = operationServerMap['VirtualDesktopUtilsApi.listSupportedGpus']?.[localVarOperationServerIndex]?.url;
-            return (axios, basePath) => createRequestFunction(localVarAxiosArgs, globalAxios, BASE_PATH, configuration)(axios, localVarOperationServerBasePath || basePath);
-        },
-        /**
-         * List supported operating systems for virtual desktops
-         * @param {*} [options] Override http request option.
-         * @throws {RequiredError}
-         */
-        async listSupportedOses(options?: RawAxiosRequestConfig): Promise<(axios?: AxiosInstance, basePath?: string) => AxiosPromise<ListSupportedOsesResponseContent>> {
-            const localVarAxiosArgs = await localVarAxiosParamCreator.listSupportedOses(options);
-            const localVarOperationServerIndex = configuration?.serverIndex ?? 0;
-            const localVarOperationServerBasePath = operationServerMap['VirtualDesktopUtilsApi.listSupportedOses']?.[localVarOperationServerIndex]?.url;
-            return (axios, basePath) => createRequestFunction(localVarAxiosArgs, globalAxios, BASE_PATH, configuration)(axios, localVarOperationServerBasePath || basePath);
-        },
     }
 };
 
@@ -1421,30 +2836,6 @@ export const VirtualDesktopUtilsApiFactory = function (configuration?: Configura
         listPermissionProfiles(requestParameters: VirtualDesktopUtilsApiListPermissionProfilesRequest = {}, options?: RawAxiosRequestConfig): AxiosPromise<ListPermissionProfilesResponseContent> {
             return localVarFp.listPermissionProfiles(requestParameters.profileId, requestParameters.nextToken, options).then((request) => request(axios, basePath));
         },
-        /**
-         * List available schedule types for virtual desktops
-         * @param {*} [options] Override http request option.
-         * @throws {RequiredError}
-         */
-        listScheduleTypes(options?: RawAxiosRequestConfig): AxiosPromise<ListScheduleTypesResponseContent> {
-            return localVarFp.listScheduleTypes(options).then((request) => request(axios, basePath));
-        },
-        /**
-         * List supported GPUs for virtual desktops
-         * @param {*} [options] Override http request option.
-         * @throws {RequiredError}
-         */
-        listSupportedGpus(options?: RawAxiosRequestConfig): AxiosPromise<ListSupportedGpusResponseContent> {
-            return localVarFp.listSupportedGpus(options).then((request) => request(axios, basePath));
-        },
-        /**
-         * List supported operating systems for virtual desktops
-         * @param {*} [options] Override http request option.
-         * @throws {RequiredError}
-         */
-        listSupportedOses(options?: RawAxiosRequestConfig): AxiosPromise<ListSupportedOsesResponseContent> {
-            return localVarFp.listSupportedOses(options).then((request) => request(axios, basePath));
-        },
     };
 };
 
@@ -1483,27 +2874,6 @@ export interface VirtualDesktopUtilsApiInterface {
      * @throws {RequiredError}
      */
     listPermissionProfiles(requestParameters?: VirtualDesktopUtilsApiListPermissionProfilesRequest, options?: RawAxiosRequestConfig): AxiosPromise<ListPermissionProfilesResponseContent>;
-
-    /**
-     * List available schedule types for virtual desktops
-     * @param {*} [options] Override http request option.
-     * @throws {RequiredError}
-     */
-    listScheduleTypes(options?: RawAxiosRequestConfig): AxiosPromise<ListScheduleTypesResponseContent>;
-
-    /**
-     * List supported GPUs for virtual desktops
-     * @param {*} [options] Override http request option.
-     * @throws {RequiredError}
-     */
-    listSupportedGpus(options?: RawAxiosRequestConfig): AxiosPromise<ListSupportedGpusResponseContent>;
-
-    /**
-     * List supported operating systems for virtual desktops
-     * @param {*} [options] Override http request option.
-     * @throws {RequiredError}
-     */
-    listSupportedOses(options?: RawAxiosRequestConfig): AxiosPromise<ListSupportedOsesResponseContent>;
 
 }
 
@@ -1588,33 +2958,6 @@ export class VirtualDesktopUtilsApi extends BaseAPI implements VirtualDesktopUti
      */
     public listPermissionProfiles(requestParameters: VirtualDesktopUtilsApiListPermissionProfilesRequest = {}, options?: RawAxiosRequestConfig) {
         return VirtualDesktopUtilsApiFp(this.configuration).listPermissionProfiles(requestParameters.profileId, requestParameters.nextToken, options).then((request) => request(this.axios, this.basePath));
-    }
-
-    /**
-     * List available schedule types for virtual desktops
-     * @param {*} [options] Override http request option.
-     * @throws {RequiredError}
-     */
-    public listScheduleTypes(options?: RawAxiosRequestConfig) {
-        return VirtualDesktopUtilsApiFp(this.configuration).listScheduleTypes(options).then((request) => request(this.axios, this.basePath));
-    }
-
-    /**
-     * List supported GPUs for virtual desktops
-     * @param {*} [options] Override http request option.
-     * @throws {RequiredError}
-     */
-    public listSupportedGpus(options?: RawAxiosRequestConfig) {
-        return VirtualDesktopUtilsApiFp(this.configuration).listSupportedGpus(options).then((request) => request(this.axios, this.basePath));
-    }
-
-    /**
-     * List supported operating systems for virtual desktops
-     * @param {*} [options] Override http request option.
-     * @throws {RequiredError}
-     */
-    public listSupportedOses(options?: RawAxiosRequestConfig) {
-        return VirtualDesktopUtilsApiFp(this.configuration).listSupportedOses(options).then((request) => request(this.axios, this.basePath));
     }
 }
 

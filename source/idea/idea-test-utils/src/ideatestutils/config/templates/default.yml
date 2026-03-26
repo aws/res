@@ -451,9 +451,9 @@ global-settings:
       checksum: "ca1bff69624909f16fb6c240cddb7b44236de616dfb6dd68d26cb264654e737457e265c61a78b7e42ec4832cfd6d48a5"
       checksum_method: sha384
     python:
-      version: "3.9.16"
-      url: "https://www.python.org/ftp/python/3.9.16/Python-3.9.16.tgz"
-      checksum: "87acee12323b63a2e0c368193c03fd57e008585c754b6bceec6d5ec4c0bc34b3bb1ff20f31b6f5aff6e02502e7f5b291"
+      version: "3.12.11"
+      url: "https://www.python.org/ftp/python/3.12.11/Python-3.12.11.tgz"
+      checksum: "867b9026d3cd91cdded1975a570bfca0d8071b10c62dc650e4eca08c6e7bac177edec1c522b9da76bc1987bd237891f7"
       checksum_method: sha384
     efa:
       version: "1.22.0"

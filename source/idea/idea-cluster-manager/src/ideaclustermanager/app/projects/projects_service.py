@@ -459,7 +459,8 @@ class ProjectsService:
 
     def _create_vdi_role_and_instance_profile(self, project_name: str , policy_arns: Set[str], ) -> bool:
         self.logger.debug(f'Creating new VDI role for project {project_name}')
-        vdi_role_name = LaunchRoleHelper.get_vdi_role_name(cluster_name=self.context.cluster_name(), project_name=project_name)
+        iam_resource_prefix = self.context.config().get_string('cluster.iam.iam_resource_prefix', "")
+        vdi_role_name = LaunchRoleHelper.get_vdi_role_name(cluster_name=self.context.cluster_name(), project_name=project_name, prefix=iam_resource_prefix)
         instance_profile_name = vdi_role_name
         is_vdi_role_created = False
         is_vdi_instance_profile_created = False
@@ -503,7 +504,8 @@ class ProjectsService:
     
     def _delete_vdi_role_and_instance_profile(self, project_name: str) -> None:
 
-        vdi_role_name = instance_profile_name = LaunchRoleHelper.get_vdi_role_name(cluster_name=self.context.cluster_name(), project_name=project_name)
+        iam_resource_prefix = self.context.config().get_string('cluster.iam.iam_resource_prefix', "")
+        vdi_role_name = instance_profile_name = LaunchRoleHelper.get_vdi_role_name(cluster_name=self.context.cluster_name(), project_name=project_name, prefix=iam_resource_prefix)
         is_vdi_role_deleted = False
         is_role_profile_dissociated = False
         is_vdi_instance_profile_deleted = False
@@ -542,7 +544,8 @@ class ProjectsService:
             raise exceptions.general_exception(f"Could not delete role for project {project_name}")
 
     def _update_vdi_role(self, project_name, policies_to_detach: Set[str], policies_to_attach: Set[str]) -> bool:
-        vdi_role_name = LaunchRoleHelper.get_vdi_role_name(cluster_name=self.context.cluster_name(), project_name=project_name)
+        iam_resource_prefix = self.context.config().get_string('cluster.iam.iam_resource_prefix', "")
+        vdi_role_name = LaunchRoleHelper.get_vdi_role_name(cluster_name=self.context.cluster_name(), project_name=project_name, prefix=iam_resource_prefix)
         if not self.context.aws_util().does_vdi_role_exist(role_name=vdi_role_name):
             # If role does not exist, there were never any existing policies attached
             return self._create_vdi_role_and_instance_profile(project_name, policies_to_attach)

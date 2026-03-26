@@ -16,6 +16,7 @@
 -e file:.
 -e file:./source/idea/idea-data-model/src
 -e file:./source/idea/library/src
+-e file:./source/idea/data-model/src
 
 pip-tools~=7.0
 pyfiglet~=1.0

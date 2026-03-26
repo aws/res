@@ -41,6 +41,7 @@ import aiofiles
 from typing import Dict, List, Any
 from zipfile import ZipFile
 from collections import deque
+import shlex
 
 # default lines to prefetch on an initial tail request.
 TAIL_FILE_MAX_LINE_COUNT = 10000
@@ -132,16 +133,19 @@ class FileSystemHelper:
         if len(tokens) > 1 and tokens[1] in RESTRICTED_ROOT_FOLDERS and not is_data_mount:
             raise exceptions.unauthorized_access()
 
+        # Sanitize file path to prevent command injection
+        safe_file = shlex.quote(file)
+
         if check_dir:
-            is_dir = self.shell.invoke(['su', self.username, '-c', f'test -d "{file}"'])
+            is_dir = self.shell.invoke(['su', self.username, '-c', f'test -d {safe_file}'])
             if is_dir.returncode != 0:
                 raise exceptions.unauthorized_access()
         if check_read:
-            can_read = self.shell.invoke(['su', self.username, '-c', f'test -r "{file}"'])
+            can_read = self.shell.invoke(['su', self.username, '-c', f'test -r {safe_file}'])
             if can_read.returncode != 0:
                 raise exceptions.unauthorized_access()
         if check_write:
-            can_write = self.shell.invoke(['su', self.username, '-c', f'test -w "{file}"'])
+            can_write = self.shell.invoke(['su', self.username, '-c', f'test -w {safe_file}'])
             if can_write.returncode != 0:
                 raise exceptions.unauthorized_access()
 
@@ -153,8 +157,10 @@ class FileSystemHelper:
             cwd = user_home
 
         self.check_access(cwd, check_dir=True, check_read=True, check_write=False)
-
-        result = self.shell.invoke(['su', self.username, '-c', f'ls "{cwd}" -1'])
+        
+        # Sanitize cwd to prevent command injection
+        safe_cwd = shlex.quote(cwd)
+        result = self.shell.invoke(['su', self.username, '-c', f'ls {safe_cwd} -1'])
         if result.returncode != 0:
             raise exceptions.unauthorized_access()
 

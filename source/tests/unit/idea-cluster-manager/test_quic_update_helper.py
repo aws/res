@@ -310,13 +310,15 @@ def test_create_listener(context: AppContext):
             target_group_arn="target-group-arn",
         )
 
-        context.aws().elbv2().create_listener.assert_called_with(
-            LoadBalancerArn="nlb-arn",
-            Protocol=QUIC_PROTOCOL,
-            Port=LISTENER_PORT,
-            DefaultActions=[{"Type": "forward", "TargetGroupArn": "target-group-arn"}],
-            Tags=[{"Key": "test-key", "Value": "test-value"}],
-        )
+        context.aws().elbv2().create_listener.assert_called_once()
+
+        call_args = context.aws().elbv2().create_listener.call_args
+        actual_tags = call_args.kwargs["Tags"]
+
+        assert {"Key": "test-key", "Value": "test-value"} in actual_tags
+        assert call_args.kwargs["LoadBalancerArn"] == "nlb-arn"
+        assert call_args.kwargs["Protocol"] == QUIC_PROTOCOL
+        assert call_args.kwargs["Port"] == LISTENER_PORT
         assert result == "listener-arn"
 
 

@@ -11,7 +11,7 @@
 
 import ideasdk.app
 from ideadatamodel import constants
-from ideasdk.client import NotificationsAsyncClient, ProjectsClient, SocaClientOptions, AccountsClient, RolesClient, RoleAssignmentsClient
+from ideasdk.client import NotificationsAsyncClient, ProjectsClient, SocaClientOptions, AccountsClient, RolesClient, RoleAssignmentsClient, SharedFileSystemClient
 from ideasdk.utils import Utils, GroupNameHelper
 from ideasdk.auth import TokenService, TokenServiceOptions
 from ideasdk.server import SocaServerOptions
@@ -222,6 +222,15 @@ class VirtualDesktopControllerApp(ideasdk.app.SocaApp):
             token_service=self.context.token_service
         )
         self.context.role_assignments_client = RoleAssignmentsClient(
+            context=self.context,
+            options=SocaClientOptions(
+                endpoint=f'{internal_endpoint}/{cluster_manager_module_id}/api/v1',
+                enable_logging=False,
+                verify_ssl=False
+            ),
+            token_service=self.context.token_service
+        )
+        self.context.shared_filesystem_client = SharedFileSystemClient(
             context=self.context,
             options=SocaClientOptions(
                 endpoint=f'{internal_endpoint}/{cluster_manager_module_id}/api/v1',

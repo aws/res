@@ -37,6 +37,7 @@ class IntegTestStepBuilder:
             [
                 "source/idea/pipeline/scripts/common/install_commands.sh",
                 "source/idea/pipeline/scripts/integ_tests/install_commands.sh",
+                "source/idea/pipeline/scripts/chrome/install_commands.sh",
             ]
         )
         self._role_policy_statements = [

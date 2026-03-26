@@ -178,6 +178,9 @@ structure Project {
     @documentation("Project name")
     name: String
 
+    @documentation("Project title")
+    title: String
+
     @documentation("Project description")
     description: String
 }
@@ -207,9 +210,11 @@ structure VirtualDesktopSoftwareStack {
 
     @documentation("Base operating system")
     @jsonName("base_os")
+    @required
     baseOs: VirtualDesktopBaseOs
 
     @documentation("Human-readable name for the software stack")
+    @required
     name: String
 
     @documentation("Description of the software stack")
@@ -237,16 +242,19 @@ structure VirtualDesktopSoftwareStack {
 
     @documentation("Minimum storage requirement")
     @jsonName("min_storage")
+    @required
     minStorage: ResMemory
 
     @documentation("Minimum RAM requirement")
     @jsonName("min_ram")
+    @required
     minRam: ResMemory
 
     @documentation("CPU architecture")
     architecture: VirtualDesktopArchitecture
 
     @documentation("GPU type")
+    @required
     gpu: VirtualDesktopGpu
 
     @documentation("Instance placement configuration")
@@ -548,9 +556,13 @@ list VirtualDesktopPermissionList {
 structure VirtualDesktopPermissionProfile {
     @documentation("Profile identifier")
     @jsonName("profile_id")
+    @required
+    @length(min: 1)
     profileId: VirtualDesktopPermissionProfileId
 
     @documentation("Profile title")
+    @required
+    @length(min: 1)
     title: String
 
     @documentation("Profile description")
@@ -570,4 +582,91 @@ structure VirtualDesktopPermissionProfile {
     @jsonName("updated_on")
     @suppress(["ShouldHaveUsedTimestamp"])
     updatedOn: String
+}
+
+structure VirtualDesktopSessionPermission {
+    @required
+    @length(min: 1)
+    @jsonName("idea_session_id")
+    ideaSessionId: String
+
+    @required
+    @length(min: 1)
+    @jsonName("idea_session_owner")
+    ideaSessionOwner: String
+
+    @required
+    @length(min: 1)
+    @jsonName("idea_session_name")
+    ideaSessionName: String
+
+    @required
+    @length(min: 1)
+    @jsonName("idea_session_instance_type")
+    ideaSessionInstanceType: String
+
+    @required
+    @length(min: 1)
+    @jsonName("idea_session_state")
+    ideaSessionState: VirtualDesktopSessionState
+
+    @required
+    @length(min: 1)
+    @jsonName("idea_session_base_os")
+    ideaSessionBaseOs: VirtualDesktopBaseOs
+
+    @required
+    @jsonName("idea_session_hibernation_enabled")
+    ideaSessionHibernationEnabled: Boolean
+
+    @required
+    @length(min: 1)
+    @jsonName("idea_session_type")
+    ideaSessionType: VirtualDesktopSessionType
+
+    @required
+    @jsonName("permission_profile")
+    permissionProfile: PermissionProfile
+
+    @required
+    @length(min: 1)
+    @jsonName("actor_type")
+    actorType: String
+
+    @required
+    @length(min: 1)
+    @jsonName("actor_name")
+    actorName: String
+
+    @documentation("Creation timestamp")
+    @jsonName("created_on")
+    @suppress(["ShouldHaveUsedTimestamp"])
+    createdOn: String
+
+    @required
+    @length(min: 1)
+    @documentation("Creation time for session")
+    @jsonName("idea_session_created_on")
+    @suppress(["ShouldHaveUsedTimestamp"])
+    ideaSessionCreatedOn: String
+
+    @documentation("Last update timestamp")
+    @jsonName("updated_on")
+    @suppress(["ShouldHaveUsedTimestamp"])
+    updatedOn: String
+
+    @documentation("Expiry date")
+    @jsonName("expiry_date")
+    @suppress(["ShouldHaveUsedTimestamp"])
+    expiryDate: String
+
+    @documentation("Reason for any failure in session permission creation or update")
+    @jsonName("failure_reason")
+    failureReason: String
+}
+
+structure PermissionProfile {
+    @required
+    @jsonName("profile_id")
+    profileId: String
 }

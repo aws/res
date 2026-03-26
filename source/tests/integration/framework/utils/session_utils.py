@@ -26,6 +26,10 @@ from ideadatamodel import (  # type: ignore
     VirtualDesktopSessionState,
     VirtualDesktopSoftwareStack,
 )
+from tests.integration.framework.client.api_client import (
+    ApiClient,
+    DeleteSoftwareStackRequestContent,
+)
 from tests.integration.framework.client.res_client import ResClient
 from tests.integration.framework.utils.remote_command_runner import (
     EC2InstancePlatform,
@@ -50,13 +54,23 @@ MAX_WAITING_TIME_FOR_AMI_CREATION = 900
 
 
 def wait_for_launching_session(
-    client: ResClient, session: VirtualDesktopSession
+    api_client: ApiClient, session: VirtualDesktopSession
 ) -> VirtualDesktopSession:
     start_time = time.time()
     while time.time() - start_time < MAX_WAITING_TIME_FOR_LAUNCHING_SESSION_IN_SEC:
-        get_session_info_request = GetSessionInfoRequest(session=session)
-        get_session_info_response = client.get_session_info(get_session_info_request)
-        session = get_session_info_response.session
+        get_session_info_response = api_client.get_session(
+            session.idea_session_id, session.owner
+        )
+        api_session = get_session_info_response.session  # type: ignore
+
+        # Convert API model to ideadatamodel
+        # TODO: Could be removed after other Sessions API is migrated.
+        if hasattr(api_session, "to_dict"):
+            session_dict = api_session.to_dict()
+        else:
+            session_dict = json.loads(json.dumps(api_session, default=str))
+
+        session = VirtualDesktopSession(**session_dict)
         session_state = session.state
 
         if session_state in SESSION_COMPLETE_STATES:
@@ -75,12 +89,12 @@ def wait_for_launching_session(
 
 
 def wait_for_deleting_session(
-    client: ResClient, session: VirtualDesktopSession
+    api_client: ApiClient, session: VirtualDesktopSession
 ) -> None:
     start_time = time.time()
     while time.time() - start_time < MAX_WAITING_TIME_FOR_DELETING_SESSION_IN_SEC:
-        list_sessions_response = client.list_sessions(ListSessionsRequest())
-        existing_sessions = list_sessions_response.listing
+        list_sessions_response = api_client.list_sessions()
+        existing_sessions = list_sessions_response.listing  # type: ignore
 
         if existing_sessions and any(
             existing_session.idea_session_id == session.idea_session_id
@@ -97,13 +111,14 @@ def wait_for_deleting_session(
 
 
 def wait_for_stopped_idle_session(
-    client: ResClient, session: VirtualDesktopSession
+    api_client: ApiClient, session: VirtualDesktopSession
 ) -> None:
     start_time = time.time()
     while time.time() - start_time < MAX_WAITING_TIME_FOR_STOPPING_IDLE_SESSION_IN_SEC:
-        get_session_info_request = GetSessionInfoRequest(session=session)
-        get_session_info_response = client.get_session_info(get_session_info_request)
-        session = get_session_info_response.session
+        get_session_info_response = api_client.get_session(
+            session.idea_session_id, session.owner
+        )
+        session = get_session_info_response.session  # type: ignore
         session_state = session.state
 
         if session_state == VirtualDesktopSessionState.STOPPED_IDLE:
@@ -143,7 +158,7 @@ def force_idle_session(
             f"cat <<< $(jq '.idle_cpu_threshold = {forced_idle_cpu_threshold} | .idle_timeout = {forced_idle_timeout}' {linux_idle_config_path}) > {linux_idle_config_path}",
         ]
     else:
-        windows_idle_config_path = "C:\IDEA\Idle_Config.json"
+        windows_idle_config_path = r"C:\IDEA\Idle_Config.json"
         vdi_helper_api_gateway_url_lookup_key = (
             r"{\"key\": {\"S\": \"vdc.vdi_helper_api_gateway_url\"}}"
         )
@@ -192,20 +207,25 @@ def wait_for_session_connection_count(
 
 
 def wait_for_software_stack_to_be_active(
-    client: ResClient, software_stack: VirtualDesktopSoftwareStack
+    api_client: ApiClient, software_stack: VirtualDesktopSoftwareStack
 ) -> None:
     start_time = time.time()
     while time.time() - start_time < MAX_WAITING_TIME_FOR_AMI_CREATION:
-        response = client.get_software_stack(
-            request=GetSoftwareStackInfoRequest(
-                stack_id=software_stack.stack_id, base_os=software_stack.base_os
-            )
+        response = api_client.get_software_stack(
+            stack_id=software_stack.stack_id, base_os=software_stack.base_os.value
         )
-        if response.software_stack.enabled:
+        if (
+            response is not None
+            and response.software_stack is not None
+            and response.software_stack.enabled
+        ):
             return
         time.sleep(30)
-    client.delete_software_stack(
-        request=DeleteSoftwareStackRequest(software_stack=software_stack)
+    api_client.delete_software_stack(
+        stack_id=software_stack.stack_id,
+        request_content=DeleteSoftwareStackRequestContent(
+            base_os=software_stack.base_os
+        ),
     )
     assert (
         False

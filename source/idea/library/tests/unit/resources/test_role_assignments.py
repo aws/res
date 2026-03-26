@@ -6,6 +6,7 @@ Test Cases for RoleAssignmentsService
 """
 
 from typing import Dict, Optional
+from unittest.mock import Mock, patch
 
 import pytest
 import res.constants as constants
@@ -174,3 +175,46 @@ def test_crud_delete_role_assignment(context, monkeypatch):
     )
 
     assert len(retrieved_assignments) == 0
+
+
+@patch("res.resources.role_assignments.list_role_assignments")
+@patch("res.resources.role_assignments.accounts.get_user")
+def test_list_role_assignments_for_user_and_groups(
+    mock_get_user, mock_list_assignments
+):
+    """
+    Test list_role_assignments_for_user_and_groups returns combined assignments
+    """
+    mock_get_user.return_value = {
+        "username": "testuser",
+        "additional_groups": ["group1", "group2"],
+    }
+    mock_list_assignments.side_effect = [
+        [{"role_id": "role1"}],
+        [{"role_id": "role2"}],
+        [{"role_id": "role3"}],
+    ]
+
+    result = role_assignments.list_role_assignments_for_user_and_groups("testuser")
+
+    assert len(result) == 3
+    mock_get_user.assert_called_once_with("testuser")
+    assert mock_list_assignments.call_count == 3
+
+
+@patch("res.resources.role_assignments.list_role_assignments")
+@patch("res.resources.role_assignments.accounts.get_user")
+def test_list_role_assignments_for_user_and_groups_no_groups(
+    mock_get_user, mock_list_assignments
+):
+    """
+    Test list_role_assignments_for_user_and_groups with user having no groups
+    """
+    mock_get_user.return_value = {"username": "testuser", "additional_groups": []}
+    mock_list_assignments.return_value = [{"role_id": "role1"}]
+
+    result = role_assignments.list_role_assignments_for_user_and_groups("testuser")
+
+    assert len(result) == 1
+    mock_get_user.assert_called_once_with("testuser")
+    mock_list_assignments.assert_called_once_with(actor_key="testuser:user")

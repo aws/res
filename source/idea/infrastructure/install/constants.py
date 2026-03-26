@@ -10,7 +10,7 @@ RES_COMMON_LAMBDA_RUNTIME = aws_lambda.Runtime.PYTHON_3_12
 SHARED_RES_LIBRARY_LAMBDA_LAYER_NAME = "shared_res_library_layer"
 API_PROXY_LAMBDA_LAYER_NAME = "api_proxy_dependencies"
 OPTIONAL_INPUT_PARAMETER_LABEL_SUFFIX = " - Optional"
-PROXY_URL_REGEX = "^((https|http):\/\/(?:(?:\d{1,3}\.){3}\d{1,3}|\[(?:[0-9a-fA-F]{1,4}:){7}[0-9a-fA-F]{1,4}\]):(\d+))?$"
+PROXY_URL_REGEX = r"^((https|http):\/\/(?:(?:\d{1,3}\.){3}\d{1,3}|\[(?:[0-9a-fA-F]{1,4}:){7}[0-9a-fA-F]{1,4}\]):(\d+))?$"
 
 API_GATEWAY_CUSTOM_CREDENTIAL_BROKER_STAGE = "prod"
 API_GATEWAY_CUSTOM_CREDENTIAL_BROKER_RESOURCE = "ObjectStorageTempCredentials"

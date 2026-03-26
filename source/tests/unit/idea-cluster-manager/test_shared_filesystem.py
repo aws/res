@@ -25,6 +25,7 @@ from ideasdk.aws import AwsClientProvider
 from ideadatamodel import (
     AddFileSystemToProjectRequest,
     FileSystem,
+    FSxLUSTREFileSystem,
     ListGlobalFileSystemsRequest,
     ListOnboardedFileSystemsRequest,
     ListOnboardedFileSystemsResult,
@@ -164,7 +165,7 @@ def test_shared_filesystem_onboard_lustre_file_system_not_present_in_vpc_fail(
         context.shared_filesystem.onboard_lustre_filesystem(request)
     assert exc_info.value.error_code == errorcodes.FILESYSTEM_NOT_IN_VPC
     assert (
-        "lustre_filesystem_id not part of the env's VPC thus not accessible"
+        "lustre_filesystem_id is not part of the env's VPC thus not accessible"
         in exc_info.value.message
     )
 
@@ -1467,3 +1468,400 @@ def test_shared_filesystem_remove_filesystem_with_attached_projects_fail(
         "My S3 Bucket 1 filesystem has attached projects: dummy-proj-1"
         in exc_info.value.message
     )
+
+
+def test_list_unonboarded_ontap_file_systems_volume_level_filtering_succeed(
+    context: AppContext, monkeypatch: MonkeyPatch
+):
+    """
+    Test that _list_unonboarded_ontap_file_systems filters at volume level
+    and only includes SVMs with available volumes
+    """
+
+    def _get_config_entry_mock(key: str):
+        if key == "cluster.network.vpc_id":
+            return {"value": "vpc-123"}
+        return MagicMock()
+
+    monkeypatch.setattr(
+        context.shared_filesystem.config.db, "get_config_entry", _get_config_entry_mock
+    )
+
+    mock_ec2 = SocaAnyPayload()
+    mock_ec2.describe_subnets = MagicMock(
+        return_value={"Subnets": [{"VpcId": "vpc-123"}]}
+    )
+    monkeypatch.setattr(AwsClientProvider, "ec2", lambda *_: mock_ec2)
+
+    mock_fsx = SocaAnyPayload()
+    mock_fsx.describe_file_systems = MagicMock(
+        return_value={
+            "FileSystems": [
+                {
+                    "FileSystemId": "fs-123",
+                    "FileSystemType": "ONTAP",
+                    "Lifecycle": "AVAILABLE",
+                    "SubnetIds": ["subnet-123"],
+                }
+            ]
+        }
+    )
+    mock_fsx.describe_volumes = MagicMock(
+        return_value={
+            "Volumes": [
+                {
+                    "VolumeId": "vol-111",
+                    "Lifecycle": "CREATED",
+                    "OntapConfiguration": {"StorageVirtualMachineId": "svm-aaa"},
+                },
+                {
+                    "VolumeId": "vol-222",
+                    "Lifecycle": "CREATED",
+                    "OntapConfiguration": {"StorageVirtualMachineId": "svm-bbb"},
+                },
+            ]
+        }
+    )
+    mock_fsx.describe_storage_virtual_machines = MagicMock(
+        return_value={
+            "StorageVirtualMachines": [
+                {"StorageVirtualMachineId": "svm-aaa", "Lifecycle": "CREATED"},
+                {"StorageVirtualMachineId": "svm-bbb", "Lifecycle": "CREATED"},
+            ]
+        }
+    )
+    monkeypatch.setattr(AwsClientProvider, "fsx", lambda *_: mock_fsx)
+
+    onboarded_identifiers = {"fs-123:vol-111"}
+    result = context.shared_filesystem._list_unonboarded_ontap_file_systems(
+        onboarded_identifiers
+    )
+
+    assert len(result) == 1
+    filesystem = result[0]
+
+    assert len(filesystem.volume) == 1
+    assert filesystem.volume[0].volume["VolumeId"] == "vol-222"
+
+    assert len(filesystem.svm) == 1
+    assert (
+        filesystem.svm[0].storage_virtual_machine["StorageVirtualMachineId"]
+        == "svm-bbb"
+    )
+
+
+def test_list_unonboarded_ontap_file_systems_no_available_volumes_returns_empty(
+    context: AppContext, monkeypatch: MonkeyPatch
+):
+    """
+    Test that _list_unonboarded_ontap_file_systems returns empty list when all volumes are onboarded
+    """
+
+    def _get_config_entry_mock(key: str):
+        if key == "cluster.network.vpc_id":
+            return {"value": "vpc-123"}
+        return MagicMock()
+
+    monkeypatch.setattr(
+        context.shared_filesystem.config.db, "get_config_entry", _get_config_entry_mock
+    )
+
+    mock_ec2 = SocaAnyPayload()
+    mock_ec2.describe_subnets = MagicMock(
+        return_value={"Subnets": [{"VpcId": "vpc-123"}]}
+    )
+    monkeypatch.setattr(AwsClientProvider, "ec2", lambda *_: mock_ec2)
+
+    mock_fsx = SocaAnyPayload()
+    mock_fsx.describe_file_systems = MagicMock(
+        return_value={
+            "FileSystems": [
+                {
+                    "FileSystemId": "fs-123",
+                    "FileSystemType": "ONTAP",
+                    "Lifecycle": "AVAILABLE",
+                    "SubnetIds": ["subnet-123"],
+                }
+            ]
+        }
+    )
+    mock_fsx.describe_volumes = MagicMock(
+        return_value={
+            "Volumes": [
+                {
+                    "VolumeId": "vol-111",
+                    "Lifecycle": "CREATED",
+                    "OntapConfiguration": {"StorageVirtualMachineId": "svm-aaa"},
+                }
+            ]
+        }
+    )
+    mock_fsx.describe_storage_virtual_machines = MagicMock(
+        return_value={
+            "StorageVirtualMachines": [
+                {"StorageVirtualMachineId": "svm-aaa", "Lifecycle": "CREATED"}
+            ]
+        }
+    )
+    monkeypatch.setattr(AwsClientProvider, "fsx", lambda *_: mock_fsx)
+
+    onboarded_identifiers = {"fs-123:vol-111"}
+    result = context.shared_filesystem._list_unonboarded_ontap_file_systems(
+        onboarded_identifiers
+    )
+
+    assert len(result) == 0
+
+
+def test_validate_filesystem_present_in_vpc_comprehensive_identifier_set_succeed(
+    context: AppContext, monkeypatch: MonkeyPatch
+):
+    """
+    Test that _validate_filesystem_present_in_vpc_and_not_onboarded builds comprehensive
+    identifier set including ONTAP volume identifiers
+    """
+    mock_filesystems = [
+        FileSystem(
+            name="efs-filesystem",
+            storage={"provider": "efs", "efs": {"file_system_id": "fs-efs123"}},
+        ),
+        FileSystem(
+            name="lustre-filesystem",
+            storage={
+                "provider": "fsx_lustre",
+                "fsx_lustre": {"file_system_id": "fs-lustre123"},
+            },
+        ),
+        FileSystem(
+            name="ontap-filesystem",
+            storage={
+                "provider": "fsx_netapp_ontap",
+                "fsx_netapp_ontap": {
+                    "file_system_id": "fs-ontap123",
+                    "volume": {"volume_id": "vol-456"},
+                },
+            },
+        ),
+    ]
+
+    monkeypatch.setattr(
+        context.shared_filesystem,
+        "list_onboarded_file_systems",
+        lambda *_: ListOnboardedFileSystemsResult(listing=mock_filesystems),
+    )
+
+    mock_ec2 = SocaAnyPayload()
+    mock_ec2.describe_subnets = MagicMock(
+        return_value={"Subnets": [{"VpcId": "vpc-123"}]}
+    )
+    monkeypatch.setattr(AwsClientProvider, "ec2", lambda *_: mock_ec2)
+
+    mock_fsx = SocaAnyPayload()
+    mock_fsx.describe_file_systems = MagicMock(
+        return_value={
+            "FileSystems": [
+                {
+                    "FileSystemId": "fs-new123",
+                    "FileSystemType": "LUSTRE",
+                    "Lifecycle": "AVAILABLE",
+                    "SubnetIds": ["subnet-123"],
+                }
+            ]
+        }
+    )
+    monkeypatch.setattr(AwsClientProvider, "fsx", lambda *_: mock_fsx)
+
+    def _get_config_entry_mock(key: str):
+        if key == "cluster.network.vpc_id":
+            return {"value": "vpc-123"}
+        return MagicMock()
+
+    monkeypatch.setattr(
+        context.shared_filesystem.config.db, "get_config_entry", _get_config_entry_mock
+    )
+
+    def mock_list_lustre(identifiers):
+        expected_identifiers = {"fs-efs123", "fs-lustre123", "fs-ontap123:vol-456"}
+        assert identifiers == expected_identifiers
+
+        return [
+            FSxLUSTREFileSystem(
+                filesystem={"FileSystemId": "fs-new123", "FileSystemType": "LUSTRE"}
+            )
+        ]
+
+    def mock_list_efs(identifiers):
+        expected_identifiers = {"fs-efs123", "fs-lustre123", "fs-ontap123:vol-456"}
+        assert identifiers == expected_identifiers
+        return []
+
+    monkeypatch.setattr(
+        context.shared_filesystem,
+        "_list_unonboarded_lustre_file_systems",
+        mock_list_lustre,
+    )
+    monkeypatch.setattr(
+        context.shared_filesystem, "_list_unonboarded_efs_file_systems", mock_list_efs
+    )
+
+    result = (
+        context.shared_filesystem._validate_filesystem_present_in_vpc_and_not_onboarded(
+            "fs-new123", constants.STORAGE_PROVIDER_FSX_LUSTRE
+        )
+    )
+
+    assert result is True
+
+
+def test_validate_filesystem_present_in_vpc_ontap_volume_already_onboarded_fail(
+    context: AppContext, monkeypatch: MonkeyPatch
+):
+    """
+    Test that ONTAP volume validation fails when the specific volume is already onboarded
+    """
+    mock_filesystems = [
+        FileSystem(
+            name="ontap-filesystem",
+            storage={
+                "provider": "fsx_netapp_ontap",
+                "fsx_netapp_ontap": {
+                    "file_system_id": "fs-ontap123",
+                    "volume": {"volume_id": "vol-456"},
+                },
+            },
+        )
+    ]
+
+    monkeypatch.setattr(
+        context.shared_filesystem,
+        "list_onboarded_file_systems",
+        lambda *_: ListOnboardedFileSystemsResult(listing=mock_filesystems),
+    )
+
+    with pytest.raises(exceptions.SocaException) as exc_info:
+        context.shared_filesystem._validate_filesystem_present_in_vpc_and_not_onboarded(
+            "fs-ontap123", "vol-456"
+        )
+
+    assert exc_info.value.error_code == errorcodes.FILESYSTEM_ALREADY_ONBOARDED
+    assert "fs-ontap123:vol-456 has already been onboarded" in exc_info.value.message
+
+
+def test_validate_filesystem_present_in_vpc_ontap_volume_not_in_vpc_fail(
+    context: AppContext, monkeypatch: MonkeyPatch
+):
+    """
+    Test that ONTAP volume validation fails when the filesystem is not in the environment's VPC
+    """
+    monkeypatch.setattr(
+        context.shared_filesystem,
+        "list_onboarded_file_systems",
+        lambda *_: ListOnboardedFileSystemsResult(listing=[]),
+    )
+
+    mock_ec2 = SocaAnyPayload()
+    mock_ec2.describe_subnets = MagicMock(
+        return_value={"Subnets": [{"VpcId": "vpc-different"}]}  # Different VPC
+    )
+    monkeypatch.setattr(AwsClientProvider, "ec2", lambda *_: mock_ec2)
+
+    mock_fsx = SocaAnyPayload()
+    mock_fsx.describe_file_systems = MagicMock(
+        return_value={
+            "FileSystems": [
+                {
+                    "FileSystemId": "fs-ontap123",
+                    "FileSystemType": "ONTAP",
+                    "Lifecycle": "AVAILABLE",
+                    "SubnetIds": ["subnet-456"],
+                }
+            ]
+        }
+    )
+    monkeypatch.setattr(AwsClientProvider, "fsx", lambda *_: mock_fsx)
+
+    def _get_config_entry_mock(key: str):
+        if key == "cluster.network.vpc_id":
+            return {"value": "vpc-123"}  # Environment VPC
+        return MagicMock()
+
+    monkeypatch.setattr(
+        context.shared_filesystem.config.db, "get_config_entry", _get_config_entry_mock
+    )
+
+    with pytest.raises(exceptions.SocaException) as exc_info:
+        context.shared_filesystem._validate_filesystem_present_in_vpc_and_not_onboarded(
+            "fs-ontap123", "vol-456"
+        )
+
+    assert exc_info.value.error_code == errorcodes.FILESYSTEM_NOT_IN_VPC
+    assert (
+        "fs-ontap123 is not part of the env's VPC thus not accessible"
+        in exc_info.value.message
+    )
+
+
+def test_validate_filesystem_present_in_vpc_efs_backward_compatibility_succeed(
+    context: AppContext, monkeypatch: MonkeyPatch
+):
+    """
+    Test that EFS validation works correctly with unified identifier set containing ONTAP volumes
+    """
+    mock_filesystems = [
+        FileSystem(
+            name="ontap-filesystem",
+            storage={
+                "provider": "fsx_netapp_ontap",
+                "fsx_netapp_ontap": {
+                    "file_system_id": "fs-ontap123",
+                    "volume": {"volume_id": "vol-456"},
+                },
+            },
+        )
+    ]
+
+    monkeypatch.setattr(
+        context.shared_filesystem,
+        "list_onboarded_file_systems",
+        lambda *_: ListOnboardedFileSystemsResult(listing=mock_filesystems),
+    )
+
+    mock_ec2 = SocaAnyPayload()
+    mock_ec2.describe_subnets = MagicMock(
+        return_value={"Subnets": [{"VpcId": "vpc-123"}]}
+    )
+    monkeypatch.setattr(AwsClientProvider, "ec2", lambda *_: mock_ec2)
+
+    def _get_config_entry_mock(key: str):
+        if key == "cluster.network.vpc_id":
+            return {"value": "vpc-123"}
+        elif key == "shared-storage.home.efs.file_system_id":
+            return {"value": "fs-home"}
+        elif key == "shared-storage.internal.efs.file_system_id":
+            return {"value": "fs-internal"}
+        return MagicMock()
+
+    monkeypatch.setattr(
+        context.shared_filesystem.config.db, "get_config_entry", _get_config_entry_mock
+    )
+
+    mock_efs = SocaAnyPayload()
+    mock_efs.describe_file_systems = MagicMock(
+        return_value={
+            "FileSystems": [
+                {"FileSystemId": "fs-efs123", "LifeCycleState": "available"}
+            ]
+        }
+    )
+    mock_efs.describe_mount_targets = MagicMock(
+        return_value={"MountTargets": [{"VpcId": "vpc-123"}]}
+    )
+    monkeypatch.setattr(AwsClientProvider, "efs", lambda *_: mock_efs)
+
+    result = (
+        context.shared_filesystem._validate_filesystem_present_in_vpc_and_not_onboarded(
+            "fs-efs123", constants.STORAGE_PROVIDER_EFS
+        )
+    )
+
+    assert result is True

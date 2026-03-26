@@ -34,7 +34,7 @@ BASE_OS = [
 ]
 
 AL2023_SOFTWARE_STACK = VirtualDesktopSoftwareStack(
-    name=f"res-integ-test-stack-{VirtualDesktopBaseOS.AMAZON_LINUX2023}-{VirtualDesktopArchitecture.X86_64}",
+    name=f"res-integ-test-stack-{VirtualDesktopBaseOS.AMAZON_LINUX2023.value}-{VirtualDesktopArchitecture.X86_64.value}",
     description="RES integ test software stack",
     base_os=VirtualDesktopBaseOS.AMAZON_LINUX2023,
     architecture=VirtualDesktopArchitecture.X86_64,
@@ -43,43 +43,11 @@ AL2023_SOFTWARE_STACK = VirtualDesktopSoftwareStack(
     gpu=VirtualDesktopGPU.NO_GPU,
     allowed_instance_types=["t3", "m6a"],
 )
+
 LINUX_SOFTWARE_STACKS = [
     # Stack 0
     VirtualDesktopSoftwareStack(
-        name=f"res-integ-test-stack-{VirtualDesktopBaseOS.AMAZON_LINUX2}-{VirtualDesktopArchitecture.X86_64}",
-        description="RES integ test software stack",
-        base_os=VirtualDesktopBaseOS.AMAZON_LINUX2,
-        architecture=VirtualDesktopArchitecture.X86_64,
-        min_storage=MIN_LINUX_STORAGE,
-        min_ram=MIN_RAM,
-        gpu=VirtualDesktopGPU.NO_GPU,
-        allowed_instance_types=["t3", "m6a"],
-    ),
-    # Stack 1
-    VirtualDesktopSoftwareStack(
-        name=f"res-integ-test-stack-{VirtualDesktopBaseOS.AMAZON_LINUX2}-{VirtualDesktopArchitecture.ARM64}",
-        description="RES integ test software stack",
-        base_os=VirtualDesktopBaseOS.AMAZON_LINUX2,
-        architecture=VirtualDesktopArchitecture.ARM64,
-        min_storage=MIN_LINUX_STORAGE,
-        min_ram=MIN_RAM,
-        gpu=VirtualDesktopGPU.NO_GPU,
-        allowed_instance_types=["m6g"],
-    ),
-    # Stack 2
-    VirtualDesktopSoftwareStack(
-        name=f"res-integ-test-stack-{VirtualDesktopBaseOS.RHEL8}-{VirtualDesktopArchitecture.X86_64}",
-        description="RES integ test software stack",
-        base_os=VirtualDesktopBaseOS.RHEL8,
-        architecture=VirtualDesktopArchitecture.X86_64,
-        min_storage=MIN_LINUX_STORAGE,
-        min_ram=MIN_RAM,
-        gpu=VirtualDesktopGPU.NO_GPU,
-        allowed_instance_types=["t3", "m6a"],
-    ),
-    # Stack 3
-    VirtualDesktopSoftwareStack(
-        name=f"res-integ-test-stack-{VirtualDesktopBaseOS.RHEL9}-{VirtualDesktopArchitecture.X86_64}",
+        name=f"res-integ-test-stack-{VirtualDesktopBaseOS.RHEL9.value}-{VirtualDesktopArchitecture.X86_64.value}",
         description="RES integ test software stack",
         base_os=VirtualDesktopBaseOS.RHEL9,
         architecture=VirtualDesktopArchitecture.X86_64,
@@ -88,9 +56,9 @@ LINUX_SOFTWARE_STACKS = [
         gpu=VirtualDesktopGPU.NO_GPU,
         allowed_instance_types=["t3", "m6a"],
     ),
-    # Stack 4
+    # Stack 1
     VirtualDesktopSoftwareStack(
-        name=f"res-integ-test-stack-{VirtualDesktopBaseOS.UBUNTU2204}-{VirtualDesktopArchitecture.X86_64}",
+        name=f"res-integ-test-stack-{VirtualDesktopBaseOS.UBUNTU2204.value}-{VirtualDesktopArchitecture.X86_64.value}",
         description="RES integ test software stack",
         base_os=VirtualDesktopBaseOS.UBUNTU2204,
         architecture=VirtualDesktopArchitecture.X86_64,
@@ -99,9 +67,9 @@ LINUX_SOFTWARE_STACKS = [
         gpu=VirtualDesktopGPU.NO_GPU,
         allowed_instance_types=["t3", "m6a"],
     ),
-    # Stack 5
+    # Stack 2
     VirtualDesktopSoftwareStack(
-        name=f"res-integ-test-stack-{VirtualDesktopBaseOS.UBUNTU2404}-{VirtualDesktopArchitecture.X86_64}",
+        name=f"res-integ-test-stack-{VirtualDesktopBaseOS.UBUNTU2404.value}-{VirtualDesktopArchitecture.X86_64.value}",
         description="RES integ test software stack",
         base_os=VirtualDesktopBaseOS.UBUNTU2404,
         architecture=VirtualDesktopArchitecture.X86_64,
@@ -110,11 +78,11 @@ LINUX_SOFTWARE_STACKS = [
         gpu=VirtualDesktopGPU.NO_GPU,
         allowed_instance_types=["t3", "m6a"],
     ),
-    # Stack 6
+    # Stack 3
     AL2023_SOFTWARE_STACK,
-    # Stack 7
+    # Stack 4
     VirtualDesktopSoftwareStack(
-        name=f"res-integ-test-stack-{VirtualDesktopBaseOS.AMAZON_LINUX2023}-{VirtualDesktopArchitecture.ARM64}",
+        name=f"res-integ-test-stack-{VirtualDesktopBaseOS.AMAZON_LINUX2023.value}-{VirtualDesktopArchitecture.ARM64.value}",
         description="RES integ test software stack",
         base_os=VirtualDesktopBaseOS.AMAZON_LINUX2023,
         architecture=VirtualDesktopArchitecture.ARM64,
@@ -123,9 +91,9 @@ LINUX_SOFTWARE_STACKS = [
         gpu=VirtualDesktopGPU.NO_GPU,
         allowed_instance_types=["m6g"],
     ),
-    # Stack 8
+    # Stack 5
     VirtualDesktopSoftwareStack(
-        name=f"res-integ-test-stack-{VirtualDesktopBaseOS.ROCKY_LINUX9}-{VirtualDesktopArchitecture.X86_64}",
+        name=f"res-integ-test-stack-{VirtualDesktopBaseOS.ROCKY_LINUX9.value}-{VirtualDesktopArchitecture.X86_64.value}",
         description="RES integ test software stack",
         base_os=VirtualDesktopBaseOS.ROCKY_LINUX9,
         architecture=VirtualDesktopArchitecture.X86_64,
@@ -137,9 +105,9 @@ LINUX_SOFTWARE_STACKS = [
 ]
 
 TEST_SOFTWARE_STACKS = LINUX_SOFTWARE_STACKS + [
-    # Stack 9
+    # Stack 6
     VirtualDesktopSoftwareStack(
-        name=f"res-integ-test-stack-{VirtualDesktopBaseOS.WINDOWS}-{VirtualDesktopArchitecture.X86_64}",
+        name=f"res-integ-test-stack-{VirtualDesktopBaseOS.WINDOWS.value}-{VirtualDesktopArchitecture.X86_64.value}",
         description="RES integ test software stack",
         base_os=VirtualDesktopBaseOS.WINDOWS,
         architecture=VirtualDesktopArchitecture.X86_64,
@@ -148,9 +116,9 @@ TEST_SOFTWARE_STACKS = LINUX_SOFTWARE_STACKS + [
         gpu=VirtualDesktopGPU.NO_GPU,
         allowed_instance_types=["t3", "m6a"],
     ),
-    # Stack 10
+    # Stack 7
     VirtualDesktopSoftwareStack(
-        name=f"res-integ-test-stack-{VirtualDesktopBaseOS.WINDOWS}-{VirtualDesktopArchitecture.X86_64}-{VirtualDesktopGPU.NVIDIA}",
+        name=f"res-integ-test-stack-{VirtualDesktopBaseOS.WINDOWS.value}-{VirtualDesktopArchitecture.X86_64.value}-{VirtualDesktopGPU.NVIDIA.value}",
         description="RES integ test software stack",
         base_os=VirtualDesktopBaseOS.WINDOWS,
         architecture=VirtualDesktopArchitecture.X86_64,
@@ -159,9 +127,9 @@ TEST_SOFTWARE_STACKS = LINUX_SOFTWARE_STACKS + [
         gpu=VirtualDesktopGPU.NVIDIA,
         allowed_instance_types=["g4dn", "g5"],
     ),
-    # Stack 11
+    # Stack 8
     VirtualDesktopSoftwareStack(
-        name=f"res-integ-test-stack-{VirtualDesktopBaseOS.WINDOWS}-{VirtualDesktopArchitecture.X86_64}-{VirtualDesktopGPU.AMD}",
+        name=f"res-integ-test-stack-{VirtualDesktopBaseOS.WINDOWS.value}-{VirtualDesktopArchitecture.X86_64.value}-{VirtualDesktopGPU.AMD.value}",
         description="RES integ test software stack",
         base_os=VirtualDesktopBaseOS.WINDOWS,
         architecture=VirtualDesktopArchitecture.X86_64,
@@ -173,8 +141,7 @@ TEST_SOFTWARE_STACKS = LINUX_SOFTWARE_STACKS + [
 ]
 
 TEST_SOFTWARE_STACKS_GOVCLOUD = [
-    f"res-integ-test-stack-{VirtualDesktopBaseOS.AMAZON_LINUX2}-{VirtualDesktopArchitecture.X86_64}",
-    f"res-integ-test-stack-{VirtualDesktopBaseOS.AMAZON_LINUX2}-{VirtualDesktopArchitecture.ARM64}",
-    f"res-integ-test-stack-{VirtualDesktopBaseOS.RHEL8}-{VirtualDesktopArchitecture.X86_64}",
-    f"res-integ-test-stack-{VirtualDesktopBaseOS.RHEL9}-{VirtualDesktopArchitecture.X86_64}",
+    f"res-integ-test-stack-{VirtualDesktopBaseOS.AMAZON_LINUX2023.value}-{VirtualDesktopArchitecture.X86_64.value}",
+    f"res-integ-test-stack-{VirtualDesktopBaseOS.AMAZON_LINUX2023.value}-{VirtualDesktopArchitecture.ARM64.value}",
+    f"res-integ-test-stack-{VirtualDesktopBaseOS.RHEL9.value}-{VirtualDesktopArchitecture.X86_64.value}",
 ]

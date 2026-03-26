@@ -24,20 +24,20 @@ TEST_WINDOWS_SOFTWARE_STACK = VirtualDesktopSoftwareStack(
     architecture=VirtualDesktopArchitecture.X86_64,
     gpu=VirtualDesktopGPU.NO_GPU,
 )
-TEST_NVIDIA_AL2_SOFTWARE_STACK = VirtualDesktopSoftwareStack(
-    base_os=VirtualDesktopBaseOS.AMAZON_LINUX2,
+TEST_NVIDIA_AL3_SOFTWARE_STACK = VirtualDesktopSoftwareStack(
+    base_os=VirtualDesktopBaseOS.AMAZON_LINUX2023,
     ami_id=TEST_AMI,
     architecture=VirtualDesktopArchitecture.X86_64,
     gpu=VirtualDesktopGPU.NVIDIA,
 )
-TEST_AMD_AL2_SOFTWARE_STACK = VirtualDesktopSoftwareStack(
-    base_os=VirtualDesktopBaseOS.AMAZON_LINUX2,
+TEST_AMD_AL3_SOFTWARE_STACK = VirtualDesktopSoftwareStack(
+    base_os=VirtualDesktopBaseOS.AMAZON_LINUX2023,
     ami_id=TEST_AMI,
     architecture=VirtualDesktopArchitecture.X86_64,
     gpu=VirtualDesktopGPU.AMD,
 )
 TEST_DEDICATED_HOST_TENANCY_SOFTWARE_STACK = VirtualDesktopSoftwareStack(
-    base_os=VirtualDesktopBaseOS.AMAZON_LINUX2,
+    base_os=VirtualDesktopBaseOS.AMAZON_LINUX2023,
     ami_id=TEST_AMI,
     architecture=VirtualDesktopArchitecture.X86_64,
     gpu=VirtualDesktopGPU.NO_GPU,
@@ -233,7 +233,7 @@ def test_no_gpu_get_valid_instance_types(mock_environment):
 def test_nvidia_gpu_get_valid_instance_types(mock_environment):
     utils, _ = mock_environment
     result = utils.get_valid_instance_types_by_software_stack(
-        hibernation_support=False, software_stack=TEST_NVIDIA_AL2_SOFTWARE_STACK
+        hibernation_support=False, software_stack=TEST_NVIDIA_AL3_SOFTWARE_STACK
     )
 
     assert len(result) == 1
@@ -245,7 +245,7 @@ def test_nvidia_gpu_get_valid_instance_types(mock_environment):
 def test_amd_gpu_get_valid_instance_types(mock_environment):
     utils, _ = mock_environment
     result = utils.get_valid_instance_types_by_software_stack(
-        hibernation_support=False, software_stack=TEST_AMD_AL2_SOFTWARE_STACK
+        hibernation_support=False, software_stack=TEST_AMD_AL3_SOFTWARE_STACK
     )
 
     assert len(result) == 1

@@ -9,6 +9,9 @@ from res.utils import logging_utils, table_utils  # type: ignore
 
 GSI_RESOURCE_KEY = "resource-key-index"
 GSI_RESOURCE_KEY_HASH_KEY = ROLE_ASSIGNMENTS_DB_RANGE_KEY = "resource_key"
+ROLE_ASSIGNMENTS_RESOURCE_ID_KEY = "resource_id"
+ROLE_ASSIGNMENTS_RESOURCE_TYPE_KEY = "resource_type"
+ROLE_ASSIGNMENTS_ROLE_ID_KEY = "role_id"
 GSI_RESOURCE_KEY_RANGE_KEY = ROLE_ASSIGNMENTS_DB_HASH_KEY = "actor_key"
 ROLE_ASSIGNMENTS_TABLE_NAME = "authz.role-assignments"
 
@@ -143,3 +146,20 @@ def list_role_assignments(
             )
 
     return role_assignments
+
+
+def list_role_assignments_for_user_and_groups(username: str) -> List[Dict[str, Any]]:
+    """
+    List all role assignments for a user and their groups
+    :param username: username to get assignments for
+    :return: combined list of role assignments
+    """
+    user = accounts.get_user(username)
+    groups = user.get("additional_groups", [])
+
+    assignments = []
+    assignments.extend(list_role_assignments(actor_key=f"{username}:user"))
+    for group in groups:
+        assignments.extend(list_role_assignments(actor_key=f"{group}:group"))
+
+    return assignments

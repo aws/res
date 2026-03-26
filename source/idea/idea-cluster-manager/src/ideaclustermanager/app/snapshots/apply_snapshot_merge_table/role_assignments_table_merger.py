@@ -25,6 +25,7 @@ from ideadatamodel import (
     PutRoleAssignmentErrorResponse,
     errorcodes,
     exceptions,
+    constants,
 )
 
 from ideasdk.context import SocaContext
@@ -89,6 +90,9 @@ class RoleAssignmentsTableMerger(MergeTable):
                     if isinstance(response, PutRoleAssignmentErrorResponse):
                         if response.error_code in [errorcodes.AUTH_USER_NOT_FOUND, errorcodes.AUTH_GROUP_NOT_FOUND]:
                             logger.warning(TABLE_NAME, composite_key, None, "Actor not found. Skipping migration for this record")
+                            continue
+                        elif response.error_code == errorcodes.INVALID_PARAMS and constants.INVALID_ROLE_ASSIGNMENT_ROLE_ID in response.message:
+                            logger.warning(TABLE_NAME, composite_key, None, "Role not found. Skipping migration for this record")
                             continue
                         else:
                             raise exceptions.SocaException(response.error_code, response.message)

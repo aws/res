@@ -2,6 +2,7 @@
 #  SPDX-License-Identifier: Apache-2.0
 
 from typing import Dict, Optional
+from unittest.mock import Mock, patch
 
 import pytest
 from res.resources import projects  # type: ignore
@@ -63,3 +64,113 @@ def test_projects_crud_get_project_by_id(context):
     assert result is not None
     assert result["name"] == crud_project["name"]
     assert result["project_id"] == crud_project["project_id"]
+
+
+@patch("res.resources.projects.roles.filter_roles_with_manage_sessions_permission")
+@patch(
+    "res.resources.projects.role_assignments.list_role_assignments_for_user_and_groups"
+)
+def test_list_user_manage_sessions_projects_user_with_manage_permission(
+    mock_list_assignments_for_user, mock_filter_roles
+):
+    """
+    Test list_user_manage_sessions_projects returns project IDs where user has manage sessions permission
+    """
+    mock_list_assignments_for_user.return_value = [
+        {"role_id": "role1", "resource_id": "project1", "resource_type": "project"},
+        {"role_id": "role2", "resource_id": "project2", "resource_type": "project"},
+    ]
+    mock_filter_roles.return_value = {"role1"}
+
+    result = projects.list_user_manage_sessions_projects("testuser")
+
+    assert result == ["project1"]
+    mock_list_assignments_for_user.assert_called_once_with("testuser")
+    mock_filter_roles.assert_called_once_with({"role1", "role2"})
+
+
+@patch("res.resources.projects.roles.filter_roles_with_manage_sessions_permission")
+@patch(
+    "res.resources.projects.role_assignments.list_role_assignments_for_user_and_groups"
+)
+def test_list_user_manage_sessions_projects_user_without_manage_permission(
+    mock_list_assignments_for_user, mock_filter_roles
+):
+    """
+    Test list_user_manage_sessions_projects returns empty list when user has no manage sessions permission
+    """
+    mock_list_assignments_for_user.return_value = [
+        {"role_id": "role1", "resource_id": "project1", "resource_type": "project"},
+    ]
+    mock_filter_roles.return_value = set()
+
+    result = projects.list_user_manage_sessions_projects("testuser")
+
+    assert result == []
+    mock_list_assignments_for_user.assert_called_once_with("testuser")
+    mock_filter_roles.assert_called_once_with({"role1"})
+
+
+@patch("res.resources.projects.roles.filter_roles_with_manage_sessions_permission")
+@patch(
+    "res.resources.projects.role_assignments.list_role_assignments_for_user_and_groups"
+)
+def test_list_user_manage_sessions_projects_no_role_assignments(
+    mock_list_assignments_for_user, mock_filter_roles
+):
+    """
+    Test list_user_manage_sessions_projects returns empty list when user has no role assignments
+    """
+    mock_list_assignments_for_user.return_value = []
+
+    result = projects.list_user_manage_sessions_projects("testuser")
+
+    assert result == []
+    mock_list_assignments_for_user.assert_called_once_with("testuser")
+    mock_filter_roles.assert_not_called()
+
+
+@patch("res.resources.projects.roles.filter_roles_with_manage_sessions_permission")
+@patch(
+    "res.resources.projects.role_assignments.list_role_assignments_for_user_and_groups"
+)
+def test_list_user_manage_sessions_projects_non_project_resources(
+    mock_list_assignments_for_user, mock_filter_roles
+):
+    """
+    Test list_user_manage_sessions_projects filters out non-project resource assignments
+    """
+    mock_list_assignments_for_user.return_value = [
+        {"role_id": "role1", "resource_id": "project1", "resource_type": "project"},
+        {"role_id": "role1", "resource_id": "cluster1", "resource_type": "cluster"},
+    ]
+    mock_filter_roles.return_value = {"role1"}
+
+    result = projects.list_user_manage_sessions_projects("testuser")
+
+    assert result == ["project1"]
+    mock_list_assignments_for_user.assert_called_once_with("testuser")
+    mock_filter_roles.assert_called_once_with({"role1"})
+
+
+@patch("res.resources.projects.roles.filter_roles_with_manage_sessions_permission")
+@patch(
+    "res.resources.projects.role_assignments.list_role_assignments_for_user_and_groups"
+)
+def test_list_user_manage_sessions_projects_duplicate_roles_checked_once(
+    mock_list_assignments_for_user, mock_filter_roles
+):
+    """
+    Test list_user_manage_sessions_projects checks each unique role only once
+    """
+    mock_list_assignments_for_user.return_value = [
+        {"role_id": "role1", "resource_id": "project1", "resource_type": "project"},
+        {"role_id": "role1", "resource_id": "project2", "resource_type": "project"},
+    ]
+    mock_filter_roles.return_value = {"role1"}
+
+    result = projects.list_user_manage_sessions_projects("testuser")
+
+    assert sorted(result) == ["project1", "project2"]
+    mock_list_assignments_for_user.assert_called_once_with("testuser")
+    mock_filter_roles.assert_called_once_with({"role1"})

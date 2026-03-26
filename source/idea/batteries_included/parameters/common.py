@@ -50,7 +50,7 @@ class CommonParameters(Base):
                 "for range. Replace x.x.x.x with your own PUBLIC IP. You can get "
                 "your public IP using tools such as https://ifconfig.co/)."
             ),
-            allowed_pattern="(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})/(\d{1,2})",
+            allowed_pattern=r"(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})/(\d{1,2})",
             constraint_description=(
                 "ClientIP must be a valid IP or network range of the form x.x.x.x/x. "
                 "specify your IP/NETMASK (e.g x.x.x/32 or x.x.x.x/24 for subnet range)"
@@ -79,7 +79,7 @@ class CommonParameters(Base):
             id=CommonKey.CLUSTER_NAME,
             type="String",
             description='Provide name of the Environment, the name of the environment must start with "res-" without capital letters and should be less than or equal to 11 characters.',
-            allowed_pattern="res-[a-z\-\_0-9]{0,7}",
+            allowed_pattern=r"res-[a-z_0-9-]{0,7}",
             constraint_description='The name of the environment must start with "res-" without capital letters and should be less than or equal to 11 characters.',
         )
     )
@@ -97,7 +97,7 @@ class CommonParameters(Base):
             id=CommonKey.IAM_PERMISSION_BOUNDARY,
             type="String",
             description="You may provide an IAM permission boundary ARN that will be attached to all roles created in RES.",
-            allowed_pattern="^(?:arn:(?:aws|aws-us-gov|aws-cn):iam::[0-9]{12}:policy/[A-Za-z0-9\-\_\+\=\,\.\@]{1,128})?$",
+            allowed_pattern=r"^(?:arn:(?:aws|aws-us-gov|aws-cn):iam::[0-9]{12}:policy/[A-Za-z0-9_+=,.@-]{1,128})?$",
             constraint_description="The IAM permission boundary must be a valid ARN.",
         )
     )
@@ -110,7 +110,7 @@ class CommonParameters(Base):
                 "You may provide an IAM resource prefix that will be attached to all IAM resources created in RES. "
                 "The prefix should end with hyphen ('-') and contain no slash ('/') character."
             ),
-            allowed_pattern="^([a-zA-Z0-9][a-zA-Z0-9\-\_]{0,10}[\-])?$",
+            allowed_pattern=r"^([a-zA-Z0-9][a-zA-Z0-9_-]{0,10}-)?$",
             constraint_description="IAM resource prefix must contain only letters, numbers, hyphens, or underscores and end with a hyphen (-), and be less than or equal to 12 characters.",
         )
     )
@@ -124,7 +124,7 @@ class CommonParameters(Base):
                 "The path should start and end with slashes ('/') and be less than or equal to 512 characters. "
                 "It can contain multiple slashes ('/') between the start and end slashes ('/')."
             ),
-            allowed_pattern="^(\/[a-zA-Z0-9\-\_\.\/]{0,510}\/)?$",
+            allowed_pattern=r"^(/[a-zA-Z0-9_./-]{0,510}/)?$",
             constraint_description="IAM resource path must start and end with '/', and be less than or equal to 512 characters.",
         )
     )
@@ -203,46 +203,46 @@ class CommonParameterGroups:
     parameter_group_for_environment_and_installer_details: dict[str, Any] = {
         "Label": {"default": "Environment and installer details"},
         "Parameters": [
-            CommonKey.CLUSTER_NAME,
-            CommonKey.ADMIN_EMAIL,
-            CommonKey.SSH_KEY_PAIR,
-            CommonKey.CLIENT_IP,
-            CommonKey.INFRASTRUCTURE_HOST_AMI,
-            CommonKey.CLIENT_PREFIX_LIST,
-            CommonKey.IAM_PERMISSION_BOUNDARY,
-            CommonKey.IAM_RESOURCE_PREFIX,
-            CommonKey.IAM_RESOURCE_PATH,
+            CommonKey.CLUSTER_NAME.value,
+            CommonKey.ADMIN_EMAIL.value,
+            CommonKey.SSH_KEY_PAIR.value,
+            CommonKey.CLIENT_IP.value,
+            CommonKey.INFRASTRUCTURE_HOST_AMI.value,
+            CommonKey.CLIENT_PREFIX_LIST.value,
+            CommonKey.IAM_PERMISSION_BOUNDARY.value,
+            CommonKey.IAM_RESOURCE_PREFIX.value,
+            CommonKey.IAM_RESOURCE_PATH.value,
         ],
     }
 
     parameter_group_for_network_configuration: dict[str, Any] = {
         "Label": {"default": "Network configuration for the RES environment"},
         "Parameters": [
-            CommonKey.VPC_ID,
-            CommonKey.IS_LOAD_BALANCER_INTERNET_FACING,
-            CommonKey.LOAD_BALANCER_SUBNETS,
-            CommonKey.INFRASTRUCTURE_HOST_SUBNETS,
-            CommonKey.VDI_SUBNETS,
-            CommonKey.RETAIN_STORAGE_RESOURCES,
+            CommonKey.VPC_ID.value,
+            CommonKey.IS_LOAD_BALANCER_INTERNET_FACING.value,
+            CommonKey.LOAD_BALANCER_SUBNETS.value,
+            CommonKey.INFRASTRUCTURE_HOST_SUBNETS.value,
+            CommonKey.VDI_SUBNETS.value,
+            CommonKey.RETAIN_STORAGE_RESOURCES.value,
         ],
     }
 
 
 class CommonParameterLabels:
     parameter_labels_for_environment_and_installer_details: dict[str, Any] = {
-        CommonKey.CLIENT_PREFIX_LIST: {
-            "default": f"{CommonKey.CLIENT_PREFIX_LIST}{OPTIONAL_INPUT_PARAMETER_LABEL_SUFFIX}"
+        CommonKey.CLIENT_PREFIX_LIST.value: {
+            "default": f"{CommonKey.CLIENT_PREFIX_LIST.value}{OPTIONAL_INPUT_PARAMETER_LABEL_SUFFIX}"
         },
-        CommonKey.INFRASTRUCTURE_HOST_AMI: {
-            "default": f"{CommonKey.INFRASTRUCTURE_HOST_AMI}{OPTIONAL_INPUT_PARAMETER_LABEL_SUFFIX}"
+        CommonKey.INFRASTRUCTURE_HOST_AMI.value: {
+            "default": f"{CommonKey.INFRASTRUCTURE_HOST_AMI.value}{OPTIONAL_INPUT_PARAMETER_LABEL_SUFFIX}"
         },
-        CommonKey.IAM_PERMISSION_BOUNDARY: {
-            "default": f"{CommonKey.IAM_PERMISSION_BOUNDARY}{OPTIONAL_INPUT_PARAMETER_LABEL_SUFFIX}"
+        CommonKey.IAM_PERMISSION_BOUNDARY.value: {
+            "default": f"{CommonKey.IAM_PERMISSION_BOUNDARY.value}{OPTIONAL_INPUT_PARAMETER_LABEL_SUFFIX}"
         },
-        CommonKey.IAM_RESOURCE_PREFIX: {
-            "default": f"{CommonKey.IAM_RESOURCE_PREFIX}{OPTIONAL_INPUT_PARAMETER_LABEL_SUFFIX}"
+        CommonKey.IAM_RESOURCE_PREFIX.value: {
+            "default": f"{CommonKey.IAM_RESOURCE_PREFIX.value}{OPTIONAL_INPUT_PARAMETER_LABEL_SUFFIX}"
         },
-        CommonKey.IAM_RESOURCE_PATH: {
-            "default": f"{CommonKey.IAM_RESOURCE_PATH}{OPTIONAL_INPUT_PARAMETER_LABEL_SUFFIX}"
+        CommonKey.IAM_RESOURCE_PATH.value: {
+            "default": f"{CommonKey.IAM_RESOURCE_PATH.value}{OPTIONAL_INPUT_PARAMETER_LABEL_SUFFIX}"
         },
     }

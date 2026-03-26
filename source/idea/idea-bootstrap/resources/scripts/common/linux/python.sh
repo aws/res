@@ -52,7 +52,7 @@ function install_python () {
     # Use the system Python if exists and meets the minimum version requirement
     local PYTHON3_BIN=$(which python3)
     local CURRENT_VERSION="$(${PYTHON3_BIN} --version | awk {'print $NF'})"
-    local MINIMUM_VERSION="3.9.16"
+    local MINIMUM_VERSION="3.12.0"
     local PYTHON_VERSION=$(get_string 'package_config.python.version')
     if [ "$(printf '%s\n' "$MINIMUM_VERSION" "$CURRENT_VERSION" | sort -V | head -n1)" = "$MINIMUM_VERSION" ]; then
       log_info "Python ${CURRENT_VERSION} is already installed and meets the requirement."

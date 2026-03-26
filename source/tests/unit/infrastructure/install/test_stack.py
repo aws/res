@@ -54,7 +54,10 @@ def test_res_ecr_repository_creation(
         props={
             "Properties": {
                 "RepositoryName": {
-                    "Fn::Join": ["", [{"Ref": CommonKey.CLUSTER_NAME}, "-res-ecr"]]
+                    "Fn::Join": [
+                        "",
+                        [{"Ref": CommonKey.CLUSTER_NAME.value}, "-res-ecr"],
+                    ]
                 }
             },
             "UpdateReplacePolicy": "Delete",
@@ -101,7 +104,10 @@ def test_ecr_images_duplication_project_creation(
                 "Name": {
                     "Fn::Join": [
                         "-",
-                        [{"Ref": CommonKey.CLUSTER_NAME}, "copy-images-to-res-ecr"],
+                        [
+                            {"Ref": CommonKey.CLUSTER_NAME.value},
+                            "copy-images-to-res-ecr",
+                        ],
                     ]
                 },
                 "Source": {
@@ -198,7 +204,7 @@ def test_ecr_images_handler_role_creation(
                         [
                             stack.resolve(stack.parameters.iam_resource_prefix_string),
                             {
-                                "Ref": CommonKey.CLUSTER_NAME,
+                                "Ref": CommonKey.CLUSTER_NAME.value,
                             },
                             "-ecr-image-handler-role",
                         ],
@@ -269,7 +275,7 @@ def test_ecr_images_handler_role_policy_creation(
                         [
                             stack.resolve(stack.parameters.iam_resource_prefix_string),
                             {
-                                "Ref": CommonKey.CLUSTER_NAME,
+                                "Ref": CommonKey.CLUSTER_NAME.value,
                             },
                             "-custom-resource-ecr-image-handler-role-policy",
                         ],

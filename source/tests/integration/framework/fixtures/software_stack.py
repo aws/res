@@ -9,7 +9,9 @@
 #  OR CONDITIONS OF ANY KIND, express or implied. See the License for the specific language governing permissions
 #  and limitations under the License.
 
+import json
 import os
+import uuid
 
 import pytest
 import yaml
@@ -22,10 +24,16 @@ from ideadatamodel import (  # type: ignore
     SocaFilter,
     VirtualDesktopSoftwareStack,
 )
+from tests.integration.framework.client.api_client import (
+    ApiClient,
+    CreateSoftwareStackRequestContent,
+    DeleteSoftwareStackRequestContent,
+)
 from tests.integration.framework.client.res_client import ResClient
 from tests.integration.framework.fixtures.fixture_request import FixtureRequest
 from tests.integration.framework.fixtures.res_environment import ResEnvironment
 from tests.integration.framework.model.client_auth import ClientAuth
+from tests.integration.framework.utils.virtual_desktop import api_model_to_ideadatamodel
 from tests.integration.tests.smoke.config import TEST_SOFTWARE_STACKS_GOVCLOUD
 
 
@@ -42,8 +50,13 @@ def software_stack(
     admin = request.getfixturevalue(request.param[2])
     software_stack.projects = [project]
 
+    # Add unique short ID to stack name to avoid collisions in parallel test runs
+    unique_id = str(uuid.uuid4())[:4]
+    software_stack.name = f"{software_stack.name}-{unique_id}"
+
+    api_client = ApiClient(res_environment, admin)
     api_invoker_type = request.config.getoption("--api-invoker-type")
-    client = ResClient(res_environment, admin, api_invoker_type)
+    res_client = ResClient(res_environment, admin, api_invoker_type)
 
     if (
         res_environment.region == "us-gov-west-1"
@@ -54,25 +67,25 @@ def software_stack(
     # If no AMI ID is provided, find AMI ID from VDI AMI config file
     if not software_stack.ami_id:
         software_stack.ami_id = get_ami_id(
-            client, software_stack, res_environment.region
+            res_client, software_stack, res_environment.region
         )
 
-    create_software_stack_request = CreateSoftwareStackRequest(
-        software_stack=software_stack
-    )
-    software_stack = client.create_software_stack(
-        create_software_stack_request
-    ).software_stack
+    payload = {"software_stack": json.loads(software_stack.json())}
+    request_content = CreateSoftwareStackRequestContent(**payload)
+    response = api_client.create_software_stack(request_content)
 
     def tear_down() -> None:
-        delete_software_stack_request = DeleteSoftwareStackRequest(
-            software_stack=software_stack
+        delete_request = DeleteSoftwareStackRequestContent(
+            base_os=response.software_stack.base_os  # type: ignore
         )
-        client.delete_software_stack(delete_software_stack_request)
+        api_client.delete_software_stack(
+            response.software_stack.stack_id, delete_request  # type: ignore
+        )
 
     request.addfinalizer(tear_down)
 
-    return software_stack
+    # Return the created software stack (converted back to ideadatamodel)
+    return api_model_to_ideadatamodel(response.software_stack)  # type: ignore
 
 
 def get_ami_id(

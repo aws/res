@@ -371,7 +371,9 @@ class BuildTool:
             # python does not accept server and does some funky normalization on the semver.
             # this is only applicable for pre-releases or dev branches. e.g. 3.0.0-dev.1 gets converted to 3.0.0.dev1
             normalized_python_app_version = idea.utils.get_package_meta(self.c, self.src_dir, 'version')
-            sdist_name = f'{app_name}-{normalized_python_app_version}.tar.gz'
+            # setuptools normalizes package names by replacing hyphens with underscores
+            normalized_app_name = app_name.replace('-', '_')
+            sdist_name = f'{normalized_app_name}-{normalized_python_app_version}.tar.gz'
             sdist = os.path.join(self.src_dir, 'dist', sdist_name)
             shutil.copy(sdist, os.path.join(output_dir, f'{app_name}-lib.tar.gz'))
 

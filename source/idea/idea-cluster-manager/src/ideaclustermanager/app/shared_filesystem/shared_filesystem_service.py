@@ -280,7 +280,7 @@ class SharedFilesystemService:
         self._validate_onboard_filesystem_request(request)
         self._validate_filesystem_does_not_exist(request.filesystem_name)
         self._validate_filesystem_present_in_vpc_and_not_onboarded(
-            request.filesystem_id
+            request.filesystem_id, request.volume_id,
         )
 
         config_entries = self.build_config_for_vpc_ontap(request)
@@ -962,28 +962,42 @@ class SharedFilesystemService:
                     message=f"{subnet_id} is not a RES private subnet",
                 )
 
-    def _validate_filesystem_present_in_vpc_and_not_onboarded(self, filesystem_id):
+    def _validate_filesystem_present_in_vpc_and_not_onboarded(self, filesystem_id, filesystem_volume_id=None):
         onboarded_filesystems = self.list_onboarded_file_systems(
             ListOnboardedFileSystemsRequest()
         ).listing
-        onboarded_filesystem_ids = set(
-            [fs.get_filesystem_id() for fs in onboarded_filesystems]
-        )
 
-        if filesystem_id in onboarded_filesystem_ids:
+        onboarded_filesystem_identifiers = set()
+        for fs in onboarded_filesystems:
+            if fs.get_provider() == constants.STORAGE_PROVIDER_FSX_NETAPP_ONTAP:
+                # For ONTAP: use filesystem:volume format
+                provider_config = fs.storage.get(constants.STORAGE_PROVIDER_FSX_NETAPP_ONTAP, {})
+                fs_id = provider_config.get('file_system_id')
+                volume_config = provider_config.get('volume', {})
+                vol_id = volume_config.get('volume_id')
+                if fs_id and vol_id:
+                    onboarded_filesystem_identifiers.add(f"{fs_id}:{vol_id}")
+            else:
+                # For EFS/Lustre: use just filesystem_id format
+                fs_id = fs.get_filesystem_id()
+                if fs_id:
+                    onboarded_filesystem_identifiers.add(fs_id)
+
+        filesystem_identifier = f"{filesystem_id}:{filesystem_volume_id}" if filesystem_volume_id else filesystem_id
+        if filesystem_identifier in onboarded_filesystem_identifiers:
             raise exceptions.soca_exception(
                 error_code=errorcodes.FILESYSTEM_ALREADY_ONBOARDED,
-                message=f"{filesystem_id} has already been onboarded",
+                message=f"{filesystem_identifier} has already been onboarded",
             )
 
         efs_filesystems = self._list_unonboarded_efs_file_systems(
-            onboarded_filesystem_ids
+            onboarded_filesystem_identifiers
         )
         fsx_ontap_filesystems = self._list_unonboarded_ontap_file_systems(
-            onboarded_filesystem_ids
+            onboarded_filesystem_identifiers
         )
         fsx_lustre_filesystems = self._list_unonboarded_lustre_file_systems(
-            onboarded_filesystem_ids
+            onboarded_filesystem_identifiers
         )
 
         filesystems_in_vpc = [
@@ -992,13 +1006,23 @@ class SharedFilesystemService:
             *fsx_lustre_filesystems,
         ]
 
-        for filesystem in filesystems_in_vpc:
-            if filesystem_id == filesystem.get_filesystem_id():
-                return True
+        for fs in filesystems_in_vpc:
+            if filesystem_id == fs.get_filesystem_id():
+                if isinstance(fs, FSxONTAPFileSystem):
+                    for volume in fs.volume:
+                        if filesystem_volume_id == volume.get_volume_id():
+                            return True
+
+                    raise exceptions.soca_exception(
+                        error_code=errorcodes.FILESYSTEM_NOT_IN_VPC,
+                        message=f"{filesystem_id}:{filesystem_volume_id} is not part of the env's VPC thus not accessible",
+                    )
+                else:
+                    return True
 
         raise exceptions.soca_exception(
             error_code=errorcodes.FILESYSTEM_NOT_IN_VPC,
-            message=f"{filesystem_id} not part of the env's VPC thus not accessible",
+            message=f"{filesystem_id} is not part of the env's VPC thus not accessible",
         )
 
     def _update_config_for_filesystem(
@@ -1114,7 +1138,7 @@ class SharedFilesystemService:
             raise exceptions.general_exception(error_message)
 
     def _list_unonboarded_ontap_file_systems(
-        self, onboarded_filesystem_ids: Set[str]
+        self, onboarded_volume_identifiers: Set[str]
     ) -> List[FSxONTAPFileSystem]:
         try:
             env_vpc_id = self.config.db.get_config_entry("cluster.network.vpc_id")[
@@ -1133,10 +1157,7 @@ class SharedFilesystemService:
                 subnet_response = ec2_client.describe_subnets(
                     SubnetIds=fsx["SubnetIds"]
                 )
-                if (
-                    env_vpc_id == subnet_response["Subnets"][0]["VpcId"]
-                    and fs_id not in onboarded_filesystem_ids
-                ):
+                if env_vpc_id == subnet_response["Subnets"][0]["VpcId"]:
                     volume_response = fsx_client.describe_volumes(
                         Filters=[{"Name": "file-system-id", "Values": [fs_id]}]
                     )
@@ -1160,18 +1181,39 @@ class SharedFilesystemService:
                             volume_response["Volumes"],
                         )
                     )
-                    svm_list = [
-                        FSxONTAPSVM(storage_virtual_machine=svm)
-                        for svm in list_created_svms
-                    ]
-                    volume_list = [
-                        FSxONTAPVolume(volume=volume) for volume in list_created_volumes
-                    ]
-                    filesystems.append(
-                        FSxONTAPFileSystem(
-                            filesystem=fsx, svm=svm_list, volume=volume_list
+
+                    # Filter volumes at the volume level - only include volumes that are not already onboarded
+                    available_volumes = []
+                    available_svm_ids = set()
+
+                    for volume in list_created_volumes:
+                        volume_id = volume["VolumeId"]
+                        volume_identifier = f"{fs_id}:{volume_id}"
+                        if volume_identifier not in onboarded_volume_identifiers:
+                            available_volumes.append(volume)
+                            svm_id = volume.get("OntapConfiguration", {}).get("StorageVirtualMachineId")
+                            if svm_id:
+                                available_svm_ids.add(svm_id)
+
+                    if available_volumes:
+                        # Only include SVMs that have at least one available volume
+                        available_svms = [
+                            svm for svm in list_created_svms
+                            if svm["StorageVirtualMachineId"] in available_svm_ids
+                        ]
+
+                        svm_list = [
+                            FSxONTAPSVM(storage_virtual_machine=svm)
+                            for svm in available_svms
+                        ]
+                        volume_list = [
+                            FSxONTAPVolume(volume=volume) for volume in available_volumes
+                        ]
+                        filesystems.append(
+                            FSxONTAPFileSystem(
+                                filesystem=fsx, svm=svm_list, volume=volume_list
+                            )
                         )
-                    )
             return filesystems
         except botocore.exceptions.ClientError as e:
             error_message = e.response["Error"]["Message"]

@@ -269,6 +269,9 @@ def _load_base_software_stacks() -> Optional[List[Dict[str, Any]]]:
     for base_os in software_stacks.BASE_OS:
         logger.info(f"Processing base_os: {base_os}")
         os_config = base_stacks_config.get(base_os)
+        if not os_config:
+            logger.warning(f"No configuration found for base_os: {base_os}. Skipping.")
+            continue
         for arch in software_stacks.ARCHITECTURE:
             arch_key = _reformat_key(arch)
             logger.info(f"Processing architecture: {arch_key} with base_os: {base_os}")

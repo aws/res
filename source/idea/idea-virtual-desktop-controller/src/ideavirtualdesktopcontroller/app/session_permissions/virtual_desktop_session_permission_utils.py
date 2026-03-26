@@ -115,29 +115,6 @@ class VirtualDesktopSessionPermissionUtils:
 
         return permission
 
-    def update_permission_for_sessions(self, request: UpdateSessionPermissionRequest) -> UpdateSessionPermissionResponse:
-        response = []
-        sessions_info = set()
-        for session_permission in request.create:
-            response.append(self._session_permission_db.create(session_permission))
-            sessions_info.add((session_permission.idea_session_id, session_permission.idea_session_owner))
-        for session_permission in request.update:
-            response.append(self._session_permission_db.update(session_permission))
-            sessions_info.add((session_permission.idea_session_id, session_permission.idea_session_owner))
-        for session_permission in request.delete:
-            self._session_permission_db.delete(session_permission)
-            sessions_info.add((session_permission.idea_session_id, session_permission.idea_session_owner))
-
-        for session_info in sessions_info:
-            self.events_utils.publish_enforce_session_permissions_event(
-                idea_session_id=session_info[0],
-                idea_session_owner=session_info[1],
-            )
-
-        return UpdateSessionPermissionResponse(
-            permissions=response
-        )
-
     def delete_permissions_for_session(self, session: VirtualDesktopSession):
         session_permissions = self._session_permission_db.get_for_session(session.idea_session_id)
         if Utils.is_empty(session_permissions):

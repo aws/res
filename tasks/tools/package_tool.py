@@ -31,7 +31,7 @@ class PackageTool:
         self.library_build_tool: Optional[BuildTool] = None
         self.bootstrap_build_tool: Optional[BuildTool] = None
 
-        if app_name not in {'idea-bootstrap', 'library'}:
+        if app_name not in {'idea-bootstrap', 'library', 'data-model'}:
             self.data_model_build_tool = BuildTool(c, 'idea-data-model')
             self.sdk_build_tool = BuildTool(c, 'idea-sdk')
             self.library_build_tool = BuildTool(c, 'library')

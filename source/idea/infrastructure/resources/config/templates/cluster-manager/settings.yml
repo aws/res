@@ -29,7 +29,8 @@ web_portal:
   logo: ~
   subtitle: ~
   copyright_text: 'Copyright 2023 Amazon Inc. or its affiliates. All Rights Reserved.'
-
+  links: ~
+  number_of_links: 3
   # front end default log level
   #  0: OFF
   #  1: ERROR

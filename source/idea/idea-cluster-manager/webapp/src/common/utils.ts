@@ -28,7 +28,6 @@ import {
     VirtualDesktopSchedule,
     VirtualDesktopScheduleType,
     VirtualDesktopSessionType,
-    VirtualDesktopSoftwareStack,
 } from "../client/data-model";
 import {IdeaFormFieldRegistry} from "../components/form-field";
 import {v4 as uuid} from "uuid";
@@ -40,6 +39,7 @@ import {Constants} from "./constants";
 import {ProjectsClient} from "../client";
 import AuthzClient from "../client/authz-client";
 import AppContext from "./app-context";
+import { ResMemory, VirtualDesktopSoftwareStack } from "../client/generated/api";
 
 const TRUE_VALUES = ["true", "yes", "y"];
 const FALSE_VALUES = ["false", "no", "n"];
@@ -416,7 +416,7 @@ class Utils {
         }
     }
 
-    static getFormattedMemory(memory?: SocaMemory): string {
+    static getFormattedMemory(memory?: SocaMemory | ResMemory): string {
         if (memory == null) {
             return "-";
         }

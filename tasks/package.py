@@ -121,6 +121,15 @@ def library(c):
     package_tool.package()
     idea.console.success(f'distribution created: {package_tool.output_archive_name}')
 
+@task()
+def datamodel(c):
+    # type: (Context) -> None
+    """
+    package data-model
+    """
+    package_tool = PackageTool(c, 'data-model')
+    package_tool.package()
+    idea.console.success(f'distribution created: {package_tool.output_archive_name}')
 
 @task
 def bastion_host(c):
@@ -200,6 +209,8 @@ def package_all(c):
     dcv_broker(c)
 
     library(c)
+
+    datamodel(c)
 
     bastion_host(c)
 

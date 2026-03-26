@@ -40,11 +40,11 @@ class CognitoUserPoolParameters(Base):
 
 class CognitoUserPoolParameterLabels:
     parameter_labels_for_cognito_user_pool: dict[str, Any] = {
-        CognitoUserPoolKey.COGNITO_USER_POOL_ID: {
-            "default": f"{CognitoUserPoolKey.COGNITO_USER_POOL_ID}{OPTIONAL_INPUT_PARAMETER_LABEL_SUFFIX}"
+        CognitoUserPoolKey.COGNITO_USER_POOL_ID.value: {
+            "default": f"{CognitoUserPoolKey.COGNITO_USER_POOL_ID.value}{OPTIONAL_INPUT_PARAMETER_LABEL_SUFFIX}"
         },
-        CognitoUserPoolKey.COGNITO_USER_POOL_DOMAIN_URL: {
-            "default": f"{CognitoUserPoolKey.COGNITO_USER_POOL_DOMAIN_URL}{OPTIONAL_INPUT_PARAMETER_LABEL_SUFFIX}"
+        CognitoUserPoolKey.COGNITO_USER_POOL_DOMAIN_URL.value: {
+            "default": f"{CognitoUserPoolKey.COGNITO_USER_POOL_DOMAIN_URL.value}{OPTIONAL_INPUT_PARAMETER_LABEL_SUFFIX}"
         },
     }
 
@@ -55,7 +55,7 @@ class CognitoUserPoolParameterGroups:
             "default": f"Cognito User Pool details{OPTIONAL_INPUT_PARAMETER_LABEL_SUFFIX}"
         },
         "Parameters": [
-            CognitoUserPoolKey.COGNITO_USER_POOL_ID,
-            CognitoUserPoolKey.COGNITO_USER_POOL_DOMAIN_URL,
+            CognitoUserPoolKey.COGNITO_USER_POOL_ID.value,
+            CognitoUserPoolKey.COGNITO_USER_POOL_DOMAIN_URL.value,
         ],
     }

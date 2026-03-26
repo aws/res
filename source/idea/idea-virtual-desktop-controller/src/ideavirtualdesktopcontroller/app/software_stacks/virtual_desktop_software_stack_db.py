@@ -101,7 +101,7 @@ class VirtualDesktopSoftwareStackDB(VirtualDesktopNotifiableDB):
             return {}
 
         db_dict = {
-            software_stacks_constants.SOFTWARE_STACK_DB_HASH_KEY: software_stack.base_os,
+            software_stacks_constants.SOFTWARE_STACK_DB_HASH_KEY: software_stack.base_os.value,
             software_stacks_constants.SOFTWARE_STACK_DB_RANGE_KEY: software_stack.stack_id,
             software_stacks_constants.SOFTWARE_STACK_DB_NAME_KEY: software_stack.name,
             software_stacks_constants.SOFTWARE_STACK_DB_DESCRIPTION_KEY: software_stack.description,
@@ -110,13 +110,13 @@ class VirtualDesktopSoftwareStackDB(VirtualDesktopNotifiableDB):
             software_stacks_constants.SOFTWARE_STACK_DB_AMI_ID_KEY: software_stack.ami_id,
             software_stacks_constants.SOFTWARE_STACK_DB_ENABLED_KEY: software_stack.enabled,
             software_stacks_constants.SOFTWARE_STACK_DB_MIN_STORAGE_VALUE_KEY: str(software_stack.min_storage.value),
-            software_stacks_constants.SOFTWARE_STACK_DB_MIN_STORAGE_UNIT_KEY: software_stack.min_storage.unit,
+            software_stacks_constants.SOFTWARE_STACK_DB_MIN_STORAGE_UNIT_KEY: software_stack.min_storage.unit.value,
             software_stacks_constants.SOFTWARE_STACK_DB_MIN_RAM_VALUE_KEY: str(software_stack.min_ram.value),
-            software_stacks_constants.SOFTWARE_STACK_DB_MIN_RAM_UNIT_KEY: software_stack.min_ram.unit,
-            software_stacks_constants.SOFTWARE_STACK_DB_ARCHITECTURE_KEY: software_stack.architecture,
-            software_stacks_constants.SOFTWARE_STACK_DB_GPU_KEY: software_stack.gpu,
-            software_stacks_constants.SOFTWARE_STACK_DB_AFFINITY_KEY: software_stack.placement.affinity if software_stack.placement else None,
-            software_stacks_constants.SOFTWARE_STACK_DB_TENANCY_KEY: software_stack.placement.tenancy if software_stack.placement else VirtualDesktopTenancy.DEFAULT,
+            software_stacks_constants.SOFTWARE_STACK_DB_MIN_RAM_UNIT_KEY: software_stack.min_ram.unit.value,
+            software_stacks_constants.SOFTWARE_STACK_DB_ARCHITECTURE_KEY: software_stack.architecture.value,
+            software_stacks_constants.SOFTWARE_STACK_DB_GPU_KEY: software_stack.gpu.value,
+            software_stacks_constants.SOFTWARE_STACK_DB_AFFINITY_KEY: software_stack.placement.affinity.value if software_stack.placement and software_stack.placement.affinity else None,
+            software_stacks_constants.SOFTWARE_STACK_DB_TENANCY_KEY: software_stack.placement.tenancy.value if software_stack.placement and software_stack.placement.tenancy else VirtualDesktopTenancy.DEFAULT.value,
             software_stacks_constants.SOFTWARE_STACK_DB_HOST_ID_KEY: software_stack.placement.host_id if software_stack.placement else None,
             software_stacks_constants.SOFTWARE_STACK_DB_HOST_RESOURCE_GROUP_ARN_KEY: software_stack.placement.host_resource_group_arn if software_stack.placement else None,
             software_stacks_constants.SOFTWARE_STACK_DB_ALLOWED_INSTANCE_TYPES_KEY: software_stack.allowed_instance_types,
@@ -204,7 +204,7 @@ class VirtualDesktopSoftwareStackDB(VirtualDesktopNotifiableDB):
 
         result = self._table.delete_item(
             Key={
-                software_stacks_constants.SOFTWARE_STACK_DB_HASH_KEY: software_stack.base_os,
+                software_stacks_constants.SOFTWARE_STACK_DB_HASH_KEY: software_stack.base_os.value,
                 software_stacks_constants.SOFTWARE_STACK_DB_RANGE_KEY: software_stack.stack_id
             },
             ReturnValues='ALL_OLD'

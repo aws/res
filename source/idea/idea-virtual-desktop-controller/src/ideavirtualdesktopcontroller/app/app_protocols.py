@@ -50,10 +50,6 @@ class DCVClientProtocol(SocaBaseProtocol):
         ...
 
     @abstractmethod
-    def delete_sessions(self, sessions: List[VirtualDesktopSession]) -> (List[VirtualDesktopSession], List[VirtualDesktopSession]):
-        ...
-
-    @abstractmethod
     def enforce_session_permissions(self, session: VirtualDesktopSession):
         ...
 

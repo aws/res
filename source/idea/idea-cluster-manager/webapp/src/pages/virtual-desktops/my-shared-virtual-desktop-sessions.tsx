@@ -15,7 +15,7 @@ import React, { Component, RefObject } from "react";
 
 import { Link } from "@cloudscape-design/components";
 import { AppContext } from "../../common";
-import { VirtualDesktopSessionConnectionInfo, VirtualDesktopSessionPermission } from "../../client/data-model";
+import { VirtualDesktopSessionConnectionInfo } from "../../client/data-model";
 import { VirtualDesktopClient } from "../../client";
 import Utils from "../../common/utils";
 import { IdeaSideNavigationProps } from "../../components/side-navigation";
@@ -25,6 +25,7 @@ import { TableProps } from "@cloudscape-design/components/table/interfaces";
 import IdeaListView from "../../components/list-view";
 import VirtualDesktopSessionStatusIndicator from "./components/virtual-desktop-session-status-indicator";
 import { withRouter } from "../../navigation/navigation-utils";
+import { VirtualDesktopSessionPermission } from "../../client/generated/api";
 
 export interface MySharedVirtualDesktopProps extends IdeaAppLayoutProps, IdeaSideNavigationProps { }
 
@@ -339,11 +340,31 @@ class MySharedVirtualDesktopSessions extends Component<MySharedVirtualDesktopPro
                     return filters;
                 }}
                 onFetchRecords={() => {
+                    const getFilterValue = (key: string): string | undefined => 
+                        this.getListing().getFilters()?.find(f => f.key === key)?.value as string | undefined;
+
+                    const dateRangeFilters = this.getListing().getFormatedDateRange();
+                    const sessionName = getFilterValue("$all")
+                    const state = getFilterValue("idea_session_state")
+                    const baseOs = getFilterValue("idea_session_base_os")
+
                     return this.getVirtualDesktopClient()
                         .listSharedPermissions({
-                            filters: this.getListing().getFilters(),
-                            paginator: this.getListing().getPaginator(),
-                            date_range: this.getListing().getFormatedDateRange(),
+                            username: AppContext.get().auth().getUsername(),
+                            baseOs: baseOs,
+                            sessionName: sessionName,
+                            state: state,
+                            dateRangeKey: dateRangeFilters?.key,
+                            after: dateRangeFilters?.start ? new Date(dateRangeFilters.start).getTime().toString() : undefined,
+                            before: dateRangeFilters?.end  ? new Date(dateRangeFilters.end).getTime().toString() : undefined,
+                        })
+                        .then((data) => {
+                            this.setState({
+                                profileCount: data.listing!.length ?? 0
+                            })
+                            return {
+                                listing: data.listing!,
+                            };
                         })
                         .catch((error) => {
                             this.props.onFlashbarChange({

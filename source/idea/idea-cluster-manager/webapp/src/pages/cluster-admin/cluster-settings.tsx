@@ -23,7 +23,7 @@ import Utils from "../../common/utils";
 import { EnabledDisabledStatusIndicator } from "../../components/common";
 import { withRouter } from "../../navigation/navigation-utils";
 import ConfigUtils from "../../common/config-utils";
-import { UpdateModuleSettingsRequestWebPortal, UpdateModuleSettingsValuesWebPortal } from "../../client/data-model";
+import { UpdateModuleSettingsDCVBroker, UpdateModuleSettingsRequestVDC, UpdateModuleSettingsRequestWebPortal, UpdateModuleSettingsServer, UpdateModuleSettingsValuesWebPortal } from "../../client/data-model";
 
 export interface ClusterSettingsProps extends IdeaAppLayoutProps, IdeaSideNavigationProps {}
 
@@ -32,6 +32,7 @@ export interface ClusterSettingsState {
     identityProvider: any;
     directoryservice: any;
     clusterManager: any;
+    virtualDesktop: any;
     activeTabId: string;
 }
 
@@ -39,6 +40,7 @@ const DEFAULT_ACTIVE_TAB_ID = "general";
 
 class ClusterSettings extends Component<ClusterSettingsProps, ClusterSettingsState> {
     updateWebPortalSettingsForm: RefObject<IdeaForm>;
+    updateGeneralSettingsForm: RefObject<IdeaForm>;
     enableSSOConfigForm: RefObject<IdeaForm>
 
     constructor(props: ClusterSettingsProps) {
@@ -49,18 +51,30 @@ class ClusterSettings extends Component<ClusterSettingsProps, ClusterSettingsSta
             identityProvider: {},
             directoryservice: {},
             clusterManager: {},
+            virtualDesktop: {},
             activeTabId: DEFAULT_ACTIVE_TAB_ID,
         };
         this.updateWebPortalSettingsForm = React.createRef();
+        this.updateGeneralSettingsForm = React.createRef();
     }
 
     buildUpdateWebPortalSettingsForm() {
+        
+        const numberOfLinks = dot.pick("web_portal.number_of_links", this.state.clusterManager) || 3;
+        const links = dot.pick("web_portal.links", this.state.clusterManager) || [];
+        const parsedLinks = typeof links === 'string' ? JSON.parse(links) : links;
+        const linkArray = Array.from({ length: numberOfLinks }, (_, i) => parsedLinks[i] || { title: '', url: '' });
+        
         return (
             <IdeaForm
                 ref={this.updateWebPortalSettingsForm}
                 name="update-web-portal-settings"
                 modal={true}
                 title="Update Web Portal Settings"
+                values={{
+                    title: dot.pick("web_portal.title", this.state.clusterManager),
+                    subtitle: dot.pick("web_portal.subtitle", this.state.clusterManager),
+                }}
                 onSubmit={() => {
                     if (!this.updateWebPortalSettingsForm.current?.validate()) {
                         return;
@@ -79,6 +93,22 @@ class ClusterSettings extends Component<ClusterSettingsProps, ClusterSettingsSta
                     if (values.subtitle !== dot.pick("web_portal.subtitle", this.state.clusterManager)) {
                         updateSettings.settings.web_portal[UpdateModuleSettingsValuesWebPortal.SUBTITLE] = values.subtitle;
                     }
+
+                    const updatedLinks = Array.from({ length: numberOfLinks }, (_, i) => ({
+                        title: values[`link_${i}_title`] || '',
+                        url: values[`link_${i}_url`] || ''
+                    }));
+                    
+                    const sortLinks = (links: any[]) => 
+                        [...links].sort((a, b) => a.title.localeCompare(b.title) || a.url.localeCompare(b.url));
+
+                    const sortedUpdated = sortLinks(updatedLinks);
+                    const sortedOriginal = sortLinks(linkArray);
+
+                    if (JSON.stringify(sortedUpdated) !== JSON.stringify(sortedOriginal)) {
+                        updateSettings.settings.web_portal['links'] = JSON.stringify(updatedLinks);
+                    }
+
                     if (Object.keys(updateSettings.settings.web_portal).length > 0) {
                         AppContext.get()
                             .client()
@@ -119,11 +149,99 @@ class ClusterSettings extends Component<ClusterSettingsProps, ClusterSettingsSta
                     {
                         name: "subtitle",
                         title: "Subtitle",
+                        default: dot.pick("web_portal.subtitle", this.state.clusterManager),
+                    },
+                    ...linkArray.flatMap((link: any, index: number) => [
+                        {
+                            name: `link_${index}_title`,
+                            title: `Link ${index + 1} Title`,
+                            validate: { required: false },
+                            default: link.title || '',
+                        },
+                        {
+                            name: `link_${index}_url`,
+                            title: `Link ${index + 1} URL`,
+                            validate: { required: false },
+                            default: link.url || '',
+                        },
+                    ]),
+                ]}
+            />
+        );
+    }
+
+    buildupdateGeneralSettingsForm() {
+        return (
+            <IdeaForm
+                ref={this.updateGeneralSettingsForm}
+                name="update-general-portal-settings"
+                modal={true}
+                title="Update General Settings"
+                values={{
+                    session_token_validity: dot.pick("dcv_broker.session_token_validity", this.state.virtualDesktop)
+                }}
+                onSubmit={() => {
+                    if (!this.updateGeneralSettingsForm.current?.validate()) {
+                        return;
+                    }
+                    const values = this.updateGeneralSettingsForm.current?.getValues();
+                    const updateSettings: UpdateModuleSettingsRequestVDC = {
+                        module_id: 'vdc',
+                        settings: {
+                            dcv_session: {},
+                            dcv_broker: {}
+                        }
+                    }
+                    
+                    if (values.session_token_validity !== dot.pick("dcv_broker.session_token_validity", this.state.virtualDesktop)) {
+                        updateSettings.settings.dcv_broker![UpdateModuleSettingsDCVBroker.SESSION_TOKEN_VALIDITY] = values.session_token_validity;
+                    }
+
+                    if (updateSettings.settings.dcv_broker && Object.keys(updateSettings.settings.dcv_broker).length > 0) {
+                        AppContext.get()
+                            .client()
+                            .clusterSettings()
+                            .updateModuleSettings(updateSettings)
+                            .then(() => {
+                                this.props.onFlashbarChange({
+                                    items: [
+                                        {
+                                            type: "success",
+                                            content: "General settings updated successfully.",
+                                            dismissible: true,
+                                        },
+                                    ],
+                                });
+                                this.loadSettings();
+                                this.updateGeneralSettingsForm.current?.hideModal();              
+                            })
+                            .catch((error) => {
+                                this.updateGeneralSettingsForm.current?.setError(error.errorCode, error.message);
+                            });
+                    } else {
+                        this.updateGeneralSettingsForm.current?.setError("400", "No settings updated.");
+                    }
+                }}
+                onCancel={() => {
+                    this.updateGeneralSettingsForm.current?.hideModal();
+                }}
+                params={[                    
+                    {
+                        name: "session_token_validity",
+                        title: "DCV Session Token Duration",
+                        help_text: "After updating this setting. Please terminate current broker instances on your environment.",
+                        data_type: "int",
+                        default: dot.pick("dcv_broker.session_token_validity", this.state.virtualDesktop),
+                        param_type: "select",
                         validate: {
                             required: true,
                         },
-                        default: dot.pick("web_portal.subtitle", this.state.clusterManager),
-                    },
+                        choices: [
+                            { title: "1440 Minutes / 1 Day", value: (24 * 60) },
+                            { title: "10080 Minutes / 7 Days", value: (24 * 60 * 7) },
+                            { title: "43200 Minutes / 30 Days", value: (24 * 60 * 30) }
+                        ]
+                    },                   
                 ]}
             />
         );
@@ -143,7 +261,11 @@ class ClusterSettings extends Component<ClusterSettingsProps, ClusterSettingsSta
         // 2
         promises.push(clusterSettingsService.getDirectoryServiceSettings());
         // 3
+        promises.push(clusterSettingsService.getVirtualDesktopSettings(false));
+        // 4
         promises.push(clusterSettingsService.getClusterManagerSettings(false));
+        
+
         const queryParams = new URLSearchParams(this.props.location.search);
         const activeTabId = Utils.asString(queryParams.get("tab"), DEFAULT_ACTIVE_TAB_ID);
         Promise.all(promises).then((result) => {
@@ -151,13 +273,18 @@ class ClusterSettings extends Component<ClusterSettingsProps, ClusterSettingsSta
                 cluster: result[0],
                 identityProvider: result[1],
                 directoryservice: result[2],
-                clusterManager: result[3],
+                virtualDesktop: result[3],
+                clusterManager: result[4],
                 activeTabId: activeTabId,
             }, () => {
                 this.updateWebPortalSettingsForm.current?.registry.list().map((field) => {
                     field.setState({default: field.props.param.default});
                 });
                 this.updateWebPortalSettingsForm.current?.reset();
+                this.updateGeneralSettingsForm.current?.registry.list().map((field) => {
+                    field.setState({default: field.props.param.default});
+                });
+                this.updateGeneralSettingsForm.current?.reset();
             });
         });
     }
@@ -212,6 +339,7 @@ class ClusterSettings extends Component<ClusterSettingsProps, ClusterSettingsSta
                 content={
                     <SpaceBetween size={"l"}>
                         {this.buildUpdateWebPortalSettingsForm()}
+                        {this.buildupdateGeneralSettingsForm()}
                         <Container>
                             <ColumnLayout variant={"text-grid"} columns={3}>
                                 <KeyValue title="Environment Name" value={dot.pick("cluster_name", this.state.cluster)} clipboard={true} />
@@ -238,7 +366,19 @@ class ClusterSettings extends Component<ClusterSettingsProps, ClusterSettingsSta
                                     id: "general",
                                     content: (
                                         <SpaceBetween size="m">
-                                            <Container header={<Header variant={"h2"}>General Settings</Header>}>
+                                            <Container header={
+                                                    <Header 
+                                                        variant={"h2"}
+                                                        actions={
+                                                            <Button
+                                                                iconName="edit"
+                                                                onClick={() => {
+                                                                    this.updateGeneralSettingsForm.current?.showModal();
+                                                                }}
+                                                            />
+                                                        }
+                                                        >General Settings</Header>
+                                                }>
                                                 <ColumnLayout variant={"text-grid"} columns={3}>
                                                     <KeyValue title="Administrator Username" value={dot.pick("administrator_username", this.state.cluster)} />
                                                     <KeyValue title="Administrator Email" value={dot.pick("administrator_email", this.state.cluster)} clipboard={true} />
@@ -246,6 +386,7 @@ class ClusterSettings extends Component<ClusterSettingsProps, ClusterSettingsSta
                                                     <KeyValue title="Locale" value={dot.pick("locale", this.state.cluster)} />
                                                     <KeyValue title="Timezone" value={dot.pick("timezone", this.state.cluster)} />
                                                     <KeyValue title="Default Encoding" value={dot.pick("encoding", this.state.cluster)} />
+                                                    <KeyValue title="DCV Session Token Duration" value={String(dot.pick("dcv_broker.session_token_validity", this.state.virtualDesktop))} suffix=" minutes" />
                                                 </ColumnLayout>
                                             </Container>
                                             <Container
@@ -269,6 +410,19 @@ class ClusterSettings extends Component<ClusterSettingsProps, ClusterSettingsSta
                                                     <KeyValue title="Title" value={dot.pick("web_portal.title", this.state.clusterManager)}/>
                                                     <KeyValue title="Subtitle" value={dot.pick("web_portal.subtitle", this.state.clusterManager)}/>
                                                     <KeyValue title="Copyright Text" value={dot.pick("web_portal.copyright_text", this.state.clusterManager)}/>
+                                                    {(() => {
+                                                        const numberOfLinks = dot.pick("web_portal.number_of_links", this.state.clusterManager) || 3;
+                                                        const links = dot.pick("web_portal.links", this.state.clusterManager) || [];
+                                                        const parsedLinks = typeof links === 'string' ? JSON.parse(links) : links;
+                                                        const linkArray = Array.from({ length: numberOfLinks }, (_, i) => parsedLinks[i] || { title: '', url: '' });
+                                                        return linkArray.map((link: any, index: number) => (
+                                                            <React.Fragment key={index}>
+                                                                <KeyValue title={`Link ${index + 1} Title`} value={link.title}/>
+                                                                <KeyValue title={`Link ${index + 1} URL`} value={link.url} clipboard={true}/>
+                                                                <div />
+                                                            </React.Fragment>
+                                                        ));
+                                                    })()}
                                                 </ColumnLayout>
                                             </Container>
                                             <Container header={<Header variant={"h2"}>AWS Account Settings</Header>}>

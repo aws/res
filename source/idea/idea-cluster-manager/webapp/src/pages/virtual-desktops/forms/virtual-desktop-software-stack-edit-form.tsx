@@ -13,10 +13,16 @@
 
 import React, { Component, RefObject } from "react";
 import IdeaForm from "../../../components/form";
-import {Project, SocaMemory, SocaUserInputChoice, VirtualDesktopBaseOS, VirtualDesktopGPU, VirtualDesktopPlacement, VirtualDesktopSoftwareStack, VirtualDesktopTenancy} from "../../../client/data-model";
+import {Project, SocaMemory, SocaUserInputChoice} from "../../../client/data-model";
 import { ProjectsClient } from "../../../client";
 import { AppContext } from "../../../common";
 import Utils from "../../../common/utils";
+import { VirtualDesktopBaseOs, VirtualDesktopGpu, VirtualDesktopPlacement, VirtualDesktopSoftwareStack, VirtualDesktopTenancy } from "../../../client/generated/api";
+import { 
+    handleInstanceTypeUpdate,
+    fetchInstanceTypeChoices,
+    createFieldUpdaters,
+} from "../utils/software-stack-form-utils";
 
 export interface VirtualDesktopSoftwareStackEditFormProps {
     supportedOsChoices: SocaUserInputChoice[];
@@ -24,7 +30,7 @@ export interface VirtualDesktopSoftwareStackEditFormProps {
     allowedInstanceTypes: string[];
     softwareStack: VirtualDesktopSoftwareStack;
     onDismiss: () => void;
-    onSubmit: (stack_id: string, base_os: VirtualDesktopBaseOS, name: string, description: string, ami_id: string, gpu: VirtualDesktopGPU, min_storage: SocaMemory,
+    onSubmit: (stack_id: string, base_os: VirtualDesktopBaseOs, name: string, description: string, ami_id: string, gpu: VirtualDesktopGpu, min_storage: SocaMemory,
         min_ram: SocaMemory, projects: Project[], placement: VirtualDesktopPlacement, allowed_instance_types: string[]) => Promise<boolean>;
 }
 
@@ -35,11 +41,8 @@ export interface VirtualDesktopSoftwareStackEditFormState {
     affinityChoices: SocaUserInputChoice[],
     targetHostChoices: SocaUserInputChoice[],
     instanceTypeChoices: SocaUserInputChoice[];
-    selectedGPU: VirtualDesktopGPU;
-    selectedAmiId: string;
-    selectedTenancy: VirtualDesktopTenancy;
-    selectedMinRam: number;
-    selectedAllowedInstanceTypes: string[];
+    softwareStackForEdit: Partial<VirtualDesktopSoftwareStack>;
+    debounceTimer: NodeJS.Timeout | null;
 }
 
 class VirtualDesktopSoftwareStackEditForm extends Component<VirtualDesktopSoftwareStackEditFormProps, VirtualDesktopSoftwareStackEditFormState> {
@@ -55,11 +58,10 @@ class VirtualDesktopSoftwareStackEditForm extends Component<VirtualDesktopSoftwa
             affinityChoices: Utils.getAffinityChoices(),
             targetHostChoices: Utils.getTargetHostChoices(),
             instanceTypeChoices: [],
-            selectedGPU: this.props.softwareStack.gpu!,
-            selectedAmiId: this.props.softwareStack.ami_id!,
-            selectedTenancy: this.props.softwareStack.placement?.tenancy!,
-            selectedMinRam: this.props.softwareStack.min_ram?.value!,
-            selectedAllowedInstanceTypes: this.props.softwareStack.allowed_instance_types!,
+            softwareStackForEdit: {
+                ...this.props.softwareStack
+            },
+            debounceTimer: null,
         };
     }
 
@@ -75,31 +77,16 @@ class VirtualDesktopSoftwareStackEditForm extends Component<VirtualDesktopSoftwa
     }
 
     async updateInstanceTypes() {
-        const software_stack: VirtualDesktopSoftwareStack = {
-            ...this.props.softwareStack,
-            gpu: this.state.selectedGPU,
-            ami_id: this.state.selectedAmiId,
-            placement: {
-                ...this.props.softwareStack.placement,
-                tenancy: this.state.selectedTenancy,
-            },
-            min_ram: {
-                value: this.state.selectedMinRam,
-                unit: "gb",
-            }
-        };
-
-        const instanceTypes = await Utils.getAllowedInstanceTypesOptionsForSelectedSoftwareStack(software_stack);
-        const instanceTypeChoices: SocaUserInputChoice[] = instanceTypes.map(type => ({
-            title: type,
-            value: type,
-        }));
-
-        this.setState({ instanceTypeChoices }, () => {
-            this.getForm()?.getFormField("allowed_instance_types")?.setOptions({
-                listing: instanceTypeChoices,
+        try {
+            const instanceTypeChoices = await fetchInstanceTypeChoices(this.state.softwareStackForEdit);
+            this.setState({ instanceTypeChoices }, () => {
+                this.getForm()?.getFormField("allowed_instance_types")?.setOptions({
+                    listing: instanceTypeChoices,
+                });
             });
-        });
+        } catch (error: any) {
+            this.getForm()?.setError(error.errorCode || 'FETCH_ERROR', error.message || 'Failed to fetch instance types');
+        }
     }
 
     async showModal() {
@@ -185,19 +172,29 @@ class VirtualDesktopSoftwareStackEditForm extends Component<VirtualDesktopSoftwa
     }
 
     async componentDidUpdate(prevProps: VirtualDesktopSoftwareStackEditFormProps, prevState: VirtualDesktopSoftwareStackEditFormState) {
-        try {
-            let gpuUpdated = prevState.selectedGPU !== this.state.selectedGPU
-            let amiIdUpdated = prevState.selectedAmiId !== this.state.selectedAmiId
-            let tenancyUpdated = prevState.selectedTenancy !== this.state.selectedTenancy
-            let minRamUpdated = prevState.selectedMinRam !== this.state.selectedMinRam
+        if (!this.state.showModal) {
+            return;
+        }
 
-            if (gpuUpdated || amiIdUpdated || tenancyUpdated || minRamUpdated) {
-                this.getForm()?.clearError();
-                await this.updateInstanceTypes();
-                this.setState({ selectedAllowedInstanceTypes: [] });
-            }
-        } catch (error: any) {
-            this.getForm()?.setError(error.errorCode, error.message);
+        if (prevState.softwareStackForEdit === this.state.softwareStackForEdit) {
+            return;
+        }
+
+        await handleInstanceTypeUpdate({
+            prevStack: prevState.softwareStackForEdit,
+            currStack: this.state.softwareStackForEdit,
+            debounceTimer: this.state.debounceTimer,
+            clearTimer: () => this.setState({ debounceTimer: null }),
+            setTimer: (timer) => this.setState({ debounceTimer: timer }),
+            clearError: () => this.getForm()?.clearError(),
+            updateInstanceTypes: () => this.updateInstanceTypes(),
+            updateStack: (stack) => this.setState({ softwareStackForEdit: stack }),
+        });
+    }
+
+    componentWillUnmount() {
+        if (this.state.debounceTimer) {
+            clearTimeout(this.state.debounceTimer);
         }
     }
 
@@ -214,26 +211,16 @@ class VirtualDesktopSoftwareStackEditForm extends Component<VirtualDesktopSoftwa
                         this.hideForm();
                     }}
                     onStateChange={(event) => {
+                        const paramName = event.param.name;
+                        if (!paramName) return;
+                        
                         const values = this.getForm().getValues();
-                        if (event.param.name === "ami_id") {
-                            this.setState({
-                                selectedAmiId: values.ami_id.toLowerCase().trim(),
-                            });
-                        }
-                        if (event.param.name === "gpu") {
-                            this.setState({
-                                selectedGPU: values.gpu,
-                            });
-                        }
-                        if (event.param.name === "tenancy") {
-                            this.setState({
-                                selectedTenancy: values.tenancy,
-                            });
-                        }
-                        if (event.param.name === "ram_size") {
-                            this.setState({
-                                selectedMinRam: values.ram_size,
-                            });
+                        const updatedStack = { ...this.state.softwareStackForEdit };
+                        const fieldUpdaters = createFieldUpdaters(values, updatedStack);
+                        
+                        if (fieldUpdaters[paramName]) {
+                            fieldUpdaters[paramName]();
+                            this.setState({ softwareStackForEdit: updatedStack });
                         }
                     }}
                     onSubmit={() => {
@@ -314,7 +301,7 @@ class VirtualDesktopSoftwareStackEditForm extends Component<VirtualDesktopSoftwa
                             help_text: "AMI ID must start with ami-xxx. Systems Manager Parameter ARN must follow the ARN format",
                             data_type: "str",
                             param_type: "text",
-                            default: this.state.selectedAmiId,
+                            default: this.state.softwareStackForEdit.ami_id,
                             validate: {
                                 required: true,
                             },
@@ -478,7 +465,7 @@ class VirtualDesktopSoftwareStackEditForm extends Component<VirtualDesktopSoftwa
                             param_type: "select",
                             multiple: true,
                             choices: this.state.instanceTypeChoices,
-                            default: this.state.selectedAllowedInstanceTypes,
+                            default: this.state.softwareStackForEdit.allowed_instance_types || [],
                         },
                     ]}
                 />

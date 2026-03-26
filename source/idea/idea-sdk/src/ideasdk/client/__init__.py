@@ -16,3 +16,4 @@ from ideasdk.client.projects_client import ProjectsClient
 from ideasdk.client.roles_client import RolesClient
 from ideasdk.client.role_assignments_client import RoleAssignmentsClient
 from ideasdk.client.notifications_async_client import NotificationsAsyncClient
+from ideasdk.client.shared_filesystem_client import SharedFileSystemClient

@@ -26,7 +26,7 @@ TEST_INSTANCE_ID = "test_instance_id"
 TEST_DCV_SESSION_ID = "test_dcv_session_id"
 TEST_SESSION_ID = "test_session_id"
 TEST_SCHEDULE_ID = "test_schedule_id"
-TEST_SCHEDULE_DAY = schedules.SCHEDULE_DAYS[0]
+TEST_SCHEDULE_DAY = schedules.DayOfWeek.MONDAY.value
 TEST_SCHEDULE_TYPE = "test_schedule_type"
 SESSION = {
     "idea_session_id": TEST_SESSION_ID,
@@ -108,13 +108,12 @@ class TestVDIManagement(unittest.TestCase):
         assert current_session.get(sessions.SESSION_DB_STATE_KEY) == READY_STATE
 
     def test_stop_vdi_sessions_with_dcv_session_pass(self):
-        self.monkeypatch.setattr(
-            dcv_broker_client, "delete_sessions", self.delete_dcv_session_response()
-        )
+        mocked_stop_hosts = MagicMock()
+        self.monkeypatch.setattr(vdi_management, "_stop_hosts", mocked_stop_hosts)
 
-        self.monkeypatch.setattr(
-            events_client, "publish_validate_dcv_session_deletion_event", MagicMock()
-        )
+        mocked_stop_hosts.return_value = {
+            "StoppingInstances": [{"InstanceId": TEST_INSTANCE_ID}]
+        }
 
         current_session = sessions.get_session(
             owner=TEST_OWNER, session_id=TEST_SESSION_ID
@@ -128,7 +127,7 @@ class TestVDIManagement(unittest.TestCase):
         success, _ = vdi_management.stop_sessions([self.SESSION])
 
         current_server = servers.get_server(instance_id=TEST_INSTANCE_ID)
-        assert current_server.get(servers.SERVER_DB_STATE_KEY) == READY_STATE
+        assert current_server.get(servers.SERVER_DB_STATE_KEY) == STOPPED_STATE
 
         current_session = sessions.get_session(
             owner=TEST_OWNER, session_id=TEST_SESSION_ID
@@ -139,9 +138,12 @@ class TestVDIManagement(unittest.TestCase):
         assert success[0] == current_session
 
     def test_stop_vdi_sessions_with_no_dcv_session_pass(self):
-        self.monkeypatch.setattr(
-            dcv_broker_client, "delete_sessions", self.delete_dcv_session_response()
-        )
+        mocked_stop_hosts = MagicMock()
+        self.monkeypatch.setattr(vdi_management, "_stop_hosts", mocked_stop_hosts)
+
+        mocked_stop_hosts.return_value = {
+            "StoppingInstances": [{"InstanceId": TEST_INSTANCE_ID}]
+        }
 
         current_session = sessions.get_session(
             owner=TEST_OWNER, session_id=TEST_SESSION_ID
@@ -168,10 +170,6 @@ class TestVDIManagement(unittest.TestCase):
         assert success[0] == current_session
 
     def test_stop_sessions_not_in_ready_fail(self):
-        self.monkeypatch.setattr(
-            dcv_broker_client, "delete_sessions", self.delete_dcv_session_response()
-        )
-
         current_session = self.SESSION
         current_session[sessions.SESSION_DB_STATE_KEY] = STOPPED_STATE
         sessions.update_session(current_session)
@@ -183,17 +181,6 @@ class TestVDIManagement(unittest.TestCase):
         # Check if current_Session is a subset of fail[0] since fail[0] has an extra failure_reason field
         assert fail[0].items() > current_session.items()
         assert fail[0].get("failure_reason")
-
-    def delete_dcv_session_response(self):
-        def delete_session_response(curr_sessions):
-            if curr_sessions and curr_sessions[0].get(
-                sessions.SESSION_DB_DCV_SESSION_ID_KEY
-            ):
-                return [{"dcv_session_id": TEST_DCV_SESSION_ID}], []
-            else:
-                return [], []
-
-        return delete_session_response
 
     def test_delete_schedule_for_session_pass(self):
         item = table_utils.get_item(
@@ -217,10 +204,48 @@ class TestVDIManagement(unittest.TestCase):
         )
         assert item is None
 
-    def test_terminate_sessions_with_no_dcv_session_pass(self):
+    def test_terminate_sessions_with_dcv_session_pass(self):
         self.monkeypatch.setattr(
-            dcv_broker_client, "delete_sessions", self.delete_dcv_session_response()
+            vdi_management,
+            "_terminate_hosts",
+            lambda server: {"TerminatingInstances": [{"InstanceId": TEST_INSTANCE_ID}]},
         )
+        self.monkeypatch.setattr(
+            cluster_settings, "get_setting", lambda setting: "test_url"
+        )
+
+        current_session = self.SESSION
+        assert (
+            current_session.get(sessions.SESSION_DB_DCV_SESSION_ID_KEY)
+            == TEST_DCV_SESSION_ID
+        )
+        assert current_session.get(sessions.SESSION_DB_STATE_KEY) == READY_STATE
+
+        current_server = servers.get_server(instance_id=TEST_INSTANCE_ID)
+        assert current_server.get(servers.SERVER_DB_STATE_KEY) == READY_STATE
+
+        success, _ = vdi_management.terminate_sessions([self.SESSION])
+
+        with pytest.raises(exceptions.ServerNotFound) as exc_info:
+            servers.get_server(instance_id=TEST_INSTANCE_ID)
+        assert f"Server not found: {TEST_INSTANCE_ID}" == exc_info.value.args[0]
+
+        with pytest.raises(exceptions.UserSessionNotFound) as exc_info:
+            sessions.get_session(owner=TEST_OWNER, session_id=TEST_SESSION_ID)
+        assert f"Session not found: {TEST_SESSION_ID}" == exc_info.value.args[0]
+
+        with pytest.raises(exceptions.SessionPermissionsNotFound) as exc_info:
+            session_permissions.get_session_permission(
+                session_id=TEST_SESSION_ID, user=TEST_USER
+            )
+        assert (
+            f"Session permission not found for {session_permissions.SESSION_PERMISSION_DB_HASH_KEY}: {TEST_SESSION_ID} for {session_permissions.SESSION_PERMISSION_DB_RANGE_KEY} : {TEST_USER}"
+            == exc_info.value.args[0]
+        )
+
+        assert len(success) == 1
+
+    def test_terminate_sessions_with_no_dcv_session_pass(self):
         self.monkeypatch.setattr(
             vdi_management,
             "_terminate_hosts",

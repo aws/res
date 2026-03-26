@@ -19,7 +19,7 @@ import VirtualDesktopStateChart from "../../virtual-desktops/charts/virtual-desk
 import VirtualDesktopBaseOSChart from "../../virtual-desktops/charts/virtual-desktop-baseos-chart";
 import VirtualDesktopSoftwareStackChart from "../../virtual-desktops/charts/virtual-desktop-software-stack-chart";
 import VirtualDesktopProjectChart from "../../virtual-desktops/charts/virtual-desktop-project-chart";
-import { VirtualDesktopSession } from '../../../client/data-model'
+import { VirtualDesktopSession } from "../../../client/generated/api";
 
 export interface ResourcesTabProps {
     sessions: VirtualDesktopSession[];

@@ -101,21 +101,12 @@ class TestGetPermissionProfile:
             api_client = ApiClient(res_environment, admin)
             api_client.get_permission_profile(profile_id="nonexistent-profile-id")
             pytest.fail(
-                "Expected 'Permission profile not found' error for invalid profile ID"
+                f"Exception should be raised when permission profile is not found"
             )
         except Exception as e:
-            # Should get a 400 error with "not found" message
-            if "400" in str(e):
-                # Check if the response body contains "not found"
-                if hasattr(e, "response") and e.response is not None:
-                    response_content = e.response.text
-                    if "not found" in response_content.lower():
-                        logger.info(
-                            "Correctly received error for non-existent profile ID"
-                        )
-                        return
-
-            pytest.fail(f"Unexpected error for invalid profile ID: {str(e)}")
+            assert "404" in str(e), f"Expected 404 error, got: {str(e)}"
+            assert hasattr(e, "response"), "Response should exist in the exception"
+            assert "not found" in e.response.text, f"Unexpected error: {str(e)}"
 
     @pytest.mark.parametrize("non_admin_username", ["user1"])
     def test_get_permission_profile_with_non_admin_user_returns_authorization_error(

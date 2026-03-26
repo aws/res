@@ -72,7 +72,7 @@ class Utils:
 
     @staticmethod
     def get_bootstrap_token_from_request_context(
-        event: Dict[str, Any]
+        event: Dict[str, Any],
     ) -> Optional[Any]:
         return event.get("queryStringParameters", {}).get("bootstrapToken")
 

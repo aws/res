@@ -113,6 +113,7 @@ export interface IdeaFormFieldStateChangeEvent {
     errorMessage?: string | null;
     refresh?: boolean;
     ref: IdeaFormField;
+    triggerDependencyRefresh?: boolean;
 }
 
 export interface IdeaFormFieldLifecycleEvent {
@@ -1664,12 +1665,12 @@ class IdeaFormField extends Component<IdeaFormFieldProps, IdeaFormFieldState> {
     buildSelect(props: FormFieldProps) {
         let secondaryControl = this.buildFormFieldSecondaryControl();
         return this.buildFormField(
-            <Select selectedOption={this.state.selectedOption} 
-                    options={this.state.options} 
-                    empty={this.getEmptyOptionsLabel()} 
-                    disabled={this.isReadOnly() || this.state.disabled} 
+            <Select selectedOption={this.state.selectedOption}
+                    options={this.state.options}
+                    empty={this.getEmptyOptionsLabel()}
+                    disabled={this.isReadOnly() || this.state.disabled}
                     onChange={(event) => this.onSelectStateChange(event.detail.selectedOption)}
-                    triggerVariant={this.props.param.triggerVariant as SelectProps.TriggerVariant} />, 
+                    triggerVariant={this.props.param.triggerVariant as SelectProps.TriggerVariant} />,
             {
             ...props,
             secondaryControl: secondaryControl,
@@ -1904,7 +1905,7 @@ class IdeaFormField extends Component<IdeaFormFieldProps, IdeaFormFieldState> {
                                                 }}
                                                 onFetchOptions={this.props.onFetchOptions}
                                                 stretch={props.stretch}
-                                                toolsOpen={this.props.toolsOpen} 
+                                                toolsOpen={this.props.toolsOpen}
                                                 tools={this.props.tools}
                                                 onToolsChange={this.props.onToolsChange}
                                             />)
@@ -1981,7 +1982,7 @@ class IdeaFormField extends Component<IdeaFormFieldProps, IdeaFormFieldState> {
                     if (container_items?.length === 2) {
                         const key = container_items[0]
                         const value = container_items[1]
-  
+
                         return [
                             {
                                 label: <FormField label={<span>{key.title}{key.description ? <i> - {key.description}</i> : ""}</span>} info={key.markdown && <Link variant="info" onFollow={() => this.handleToolsOpen(key.markdown)}>Info</Link>}></FormField>,

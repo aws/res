@@ -5,6 +5,7 @@
 set -ex
 
 invoke clean.library build.library package.library
+invoke clean.datamodel build.datamodel package.datamodel
 
 SYNTH_CMD="npx cdk synth RESHostModulesPipelineStack -c repository_name=$PIPELINE_REPOSITORY_NAME -c branch_name=$PIPELINE_BRANCH_NAME -c publish_modules=$PIPELINE_PUBLISH_MODULES"
 

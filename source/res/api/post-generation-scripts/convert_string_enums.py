@@ -28,9 +28,9 @@ def is_enum_like_model(file_path: str) -> Tuple[bool, Optional[Dict[str, str]], 
     try:
         with open(file_path, 'r') as f:
             content = f.read()
-        
+
         # Check if it inherits from Model and has "allowed enum values" comment
-        if 'from api.models.base_model import Model' not in content:
+        if 'from datamodel.models.base_model import Model' not in content:
             return False, None, None
         
         if 'allowed enum values' not in content:

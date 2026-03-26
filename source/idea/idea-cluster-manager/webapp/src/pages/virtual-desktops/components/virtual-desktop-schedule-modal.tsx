@@ -207,6 +207,7 @@ class VirtualDesktopScheduleModal extends Component<VirtualDesktopScheduleModalP
                 this.setState({
                     working_hours_start: settings.dcv_session.working_hours.start_up_time,
                     working_hours_end: settings.dcv_session.working_hours.shut_down_time,
+                    defaultSchedule: settings.dcv_session.schedule,
                 });
             });
              
@@ -229,8 +230,8 @@ class VirtualDesktopScheduleModal extends Component<VirtualDesktopScheduleModalP
                 currentTime: moment(),
             });
         }, 1000);   
-    }
-
+    }        
+   
     componentDidMount() {
        this.resetModal()
     }
@@ -240,7 +241,7 @@ class VirtualDesktopScheduleModal extends Component<VirtualDesktopScheduleModalP
     }
 
     async showSchedule(item: VirtualDesktopSession | VirtualDesktopWeekSchedule) {
-        await this.resetModal()
+        await this.resetModal();
 
         if (this.state.modalType === "session") {
             this.setState({
@@ -248,7 +249,6 @@ class VirtualDesktopScheduleModal extends Component<VirtualDesktopScheduleModalP
                 session: item as VirtualDesktopSession,
             });
         } 
-        
         if (this.state.modalType === "default") {
             this.setState({
                 visible: true,
@@ -330,6 +330,41 @@ class VirtualDesktopScheduleModal extends Component<VirtualDesktopScheduleModalP
        }
     }
 
+    async resetToDefault() {
+        if (this.state.modalType === "session" && this.state.defaultSchedule && this.state.session) {
+            const settings = await AppContext.get()
+                .getClusterSettingsService()
+                .getVirtualDesktopSettings();
+            
+            const transformSchedule = (schedule: any): VirtualDesktopWeekSchedule => {
+                const transformed: any = {};
+                Object.keys(schedule).forEach(day => {
+                    const daySchedule = schedule[day];
+                    const scheduleEntry: any = {
+                        schedule_type: daySchedule.type || daySchedule.schedule_type,
+                    };
+                    if (daySchedule.start_up_time) {
+                        scheduleEntry.start_up_time = daySchedule.start_up_time;
+                    }
+                    if (daySchedule.shut_down_time) {
+                        scheduleEntry.shut_down_time = daySchedule.shut_down_time;
+                    }
+                    transformed[day] = scheduleEntry;
+                });
+                return transformed;
+            };
+            
+            const transformed = transformSchedule(settings.dcv_session.schedule);
+            
+            this.setState({
+                session: {
+                    ...this.state.session,
+                    schedule: transformed,
+                },
+            })
+        }
+    }
+
     setErrorMessage(message: string) {
         this.setState({
             errorMessage: message,
@@ -343,14 +378,13 @@ class VirtualDesktopScheduleModal extends Component<VirtualDesktopScheduleModalP
         
         const scheduleData = this.state.modalType === "session" 
             ? this.state.session?.schedule
-            // modalType === default 
             : this.state.defaultSchedule;
 
         return (
             <ColumnLayout columns={1}>
                 {days.map((day, index) => (
                     <VirtualDesktopDayOfWeekSchedule 
-                        key={day}
+                        key={`${day}-${JSON.stringify(scheduleData?.[day.toLowerCase()])}`}
                         modalType={this.state.modalType}
                         ref={refs[index]}
                         dayOfWeek={day}
@@ -378,15 +412,24 @@ class VirtualDesktopScheduleModal extends Component<VirtualDesktopScheduleModalP
                         </Header>
                     }
                     footer={
-                        <Box float="right">
-                            <SpaceBetween size="xs" direction="horizontal">
-                                <Button disabled={this.state.saveLoading} onClick={() => this.cancel()}>
-                                    Cancel
-                                </Button>
-                                <Button loading={this.state.saveLoading} variant="primary" onClick={() => this.save()}>
-                                    Save
-                                </Button>
-                            </SpaceBetween>
+                        <Box>
+                            <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                                <div>
+                                    {this.state.modalType === "session" && this.state.defaultSchedule && (
+                                        <Button loading={this.state.saveLoading} onClick={() => this.resetToDefault()}>
+                                            Reset
+                                        </Button>
+                                    )}  
+                                </div>
+                                <SpaceBetween size="xs" direction="horizontal">
+                                    <Button disabled={this.state.saveLoading} onClick={() => this.cancel()}>
+                                        Cancel
+                                    </Button>
+                                    <Button loading={this.state.saveLoading} variant="primary" onClick={() => this.save()}>
+                                        Save
+                                    </Button>
+                                </SpaceBetween>
+                            </div>
                         </Box>
                     }
                 >

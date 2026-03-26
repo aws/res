@@ -11,7 +11,7 @@
 
 import logging
 import time
-from typing import Type
+from typing import Any, Type
 
 import selenium
 from selenium import webdriver
@@ -254,19 +254,6 @@ class ResClient:
             should_succeed,
         )
 
-    def get_session_info(
-        self, request: GetSessionInfoRequest, should_succeed: bool = True
-    ) -> GetSessionInfoResponse:
-        logger.info(f"getting session info for {request.session.name}...")
-
-        return self._invoke(
-            "VirtualDesktop.GetSessionInfo",
-            "vdc",
-            request,
-            GetSessionInfoResponse,
-            should_succeed,
-        )
-
     def get_session_connection_info(
         self, request: GetSessionConnectionInfoRequest, should_succeed: bool = True
     ) -> GetSessionConnectionInfoResponse:
@@ -279,19 +266,6 @@ class ResClient:
             "vdc",
             request,
             GetSessionConnectionInfoResponse,
-            should_succeed,
-        )
-
-    def list_sessions(
-        self, request: ListSessionsRequest, should_succeed: bool = True
-    ) -> ListSessionsResponse:
-        logger.info("listing sessions...")
-
-        return self._invoke(
-            "VirtualDesktop.ListSessions",
-            "vdc",
-            request,
-            ListSessionsResponse,
             should_succeed,
         )
 
@@ -308,7 +282,7 @@ class ResClient:
             should_succeed,
         )
 
-    def join_session(self, session: VirtualDesktopSession) -> WebDriver:
+    def join_session(self, session: VirtualDesktopSession) -> Any:
         start_time = time.time()
         get_session_connection_info_request = GetSessionConnectionInfoRequest(
             connection_info=VirtualDesktopSessionConnectionInfo(
@@ -331,6 +305,7 @@ class ResClient:
 
         # Open the session connection URL from a Chrome browser and keep the connection active.
         options = webdriver.ChromeOptions()
+        options.binary_location = "/usr/local/bin/chromium-browser"
         options.add_argument("--headless=new")
         options.add_argument("--ignore-certificate-errors")
         options.add_argument("--no-sandbox")
@@ -496,21 +471,6 @@ class ResClient:
             "vdc",
             request,
             CreateSoftwareStackFromSessionResponse,
-            should_succeed,
-        )
-
-    def get_software_stack(
-        self,
-        request: GetSoftwareStackInfoRequest,
-        should_succeed: bool = True,
-    ) -> GetSoftwareStackInfoResponse:
-        logger.info(f"getting software stack...")
-
-        return self._invoke(
-            "VirtualDesktopAdmin.GetSoftwareStackInfo",
-            "vdc",
-            request,
-            GetSoftwareStackInfoResponse,
             should_succeed,
         )
 

@@ -51,7 +51,7 @@ class VirtualDesktopScheduleDB(VirtualDesktopNotifiableDB):
             schedules_constants.SCHEDULE_DB_RANGE_KEY: schedule.schedule_id,
             schedules_constants.SCHEDULE_DB_IDEA_SESSION_ID_KEY: schedule.idea_session_id,
             schedules_constants.SCHEDULE_DB_IDEA_SESSION_OWNER_KEY: schedule.idea_session_owner,
-            schedules_constants.SCHEDULE_DB_SCHEDULE_TYPE_KEY: schedule.schedule_type,
+            schedules_constants.SCHEDULE_DB_SCHEDULE_TYPE_KEY: schedule.schedule_type.value,
         }
 
         if schedule.schedule_type == VirtualDesktopScheduleType.CUSTOM_SCHEDULE:
@@ -100,7 +100,7 @@ class VirtualDesktopScheduleDB(VirtualDesktopNotifiableDB):
         try:
             result = self._table.get_item(
                 Key={
-                    schedules_constants.SCHEDULE_DB_HASH_KEY: day_of_week,
+                    schedules_constants.SCHEDULE_DB_HASH_KEY: day_of_week.value,
                     schedules_constants.SCHEDULE_DB_RANGE_KEY: schedule_id
                 }
             )
@@ -148,7 +148,7 @@ class VirtualDesktopScheduleDB(VirtualDesktopNotifiableDB):
             'KeyConditions': {
                 schedules_constants.SCHEDULE_DB_HASH_KEY: {
                     'AttributeValueList': [
-                        day_of_week
+                        day_of_week.value
                     ],
                     'ComparisonOperator': 'EQ'
                 },
@@ -169,7 +169,7 @@ class VirtualDesktopScheduleDB(VirtualDesktopNotifiableDB):
 
         result = self._table.delete_item(
             Key={
-                schedules_constants.SCHEDULE_DB_HASH_KEY: f'{schedule.day_of_week}',
+                schedules_constants.SCHEDULE_DB_HASH_KEY: schedule.day_of_week.value,
                 schedules_constants.SCHEDULE_DB_RANGE_KEY: schedule.schedule_id
             },
             ReturnValues='ALL_OLD'

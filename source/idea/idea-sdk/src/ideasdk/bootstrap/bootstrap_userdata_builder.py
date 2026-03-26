@@ -46,62 +46,62 @@ class BootstrapUserDataBuilder:
         return self._render_template('/_templates/linux/bootstrap_userdata_linux_base_non_substitution.sh.jinja2')
 
     def _build_windows_userdata(self) -> str:
-        userdata = f'''
+        userdata = r'''
 <powershell>
- $BootstrapDir = "C`:\\Users\\Administrator\\RES\\Bootstrap"
- function Install-AWSCLI {{
+ $BootstrapDir = "C:\Users\Administrator\RES\Bootstrap"
+ function Install-AWSCLI {
     $AWSCLIInstalled = $false
-    try {{
+    try {
         $AWSCLIVersion = aws --version 2>$null
-        if ($AWSCLIVersion -and $AWSCLIVersion -match "aws-cli/2") {{
+        if ($AWSCLIVersion -and $AWSCLIVersion -match "aws-cli/2") {
         $AWSCLIInstalled = $true
-        }}
-    }} catch {{
+        }
+    } catch {
         $AWSCLIInstalled = $false
-    }}
+    }
 
-    if (!$AWSCLIInstalled) {{
+    if (!$AWSCLIInstalled) {
         Write-Host "Installing AWS CLI v2..."
-        Start-Job -Name AWSCLIWebReq -ScriptBlock {{ Invoke-WebRequest -uri https://awscli.amazonaws.com/AWSCLIV2.msi -OutFile C:\Windows\Temp\AWSCLIV2.msi }}
+        Start-Job -Name AWSCLIWebReq -ScriptBlock { Invoke-WebRequest -uri https://awscli.amazonaws.com/AWSCLIV2.msi -OutFile C:\Windows\Temp\AWSCLIV2.msi }
         Wait-Job -Name AWSCLIWebReq
-        Invoke-Command -ScriptBlock {{Start-Process "msiexec.exe" -ArgumentList "/I C:\Windows\Temp\AWSCLIV2.msi /quiet /norestart" -Wait}}
+        Invoke-Command -ScriptBlock {Start-Process "msiexec.exe" -ArgumentList "/I C:\Windows\Temp\AWSCLIV2.msi /quiet /norestart" -Wait}
         $env:Path += ";C:\Program Files\Amazon\AWSCLIV2"
         Write-Host "AWS CLI v2 installed."
-    }} else {{
+    } else {
         Write-Host "AWS CLI v2 is already installed."
-    }}
- }}
- function Download-RES-Package {{
+    }
+ }
+ function Download-RES-Package {
      Param(
      [ValidateNotNullOrEmpty()]
      [Parameter(Mandatory=$true)]
      [String] $PackageDownloadURI
      )
-     if (!(Test-Path "$BootstrapDir")) {{
+     if (!(Test-Path "$BootstrapDir")) {
          New-Item -itemType Directory -Path "$BootstrapDir"
-     }}
+     }
      cd "$BootstrapDir"
      Write-Output $PackageDownloadURI
      $PackageArchive=Split-Path $PackageDownloadURI -Leaf
      $PackageName = [System.IO.Path]::GetFileNameWithoutExtension($PackageDownloadURI)
-     if ($PackageDownloadURI -like "s3`://*") {{
+     if ($PackageDownloadURI -like "s3://*") {
         $urlParts = $PackageDownloadURI -Split "/", 4
         $bucketName = $urlParts[2]
         $key = $urlParts[3]
-        Copy-S3Object -BucketName $bucketName -Key $key -LocalFile "$BootstrapDir\\$PackageArchive" -Force
-     }} else {{
-        Copy-Item -Path $PackageDownloadURI -Destination "$BootstrapDir\\$PackageArchive"
-     }}
-     Tar -xf "$BootstrapDir\\$PackageArchive"
- }}
+        Copy-S3Object -BucketName $bucketName -Key $key -LocalFile "$BootstrapDir\$PackageArchive" -Force
+     } else {
+        Copy-Item -Path $PackageDownloadURI -Destination "$BootstrapDir\$PackageArchive"
+     }
+     Tar -xf "$BootstrapDir\$PackageArchive"
+ }
  $AWSPowerShellVersion = "4.1.648"
  $AWSPowerShellModule = Get-Module AWSPowerShell -ListAvailable
- if (-not $AWSPowerShellModule -or (($AWSPowerShellModule | Sort-Object Version -Descending)[0].Version -lt [Version]$AWSPowerShellVersion)) {{
+ if (-not $AWSPowerShellModule -or (($AWSPowerShellModule | Sort-Object Version -Descending)[0].Version -lt [Version]$AWSPowerShellVersion)) {
      Install-PackageProvider NuGet -Force
      Install-Module -Name AWSPowerShell -Force
- }}
+ }
  Install-AWSCLI
- Download-RES-Package {self.bootstrap_package_uri}
+ Download-RES-Package ''' + self.bootstrap_package_uri + r'''
 '''
         for install_command in self.install_commands:
             userdata += f'{install_command}{os.linesep}'

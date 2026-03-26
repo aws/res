@@ -31,3 +31,11 @@ def configure() -> None:
             dcv.start_dcv_service.configure()
     except Exception as e:
         logger.error(f"Failed to configure DCV for base_os {BASE_OS}: {e}")
+
+
+def is_dcvserver_ready(timeout_seconds: int = 300, retry_interval: int = 5) -> bool:
+    try:
+        return dcv.start_dcv_service.is_dcvserver_ready(timeout_seconds, retry_interval)
+    except Exception as e:
+        logger.error(f"Failed to check whether the DCV server is ready: {e}")
+        return False

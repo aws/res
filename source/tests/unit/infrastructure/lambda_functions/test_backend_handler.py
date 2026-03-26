@@ -10,7 +10,7 @@ import res.exceptions as exceptions  # type: ignore
 from botocore.exceptions import ClientError
 from res.clients.ad_sync import ad_sync_client  # type: ignore
 
-from idea.infrastructure.resources.lambda_functions.backend.resources import (
+from idea.backend.resources import (
     ad_sync,
     bastion_host_service,
 )

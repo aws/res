@@ -28,6 +28,6 @@ class SharedStorageParameterGroups:
     parameter_group_for_shared_storage: dict[str, Any] = {
         "Label": {"default": "Shared Storage details"},
         "Parameters": [
-            SharedStorageKey.SHARED_HOME_FILESYSTEM_ID,
+            SharedStorageKey.SHARED_HOME_FILESYSTEM_ID.value,
         ],
     }
