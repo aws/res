@@ -89,6 +89,7 @@ def _run_integ_tests(
         idea.props.data_model_src,
         idea.props.sdk_src,
         idea.props.library_src,
+        idea.props.datamodel_src,
         idea.props.test_utils_src,
     ]
     if tests_src not in python_path:

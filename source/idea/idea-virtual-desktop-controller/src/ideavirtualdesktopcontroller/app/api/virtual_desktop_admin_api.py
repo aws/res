@@ -97,10 +97,6 @@ class VirtualDesktopAdminAPI(VirtualDesktopAPI):
                 'scope': self.SCOPE_WRITE,
                 'method': self.delete_sessions,
             },
-            'VirtualDesktopAdmin.GetSessionInfo': {
-                'scope': self.SCOPE_READ,
-                'method': self.get_session_info,
-            },
             'VirtualDesktopAdmin.ListSessions': {
                 'scope': self.SCOPE_READ,
                 'method': self.list_sessions,
@@ -145,10 +141,6 @@ class VirtualDesktopAdminAPI(VirtualDesktopAPI):
                 'scope': self.SCOPE_WRITE,
                 'method': self.create_software_stack_from_session,
             },
-            'VirtualDesktopAdmin.DeleteSoftwareStack': {
-                'scope': self.SCOPE_WRITE,
-                'method': self.delete_software_stack,
-            },
             'VirtualDesktopAdmin.CreatePermissionProfile': {
                 'scope': self.SCOPE_WRITE,
                 'method': self.create_permission_profile,
@@ -169,10 +161,6 @@ class VirtualDesktopAdminAPI(VirtualDesktopAPI):
                 'scope': self.SCOPE_READ,
                 'method': self.list_shared_permissions,
             },
-            'VirtualDesktopAdmin.UpdateSessionPermissions': {
-                'scope': self.SCOPE_WRITE,
-                'method': self.update_session_permission,
-            },
         }
 
     def _validate_resume_session_request(self, session: VirtualDesktopSession) -> (VirtualDesktopSession, bool):
@@ -186,10 +174,10 @@ class VirtualDesktopAdminAPI(VirtualDesktopAPI):
 
     def _validate_delete_session_request(self, session: VirtualDesktopSession) -> (VirtualDesktopSession, bool):
         return self.validate_delete_session_request(session)
-    
+
     def _validate_update_session_request(self, session: VirtualDesktopSession) -> (VirtualDesktopSession, bool):
         return self.validate_update_session_request(session)
-    
+
     def _validate_create_session_request(self, session: VirtualDesktopSession) -> (VirtualDesktopSession, bool):
         # Validate Session Object
         if Utils.is_empty(session):
@@ -207,11 +195,6 @@ class VirtualDesktopAdminAPI(VirtualDesktopAPI):
 
     def create_session(self, context: ApiInvocationContext):
         session = context.get_request_payload_as(CreateSessionRequest).session
-        if session.name:
-            ApiUtils.validate_input(session.name,
-                                    constants.SESSION_NAME_REGEX,
-                                    constants.SESSION_NAME_ERROR_MESSAGE)
-
         session, is_valid = self._validate_create_session_request(session)
         if not is_valid:
             context.fail(
@@ -298,24 +281,6 @@ class VirtualDesktopAdminAPI(VirtualDesktopAPI):
         context.success(GetSoftwareStackInfoResponse(
             software_stack=self._get_software_stack_info(stack_id, base_os)
         ))
-
-    def get_session_info(self, context: ApiInvocationContext):
-        request = context.get_request_payload_as(GetSessionInfoRequest)
-        session = request.session
-        self.validate_get_session_info_request(session)
-        session = self.complete_get_session_info_request(session, context)
-        session = self.session_db.get_from_db(session.owner, session.idea_session_id)
-        if Utils.is_empty(session.failure_reason):
-            context.success(GetSessionInfoResponse(
-                session=session
-            ))
-        else:
-            context.fail(
-                error_code=errorcodes.INVALID_PARAMS,
-                message=session.failure_reason,
-                payload=GetSessionInfoResponse(
-                    session=session
-                ))
 
     def delete_sessions(self, context: ApiInvocationContext):
         """
@@ -437,22 +402,6 @@ class VirtualDesktopAdminAPI(VirtualDesktopAPI):
             context.success(UpdateSessionResponse(
                 session=session
             ))
-
-    def update_session_permission(self, context: ApiInvocationContext):
-        request = context.get_request_payload_as(UpdateSessionPermissionRequest)
-        is_valid_request, request = self.validate_update_session_permission_request(request)
-
-        if not is_valid_request:
-            context.fail(
-                error_code=errorcodes.INVALID_PARAMS,
-                payload=UpdateSessionPermissionResponse(
-                    permissions=[] + request.create + request.update + request.delete
-                ),
-                message='Invalid request. Rejecting all permissions'
-            )
-        else:
-            response = self.session_permissions_utils.update_permission_for_sessions(request)
-            context.success(response)
 
     def update_software_stack(self, context: ApiInvocationContext):
         new_software_stack = context.get_request_payload_as(UpdateSoftwareStackRequest).software_stack

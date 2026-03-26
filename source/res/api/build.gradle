@@ -43,7 +43,7 @@ task generatePythonServer(
 }
 
 task postGeneration(type: Exec) {
-    description "Customize the auto-generated API code"
+    description "Customize the auto-generated API code and generate serializers"
     group "Research and Engineering Studio API"
     workingDir "$projectDir"
     commandLine "./post-generation-scripts/post-generation.sh"

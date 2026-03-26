@@ -18,11 +18,11 @@ import { ColumnLayout, Container, Grid, Header, SpaceBetween, Tabs } from "@clou
 import IdeaAppLayout from "../../components/app-layout/app-layout";
 import { KeyValue } from "../../components/key-value";
 import { AppContext } from "../../common";
-import { VirtualDesktopSession, VirtualDesktopSessionPermission } from "../../client/data-model";
 import VirtualDesktopSessionStatusIndicator from "./components/virtual-desktop-session-status-indicator";
 import Utils from "../../common/utils";
 import dot from "dot-object";
 import { withRouter } from "../../navigation/navigation-utils";
+import { VirtualDesktopSessionPermission, VirtualDesktopSession } from "../../client/generated/api";
 
 export interface VirtualDesktopSessionDetailProps extends IdeaAppLayoutProps, IdeaSideNavigationProps {}
 
@@ -42,7 +42,7 @@ class VirtualDesktopSessionDetail extends Component<VirtualDesktopSessionDetailP
     constructor(props: VirtualDesktopSessionDetailProps) {
         super(props);
         this.state = {
-            session: {},
+            session: {} as VirtualDesktopSession,
             sessionPermissions: [],
             activeTabId: DEFAULT_ACTIVE_TAB_ID,
             workingHours: {
@@ -81,12 +81,10 @@ class VirtualDesktopSessionDetail extends Component<VirtualDesktopSessionDetailP
 
         AppContext.get()
             .client()
-            .virtualDesktopAdmin()
-            .getSessionInfo({
-                session: {
-                    idea_session_id: this.getIdeaSessionId(),
-                    owner: this.getSessionOwner(),
-                },
+            .virtualDesktop()
+            .getSession({
+                resSessionId: this.getIdeaSessionId(),
+                owner: this.getSessionOwner(),
             })
             .then((result) => {
                 this.setState({
@@ -96,9 +94,9 @@ class VirtualDesktopSessionDetail extends Component<VirtualDesktopSessionDetailP
 
         AppContext.get()
             .client()
-            .virtualDesktopAdmin()
+            .virtualDesktop()
             .listSessionPermissions({
-                idea_session_id: this.getIdeaSessionId(),
+                resSessionId: this.getIdeaSessionId(),
             })
             .then((response) => {
                 this.setState({
@@ -111,7 +109,7 @@ class VirtualDesktopSessionDetail extends Component<VirtualDesktopSessionDetailP
         if (Utils.isEmpty(this.state.sessionPermissions)) {
             return <p> None </p>;
         } else {
-            this.state.sessionPermissions.map((permission) => {
+            return this.state.sessionPermissions.map((permission) => {
                 return (
                     <Grid gridDefinition={[{ colspan: 4 }, { colspan: 4 }, { colspan: 4 }]}>
                         <KeyValue title={"Actor"} value={permission.actor_name} />

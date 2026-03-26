@@ -33,6 +33,7 @@ export interface FileSystemState {
     splitPanelOpen: boolean;
     fileSystemOnboardingOptionLoading: boolean;
     removeFileSystemConfirmText: string;
+    currentSelectedSVM: string;
 }
 
 export const FILESYSTEM_TABLE_COLUMN_DEFINITIONS: TableProps.ColumnDefinition<SharedStorageFileSystem>[] = [
@@ -53,6 +54,16 @@ export const FILESYSTEM_TABLE_COLUMN_DEFINITIONS: TableProps.ColumnDefinition<Sh
         header: "File System ID",
         cell: (filesystem) => filesystem.getFileSystemId(),
         sortingComparator: (a, b) => a.getFileSystemId().localeCompare(b.getFileSystemId())
+    },
+    {
+        id: "volume_id",
+        header: "Volume ID",
+        cell: (filesystem) => filesystem.getVolumeId() || "—",
+        sortingComparator: (a, b) => {
+            const volumeA = a.getVolumeId() || "";
+            const volumeB = b.getVolumeId() || "";
+            return volumeA.localeCompare(volumeB);
+        }
     },
     {
         id: "scope",
@@ -97,6 +108,7 @@ class FileSystems extends Component<FileSystemProps, FileSystemState> {
             selectedFileSystem: [],
             fileSystemOnboardingOptionLoading: false,
             removeFileSystemConfirmText: '',
+            currentSelectedSVM: '',
         };
     }
 
@@ -387,7 +399,7 @@ class FileSystems extends Component<FileSystemProps, FileSystemState> {
                         >
                             <Input
                                 value={this.state.removeFileSystemConfirmText}
-                                onChange={({ detail }) => 
+                                onChange={({ detail }) =>
                                     this.setState({ removeFileSystemConfirmText: detail.value })
                                 }
                                 placeholder={selectedFileSystem?.name!}
@@ -536,9 +548,10 @@ class FileSystems extends Component<FileSystemProps, FileSystemState> {
                     required: true,
                 },
                 dynamic_choices: true,
+                refresh_on_dependency_change: [`${Constants.SHARED_STORAGE_PROVIDER_FSX_NETAPP_ONTAP}.svm_id`],
                 when: {
-                    param: "onboard_filesystem",
-                    starts_with: Constants.SHARED_STORAGE_PROVIDER_FSX_NETAPP_ONTAP,
+                    param: `${Constants.SHARED_STORAGE_PROVIDER_FSX_NETAPP_ONTAP}.svm_id`,
+                    not_empty: true,
                 },
             },
             {
@@ -629,12 +642,21 @@ class FileSystems extends Component<FileSystemProps, FileSystemState> {
         return this.getOnboardFileSystemForm().getFormField(`${Constants.SHARED_STORAGE_PROVIDER_FSX_NETAPP_ONTAP}.svm_id`);
     }
 
-    saveFilesystemIdToLocalStorage(fileSystemId: string): void {
+    saveFilesystemIdentifierToLocalStorage(identifier: string): void {
         const idsInLocalStorage = localStorage.getItem(Constants.NEWLY_ONBOARDED_FILE_SYSTEM_STORAGE_NAME);
         const projectIds = idsInLocalStorage ? JSON.parse(idsInLocalStorage) : [];
         // Cache is valid for 30 seconds
-        projectIds.push({ id: fileSystemId, exp: Date.now() + 30 * 1000 });
+        projectIds.push({ id: identifier, exp: Date.now() + 30 * 1000 });
         localStorage.setItem(Constants.NEWLY_ONBOARDED_FILE_SYSTEM_STORAGE_NAME, JSON.stringify(projectIds));
+    }
+
+    removeFilesystemIdentifierFromLocalStorage(identifier: string): void {
+        const idsInLocalStorage = localStorage.getItem(Constants.NEWLY_ONBOARDED_FILE_SYSTEM_STORAGE_NAME);
+        if (idsInLocalStorage) {
+            const projectIds = JSON.parse(idsInLocalStorage);
+            const filteredIds = projectIds.filter((project: { id: string; exp: number }) => project.id !== identifier);
+            localStorage.setItem(Constants.NEWLY_ONBOARDED_FILE_SYSTEM_STORAGE_NAME, JSON.stringify(filteredIds));
+        }
     }
 
     getFilesystemIdsFromLocalStorage(): string[] {
@@ -682,8 +704,8 @@ class FileSystems extends Component<FileSystemProps, FileSystemState> {
 
                     //Extract specified provider values
                     const providerValues = dot.pick(provider, values);
-                    let attachFileSystem;
-                    let volumeId;
+                    let attachFileSystem: (request: any) => Promise<any>;
+                    let volumeId: string | undefined;
                     if (provider === Constants.SHARED_STORAGE_PROVIDER_EFS) {
                         attachFileSystem = (request: any) => this.filesystem().onboardEFSFileSystem(request);
                     } else if (provider === Constants.SHARED_STORAGE_PROVIDER_FSX_LUSTRE) {
@@ -699,6 +721,12 @@ class FileSystems extends Component<FileSystemProps, FileSystemState> {
                         }
                         attachFileSystem = (request: any) => this.filesystem().onboardFSXONTAPFileSystem(request);
                     }
+
+                    // Save to localStorage IMMEDIATELY to prevent timing issues
+                    const identifier = provider === Constants.SHARED_STORAGE_PROVIDER_FSX_NETAPP_ONTAP
+                        ? `${fileSystemId}:${volumeId}`
+                        : fileSystemId;
+                    this.saveFilesystemIdentifierToLocalStorage(identifier);
 
                     this.hideOnboardFileSystemForm();
                     this.props.onFlashbarChange({
@@ -726,9 +754,10 @@ class FileSystems extends Component<FileSystemProps, FileSystemState> {
                                     this.getListing().fetchRecords();
                                 }
                             );
-                            this.saveFilesystemIdToLocalStorage(fileSystemId);
                         })
                         .catch((error) => {
+                            this.removeFilesystemIdentifierFromLocalStorage(identifier);
+
                             this.props.onFlashbarChange({
                                 items: [
                                     {
@@ -790,9 +819,14 @@ class FileSystems extends Component<FileSystemProps, FileSystemState> {
                                 };
                             });
                     } else if (request.param === `${Constants.SHARED_STORAGE_PROVIDER_FSX_NETAPP_ONTAP}.svm_id`) {
-                        const filesystemsNotOnboarded = this.state.filesystemsNotOnboarded;
                         const selectedOnboardFileSystemValue = this.getSelectedOnboardFileSystem()!.getValueAsString();
                         const filesystemId = selectedOnboardFileSystemValue.split(".")[1];
+
+                        if (request.refresh) {
+                            return Promise.resolve(this.forceRefreshSVMs(filesystemId));
+                        }
+
+                        const filesystemsNotOnboarded = this.state.filesystemsNotOnboarded;
                         const fsxFileSystem: FSxONTAPFileSystem = dot.pick(filesystemId, filesystemsNotOnboarded);
                         const fsxFileSystemSVMs = fsxFileSystem.svm || [];
                         const choices: SocaUserInputChoice[] = [];
@@ -807,11 +841,32 @@ class FileSystems extends Component<FileSystemProps, FileSystemState> {
                             listing: choices,
                         });
                     } else if (request.param === `${Constants.SHARED_STORAGE_PROVIDER_FSX_NETAPP_ONTAP}.volume_id`) {
-                        const filesystemsNotOnboarded = this.state.filesystemsNotOnboarded;
                         const selectedOnboardFileSystemValue = this.getSelectedOnboardFileSystem()!.getValueAsString();
                         const selectedSVM = this.getSelectedSVM()!.getValueAsString();
                         const filesystemId = selectedOnboardFileSystemValue.split(".")[1];
+
+                        if (request.refresh) {
+                            return Promise.resolve(this.forceRefreshVolumes(filesystemId, selectedSVM));
+                        }
+
+                        if (this.state.currentSelectedSVM && this.state.currentSelectedSVM !== selectedSVM) {
+                            const volumeField = this.getOnboardFileSystemForm().getFormField(`${Constants.SHARED_STORAGE_PROVIDER_FSX_NETAPP_ONTAP}.volume_id`);
+                            if (volumeField) {
+                                volumeField.setValue('');
+                            }
+
+                            this.setState({ currentSelectedSVM: selectedSVM });
+                        }
+
+                        const filesystemsNotOnboarded = this.state.filesystemsNotOnboarded;
                         const fsxFileSystem: FSxONTAPFileSystem = dot.pick(filesystemId, filesystemsNotOnboarded);
+
+                        if (!fsxFileSystem || !fsxFileSystem.volume) {
+                            return Promise.resolve({
+                                listing: [],
+                            });
+                        }
+
                         const fsxFileSystemVolumes = fsxFileSystem.volume;
                         const choices: SocaUserInputChoice[] = [];
                         fsxFileSystemVolumes.forEach((volume) => {
@@ -824,6 +879,7 @@ class FileSystems extends Component<FileSystemProps, FileSystemState> {
                                 });
                             }
                         });
+
                         return Promise.resolve({
                             listing: choices,
                         });
@@ -851,6 +907,70 @@ class FileSystems extends Component<FileSystemProps, FileSystemState> {
                 ]}
             />
         );
+    }
+
+    async forceRefreshSVMs(filesystemId: string) {
+        return this.proxyService()
+            .listFileSystemsForOnboard(this.getFilesystemIdsFromLocalStorage())
+            .then((result) => {
+                const fsxONTAPFileSystems = result.fsx_ontap;
+                const refreshedFileSystem = fsxONTAPFileSystems?.find(fs => fs.filesystem.FileSystemId === filesystemId);
+
+                if (refreshedFileSystem) {
+                    const filesystemsNotOnboarded = {...this.state.filesystemsNotOnboarded};
+                    dot.set(filesystemId, refreshedFileSystem, filesystemsNotOnboarded);
+                    this.setState({ filesystemsNotOnboarded });
+
+                    const volumeField = this.getOnboardFileSystemForm().getFormField(`${Constants.SHARED_STORAGE_PROVIDER_FSX_NETAPP_ONTAP}.volume_id`);
+                    if (volumeField) {
+                        volumeField.setValue('');
+                    }
+
+                    const fsxFileSystemSVMs = refreshedFileSystem.svm || [];
+                    const choices: SocaUserInputChoice[] = [];
+                    fsxFileSystemSVMs.forEach((svm) => {
+                        const svmId = dot.pick("StorageVirtualMachineId", svm.storage_virtual_machine);
+                        choices.push({
+                            title: svmId,
+                            value: svmId,
+                        });
+                    });
+                    return { listing: choices };
+                }
+                return { listing: [] };
+            });
+    }
+
+    async forceRefreshVolumes(filesystemId: string, selectedSVM: string) {
+        return this.proxyService()
+            .listFileSystemsForOnboard(this.getFilesystemIdsFromLocalStorage())
+            .then((result) => {
+                const fsxONTAPFileSystems = result.fsx_ontap;
+                const refreshedFileSystem = fsxONTAPFileSystems?.find(fs => fs.filesystem.FileSystemId === filesystemId);
+
+                if (refreshedFileSystem) {
+                    const filesystemsNotOnboarded = {...this.state.filesystemsNotOnboarded};
+                    dot.set(filesystemId, refreshedFileSystem, filesystemsNotOnboarded);
+                    this.setState({ filesystemsNotOnboarded });
+
+                    const fsxFileSystemVolumes = refreshedFileSystem.volume;
+                    const choices: SocaUserInputChoice[] = [];
+
+                    fsxFileSystemVolumes.forEach((volume) => {
+                        if (dot.pick("OntapConfiguration.StorageVirtualMachineId", volume.volume) === selectedSVM) {
+                            const volumeId = dot.pick("VolumeId", volume.volume);
+                            const svmId = dot.pick("OntapConfiguration.StorageVirtualMachineId", volume.volume);
+                            choices.push({
+                                title: volumeId,
+                                value: `${svmId}.${volumeId}`,
+                            });
+                        }
+                    });
+
+                    return { listing: choices };
+                }
+                return { listing: [] };
+            });
     }
 
     buildListing() {

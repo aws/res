@@ -2,12 +2,12 @@
 #  SPDX-License-Identifier: Apache-2.0
 
 """
-Utilities for importing backend models dynamically and data manipulation.
+Utilities for importing data models dynamically and data manipulation.
 
-This module provides helper functions for importing backend models from the
-lambda functions backend directory using importlib, allowing test files to
-access backend models without direct dependencies. It also includes utility
-functions for data cleaning and manipulation.
+This module provides helper functions for importing data models from the
+data-model package using importlib, allowing test files to access data models
+without direct dependencies. It also includes utility functions for data
+cleaning and manipulation.
 """
 
 import importlib.util
@@ -18,10 +18,10 @@ from typing import Any
 
 def import_backend_model(model_name: str) -> Any:
     """
-    Dynamically import a backend model using importlib.
+    Dynamically import a data model using importlib.
 
-    This function locates and imports backend models from the lambda functions
-    backend directory, handling the sys.path manipulation needed for dependencies.
+    This function locates and imports data models from the data-model package,
+    handling the sys.path manipulation needed for dependencies.
 
     Args:
         model_name: Name of the model file (without .py extension)
@@ -41,50 +41,50 @@ def import_backend_model(model_name: str) -> Any:
     source_dir = os.path.dirname(
         os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(current_file))))
     )
-    backend_path = os.path.join(
-        source_dir, "idea", "infrastructure", "resources", "lambda_functions", "backend"
+    data_model_path = os.path.join(source_dir, "idea", "data-model", "src")
+
+    model_file_path = os.path.join(
+        data_model_path, "datamodel", "models", f"{model_name}.py"
     )
 
-    model_file_path = os.path.join(backend_path, "api", "models", f"{model_name}.py")
-
     if not os.path.exists(model_file_path):
-        raise ImportError(f"Backend model file not found: {model_file_path}")
+        raise ImportError(f"Data model file not found: {model_file_path}")
 
     spec = importlib.util.spec_from_file_location(
-        f"api.models.{model_name}", model_file_path
+        f"datamodel.models.{model_name}", model_file_path
     )
     if spec is None or spec.loader is None:
         raise ImportError(f"Could not create module spec for {model_name}")
 
     module = importlib.util.module_from_spec(spec)
 
-    # Add backend path to sys.path temporarily for dependencies
-    backend_added = False
-    if backend_path not in sys.path:
-        sys.path.insert(0, backend_path)
-        backend_added = True
+    # Add data-model src path to sys.path temporarily for dependencies
+    data_model_added = False
+    if data_model_path not in sys.path:
+        sys.path.insert(0, data_model_path)
+        data_model_added = True
 
     try:
         spec.loader.exec_module(module)
         return module
     except Exception as e:
-        raise ImportError(f"Failed to import backend model {model_name}: {str(e)}")
+        raise ImportError(f"Failed to import data model {model_name}: {str(e)}")
     finally:
         # Clean up sys.path
-        if backend_added and backend_path in sys.path:
-            sys.path.remove(backend_path)
+        if data_model_added and data_model_path in sys.path:
+            sys.path.remove(data_model_path)
 
 
 def get_backend_model_class(model_name: str, class_name: str) -> Any:
     """
-    Import a backend model and return a specific class from it.
+    Import a data model and return a specific class from it.
 
     Args:
         model_name: Name of the model file (without .py extension)
         class_name: Name of the class to extract from the module
 
     Returns:
-        The requested class from the backend model
+        The requested class from the data model
 
     Raises:
         ImportError: If the model file cannot be imported
@@ -98,7 +98,7 @@ def get_backend_model_class(model_name: str, class_name: str) -> Any:
 
     if not hasattr(module, class_name):
         raise AttributeError(
-            f"Class '{class_name}' not found in backend model '{model_name}'"
+            f"Class '{class_name}' not found in data model '{model_name}'"
         )
 
     return getattr(module, class_name)

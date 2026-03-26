@@ -19,6 +19,8 @@ import { AccountsClient, AuthClient, ProjectsClient, VirtualDesktopClient } from
 import { AppContext } from "../../../common";
 import { Constants } from "../../../common/constants";
 import VirtualDesktopUtilsClient from "../../../client/virtual-desktop-utils-client";
+// TODO: MigratedVirtualDesktopSoftwareStack name is temporary until all APIs are migrated
+import { VirtualDesktopSoftwareStack as MigratedVirtualDesktopSoftwareStack } from "../../../client/generated/api";
 
 export interface VirtualDesktopCreateSessionFormProps {
     userProjects?: Project[];
@@ -38,7 +40,7 @@ export interface DCVSessionTypeChoice {
 export interface VirtualDesktopCreateSessionFormState {
     showModal: boolean;
     isCognitoNativeUser: boolean;
-    softwareStacks: { [k: string]: VirtualDesktopSoftwareStack };
+    softwareStacks: { [k: string]: MigratedVirtualDesktopSoftwareStack };
     dcvSessionTypeChoice: DCVSessionTypeChoice;
     eVDIUsers: User[];
     advEnabled: false
@@ -190,7 +192,7 @@ class VirtualDesktopCreateSessionForm extends Component<VirtualDesktopCreateSess
         return reverseIndex;
     }
 
-    compare_software_stacks = (a: VirtualDesktopSoftwareStack, b: VirtualDesktopSoftwareStack): number => {
+    compare_software_stacks = (a: MigratedVirtualDesktopSoftwareStack, b: MigratedVirtualDesktopSoftwareStack): number => {
         if (a === undefined && b === undefined) {
             return 0;
         }
@@ -246,7 +248,7 @@ class VirtualDesktopCreateSessionForm extends Component<VirtualDesktopCreateSess
         return 1;
     };
 
-    generateSoftwareStackListing(softwareStacks: VirtualDesktopSoftwareStack[] | undefined): SocaUserInputChoice[] {
+    generateSoftwareStackListing(softwareStacks: MigratedVirtualDesktopSoftwareStack[] | undefined): SocaUserInputChoice[] {
         let softwareStackChoices: SocaUserInputChoice[] = [];
 
         softwareStacks?.sort(this.compare_software_stacks);
@@ -364,43 +366,46 @@ class VirtualDesktopCreateSessionForm extends Component<VirtualDesktopCreateSess
         return projectChoices;
     }
 
-    updateSoftwareStackOptions() {
+    async updateSoftwareStackOptions() {
         let project_id = this.getForm()?.getFormField("project_id")?.getValueAsString();
         if (Utils.isEmpty(project_id)) {
             return;
         }
         this.getForm()?.getFormField("software_stack")?.reset();
-        this.getVirtualDesktopClient()
-            .listSoftwareStacks({
-                disabled_also: true,
-                project_id: project_id,
-                paginator: {
-                    page_size: 100,
-                },
-            })
-            .then((result) => {
-                const softwareStack = this.getForm()?.getFormField("software_stack");
-                softwareStack?.setOptions({
-                    listing: this.generateSoftwareStackListing(result.listing),
-                });
-
-                let softwareStacks: { [k: string]: VirtualDesktopSoftwareStack } = {};
-                result.listing?.forEach((stack) => {
-                    if (stack.stack_id !== undefined) {
-                        softwareStacks[stack.stack_id] = stack;
-                    }
-                });
-                this.setState({
-                    softwareStacks: softwareStacks,
-                });
+        
+        let allItems: MigratedVirtualDesktopSoftwareStack[] = [];
+        let nextToken: string | undefined;
+        
+        do {
+            const data = await this.getVirtualDesktopClient().listSoftwareStacks({
+                projectId: project_id,
+                nextToken: nextToken,
             });
+            allItems.push(...(data.listing || []));
+            nextToken = data.nextToken;
+        } while (nextToken);
+        
+        const softwareStack = this.getForm()?.getFormField("software_stack");
+        softwareStack?.setOptions({
+            listing: this.generateSoftwareStackListing(allItems),
+        });
+
+        let softwareStacks: { [k: string]: MigratedVirtualDesktopSoftwareStack } = {};
+        allItems.forEach((stack) => {
+            if (stack.stack_id !== undefined) {
+                softwareStacks[stack.stack_id] = stack;
+            }
+        });
+        this.setState({
+            softwareStacks: softwareStacks,
+        });
     }
 
     updateRootVolumeSizeIfRequired() {
         let softwareStack = this.state.softwareStacks[this.getForm()?.getValue("software_stack")];
         let isHibernationSupported = Utils.asBoolean(this.getForm()?.getValue("hibernate_instance"));
         let instanceTypeName = this.getForm()?.getValue("instance_type");
-        let min_storage_gb = this.getMinRootVolumeSizeInGB(softwareStack, isHibernationSupported, instanceTypeName);
+        let min_storage_gb = this.getMinRootVolumeSizeInGB(softwareStack as any, isHibernationSupported, instanceTypeName);
         let root_storage_size = this.getForm()?.getFormField("root_storage_size");
         let current_storage_size = Utils.asNumber(root_storage_size?.getValueAsString());
         if (current_storage_size < min_storage_gb.value!) {
@@ -459,13 +464,13 @@ class VirtualDesktopCreateSessionForm extends Component<VirtualDesktopCreateSess
             description: "Enter a name for the virtual desktop",
             data_type: "str",
             param_type: "text",
-            help_text: "Session Name is required. Use any characters and form a name of length between 3 and 24 characters, inclusive.",
+            help_text: "Session Name is required. Can only use alphabets, numbers, hyphens (-), underscores (_), or periods (.). Must be between 3 and 24 characters long.",
             default: this.props.defaultName!,
             auto_focus: true,
             validate: {
                 required: true,
-                regex: "^.{3,24}$",
-                message: "Use any characters and form a name of length between 3 and 24 characters, inclusive.",
+                regex: "^[a-zA-Z0-9-_.]{3,24}$",
+                message: "Can only use alphabets, numbers, hyphens (-), underscores (_), or periods (.). Must be between 3 and 24 characters long.",
             },
         });
 
@@ -645,8 +650,14 @@ class VirtualDesktopCreateSessionForm extends Component<VirtualDesktopCreateSess
                             if (event.value) {
                                 const stackId = event.value
                                 const hibernation = this.getForm()?.getFormField("hibernate_instance");
-                                hibernation?.disable(false);
                                 const base_os = this.state.softwareStacks[stackId].base_os;
+                                if (base_os === "ubuntu2404") {
+                                    hibernation?.disable(true);
+                                    hibernation?.setState({ errorMessage: "Hibernation is not supported for Ubuntu 24.04" });
+                                } else {
+                                    hibernation?.disable(false);
+                                    hibernation?.setState({ errorMessage: "" });
+                                }
                                 if (base_os === "windows" && this.state.isCognitoNativeUser) {
                                     this.getForm()?.disablePrimaryActionButton();
                                     event.ref.setState({
@@ -664,7 +675,7 @@ class VirtualDesktopCreateSessionForm extends Component<VirtualDesktopCreateSess
                                     listAllowedInstanceTypesForSessionRequestContent: {
                                         session: {
                                             hibernation_enabled: this.getForm()?.getValue("hibernate_instance"),
-                                            software_stack: this.state.softwareStacks[stackId] as any,
+                                            software_stack: this.state.softwareStacks[stackId] as any
                                         }
                                     }
                                 })
@@ -687,7 +698,7 @@ class VirtualDesktopCreateSessionForm extends Component<VirtualDesktopCreateSess
                             this.updateRootVolumeSizeIfRequired();
                             this.updateSessionTypeChoicesIfRequired(event.param.name);
                         } else if (event.param.name === "root_storage_size") {
-                            let min_storage_gb = this.getMinRootVolumeSizeInGB(this.state.softwareStacks[this.getForm()?.getValue("software_stack")], this.getForm()?.getValue("hibernate_instance"), this.getForm()?.getValue("instance_type"));
+                            let min_storage_gb = this.getMinRootVolumeSizeInGB(this.state.softwareStacks[this.getForm()?.getValue("software_stack")] as any, this.getForm()?.getValue("hibernate_instance"), this.getForm()?.getValue("instance_type"));
                             if (event.value < min_storage_gb.value) {
                                 event.ref.setState({
                                     errorMessage: `Storage size must be greater than or equal to: ${Utils.getFormattedMemory(min_storage_gb)}`,
@@ -705,7 +716,7 @@ class VirtualDesktopCreateSessionForm extends Component<VirtualDesktopCreateSess
                                         listAllowedInstanceTypesForSessionRequestContent: {
                                             session: {
                                                 hibernation_enabled: event.value,
-                                                software_stack: this.state.softwareStacks[stackId] as any,
+                                                software_stack: this.state.softwareStacks[stackId] as any
                                             }
                                         }
                                     })
@@ -739,7 +750,7 @@ class VirtualDesktopCreateSessionForm extends Component<VirtualDesktopCreateSess
                         const session_tags = values.session_tags
                         let username = values.user_name;
                         if (this.props.onSubmit) {
-                            return this.props.onSubmit(session_name, username, project_id, base_os, software_stack_id, session_type, instance_type, storage_size, hibernation_enabled, vpc_subnet_id, session_tags);
+                            return this.props.onSubmit(session_name, username, project_id, base_os as any, software_stack_id, session_type, instance_type, storage_size, hibernation_enabled, vpc_subnet_id, session_tags);
                         } else {
                             return Promise.resolve(true);
                         }

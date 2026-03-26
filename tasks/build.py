@@ -118,6 +118,15 @@ def library(c):
 
 
 @task
+def datamodel(c):
+    # type: (Context) -> None
+    """
+    build data-model
+    """
+    BuildTool(c, 'data-model').build()
+
+
+@task
 def bastion_host(c):
     # type: (Context) -> None
     """
@@ -170,6 +179,8 @@ def build_all(c):
     dcv_broker(c)
 
     library(c)
+
+    datamodel(c)
 
     bastion_host(c)
 

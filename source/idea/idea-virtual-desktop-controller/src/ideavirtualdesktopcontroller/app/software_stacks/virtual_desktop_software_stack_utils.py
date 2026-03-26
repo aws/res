@@ -82,7 +82,7 @@ class VirtualDesktopSoftwareStackUtils:
             if getattr(software_stack, field) is None:
                 software_stack.failure_reason = error_message
                 return software_stack, False
-
+            
         for project in software_stack.projects:
             if project.project_id is None:
                 software_stack.failure_reason = 'software_stack.project.project_id missing'

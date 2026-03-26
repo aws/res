@@ -24,6 +24,7 @@ import uuid
 import os
 from pathlib import Path
 import sanic
+import json
 from typing import Dict
 from datetime import datetime
 
@@ -118,6 +119,19 @@ class WebPortal:
                 'api_context_path': api_context_path
             })
 
+        num_of_links = self.context.config().get_int('cluster-manager.web_portal.number_of_links', 3)
+        default_links_array = [{"title": "", "url": ""} for _ in range(num_of_links)]
+        
+        links = self.context.config().get_string('cluster-manager.web_portal.links', None)
+        if links:
+            try:
+                links = json.loads(links)
+            except (json.JSONDecodeError, ValueError) as e:
+                self.logger.error(f'Failed to parse web_portal.links JSON: {e}. Using default links.')
+                links = default_links_array
+        else:
+            links = default_links_array
+
         app_init_data = {
             'version': ideaclustermanager.__version__,
             'sso': sso_enabled,
@@ -132,6 +146,7 @@ class WebPortal:
             'default_log_level': self.context.config().get_int('cluster-manager.web_portal.default_log_level', 3),
             'module_set': module_set_id,
             'modules': modules,
+            'links': links,
         }
 
         error_msg = self.server.get_query_param_as_string('error_msg', http_request)

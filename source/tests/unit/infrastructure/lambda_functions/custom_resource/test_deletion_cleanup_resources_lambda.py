@@ -238,7 +238,7 @@ class TestDeletionCleanupResourcesLambda(TestCase):
                 },
                 {
                     "Name": "interface-type",
-                    "Values": ["lambda"],
+                    "Values": ["lambda", "interface"],
                 },
             ]
         )

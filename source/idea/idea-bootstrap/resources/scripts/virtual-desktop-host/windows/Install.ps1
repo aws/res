@@ -15,7 +15,7 @@ function Check-Python-Installed {
 
   if ($PythonCommand) {
       $PythonVersion = python --version
-      $MinimumVersion = [System.Version]"3.9.16"
+      $MinimumVersion = [System.Version]"3.12.0"
       $InstalledVersion = [System.Version]$PythonVersion
       if ($InstalledVersion -ge $MinimumVersion) {
           $PythonInstalled = $true

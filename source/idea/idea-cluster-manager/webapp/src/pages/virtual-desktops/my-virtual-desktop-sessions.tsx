@@ -15,7 +15,7 @@ import React, { Component, RefObject } from "react";
 
 import { Box, Button, Cards, Header, SegmentedControl, SpaceBetween, Toggle } from "@cloudscape-design/components";
 import { AppContext } from "../../common";
-import { Project, ListSessionsResponse, SocaUserInputChoice, VDIPermissions, VirtualDesktopBaseOS, VirtualDesktopSession, VirtualDesktopSessionPermission, VirtualDesktopSessionScreenshot, VirtualDesktopSoftwareStack } from "../../client/data-model";
+import { Project, ListSessionsResponse, SocaUserInputChoice, VirtualDesktopBaseOS, VirtualDesktopSession, VirtualDesktopSessionScreenshot, VirtualDesktopSoftwareStack } from "../../client/data-model";
 import { ProjectsClient, VirtualDesktopClient } from "../../client";
 import IdeaForm from "../../components/form";
 import Utils from "../../common/utils";
@@ -33,6 +33,7 @@ import dot from "dot-object";
 import VirtualDesktopCreateSessionForm from "./forms/virtual-desktop-create-session-form";
 import VirtualDesktopUtilsClient from "../../client/virtual-desktop-utils-client";
 import AuthzClient from "../../client/authz-client";
+import { VirtualDesktopBaseOs, VirtualDesktopSessionPermission, ListSessionsResponseContent } from "../../client/generated/api";
 
 const CARD_HEADER_CLASS_NAME = "awsui_card-header_p8a6i_9tpvn_272";
 const OS_FILTER_LINUX_ID = "linux";
@@ -227,7 +228,7 @@ class MyVirtualDesktopSessions extends Component<MyVirtualDesktopSessionsProps, 
     fetchSessions(): Promise<boolean> {
         return this.fetchUserSessions()
             .then((result) => {
-                return this.setSessions(result?.listing, this.state.osFilter);
+                return this.setSessions(result?.listing as any ?? [], this.state.osFilter);
             })
             .catch((error) => {
                 this.props.onFlashbarChange({
@@ -243,36 +244,27 @@ class MyVirtualDesktopSessions extends Component<MyVirtualDesktopSessionsProps, 
             });
     }
 
-    async fetchUserSessions(): Promise<ListSessionsResponse> {
-        const response: ListSessionsResponse = {
-            paginator: { page_size: undefined },
-            listing: [],
-        }
-
-        let cursor: string | undefined = undefined;
+    async fetchUserSessions(): Promise<ListSessionsResponseContent> {
         let client = AppContext.get().client().virtualDesktop()
-        do {
-            const result: ListSessionsResponse = await client.listSessions({
-                filters: [
-                    {
-                        key: "base_os",
-                        value: this.state.osFilter,
-                    },
-                    {
-                        key: "owner",
-                        value: AppContext.get().auth().getUsername(),
-                    }
-                ],
-                paginator: {
-                    page_size: undefined,
-                    cursor: cursor,
+        let owner = AppContext.get().auth().getUsername()
+        const response = await client.listSessions({
+            ...(this.state.osFilter !== "$all" && { baseOs: this.state.osFilter}),
+            owner: owner,
+        });
+
+        return {
+            listing: response.listing as any,
+            filters: [
+                {
+                    key: "base_os",
+                    value: this.state.osFilter,
                 },
-            });
-            response.listing?.push(...result.listing ?? []);
-            cursor = result.paginator?.cursor;
-        } while (cursor);
-        
-        return response;
+                {
+                    key: "owner",
+                    value: AppContext.get().auth().getUsername(),
+                }
+            ],
+        };
     }
 
     setFlashMessage = (content: React.ReactNode, type: "success" | "info" | "error") => {
@@ -423,7 +415,7 @@ class MyVirtualDesktopSessions extends Component<MyVirtualDesktopSessionsProps, 
             if (Utils.isNotEmpty(os_filter) && os_filter !== OS_FILTER_ALL_ID && session.base_os !== undefined) {
                 // there is an OS filter that is applied.
                 // Any session that doesn't match the OS filter in our local copy also needs to be hidden.
-                let os_filters: VirtualDesktopBaseOS[] = ["windows"];
+                let os_filters: VirtualDesktopBaseOS|VirtualDesktopBaseOs[] = ["windows"];
 
                 if (os_filter === OS_FILTER_LINUX_ID) {
                     os_filters = ["amazonlinux2", "amzn2023", "rhel8", "rhel9", "rocky9"];
@@ -913,12 +905,12 @@ class MyVirtualDesktopSessions extends Component<MyVirtualDesktopSessionsProps, 
                         description: "Enter a name for the virtual desktop",
                         data_type: "str",
                         param_type: "text",
-                        help_text: "Session Name is required. Use any characters and form a name of length between 3 and 24 characters, inclusive.",
+                        help_text: "Session Name is required. Can only use alphabets, numbers, hyphens (-), underscores (_), or periods (.). Must be between 3 and 24 characters long.",
                         default: this.state.selectedSession?.name,
                         validate: {
                             required: true,
-                            regex: "^.{3,24}$",
-                            message: "Use any characters and form a name of length between 3 and 24 characters, inclusive.",
+                            regex: "^[a-zA-Z0-9-_.]{3,24}$",
+                            message: "Can only use alphabets, numbers, hyphens (-), underscores (_), or periods (.). Must be between 3 and 24 characters long.",
                         },
                     },
                     {
@@ -967,7 +959,8 @@ class MyVirtualDesktopSessions extends Component<MyVirtualDesktopSessionsProps, 
                             return Promise.resolve(true);
                         })
                         .catch((error) => {
-                            this.getUpdateSessionPermissionForm()?.setError(error.errorCode, error.message);
+                            const errorMessage = error?.response?.data?.message || error?.message || 'Failed to update session permission';
+                            this.getUpdateSessionPermissionForm()?.setError('UPDATE_ERROR', errorMessage);
                             return Promise.resolve(false);
                         });
                 }}

@@ -103,6 +103,13 @@ def library(c):
     """
     CleanTool(c, 'library').clean()
 
+@task
+def datamodel(c):
+    """
+    clean data-model
+    """
+    CleanTool(c, 'data-model').clean()
+
 
 @task
 def bastion_host(c):
@@ -150,6 +157,8 @@ def clean_all(c):
     dcv_broker(c)
 
     library(c)
+
+    datamodel(c)
 
     bastion_host(c)
 

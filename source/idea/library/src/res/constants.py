@@ -48,6 +48,12 @@ USERNAME_ERROR_MESSAGE = (
 # The total allowable number of characters for group name is 65.
 GROUP_NAME_REGEX = "^([a-zA-Z0-9_. -]){1,65}$"
 
+SESSION_NAME_REGEX = "^[a-zA-Z0-9-_.]{3,24}$"
+SESSION_NAME_ERROR_MESSAGE = (
+    "Only use alphabets, numbers, hyphens (-), underscores (_), or periods (.) for session name. "
+    + "Must be between 3 and 24 characters long."
+)
+
 CLUSTER_NETWORK_PRIVATE_SUBNETS = "cluster.network.private_subnets"
 COGNITO_USER_POOL_PROVIDER_URL = "identity-provider.cognito.provider_url"
 COGNITO_SSO_IDP_PROVIDER_NAME = "identity-provider.cognito.sso_idp_provider_name"
@@ -179,6 +185,7 @@ MODULE_ID_CLUSTER_MANAGER = "cluster-manager"
 MODULE_ID_DIRECTORY_SERVICE = "directoryservice"
 MODULE_ID_BASTION_HOST = "bastion-host"
 MODULE_ID_VIRTUAL_DESKTOP_APP = "vdi-app"
+MODULE_ID_IDENTITY_PROVIDER = "identity-provider"
 
 # Module Names
 MODULE_NAME_VDC = "virtual-desktop-controller"

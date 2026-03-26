@@ -356,7 +356,9 @@ class ClusterManagerPolicy(Policy):
                 ],
                 resources=[
                     arn_builder.get_vdi_iam_role_arn("*"),
-                    arn_builder.get_iam_role_arn(f"{arn_builder.cluster_name}-vdi-*"),
+                    arn_builder.get_iam_role_arn_no_custom_path(
+                        f"{arn_builder.cluster_name}-vdi-*"
+                    ),
                 ],
                 effect=iam.Effect.ALLOW,
             ),

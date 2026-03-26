@@ -40,6 +40,7 @@ export interface AppData {
     module_set: string;
     modules: any;
     default_log_level: number;
+    links?: Array<{ title: string; url: string }>;
 }
 
 const DARK_MODE_KEY = "theme.dark-mode";
@@ -182,6 +183,10 @@ class AppContext {
         } else {
             return "Copyright 2023 Amazon.com, Inc. or its affiliates. All Rights Reserved.";
         }
+    }
+
+    getUrlLinks(): Array<{ title: string; url: string }> {
+        return this.props.app.links || [];
     }
 
     uuid(): string {

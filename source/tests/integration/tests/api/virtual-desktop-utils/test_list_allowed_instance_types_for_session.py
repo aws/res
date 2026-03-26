@@ -78,6 +78,8 @@ class TestListAllowedInstanceTypesForSession:
                     "gpu": "NO_GPU",
                     "ami_id": ami_id,
                     "allowed_instance_types": ["t3"],
+                    "min_storage": {"value": 100, "unit": "gb"},
+                    "min_ram": {"value": 22, "unit": "gb"},
                 },
             }
 
@@ -146,6 +148,8 @@ class TestListAllowedInstanceTypesForSession:
                     "gpu": "NVIDIA",
                     "ami_id": ami_id,
                     "allowed_instance_types": ["g4dn"],
+                    "min_storage": {"value": 100, "unit": "gb"},
+                    "min_ram": {"value": 22, "unit": "gb"},
                 },
             }
 
@@ -214,6 +218,8 @@ class TestListAllowedInstanceTypesForSession:
                     "gpu": "NO_GPU",
                     "ami_id": ami_id,
                     "allowed_instance_types": ["t3"],
+                    "min_storage": {"value": 100, "unit": "gb"},
+                    "min_ram": {"value": 22, "unit": "gb"},
                 },
             }
 
@@ -281,6 +287,8 @@ class TestListAllowedInstanceTypesForSession:
                     "gpu": "NO_GPU",
                     "ami_id": ami_id,
                     # Missing architecture
+                    "min_storage": {"value": 100, "unit": "gb"},
+                    "min_ram": {"value": 22, "unit": "gb"},
                 },
             }
 
@@ -349,6 +357,8 @@ class TestListAllowedInstanceTypesForSession:
                     "gpu": "NO_GPU",
                     "ami_id": ami_id,
                     "allowed_instance_types": ["t3"],
+                    "min_storage": {"value": 100, "unit": "gb"},
+                    "min_ram": {"value": 22, "unit": "gb"},
                 },
             }
 
@@ -656,6 +666,9 @@ class TestListAllowedInstanceTypesForSession:
                     "architecture": "x86_64",
                     "gpu": "NO_GPU",
                     "ami_id": "ami-12345",
+                    "description": "sofwares-stack description",
+                    "min_storage": {"value": 100, "unit": "gb"},
+                    "min_ram": {"value": 22, "unit": "gb"},
                 },
                 # Missing hibernation_enabled
             }

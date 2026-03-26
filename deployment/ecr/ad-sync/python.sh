@@ -5,9 +5,9 @@
 function install_python () {
   local ALIAS_PREFIX="res"
   local INSTALL_DIR="/opt/res/python"
-  local PYTHON_VERSION="3.9.16"
+  local PYTHON_VERSION="3.12.11"
   local PYTHON_URL="https://www.python.org/ftp/python/${PYTHON_VERSION}/Python-${PYTHON_VERSION}.tgz"
-  local PYTHON_HASH="87acee12323b63a2e0c368193c03fd57e008585c754b6bceec6d5ec4c0bc34b3bb1ff20f31b6f5aff6e02502e7f5b291"
+  local PYTHON_HASH="867b9026d3cd91cdded1975a570bfca0d8071b10c62dc650e4eca08c6e7bac177edec1c522b9da76bc1987bd237891f7"
   local PYTHON_HASH_METHOD=sha384
   local PYTHON_TGZ="Python-${PYTHON_VERSION}.tgz"
 

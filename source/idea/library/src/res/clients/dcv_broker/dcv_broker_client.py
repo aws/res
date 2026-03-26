@@ -1,14 +1,10 @@
 #  Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 #  SPDX-License-Identifier: Apache-2.0
 
-import logging
 import os
 from typing import Any, Dict, List, Tuple
 
 from res.clients import dcv_swagger_client
-from res.clients.dcv_swagger_client.models.delete_session_request_data import (
-    DeleteSessionRequestData,
-)
 from res.clients.dcv_swagger_client.models.describe_sessions_request_data import (
     DescribeSessionsRequestData,
 )
@@ -21,78 +17,6 @@ logger = logging_utils.get_logger("dcv-broker-client")
 DCV_SESSION_DELETE_ERROR_SESSION_DOESNT_EXIST = (
     "The requested dcvSession does not exist"
 )
-
-
-def delete_sessions(sessions: List[Dict[str, Any]]) -> Tuple[List, List]:
-    """
-    Delete dcv sessions
-    :param sessions: list of dcv sessions to be deleted
-    :returns successful and unsuccessul list of stopped sessions
-    """
-    can_delete_sessions = []
-    sessions_to_check = []
-    skipped_sessions = []
-    for session in sessions:
-        if session.get("force", False):
-            if session.get("hibernation_enabled"):
-                skipped_sessions.append(session)
-            else:
-                can_delete_sessions.append(session)
-        else:
-            sessions_to_check.append(session)
-
-    sessions_with_count = get_active_counts_for_sessions(sessions_to_check)
-    unsuccessful_list = []
-    delete_fail_session_ids = []
-    for session in sessions_with_count:
-        if session.get("connection_count", 0) > 0:
-            logger.info(
-                f"Session {session.get('idea_session_id')}:{session.get('name')} has {session.get('connection_count')} active connection(s)"
-            )
-            session["failure_reason"] = (
-                f"There exists {session.get('connection_count')} active connection(s)for session_id: {session.get('idea_session_id')}:{session.get('name')}. Please terminate."
-            )
-            logger.error(session["failure_reason"])
-            delete_fail_session_ids.append(session["dcv_session_id"])
-            unsuccessful_list.append(session)
-        else:
-            if session.get("hibernation_enabled"):
-                skipped_sessions.append(session)
-            else:
-                can_delete_sessions.append(session)
-
-    session_id_names = [
-        f"{session.get('idea_session_id')}:{session.get('name')}"
-        for session in can_delete_sessions
-    ]
-    logger.debug(f"Attempting to delete dcv session(s): {session_id_names}")
-
-    response = _delete_sessions(can_delete_sessions)
-    successful_list = [
-        {"dcv_session_id": e.get("session_id")}
-        for e in response.get("successful_list", [])
-    ]
-
-    for session in skipped_sessions:
-        successful_list.append({"dcv_session_id": session.get("dcv_session_id")})
-
-    for entry in response.get("unsuccessful_list", []):
-        dcv_session_id = entry.get("session_id")
-        failure_reason = entry.get("failure_reason")
-        if failure_reason == DCV_SESSION_DELETE_ERROR_SESSION_DOESNT_EXIST:
-            successful_list.append({"dcv_session_id": dcv_session_id})
-        else:
-            unsuccessful_list.append(
-                {
-                    "dcv_session_id": dcv_session_id,
-                    "failure_reason": failure_reason,
-                }
-            )
-            delete_fail_session_ids.append(dcv_session_id)
-            logger.info(
-                f"Delete session request failed for dcv_session_id: {dcv_session_id} because{failure_reason}"
-            )
-    return successful_list, unsuccessful_list
 
 
 def get_active_counts_for_sessions(
@@ -112,24 +36,6 @@ def get_active_counts_for_sessions(
             "num_of_connections", 0
         )
     return sessions
-
-
-def _delete_sessions(sessions: List[Dict[str, Any]]) -> Dict:
-    if not sessions:
-        return {}
-
-    delete_sessions_request = list()
-    for session in sessions:
-        delete_sessions_request.append(
-            DeleteSessionRequestData(
-                session_id=session.get("dcv_session_id"),
-                owner=session.get("owner"),
-                force=session.get("force"),
-            )
-        )
-
-    api_response = _get_sessions_api().delete_sessions(body=delete_sessions_request)
-    return api_response.to_dict()
 
 
 def describe_sessions(sessions: List[Dict[str, Any]], next_token=None) -> Dict:

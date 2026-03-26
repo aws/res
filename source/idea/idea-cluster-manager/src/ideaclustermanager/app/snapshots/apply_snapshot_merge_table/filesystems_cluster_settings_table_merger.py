@@ -97,7 +97,7 @@ class FileSystemsClusterSettingTableMerger(MergeTable):
                 if filesystem_id not in accessible_filesystem_ids and provider != STORAGE_PROVIDER_S3_BUCKET:
                     raise exceptions.soca_exception(
                         error_code=errorcodes.FILESYSTEM_NOT_IN_VPC,
-                        message=f"{filesystem_id} not part of the env's VPC thus not accessible"
+                        message=f"{filesystem_id} is not part of the env's VPC thus not accessible"
                     )
             except exceptions.SocaException as e:
                 # Gracefully handling cases when filesystem is already onboarded or not accessible

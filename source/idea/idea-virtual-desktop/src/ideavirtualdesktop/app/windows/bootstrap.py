@@ -60,29 +60,22 @@ def run():
         admin_key = "HKLM:\\SOFTWARE\\Microsoft\\Active Setup\\Installed Components\\{A509B1A7-37EF-4b3f-8CFC-4F3A74704073}"
         user_key = "HKLM:\\SOFTWARE\\Microsoft\\Active Setup\\Installed Components\\{A509B1A8-37EF-4b3f-8CFC-4F3A74704073}"
 
-        subprocess.run([
-            'powershell',
-            '-Command',
-            f'Set-ItemProperty -Path "{admin_key}" -Name "IsInstalled" -Value 0 -Force'
-        ], check=True)
-
-        subprocess.run([
-            'powershell',
-            '-Command',
-            f'Set-ItemProperty -Path "{user_key}" -Name "IsInstalled" -Value 0 -Force'
-        ], check=True)
+        for key in [admin_key, user_key]:
+            subprocess.run([
+                'powershell',
+                '-Command',
+                f'if (-not (Test-Path "{key}")) {{ New-Item -Path "{key}" -Force | Out-Null }}'
+            ], check=True)
+            
+            subprocess.run([
+                'powershell',
+                '-Command',
+                f'Set-ItemProperty -Path "{key}" -Name "IsInstalled" -Value 0 -Force'
+            ], check=True)
 
         logger.info("Create Shortcut to RES web interface")
         default_desktop_dir = "C:\\Users\\Default\\Desktop"
         os.makedirs(default_desktop_dir, exist_ok=True)
-        shortcut_path = f"{default_desktop_dir}\\RES_Interface.url"
-        powershell_command = f'''
-        $WshShell = New-Object -comObject WScript.Shell
-        $IdeaShortcut = $WshShell.CreateShortcut("{shortcut_path}")
-        $IdeaShortcut.TargetPath = "{IDEA_WEB_PORTAL_URL}"
-        $IdeaShortcut.Save()
-        '''
-        subprocess.run(['powershell', '-Command', powershell_command], check=True)
 
         shared_storage.configure()
 

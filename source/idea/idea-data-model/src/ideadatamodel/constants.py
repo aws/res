@@ -436,7 +436,7 @@ FILE_SYSTEM_NAME_REGEX = "^[a-z0-9_]{3,18}$"
 FILE_SYSTEM_NAME_ERROR_MESSAGE = "Only use lowercase alphabets, numbers and underscore (_) for file system name. " +\
             "Must be between 3 and 18 characters long."
 
-FILE_SYSTEM_TITLE_REGEX = "^[a-zA-Z0-9\s_-]{3,48}$"
+FILE_SYSTEM_TITLE_REGEX = r"^[a-zA-Z0-9\s_-]{3,48}$"
 FILE_SYSTEM_TITLE_ERROR_MESSAGE = "Only use valid alphanumeric, hyphens (-), underscores (_), and spaces ( ) characters for the file system title. " +\
             "Must be between 3 and 48 characters long."
 
@@ -452,7 +452,7 @@ FILE_SYSTEM_VALID_FILTER_KEYS = [FILE_SYSTEM_TITLE_KEY, FILE_SYSTEM_PROVIDER_KEY
 FILE_SYSTEM_FILTER_KEY_REGEX = f"^({'|'.join(FILE_SYSTEM_VALID_FILTER_KEYS)})$"
 FILE_SYSTEM_FILTER_KEY_ERROR_MESSAGE = "Only use valid filter keys for file systems."
 
-FILE_SYSTEM_FILTER_TITLE_REGEX = "^[a-zA-Z0-9\s_-]*$"
+FILE_SYSTEM_FILTER_TITLE_REGEX = r"^[a-zA-Z0-9\s_-]*$"
 FILE_SYSTEM_FILTER_TITLE_ERROR_MESSAGE = "Only use valid alphanumeric, hyphens (-), underscores (_), and spaces ( ) characters for the file system title."
 
 FILE_SYSTEM_FILTER_PROVIDERS_REGEX = f"^({'|'.join([STORAGE_PROVIDER_EFS, STORAGE_PROVIDER_FSX_LUSTRE, STORAGE_PROVIDER_FSX_NETAPP_ONTAP, STORAGE_PROVIDER_S3_BUCKET])})$"
@@ -462,7 +462,7 @@ MOUNT_DIRECTORY_REGEX = "^/[a-z0-9-]{3,18}$"
 MOUNT_DIRECTORY_ERROR_MESSAGE = "Only use lowercase alphabets, numbers, " +\
     "and hyphens (-) for mount directory. Must be between 3 and 18 characters long."
 
-MOUNT_DIRECTORY_HOME_REGEX = "^(?!\/home$).*"
+MOUNT_DIRECTORY_HOME_REGEX = r"^(?!\/home$).*"
 MOUNT_DIRECTORY_HOME_ERROR_MESSAGE = "/home cannot be used as the mount directory for S3 Bucket."
 
 S3_BUCKET_ARN_REGEX = "^(?:arn:(?:aws(?:-cn|-us-gov)?)):s3:::([a-z0-9][a-z0-9-.]{1,61}[a-z0-9])(?:/[a-z0-9-.]+)*/?$"

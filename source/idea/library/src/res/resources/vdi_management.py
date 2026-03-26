@@ -24,62 +24,20 @@ def stop_sessions(sessions: List[Dict[str, Any]]) -> Tuple[List, List]:
     """
     Stop sessions
     :param sessions: list of sessions to be stopped
-    :returns successful and unsuccessul list of stopped sessions
+    :returns successful and unsuccessful list of stopped sessions
     """
-    vdi_with_no_dcv_session = []
-    vdi_with_dcv_session = []
-    success_response_list = []
-    fail_response_list = []
-    session_map: Dict[str, Any] = {}
-    for curr_session in sessions:
-        try:
-            session = user_sessions.get_session(
-                owner=curr_session["owner"],
-                session_id=curr_session[SESSION_ID_KEY],
-            )
-        except exceptions.UserSessionNotFound as e:
-            session = {}
-            session["failure_reason"] = (
-                f"Invalid RES Session ID: {curr_session[SESSION_ID_KEY]}:{curr_session['name']} for user: {curr_session['owner']}. Nothing to stop"
-            )
-            logger.error(session["failure_reason"])
-            fail_response_list.append(session)
-            continue
-
-        session["is_idle"] = curr_session.get("is_idle", False)
-        if session.get("state", "") != "READY":
-            session["failure_reason"] = (
-                f"RES Session ID: {session[SESSION_ID_KEY]}:{session['name']} for user: {session['owner']} is in {session['state']} state. Can't stop. Wait for it to be READY."
-            )
-            logger.error(session["failure_reason"])
-            fail_response_list.append(session)
-            continue
-
-        if not session.get("dcv_session_id"):
-            vdi_with_no_dcv_session.append(session)
-        else:
-            session["force"] = curr_session.get("force", False)
-            vdi_with_dcv_session.append(session)
-            session_map[session.get("dcv_session_id")] = session
-
-    success_list, error_list = dcv_broker_client.delete_sessions(vdi_with_dcv_session)
+    validate_sessions_to_delete(sessions, True)
 
     servers_to_stop = []
     servers_to_hibernate = []
+    success_response_list = []
+    fail_response_list = []
+    for session in sessions:
+        if session.get("failure_reason"):
+            logger.error(f'{session[SESSION_ID_KEY]}: {session["failure_reason"]}')
+            fail_response_list.append(session)
+            continue
 
-    for dcv_session in success_list:
-        session = session_map.get(dcv_session.get("dcv_session_id"))
-        session["state"] = "STOPPING"
-        session = user_sessions.update_session(session)
-        events_client.publish_validate_dcv_session_deletion_event(
-            session_id=session.get(SESSION_ID_KEY), owner=session.get("owner")
-        )
-        success_response_list.append(session)
-
-    for session in vdi_with_no_dcv_session:
-        session["server"]["is_idle"] = (
-            session.get("is_idle") if session.get("is_idle") else False
-        )
         if session.get("hibernation_enabled"):
             servers_to_hibernate.append(session.get("server"))
         else:
@@ -88,21 +46,65 @@ def stop_sessions(sessions: List[Dict[str, Any]]) -> Tuple[List, List]:
         session = user_sessions.update_session(session)
         success_response_list.append(session)
 
-    for session in error_list:
-        session_map.get(session.get("dcv_session_id"))["failure_reason"] = session.get(
-            "failure_reason"
-        )
-        fail_response_list.append(session_map[session["dcv_session_id"]])
-
-    session_id_names = [
-        f"{session.get(SESSION_ID_KEY)}:{session.get('name')}"
-        for session in vdi_with_no_dcv_session
-    ]
-    logger.info(f"Stopping session(s): {session_id_names}")
-
+    logger.info(f"Stopping session(s)")
     stop_servers(servers_to_stop)
     hibernate_servers(servers_to_hibernate)
     return success_response_list, fail_response_list
+
+
+def validate_sessions_to_delete(
+    sessions: List[Dict[str, Any]],
+    check_ready_state: bool = False,
+) -> None:
+    sessions_to_check = []
+    for i, session in enumerate(sessions):
+        try:
+            existing_session = user_sessions.get_session(
+                owner=session["owner"],
+                session_id=session[SESSION_ID_KEY],
+            )
+            session = {
+                **existing_session,
+                "is_idle": session.get("is_idle", False),
+                "force": session.get("force", False),
+            }
+            sessions[i] = session
+
+        except exceptions.UserSessionNotFound:
+            session["failure_reason"] = (
+                f"Invalid RES Session ID: {session[SESSION_ID_KEY]}:{session['name']} for user: {session['owner']}.  Nothing to delete"
+            )
+            continue
+
+        if check_ready_state and session.get("state", "") != "READY":
+            session["failure_reason"] = (
+                f"RES Session ID: {session[SESSION_ID_KEY]}:{session['name']} for user: {session['owner']} is in {session['state']} state. Can't stop. Wait for it to be READY."
+            )
+            continue
+        if session.get("state", "") in {"STOPPED", "STOPPED_IDLE"}:
+            continue
+
+        if not session.get(user_sessions.SESSION_DB_DCV_SESSION_ID_KEY):
+            session["server"]["is_idle"] = (
+                session.get("is_idle") if session.get("is_idle") else False
+            )
+            continue
+
+        if not session.get("force"):
+            sessions_to_check.append(session)
+
+    sessions_with_count = dcv_broker_client.get_active_counts_for_sessions(
+        sessions_to_check
+    )
+
+    for session in sessions_with_count:
+        if session.get("connection_count", 0) > 0:
+            logger.info(
+                f"Session {session.get('idea_session_id')}:{session.get('name')} has {session.get('connection_count')} active connection(s)"
+            )
+            session["failure_reason"] = (
+                f"There exists {session.get('connection_count')} active connection(s)for session_id: {session.get('idea_session_id')}:{session.get('name')}. Please terminate."
+            )
 
 
 def stop_servers(servers: List[Dict] = None) -> None:
@@ -154,77 +156,37 @@ def terminate_sessions(sessions: List[Dict[str, Any]]):
     """
     Terminates sessions
     :param sessions: list of sessions to be terminated
-    :returns successful and unsuccessul list of terminated sessions
+    :returns successful and unsuccessful list of terminated sessions
     """
-    vdi_with_no_dcv_session = []
-    vdi_with_dcv_session = []
+    validate_sessions_to_delete(sessions)
+
+    servers_to_delete = []
     success_response_list = []
     fail_response_list = []
-    session_map: Dict[str, Any] = {}
-
-    for curr_session in sessions:
-        try:
-            session = user_sessions.get_session(
-                owner=curr_session["owner"],
-                session_id=curr_session[SESSION_ID_KEY],
-            )
-        except exceptions.UserSessionNotFound as e:
-            session = {}
-            session["failure_reason"] = (
-                f"Invalid RES Session ID: {curr_session[SESSION_ID_KEY]}:{curr_session['name']} for user: {curr_session['owner']}.  Nothing to delete"
-            )
-            logger.error(session["failure_reason"])
+    for session in sessions:
+        if session.get("failure_reason"):
+            logger.error(f'{session[SESSION_ID_KEY]}: {session["failure_reason"]}')
             fail_response_list.append(session)
             continue
 
-        session["force"] = curr_session.get("force", False)
-        if session.get("state", "") in {"STOPPED", "STOPPED_IDLE"} or not session.get(
-            user_sessions.SESSION_DB_DCV_SESSION_ID_KEY
-        ):
-            vdi_with_no_dcv_session.append(session)
-            continue
-
-        session_map[session["dcv_session_id"]] = session
-        vdi_with_dcv_session.append(session)
-
-    success_list, error_list = dcv_broker_client.delete_sessions(vdi_with_dcv_session)
-
-    servers_to_delete = []
-    session_db_entries_to_delete = []
-
-    for dcv_session in success_list:
-        session = session_map.get(dcv_session.get("dcv_session_id"))
         session["state"] = "DELETING"
         session = user_sessions.update_session(session)
-        events_client.publish_validate_dcv_session_deletion_event(
-            session_id=session.get(SESSION_ID_KEY), owner=session.get("owner")
-        )
-        success_response_list.append(session)
 
-    for session in vdi_with_no_dcv_session:
-        session_db_entries_to_delete.append(session)
+        delete_schedule_for_session(session=session)
+        session_permissions.delete_session_permission_by_id(
+            session_id=session[SESSION_ID_KEY]
+        )
+        user_sessions.delete_session(session=session)
+        session["state"] = "DELETED"
         servers_to_delete.append(session.get("server"))
+
+        success_response_list.append(session)
 
     terminate_servers(servers_to_delete)
 
     ad_automation.remove_ad_authorization(
         [server["instance_id"] for server in servers_to_delete]
     )
-
-    for session in session_db_entries_to_delete:
-        delete_schedule_for_session(session)
-        session_permissions.delete_session_permission_by_id(
-            session_id=session[SESSION_ID_KEY]
-        )
-        user_sessions.delete_session(session)
-        session["state"] = "DELETED"
-        success_response_list.append(session)
-
-    for session in error_list:
-        session_map.get(session.get("dcv_session_id"))["failure_reason"] = session.get(
-            "failure_reason"
-        )
-        fail_response_list.append(session_map[session["dcv_session_id"]])
 
     return success_response_list, fail_response_list
 
@@ -259,8 +221,8 @@ def delete_schedule_for_session(session: Dict[str, Any]) -> None:
     owner = session.get(user_sessions.SESSION_DB_HASH_KEY)
     curr_session = user_sessions.get_session(owner=owner, session_id=session_id)
 
-    for day in schedules.SCHEDULE_DAYS:
-        key = f"{day}{user_sessions.SESSION_DB_SCHEDULE_SUFFIX}"
+    for day in schedules.DayOfWeek:
+        key = f"{day.value}{user_sessions.SESSION_DB_SCHEDULE_SUFFIX}"
         schedule = curr_session.get(key)
         if schedule and schedule.get("schedule_id"):
             schedules.delete_schedule(schedule=schedule)

@@ -40,7 +40,7 @@ class VirtualDesktopPermissionProfileDetail extends Component<VirtualDesktopPerm
     constructor(props: VirtualDesktopPermissionProfileDetailProps) {
         super(props);
         this.state = {
-            permissionProfile: {},
+            permissionProfile: {profile_id: "", title: ""},
             ownerPermissions: new Map(),
             ownerProfileLoaded: false,
         };

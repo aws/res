@@ -43,6 +43,7 @@ UNIT_TESTS = [
     "tests.cluster-manager",
     "tests.virtual-desktop-controller",
     "tests.library",
+    "tests.datamodel",
     "tests.sdk",
     "tests.bootstrap",
     "tests.pipeline",
@@ -739,6 +740,7 @@ class PipelineStack(Stack):
                             f"arn:{self.partition}:dynamodb:{self.region}:{self.account}:table/{self.params.cluster_name}.cluster-settings",
                             f"arn:{self.partition}:dynamodb:{self.region}:{self.account}:table/{self.params.cluster_name}.ad-sync.distributed-lock",
                             f"arn:{self.partition}:dynamodb:{self.region}:{self.account}:table/{self.params.cluster_name}.ad-sync.status",
+                            f"arn:{self.partition}:dynamodb:{self.region}:{self.account}:table/{self.params.cluster_name}.vdc.controller.user-sessions",
                         ],
                     }
                 ),

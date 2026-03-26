@@ -129,8 +129,8 @@ class DCVBrokerClientUtils:
                 permissions_file_path = f'{permissions_folder}idea.perm'
                 dcv_command += f'--permissions-file `"{permissions_file_path}`" '
         else:
-            dcv_command = f'dcv create-session --type {session.type.lower()} --name "{session.name}" ' \
-                          f'--user {session.owner} --owner {session.owner} --storage-root "{storage_root}" '
+            dcv_command = f'dcv create-session --type \'{session.type.lower()}\' --name \'{session.name}\' ' \
+                          f'--user \'{session.owner}\' --owner \'{session.owner}\' --storage-root \'{storage_root}\' '
 
             if Utils.is_not_empty(permissions_content):
                 command_list.append(f"mkdir -p /etc/dcv/{session.dcv_session_id}/")

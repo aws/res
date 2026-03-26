@@ -15,7 +15,8 @@ import React, { Component, RefObject } from "react";
 
 import { AppContext } from "../../common";
 import IdeaListView from "../../components/list-view";
-import { VirtualDesktopPermission, VirtualDesktopPermissionProfile } from "../../client/data-model";
+import { VirtualDesktopPermission } from "../../client/data-model";
+import { VirtualDesktopPermissionProfile } from "../../client/generated/api";
 import { Constants } from "../../common/constants";
 import { IdeaSideNavigationProps } from "../../components/side-navigation";
 import { IdeaAppLayoutProps } from "../../components/app-layout";
@@ -165,7 +166,7 @@ class GlobalPermissions extends Component<GlobalPermissionsProps, GlobalPermissi
             }
         }
         profileToUpdate.permissions = permissions;
-        this.virtualDesktopAdminClient().updatePermissionProfile({
+        this.virtualDesktopAdminClient().updatePermissionProfile(profileToUpdate.profile_id!, {
             profile: profileToUpdate,
         }).then(() => {
             this.setState({

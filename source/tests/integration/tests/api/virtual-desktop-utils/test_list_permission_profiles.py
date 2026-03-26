@@ -117,7 +117,7 @@ class TestListPermissionProfiles:
             pytest.fail(f"Unexpected API error: {str(e)}")
 
     @pytest.mark.parametrize("non_admin_username", ["user1"])
-    def test_list_permission_profiles_with_non_admin_user_returns_authorization_error(
+    def test_list_permission_profiles_with_non_admin_user_returns_valid_response(
         self,
         request: FixtureRequest,
         region: str,
@@ -126,24 +126,34 @@ class TestListPermissionProfiles:
         non_admin: ClientAuth,
     ) -> None:
         """
-        Test that non-admin users get proper authorization error.
+        Test successful retrieval of permission profiles.
         """
         try:
             api_client = ApiClient(res_environment, non_admin)
-            api_client.list_permission_profiles()
-            pytest.fail("Expected authorization error for non-admin user")
+            response = api_client.list_permission_profiles()
+
+            # Verify we got a proper response
+            assert response is not None, "Response should not be None"
+
+            # Response must always have a listing field
+            assert response.listing is not None, "Response must contain 'listing' field"
+            assert isinstance(response.listing, list), "Listing should be a list"
+
+            # Verify each profile has required fields
+            for profile in response.listing:
+                assert profile.profile_id is not None, "Profile must have profile_id"
+                assert profile.title is not None, "Profile must have title"
+                assert profile.permissions is not None, "Profile must have permissions"
+                assert isinstance(
+                    profile.permissions, list
+                ), "Permissions should be a list"
+
+            logger.info(
+                f"Successfully retrieved {len(response.listing)} permission profiles"
+            )
+
         except Exception as e:
-            assert hasattr(e, "response"), "Response should exist in the exception"
-            assert e.response is not None, "Response should not be None"
-
-            response_content = e.response.text
-            if "Unauthorized user" in response_content:
-                logger.info(
-                    "Non-admin user correctly received 'Unauthorized user' error"
-                )
-                return
-
-            pytest.fail(f"Unexpected error for non-admin user: {str(e)}")
+            pytest.fail(f"Unexpected API error: {str(e)}")
 
     def test_list_permission_profiles_with_nonexistent_user_returns_user_not_found_error(
         self, res_environment: ResEnvironment

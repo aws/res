@@ -7,7 +7,7 @@ ARG PUBLIC_ECR_TAG
 ENV PUBLIC_ECR_TAG=${PUBLIC_ECR_TAG}
 ADD all-*.tar.gz python.sh /opt/res/downloads/
 
-# install Python 3.9.16 which is required to run RES applications
+# install Python 3.12.11 which is required to run RES applications
 RUN yum install -y wget openssl openssl-devel tar gzip gcc zlib-devel
 RUN . /opt/res/downloads/python.sh
 

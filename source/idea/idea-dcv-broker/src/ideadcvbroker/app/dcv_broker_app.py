@@ -22,7 +22,14 @@ from ideasdk.metrics.cloudwatch.cloudwatch_agent_config import (
     CloudWatchAgentLogFileOptions,
 )
 from res.app.res_app import ResApp
-from res.utils import logging_utils
+from res.resources.cluster_settings import CLUSTER_SETTINGS_TABLE_NAME
+from res.resources.dynamodb.dynamodb_stream_subscription import (
+    DynamoDBStreamSubscription,
+)
+from res.utils import logging_utils, table_utils
+from ideadcvbroker.app.dcv_broker_config_subscriber import (
+    DcvBrokerConfigEventSubscriber,
+)
 
 
 class DcvBrokerApp(ResApp):
@@ -89,6 +96,16 @@ class DcvBrokerApp(ResApp):
         dcv_broker.configure_dcv_broker()
         dcv_broker.clean_staging_area()
         dcv_broker.notify_controller()
+
+        # Subscribe to cluster-settings changes
+        DynamoDBStreamSubscription(
+            stream_subscriber=DcvBrokerConfigEventSubscriber(self.logger),
+            table_name=table_utils.resolve_table_name(CLUSTER_SETTINGS_TABLE_NAME),
+            table_kinesis_stream_name=table_utils.get_table_kinesis_stream_name(
+                CLUSTER_SETTINGS_TABLE_NAME
+            ),
+            logger=self.logger,
+        )
 
         timestamp = str(int(time.time()))
         with open(bootstrap_constants.INSTANCE_READY_LOCK, "w") as f:

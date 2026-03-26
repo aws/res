@@ -35,7 +35,7 @@ def patch_util_file(util_file_path: str) -> bool:
         
         # Add enum import after other imports
         import_pattern = r'(from api import typing_utils)'
-        import_replacement = r'\1\nfrom enum import Enum'
+        import_replacement = r'from datamodel import typing_utils\nfrom enum import Enum'
         
         content = re.sub(import_pattern, import_replacement, content)
         

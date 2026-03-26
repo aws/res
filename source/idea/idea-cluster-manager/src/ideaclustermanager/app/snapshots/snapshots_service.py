@@ -32,6 +32,7 @@ DYNAMODB_TABLES_TO_EXPORT = [
     'accounts.users',
     'ad-automation',
     'authz.role-assignments',
+    'authz.roles',
     'cluster-settings',
     'email-templates',
     'modules',

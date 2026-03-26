@@ -29,8 +29,9 @@ from ideadatamodel import (
     VirtualDesktopTenancy,
     SocaMemory,
     SocaMemoryUnit,
-    VirtualDesktopSoftwareStack
+    VirtualDesktopSoftwareStack,
 )
+from ideadatamodel.shared_filesystem import ListOnboardedFileSystemsRequest
 from ideasdk.bootstrap import BootstrapUserDataBuilder
 from ideasdk.context import BootstrapContext
 from ideasdk.launch_configurations import ScriptOSType, ScriptEventType
@@ -112,9 +113,9 @@ class VirtualDesktopControllerUtils:
         custom_script_commands = custom_script_check + [
             *on_vdi_start_script_store,
             *on_vdi_configured_script_store,
-            f'/bin/bash scripts/virtual-desktop-host/linux/export_launch_script_env.sh -p {session.project.project_id} -o {session.owner} -n {session.project.name} -e {self.context.config().cluster_name} -c {ScriptEventType.ON_VDI_CONFIGURED}.sh -s {ScriptEventType.ON_VDI_START}.sh -r {rerun_on_reboot}',
+            f'/bin/bash scripts/virtual-desktop-host/linux/export_launch_script_env.sh -p {session.project.project_id} -o {session.owner} -n {session.project.name} -e {self.context.config().cluster_name} -c {ScriptEventType.ON_VDI_CONFIGURED.value}.sh -s {ScriptEventType.ON_VDI_START.value}.sh -r {rerun_on_reboot}',
             'source /etc/launch_script_environment',
-            f'/bin/bash scripts/virtual-desktop-host/linux/{ScriptEventType.ON_VDI_START}.sh',
+            f'/bin/bash scripts/virtual-desktop-host/linux/{ScriptEventType.ON_VDI_START.value}.sh',
             f"echo $(date +%s) > {lock_file}",
             "fi"
         ]
@@ -144,8 +145,11 @@ class VirtualDesktopControllerUtils:
         except Exception as e:
             logger.info(f"Error retriving secret from secret manager {str(e)}")
 
+        # Check if FSx Lustre file systems are onboarded
+        enable_lustre = 'true' if self._has_fsx_lustre_file_systems() else 'false'
+
         install_commands = custom_script_commands + [
-            f'/bin/bash scripts/virtual-desktop-host/linux/install.sh -m {res_constants.MODULE_ID_VIRTUAL_DESKTOP_APP} -g {gpu_family} -u {custome_broker_api_url} -t {jwt_token} -p false -e {self.context.config().cluster_name} -n {session.project.name} -o {session.owner} -d {session.type.name} -i {session.idea_session_id} -a {region} -h {session.hibernation_enabled}'
+            f'/bin/bash scripts/virtual-desktop-host/linux/install.sh -m {res_constants.MODULE_ID_VIRTUAL_DESKTOP_APP} -g {gpu_family} -u {custome_broker_api_url} -t {jwt_token} -p false -e {self.context.config().cluster_name} -n {session.project.name} -o {session.owner} -d {session.type.name} -i {session.idea_session_id} -a {region} -h {session.hibernation_enabled} -l {enable_lustre}'
         ]
 
         if session.software_stack.base_os == BaseOS.WINDOWS:
@@ -155,11 +159,11 @@ class VirtualDesktopControllerUtils:
             on_vdi_start_script_store = self._store_commands_as_windows_script(on_vdi_start_script_commands, ScriptEventType.ON_VDI_START)
             on_vdi_configured_script_store = self._store_commands_as_windows_script(on_vdi_configured_script_commands, ScriptEventType.ON_VDI_CONFIGURED)
             export_env_variables_commands = ['Import-Module .\\ExportLaunchScriptEnv.ps1',
-                                             f'Export-EnvironmentVariables -ProjectId "{session.project.project_id}" -OwnerId "{session.owner}" -EnvName "{self.context.config().cluster_name}" -ProjectName "{session.project.name}" -OnVDIStartCommands "{ScriptEventType.ON_VDI_START}.ps1" -OnVDIConfigureCommands "{ScriptEventType.ON_VDI_CONFIGURED}.ps1"']
+                                             f'Export-EnvironmentVariables -ProjectId "{session.project.project_id}" -OwnerId "{session.owner}" -EnvName "{self.context.config().cluster_name}" -ProjectName "{session.project.name}" -OnVDIStartCommands "{ScriptEventType.ON_VDI_START.value}.ps1" -OnVDIConfigureCommands "{ScriptEventType.ON_VDI_CONFIGURED.value}.ps1"']
             on_vdi_start_script_commands = ['& .\\$env:ON_VDI_START_COMMANDS']
             install_commands = change_directory_command + export_env_variables_commands + on_vdi_start_script_store + on_vdi_configured_script_store + on_vdi_start_script_commands + [
                 'Import-Module .\\Install.ps1',
-                f'Install-WindowsEC2Instance -ConfigureForRESVDI -AWSRegion "{self.context.config().aws_region}" -ENVName "{self.context.config().cluster_name}" -ModuleID "{res_constants.MODULE_ID_VIRTUAL_DESKTOP_APP}" -ProjectName {session.project.name} -SessionOwner "{session.owner}" -SessionId "{session.idea_session_id}" -BootstrapToken "{jwt_token}" -CustomBrokerApi "{custome_broker_api_url}" -OnVDIConfiguredCommands "{ScriptEventType.ON_VDI_CONFIGURED}.ps1"'
+                f'Install-WindowsEC2Instance -ConfigureForRESVDI -AWSRegion "{self.context.config().aws_region}" -ENVName "{self.context.config().cluster_name}" -ModuleID "{res_constants.MODULE_ID_VIRTUAL_DESKTOP_APP}" -ProjectName {session.project.name} -SessionOwner "{session.owner}" -SessionId "{session.idea_session_id}" -BootstrapToken "{jwt_token}" -CustomBrokerApi "{custome_broker_api_url}" -OnVDIConfiguredCommands "{ScriptEventType.ON_VDI_CONFIGURED.value}.ps1"'
             ]
 
         https_proxy = self.context.config().get_string('cluster.network.https_proxy', required=False, default='')
@@ -184,14 +188,39 @@ class VirtualDesktopControllerUtils:
 
         return user_data_builder.build()
 
-    def _store_commands_as_linux_script(self, commands: List[str], scriptName: str) -> List[str]:
+    def _has_fsx_lustre_file_systems(self) -> bool:
+        """
+        Check if any FSx Lustre file systems are onboarded by calling cluster manager.
+        Returns True if FSx Lustre is onboarded, False otherwise.
+        """
+        try:
+            # Use SharedFileSystemClient to list file systems
+            result = self.context.shared_filesystem_client.list_onboarded_file_systems(
+                ListOnboardedFileSystemsRequest()
+            )
+            
+            # Check if any file system has fsx_lustre provider
+            for fs in result.listing:
+                if fs.get_provider() == constants.STORAGE_PROVIDER_FSX_LUSTRE:
+                    self._logger.info(f"Found FSx Lustre file system: {fs.name}")
+                    return True
+            
+            self._logger.info("No FSx Lustre file systems found")
+            return False
+            
+        except Exception as e:
+            self._logger.error(f"Error checking for FSx Lustre file systems: {e}")
+            # Default to false if we can't determine
+            return False
+
+    def _store_commands_as_linux_script(self, commands: List[str], scriptName: ScriptEventType) -> List[str]:
         begin = "#!/bin/bash"
         script = "\n".join([begin] + commands)
-        return [f'echo "{script}" > scripts/virtual-desktop-host/linux/{scriptName}.sh']
+        return [f'echo "{script}" > scripts/virtual-desktop-host/linux/{scriptName.value}.sh']
 
-    def _store_commands_as_windows_script(self, commands: List[str], scriptName: str) -> List[str]:
+    def _store_commands_as_windows_script(self, commands: List[str], scriptName: ScriptEventType) -> List[str]:
         script = "`n".join(commands)
-        return [f'"{script}" | Out-File -FilePath {scriptName}.ps1']
+        return [f'"{script}" | Out-File -FilePath {scriptName.value}.ps1']
 
     def _retrieve_scripts_as_commands(self, project: Project, os_type: ScriptOSType, script_event: ScriptEventType) -> List[str]:
         scripts = project.scripts

@@ -17,15 +17,13 @@ import {
     ListAllowedInstanceTypesResponseContent,
     ListAllowedInstanceTypesForSessionResponseContent,
     VirtualDesktopUtilsApi,
-    ListSupportedOsesResponseContent,
-    ListSupportedGpusResponseContent,
-    ListScheduleTypesResponseContent,
     VirtualDesktopUtilsApiListAllowedInstanceTypesRequest,
     VirtualDesktopUtilsApiListAllowedInstanceTypesForSessionRequest,
     VirtualDesktopUtilsApiListPermissionProfilesRequest,
     ListPermissionProfilesResponseContent,
     VirtualDesktopUtilsApiGetPermissionProfileRequest,
-    GetPermissionProfileResponseContent
+    GetPermissionProfileResponseContent,
+    VirtualDesktopPermissionProfile
 } from "./generated/api";
 import { Configuration } from "./generated/configuration";
 
@@ -56,63 +54,28 @@ class VirtualDesktopUtilsClient extends IdeaBaseClient<VirtualDesktopUtilsClient
         return '';
     }
 
-    async listSupportedOses(): Promise<ListSupportedOsesResponseContent> {
-        try {
-            const response = await this.generatedClient.listSupportedOses();
-
-            return response.data;
-        } catch (error) {
-            console.warn('Generated client failed, returning empty response:', error);
-            return {
-                paginator: undefined,
-                sort_by: undefined,
-                data_range: undefined,
-                listing: [],
-                filters: []
-            };
-        }
-    }
-
-    async listSupportedGpus(): Promise<ListSupportedGpusResponseContent> {
-        try {
-            const response = await this.generatedClient.listSupportedGpus();
-
-            return response.data;
-        } catch (error) {
-            console.warn('Generated client failed, returning empty response:', error);
-            return {
-                paginator: undefined,
-                sort_by: undefined,
-                data_range: undefined,
-                listing: [],
-                filters: []
-            };
-        }
-    }
-
-    async listScheduleTypes(): Promise<ListScheduleTypesResponseContent> {
-        try {
-            const response = await this.generatedClient.listScheduleTypes();
-
-            return response.data;
-        } catch (error) {
-            console.warn('Generated client failed, returning empty response:', error);
-            return {
-                paginator: undefined,
-                sort_by: undefined,
-                data_range: undefined,
-                listing: [],
-                filters: []
-            };
-        }
-    }
     async listPermissionProfiles(request: VirtualDesktopUtilsApiListPermissionProfilesRequest): Promise<ListPermissionProfilesResponseContent> {
         try {
-            const response = await this.generatedClient.listPermissionProfiles({
-                profileId: request.profileId
-            });
+            let allProfiles: VirtualDesktopPermissionProfile[] = [];
+            let nextToken = request.nextToken;
+            let lastResponse;
 
-            return response.data;
+            do {
+                const response = await this.generatedClient.listPermissionProfiles({
+                    profileId: request.profileId,
+                    nextToken: nextToken
+                });
+                
+                lastResponse = response;
+                allProfiles.push(...(response.data.listing || []));
+                nextToken = response.data.nextToken;
+            } while (nextToken);
+
+            return {
+                ...lastResponse.data,
+                listing: allProfiles,
+                nextToken: undefined
+            };
         } catch (error) {
             console.warn('Generated client failed, returning empty response:', error);
             return {

@@ -40,7 +40,7 @@ def configure() -> None:
         )
         # Set up sudoers group permission in configured in cluster setting
         if sudoers_group_name:
-            group_name_escaped = sudoers_group_name.replace(" ", "\ ")
+            group_name_escaped = sudoers_group_name.replace(" ", r"\ ")
             if not file_content_exists(
                 f"%{group_name_escaped}", constants.SUDOERS_FILE
             ):

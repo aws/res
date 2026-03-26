@@ -29,7 +29,7 @@ from idea.infrastructure.install.parameters.parameters import RESParameters
 from idea.infrastructure.install.policies import BackendLambdaPolicy
 from idea.infrastructure.install.stacks.cluster_stack import ClusterStack
 from idea.infrastructure.install.stacks.identity_stack import IdentityStack
-from idea.infrastructure.resources.lambda_functions.backend import handler
+from idea.backend import handler
 
 backend_lambda_security_group_name = "backend-lambda-security-group-name"
 backend_lambda_name = "backend-lambda"
@@ -185,6 +185,7 @@ class BackendLambda(Construct):
             runtime=RES_COMMON_LAMBDA_RUNTIME,
             description="RES Backend Lambda",  # type: ignore
             timeout=aws_cdk.Duration.minutes(15),  # type: ignore
+            memory_size=4096,  # type: ignore
             layers=[self.lambda_layer],  # type: ignore
             initial_policy=BackendLambdaPolicy.create_policy_statements(self.arn_builder),  # type: ignore
             environment={

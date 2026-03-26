@@ -14,7 +14,7 @@
 import React, { Component, RefObject } from "react";
 import { Box, Button, Container, Form, Grid, Header, Modal, SpaceBetween } from "@cloudscape-design/components";
 import { ModalProps } from "@cloudscape-design/components/modal/interfaces";
-import { GetUserResult, SocaUserInputChoice, SocaUserInputParamMetadata, User, VirtualDesktopPermissionProfile, VirtualDesktopSession, VirtualDesktopSessionPermission } from "../../../client/data-model";
+import { GetUserResult, SocaUserInputChoice, SocaUserInputParamMetadata, User, VirtualDesktopPermissionProfile, VirtualDesktopSession } from "../../../client/data-model";
 import { AuthClient, ProjectsClient, VirtualDesktopClient } from "../../../client";
 import { AppContext } from "../../../common";
 import { IdeaFormField, IdeaFormFieldLifecycleEvent, IdeaFormFieldStateChangeEvent, IdeaFormFieldStateChangeEventHandler } from "../../../components/form-field";
@@ -24,6 +24,7 @@ import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import { IconDefinition } from "@fortawesome/fontawesome-svg-core";
 import VirtualDesktopUtilsClient from "../../../client/virtual-desktop-utils-client";
 import { Constants } from "../../../common/constants";
+import { VirtualDesktopSessionPermission } from "../../../client/generated/api";
 
 export interface PermissionRowProps {
     usersList: User[];
@@ -358,7 +359,7 @@ class UpdateSessionPermissionModal extends Component<UpdateSessionPermissionModa
 
         this.getVirtualDesktopClient()
             .listSessionPermissions({
-                idea_session_id: this.props.session?.idea_session_id,
+                resSessionId: this.props.session.idea_session_id!,
             })
             .then((response) => {
                 this.setState(
@@ -659,19 +660,20 @@ class UpdateSessionPermissionModal extends Component<UpdateSessionPermissionModa
                                         }
 
                                         let permission: VirtualDesktopSessionPermission = {
-                                            idea_session_id: this.props.session.idea_session_id,
-                                            idea_session_owner: this.props.session.owner,
-                                            idea_session_name: this.props.session.name,
+                                            idea_session_id: this.props.session.idea_session_id as string,
+                                            idea_session_owner: this.props.session.owner as string,
+                                            idea_session_name: this.props.session.name as string,
                                             idea_session_instance_type: this.props.session.server?.instance_type!,
-                                            idea_session_base_os: this.props.session.base_os,
-                                            idea_session_state: this.props.session.state,
-                                            idea_session_created_on: this.props.session.created_on,
-                                            idea_session_type: this.props.session.type,
-                                            actor_name: this.allRowValues[key].actor,
+                                            idea_session_base_os: this.props.session.base_os!,
+                                            idea_session_state: this.props.session.state!,
+                                            idea_session_created_on: `${Date.parse(this.props.session.created_on as string)}`,
+                                            idea_session_type: this.props.session.type!,
+                                            actor_name: this.allRowValues[key].actor as string,
+                                            idea_session_hibernation_enabled: this.props.session.hibernation_enabled as boolean,
                                             actor_type: "USER",
                                             expiry_date: `${Date.parse(this.allRowValues[key].expiryDate!)}`,
                                             permission_profile: {
-                                                profile_id: this.allRowValues[key].profileId,
+                                                profile_id: this.allRowValues[key].profileId as string,
                                             },
                                         };
 

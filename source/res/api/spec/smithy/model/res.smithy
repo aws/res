@@ -16,14 +16,24 @@ use smithy.api#httpBearerAuth
 service RES {
     version: "1.0.0"
     operations: [
-        ListSupportedOses
-        ListSupportedGpus
-        ListScheduleTypes
+        BatchGetDCVSessions
+        CreatePermissionProfile
+        CreateSoftwareStack
+        DeletePermissionProfile
+        DeleteSoftwareStack
         ListAllowedInstanceTypes
         ListAllowedInstanceTypesForSession
-        ListPermissionProfiles
-        GetPermissionProfile
         ListDCVServers
-        BatchGetDCVSessions
+        ListPermissionProfiles
+        ListSessionPermissions
+        ListSharedPermissions
+        GetPermissionProfile
+        ListSoftwareStacks
+        UpdatePermissionProfile
+        UpdateSoftwareStack
+        UpdateSessionPermissions
+        GetSoftwareStack
+        ListSessions
+        GetSession
     ]
 }

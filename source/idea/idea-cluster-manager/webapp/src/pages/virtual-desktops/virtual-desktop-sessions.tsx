@@ -108,6 +108,7 @@ class VirtualDesktopSessions extends Component<VirtualDesktopSessionsProps, Virt
     listing: RefObject<IdeaListView>;
     deleteSessionsConfirmModal: RefObject<IdeaConfirm>;
     stopSessionsConfirmModal: RefObject<IdeaConfirm>;
+    rebootSessionsConfirmModal: RefObject<IdeaConfirm>;
     resumeSessionsConfirmModal: RefObject<IdeaConfirm>;
     sessionHealthModal: RefObject<IdeaView>;
     createSoftwareStackForm: RefObject<IdeaForm>;
@@ -119,6 +120,7 @@ class VirtualDesktopSessions extends Component<VirtualDesktopSessionsProps, Virt
         this.listing = React.createRef();
         this.deleteSessionsConfirmModal = React.createRef();
         this.stopSessionsConfirmModal = React.createRef();
+        this.rebootSessionsConfirmModal = React.createRef();
         this.resumeSessionsConfirmModal = React.createRef();
         this.sessionHealthModal = React.createRef();
         this.createSoftwareStackForm = React.createRef();
@@ -181,6 +183,10 @@ class VirtualDesktopSessions extends Component<VirtualDesktopSessionsProps, Virt
         return this.state.sessionSelected;
     }
 
+    hasErrorStateSessions(): boolean {
+        return this.getSelectedSessions().some(session => session.state === "ERROR");
+    }
+
     getVirtualDCVClient(): VirtualDesktopDCVClient {
         return AppContext.get().client().virtualDesktopDCV();
     }
@@ -210,6 +216,10 @@ class VirtualDesktopSessions extends Component<VirtualDesktopSessionsProps, Virt
 
     getStopSessionsConfirmModal(): IdeaConfirm {
         return this.stopSessionsConfirmModal.current!;
+    }
+
+    getRebootSessionsConfirmModal(): IdeaConfirm {
+        return this.rebootSessionsConfirmModal.current!;
     }
 
     getSessionHealthModal(): IdeaView {
@@ -568,6 +578,69 @@ class VirtualDesktopSessions extends Component<VirtualDesktopSessionsProps, Virt
         );
     }
 
+    buildRebootSessionsConfirmModal() {
+        const errorStateSessions = this.getSelectedSessions().filter(session => session.state === "ERROR");
+        const skippedSessions = this.getSelectedSessions().filter(session => session.state !== "ERROR");
+        
+        return (
+            <IdeaConfirm
+                ref={this.rebootSessionsConfirmModal}
+                title={"Reboot Session(s)"}
+                onConfirm={() => {
+                    const toReboot: VirtualDesktopSession[] = [];
+                    errorStateSessions.forEach((session) =>
+                        toReboot.push({
+                            idea_session_id: session.idea_session_id,
+                            dcv_session_id: session.dcv_session_id,
+                            owner: session.owner,
+                        })
+                    );
+                    this.getVirtualDesktopAdminClient()
+                        .rebootSessions({
+                            sessions: toReboot,
+                        })
+                        .then(
+                            (result) => {
+                                this.setState(
+                                    {
+                                        sessionSelected: false,
+                                    },
+                                    () => {
+                                        this.displayFlashResponseBanner(result, "Request Submitted", "Error");
+                                        this.getListing().fetchRecords();
+                                    }
+                                );
+                            },
+                            (error) => {
+                                this.setFlashMessage(error.message, "error");
+                            }
+                        );
+                }}
+            >
+                <p>Are you sure you want to reboot below sessions in Error state:</p>
+                {errorStateSessions.map((session, index) => {
+                    return (
+                        <li key={index}>
+                            {session.name} (Owner: {session.owner}, State: {session.state})
+                        </li>
+                    );
+                })}
+                {skippedSessions.length > 0 && (
+                    <>
+                        <p style={{ marginTop: '16px' }}>The following sessions will be skipped (not in Error state):</p>
+                        {skippedSessions.map((session, index) => {
+                            return (
+                                <li key={index}>
+                                    {session.name} (Owner: {session.owner}, State: {session.state})
+                                </li>
+                            );
+                        })}
+                    </>
+                )}
+            </IdeaConfirm>
+        );
+    }
+
     showCreateSessionForm() {
         this.setState(
             {
@@ -700,6 +773,15 @@ class VirtualDesktopSessions extends Component<VirtualDesktopSessionsProps, Virt
                                     this.getStopSessionsConfirmModal().show();
                                 }
                             );
+                        },
+                    },
+                    {
+                        id: "reboot-session",
+                        text: "Reboot Session(s)",
+                        disabled: !this.hasErrorStateSessions() || !this.isAdmin(),
+                        disabledReason: "Select at least one session in Error state to enable this Action",
+                        onClick: () => {
+                            this.getRebootSessionsConfirmModal().show();
                         },
                     },
                     {
@@ -922,13 +1004,20 @@ class VirtualDesktopSessions extends Component<VirtualDesktopSessionsProps, Virt
                         sessionSelected: event.detail.selectedItems.length > 0,
                     });
                 }}
-                onFetchRecords={() => {
-                    return fetchAllSessions(
-                        this.isAdmin() ? this.getVirtualDesktopAdminClient() : this.getVirtualDesktopClient(),
-                        this.getListing().getFilters(),
-                        this.getListing().getFormatedDateRange(),
+                onFetchRecords={async () => {
+                    const filters = this.getListing().getFilters();
+                    const dateRange = this.getListing().getFormatedDateRange();
+                    const result = await fetchAllSessions(
+                        this.getVirtualDesktopClient(),
+                        filters,
+                        dateRange,
                         this.props.onFlashbarChange
                     )
+                    return {
+                        listing: result.listing,
+                        filters: filters,
+                        date_range: dateRange,
+                    }
                 }}
                 columnDefinitions={VIRTUAL_DESKTOP_SESSIONS_TABLE_COLUMN_DEFINITIONS}
             />
@@ -967,6 +1056,7 @@ class VirtualDesktopSessions extends Component<VirtualDesktopSessionsProps, Virt
                         {this.buildResumeSessionsConfirmModal()}
                         {this.buildDeleteSessionsConfirmModal()}
                         {this.buildStopSessionsConfirmModal()}
+                        {this.buildRebootSessionsConfirmModal()}
                         {this.buildListing()}
                         {this.buildSessionHealthModal()}
                         {this.state.showCreateSoftwareStackFromSessionForm && this.buildCreateSoftwareStackFromSessionForm()}

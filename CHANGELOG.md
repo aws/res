@@ -1,6 +1,40 @@
 # Change Log
 This file is used to list changes made in each release of Research and Engineering Studio (RES).
 
+2026.03
+------
+
+**SECURITY FIXES**
+
+- Fixed a privilege escalation vulnerability in the FileBrowser component.
+- Fixed a cross-user remote code execution vulnerability via session name injection.
+- Fixed an issue where an external instance profile ARN could be used when creating a session.
+
+**ENHANCEMENTS**
+
+- Support for multiple volumes from a single ONTAP filesystem.
+- Allow users to reset their session schedule to the system default.
+- Allow administrators to restart errored VDIs from the Sessions page.
+- Allow administrators to set instance type/family when registering a software stack.
+- Allow administrators to configure DCV token expiration time via the RES portal.
+- Allow administrators to add custom links to the web portal login page.
+- Added configurable DCV session validation thresholds to support environments with longer bootstrap times.
+
+**CHANGES**
+
+- Continued migration of VDC-related APIs from the VDC EC2 host to the backend Lambda.
+- Upgraded Python to 3.12+ on infrastructure and VDI hosts.
+- Removed AL2 and RHEL8 from default software stacks. Existing AL2 and RHEL8 software stacks in deployed environments are unaffected but will no longer be included as defaults for new environments.
+- Removed unnecessary RES_Interface shortcut from VDI desktops.
+
+**BUG FIXES**
+
+- Fixed Sessions filter field.
+- Fixed Ubuntu 24.04 bootstrap failure caused by systemd service restart.
+- Fixed project deletion/creation when deploying with IAM resource prefix.
+- Fixed failure to mount Lustre file system on RHEL9/Rocky9 VDIs.
+- Fixed date range filter for list_sessions and list_shared_permissions.
+
 2025.12.01
 ------
 

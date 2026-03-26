@@ -25,7 +25,6 @@ from ideasdk.utils import Utils
 from ideavirtualdesktopcontroller.app.clients.dcv_broker_client.dcv_broker_client_utils import DCVBrokerClientUtils
 from ideavirtualdesktopcontroller.app.clients.dcvssmswaggerclient import UpdateSessionPermissionsRequestData
 from ideavirtualdesktopcontroller.app.clients.dcvssmswaggerclient.models.create_session_request_data import CreateSessionRequestData
-from ideavirtualdesktopcontroller.app.clients.dcvssmswaggerclient.models.delete_session_request_data import DeleteSessionRequestData
 from ideavirtualdesktopcontroller.app.clients.dcvssmswaggerclient.models.describe_servers_request_data import DescribeServersRequestData
 from ideavirtualdesktopcontroller.app.clients.dcvssmswaggerclient.models.describe_sessions_request_data import DescribeSessionsRequestData
 from ideavirtualdesktopcontroller.app.clients.dcvssmswaggerclient.models.get_session_screenshot_request_data import \
@@ -106,18 +105,6 @@ class DCVBrokerClient(DCVClientProtocol):
             permissions_file=permissions_content_base_64
         )
         _ = self._get_session_permissions_api().update_session_permissions([request])
-
-    def _delete_sessions(self, sessions: List[VirtualDesktopSession], force=False) -> Dict:
-        if Utils.is_empty(sessions):
-            self._logger.info('sessions is empty.. returning')
-            return {}
-
-        delete_sessions_request = list()
-        for session in sessions:
-            delete_sessions_request.append(DeleteSessionRequestData(session_id=session.dcv_session_id, owner=session.owner, force=force))
-
-        api_response = self._get_sessions_api().delete_sessions(body=delete_sessions_request)
-        return api_response.to_dict()
 
     def get_active_counts_for_sessions(self, sessions: List[VirtualDesktopSession]) -> List[VirtualDesktopSession]:
         return self._dcv_broker_client_utils.get_active_counts_for_sessions(sessions)
@@ -202,60 +189,6 @@ class DCVBrokerClient(DCVClientProtocol):
             session = self._dcv_broker_client_utils.get_session_object_from_error_result(entry)
 
         return session
-
-    def delete_sessions(self, sessions: List[VirtualDesktopSession]) -> (List[VirtualDesktopSession], List[VirtualDesktopSession]):
-        if Utils.is_empty(sessions):
-            self._logger.error('sessions to delete list is empty. Returning.')
-            return [], []
-
-        can_delete_sessions = []
-        sessions_to_check = []
-        for session in sessions:
-            if Utils.is_not_empty(session.force) and session.force:
-                can_delete_sessions.append(session)
-            else:
-                sessions_to_check.append(session)
-
-        sessions_with_count = self.get_active_counts_for_sessions(sessions_to_check)
-        unsuccessful_list = []
-        delete_fail_session_ids = []
-
-        for session in sessions_with_count:
-            if session.connection_count > 0:
-                session.failure_reason = f'There exists {session.connection_count} active connection(s) for idea_session_id: {session.idea_session_id}:{session.name}. Please terminate.'
-                self._logger.error(session.failure_reason)
-                delete_fail_session_ids.append(session.dcv_session_id)
-                unsuccessful_list.append(session)
-            else:
-                can_delete_sessions.append(session)
-
-        api_response = self._delete_sessions(can_delete_sessions, True)
-
-        successful_list = []
-        delete_success_session_ids = []
-        for entry in Utils.get_value_as_list('successful_list', api_response, []):
-            dcv_session_id = Utils.get_value_as_string('session_id', entry, None)
-            successful_list.append(VirtualDesktopSession(dcv_session_id=dcv_session_id))
-            delete_success_session_ids.append(dcv_session_id)
-
-        for entry in Utils.get_value_as_list('unsuccessful_list', api_response, []):
-            dcv_session_id = Utils.get_value_as_string('session_id', entry, None)
-            failure_reason = Utils.get_value_as_string('failure_reason', entry, None)
-
-            if failure_reason == self.DCV_SESSION_DELETE_ERROR_SESSION_DOESNT_EXIST:
-                # the session doesn't exist anyway. No need to delete, we can categorize this as success.
-                successful_list.append(VirtualDesktopSession(dcv_session_id=dcv_session_id))
-                delete_success_session_ids.append(dcv_session_id)
-            else:
-                unsuccessful_list.append(VirtualDesktopSession(
-                    dcv_session_id=dcv_session_id,
-                    failure_reason=failure_reason,
-                ))
-                delete_fail_session_ids.append(dcv_session_id)
-                self._logger.info(f'Delete session request failed for dcv_session_id: {dcv_session_id} because {failure_reason}')
-
-        self._logger.info(f'Delete session request complete... success dcv_session_ids: {delete_success_session_ids}')
-        return successful_list, unsuccessful_list
 
     def describe_servers(self) -> Dict:
         request_data = DescribeServersRequestData()

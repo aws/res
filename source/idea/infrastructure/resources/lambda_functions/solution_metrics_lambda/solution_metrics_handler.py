@@ -45,7 +45,7 @@ def post_metrics(event: Dict[str, Any]) -> None:
         json_data = json.dumps(metrics, indent=4)
         logger.info(params)
         headers = {"content-type": "application/json"}
-        req = HTTP_CLIENT.request(  # type: ignore
+        req = HTTP_CLIENT.request(
             "POST", metrics_url, body=json_data.encode("utf-8"), headers=headers
         )
         rsp_code = req.status

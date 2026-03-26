@@ -65,7 +65,7 @@ class DbEntryDeletedEventHandler(BaseDBEventHandler):
         return
 
     def handle_event(self, message_id: str, sender_id: str, event: VirtualDesktopEvent):
-        if not self.is_sender_controller_role(sender_id):
+        if not self.is_sender_controller_role(sender_id) and not self.is_sender_backend_lambda(sender_id):
             raise self.message_source_validation_failed(f'Corrupted sender_id: {sender_id}. Ignoring message')
 
         table_name = Utils.get_value_as_string('table_name', event.detail, None)

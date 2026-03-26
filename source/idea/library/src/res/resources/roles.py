@@ -81,3 +81,17 @@ def get_role(role_id: str) -> Optional[Dict[str, Any]]:
         )
 
     return role
+
+
+def filter_roles_with_manage_sessions_permission(role_ids: set) -> set:
+    """
+    Filter roles that have permission to manage other user sessions
+    :param role_ids: set of role IDs to check
+    :return: set of role IDs with manage sessions permission
+    """
+    manage_sessions_role_ids = set()
+    for role_id in role_ids:
+        role = get_role(role_id)
+        if role.get("vdis", {}).get("create_terminate_others_sessions", False):
+            manage_sessions_role_ids.add(role_id)
+    return manage_sessions_role_ids

@@ -3,6 +3,8 @@
 
 from typing import Any, Dict, List, Optional
 
+import res.constants as constants  # type: ignore
+from res.resources import accounts, role_assignments, roles  # type: ignore
 from res.utils import logging_utils, table_utils  # type: ignore
 
 GSI_PROJECT_NAME = "project-name-index"
@@ -85,3 +87,38 @@ def list_projects() -> List[Dict[str, Any]]:
     """
     projects: List[Dict[str, Any]] = table_utils.list_items(PROJECTS_TABLE_NAME)
     return projects
+
+
+def list_user_manage_sessions_projects(username: str) -> List[str]:
+    """
+    Retrieve the project IDs where the user has permission to manage other user sessions
+    :return: List of project IDs
+    """
+    # Get all role assignments for the user and their groups
+    assignments = role_assignments.list_role_assignments_for_user_and_groups(username)
+    if not assignments:
+        return []
+
+    # Extract unique role IDs from assignments
+    unique_role_ids = {
+        assignment[role_assignments.ROLE_ASSIGNMENTS_ROLE_ID_KEY]
+        for assignment in assignments
+    }
+    # Filter to roles that have manage sessions permission
+    manage_sessions_role_ids = roles.filter_roles_with_manage_sessions_permission(
+        unique_role_ids
+    )
+    if not manage_sessions_role_ids:
+        return []
+
+    # Extract project IDs where user has manage sessions permission
+    project_ids = {
+        assignment[role_assignments.ROLE_ASSIGNMENTS_RESOURCE_ID_KEY]
+        for assignment in assignments
+        if assignment[role_assignments.ROLE_ASSIGNMENTS_ROLE_ID_KEY]
+        in manage_sessions_role_ids
+        and assignment[role_assignments.ROLE_ASSIGNMENTS_RESOURCE_TYPE_KEY]
+        == constants.PROJECT_ROLE_ASSIGNMENT_TYPE
+    }
+
+    return sorted(project_ids)

@@ -180,8 +180,8 @@ class ResBaseStack(ResBaseConstruct):
 
         secret = secretsmanager.Secret(
             scope,
-            id=f"DirectoryServiceSecret{key}",
-            secret_name=f"{self.cluster_name}-{MODULE_NAME_DIRECTORY_SERVICE}-{key}",
+            id=f"DirectoryServiceSecret{key.value}",
+            secret_name=f"{self.cluster_name}-{MODULE_NAME_DIRECTORY_SERVICE}-{key.value}",
             secret_string_value=SecretValue.cfn_parameter(self.parameters.get(key)),
         )
 

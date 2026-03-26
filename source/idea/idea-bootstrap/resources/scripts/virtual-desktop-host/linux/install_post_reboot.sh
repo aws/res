@@ -12,13 +12,18 @@
 
 set -x
 
+# Prevent needrestart from restarting systemd-networkd/systemd-resolved during apt install,
+# which breaks DNS and network connectivity on Ubuntu 24.04
+export NEEDRESTART_SUSPEND=1
+
 SEMAPHORE_DIR="/root/bootstrap/semaphore"
 INSTALL_POST_REBOOT_FINISHED_LOCK="${SEMAPHORE_DIR}/install_post_reboot_finished.lock"
 
 PREBAKING_AMI="true"
 MODULE_ID="vdi-app"
+ENABLE_LUSTRE="false"
 
-while getopts m:g:p:e:n:o:d:i:t: opt
+while getopts m:g:p:e:n:o:d:i:t:l: opt
 do
     case "${opt}" in
       m) MODULE_ID=${OPTARG};;
@@ -30,6 +35,7 @@ do
       d) SESSION_TYPE=${OPTARG};;
       i) SESSION_ID=${OPTARG};;
       t) CUSTOM_BROKER_URL=${OPTARG};;
+      l) ENABLE_LUSTRE=${OPTARG};;
       ?) echo "Invalid option for install_post_reboot.sh script: -${opt}."
          exit 1;;
     esac
@@ -83,6 +89,15 @@ if [[ ! -f ${INSTALL_POST_REBOOT_FINISHED_LOCK} ]]; then
     set_reboot_required "DCV and any associated GPU drivers have been installed, reboot required for changes to take effect..."
   else
      log_info "Found ${BOOTSTRAP_DIR}/res_installed_all_packages.log... skipping package installation..."
+  fi
+
+  # Only disable kernel hold if it was enabled (i.e., if Lustre was installed)
+  if [[ "${ENABLE_LUSTRE}" == "true" ]]; then
+    log_info "Lustre was enabled, disabling kernel hold to allow package updates"
+    source "${SCRIPT_DIR}/../../common/linux/kernel_hold.sh"
+    disable_kernel_hold $BASE_OS
+  else
+    log_info "Lustre was not enabled, no kernel hold to disable"
   fi
 
   mkdir -p ${SEMAPHORE_DIR}

@@ -343,6 +343,8 @@ class InstallStack(Stack):
         # Copy requirements file and lambda library tar file to docker directory
         library_lib_tar_file = "library-lib.tar.gz"
         library_requirements_file = "requirements.txt"
+        data_model_lib_tar_file = "datamodel-lib.tar.gz"
+
         library_path = str(
             next(
                 pathlib.Path("source")
@@ -351,10 +353,21 @@ class InstallStack(Stack):
                 "",
             )
         )
+        data_model_path = str(
+            next(
+                pathlib.Path("source")
+                .parent.joinpath("dist")
+                .glob("datamodel*[!.tar.gz]"),
+                "",
+            )
+        )
+
         file_path = os.path.realpath(__file__)
         dockerfile_path = str(
             pathlib.Path(file_path).parent.parent.joinpath("library_lambda_layer")
         )
+
+        # Copy library files
         shutil.copyfile(
             library_path + "/" + library_lib_tar_file,
             dockerfile_path + "/" + library_lib_tar_file,
@@ -362,6 +375,12 @@ class InstallStack(Stack):
         shutil.copyfile(
             library_path + "/" + library_requirements_file,
             dockerfile_path + "/" + library_requirements_file,
+        )
+
+        # Copy datamodel tar file (no requirements file needed - no external dependencies)
+        shutil.copyfile(
+            data_model_path + "/" + data_model_lib_tar_file,
+            dockerfile_path + "/" + data_model_lib_tar_file,
         )
 
         shared_library_layer = lambda_.LayerVersion(
@@ -372,6 +391,7 @@ class InstallStack(Stack):
                 build_args={
                     "LIBRARY_TAR_FILE": library_lib_tar_file,
                     "LIBRARY_REQUIREMENTS_FILE": library_requirements_file,
+                    "DATA_MODEL_TAR_FILE": data_model_lib_tar_file,
                 },
             ),
             compatible_runtimes=[
@@ -383,6 +403,7 @@ class InstallStack(Stack):
         # Remove copied files
         os.remove(dockerfile_path + "/" + library_requirements_file)
         os.remove(dockerfile_path + "/" + library_lib_tar_file)
+        os.remove(dockerfile_path + "/" + data_model_lib_tar_file)
 
         return shared_library_layer
 

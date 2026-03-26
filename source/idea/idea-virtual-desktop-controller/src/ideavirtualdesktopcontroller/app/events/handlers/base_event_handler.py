@@ -119,6 +119,20 @@ class BaseVirtualDesktopControllerEventHandler(VirtualDesktopQueueMessageHandler
         if Utils.is_empty(sender_id):
             return None
         return sender_id[0]
+    
+    @staticmethod
+    def _retrieve_resource_name_from_sender(sender_id: str) -> Optional[str]:
+        sender_id = sender_id.split(':')
+        if Utils.is_empty(sender_id):
+            return None
+        return sender_id[-1]
+
+    @staticmethod
+    def _retrieve_resource_name_from_sender(sender_id: str) -> Optional[str]:
+        sender_id = sender_id.split(':')
+        if Utils.is_empty(sender_id):
+            return None
+        return sender_id[-1]
 
     @staticmethod
     def get_dcv_instance_id_from_sender_id(sender_id: str) -> Optional[str]:
@@ -150,10 +164,21 @@ class BaseVirtualDesktopControllerEventHandler(VirtualDesktopQueueMessageHandler
         if not sender_id:
             return False
         return self.context.config().get_string('virtual-desktop-controller.vdi-helper-id', required=True) == sender_id
-
+    
+    def is_sender_backend_lambda(self, sender_id: str) -> bool:
+        sender_id = self._retrieve_resource_name_from_sender(sender_id)
+        if Utils.is_empty(sender_id):
+            return False
+        return sender_id == f"{self.context.cluster_name()}-backend-lambda"
 
     def is_sender_controller_role(self, sender_id: str) -> bool:
         sender_id = self._retrieve_iam_role_id_from_sender(sender_id)
         if Utils.is_empty(sender_id):
             return False
         return self.context.config().get_string('virtual-desktop-controller.controller_iam_role_id', required=True) == sender_id
+
+    def is_sender_backend_lambda(self, sender_id: str) -> bool:
+        sender_id = self._retrieve_resource_name_from_sender(sender_id)
+        if Utils.is_empty(sender_id):
+            return False
+        return sender_id == f"{self.context.cluster_name()}-backend-lambda"

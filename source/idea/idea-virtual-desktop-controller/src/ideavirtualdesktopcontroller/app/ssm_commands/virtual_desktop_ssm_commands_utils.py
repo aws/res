@@ -139,7 +139,7 @@ class VirtualDesktopSSMCommandsUtils:
     def submit_ssm_command_to_clean_up_on_windows(self, instance_id: str, idea_session_id: str, idea_session_owner: str, software_stack_id: str) -> str:
         remote_commands = [
             # Delete all the lock files
-            'Get-ChildItem -Path "C:\IDEA\Semaphore\*" -File | Remove-Item -Force',
+            r'Get-ChildItem -Path "C:\IDEA\Semaphore\*" -File | Remove-Item -Force',
             # Delete the existing Python application task
             'schtasks /delete /tn VDIAppRestartNotification /f'
         ]

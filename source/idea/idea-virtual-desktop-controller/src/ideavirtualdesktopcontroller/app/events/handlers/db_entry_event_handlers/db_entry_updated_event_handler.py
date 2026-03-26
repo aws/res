@@ -116,7 +116,7 @@ class DbEntryUpdatedEventHandler(BaseDBEventHandler):
 
     def _handle_session_permission_updated(self, _: str, __: str, old_value: dict, new_value: dict, ___: str):
         new_session_permission = self.session_permissions_db.convert_db_dict_to_session_permission_object(new_value)
-        
+
         notifications_enabled = self.context.config().get_bool('virtual-desktop-controller.dcv_session.notifications.session-permission-updated.enabled', required=True)
         if not notifications_enabled:
             return
@@ -136,7 +136,7 @@ class DbEntryUpdatedEventHandler(BaseDBEventHandler):
         return
 
     def handle_event(self, message_id: str, sender_id: str, event: VirtualDesktopEvent):
-        if not self.is_sender_controller_role(sender_id):
+        if not self.is_sender_controller_role(sender_id) and not self.is_sender_backend_lambda(sender_id):
             raise self.message_source_validation_failed(f'Corrupted sender_id: {sender_id}. Ignoring message')
 
         table_name = Utils.get_value_as_string('table_name', event.detail, None)

@@ -9,6 +9,7 @@ from ideabootstrap.common.constants import (
 from res.utils import logging_utils
 
 from ideabootstrap import bootstrap_common
+from ideabootstrap.dcv import dcv
 
 import ideabootstrap
 import tempfile
@@ -23,6 +24,10 @@ logger = logging_utils.get_logger("bootstrap")
 def run():
     if os.path.isfile(LINUX_VDI_CONFIG_HOST_READY_LOCK):
         logger.info(f"Instance Ready Lock File Already Exists: {LINUX_VDI_CONFIG_HOST_READY_LOCK}")
+
+        if not dcv.is_dcvserver_ready(timeout_seconds=300, retry_interval=5):
+            logger.warning("DCV server is not ready for creating session")
+
         send_sqs_host_messages("DCV_HOST_REBOOT_COMPLETE_EVENT")
         return
 
@@ -44,7 +49,7 @@ def run():
         logger.info("Scheduling VDI Idle Check task")
 
         vdi_idle_check_path = os.path.join(BOOTSTRAP_DIR, "latest", "scripts", "virtual-desktop-host", "linux", "vdi_idle_check.sh")
-    
+
         crontab_list = subprocess.run(['crontab', '-l'], capture_output=True, text=True, check=False)
         current_crontab = crontab_list.stdout if crontab_list.returncode == 0 else ""
 
@@ -55,9 +60,9 @@ def run():
         with tempfile.NamedTemporaryFile(mode='w', delete=False) as temp_file:
             temp_file.write(vdi_idle_check_crontab)
             temp_file_path = temp_file.name
-        
+
         subprocess.run(['crontab', temp_file_path])
-        
+
         os.unlink(temp_file_path)
         logger.info("Crontab entry added successfully")
     except subprocess.SubprocessError as e:
@@ -68,6 +73,6 @@ def run():
         f.write(current_time)
 
     logger.info(f"Created instance ready lock file: {LINUX_VDI_CONFIG_HOST_READY_LOCK}")
-    
+
     send_sqs_host_messages("DCV_HOST_READY_EVENT")
     logger.info("Host ready event sent")

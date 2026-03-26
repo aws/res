@@ -52,7 +52,7 @@ export interface IdeaFormProps {
     useContainers?: boolean;
     containerGroups?: ReadonlyArray<IdeaFormContainerGroup>;
     toolsOpen?: boolean;
-    tools?: React.ReactNode; 
+    tools?: React.ReactNode;
     onToolsChange?: (event: OnToolsChangeEvent) => void;
     borders?: ColumnLayoutProps.Borders;
 }
@@ -116,7 +116,7 @@ class IdeaForm extends Component<IdeaFormProps, IdeaFormState> {
             shouldPrimaryActionButtonBeDisabled: true
         })
     }
-    
+
     enablePrimaryActionButton(): void {
         this.setState({
             shouldPrimaryActionButtonBeDisabled: false
@@ -166,11 +166,38 @@ class IdeaForm extends Component<IdeaFormProps, IdeaFormState> {
         this.registry.add(event.ref);
         this.setValue(event.ref.getParamName(), event.ref.getTypedValue(), () => {
             this.triggerVisibility();
+
+            // Check for dependency-based refreshes
+            this.handleDependencyRefresh(event.ref.getParamName());
+
             if (this.props.onStateChange) {
                 this.props.onStateChange(event);
             }
         });
     };
+
+    handleDependencyRefresh(changedFieldName: string) {
+        this.registry.list().forEach((field) => {
+            const param = field.getParamMeta();
+            if (param.refresh_on_dependency_change && param.refresh_on_dependency_change.includes(changedFieldName)) {
+                console.log(`Refreshing ${field.getParamName()} due to change in ${changedFieldName}`);
+                field.setValue('');
+
+                if (this.props.onFetchOptions) {
+                    this.props.onFetchOptions({
+                        module: this.props.name,
+                        param: field.getParamName(),
+                        refresh: false,
+                    }).then((result) => {
+                        field.setOptions(result, true);
+                        field.updateSelectedOptions();
+                    }).catch((error) => {
+                        console.error(`Failed to refresh dependent field ${field.getParamName()}:`, error);
+                    });
+                }
+            }
+        });
+    }
 
     validate(): boolean {
         let result = true;
@@ -384,7 +411,7 @@ class IdeaForm extends Component<IdeaFormProps, IdeaFormState> {
                                                                 onKeyEnter={() => {
                                                                     this.handleOnSubmit();
                                                                 }}
-                                                                toolsOpen={this.props.toolsOpen} 
+                                                                toolsOpen={this.props.toolsOpen}
                                                                 tools={this.props.tools}
                                                                 onToolsChange={this.props.onToolsChange}
                                                             />
@@ -411,7 +438,7 @@ class IdeaForm extends Component<IdeaFormProps, IdeaFormState> {
                                                         onKeyEnter={() => {
                                                             this.handleOnSubmit();
                                                         }}
-                                                        toolsOpen={this.props.toolsOpen} 
+                                                        toolsOpen={this.props.toolsOpen}
                                                         tools={this.props.tools}
                                                         onToolsChange={this.props.onToolsChange}
                                                     />

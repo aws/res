@@ -2,6 +2,7 @@ FROM public.ecr.aws/amazonlinux/amazonlinux:2023
 
 ARG LIBRARY_TAR_FILE=${LIBRARY_TAR_FILE}
 ARG LIBRARY_REQUIREMENTS_FILE=${LIBRARY_REQUIREMENTS_FILE}
+ARG DATA_MODEL_TAR_FILE=${DATA_MODEL_TAR_FILE}
 
 # https://github.com/pyenv/pyenv?tab=readme-ov-file#installation
 # https://github.com/pyenv/pyenv/wiki#suggested-build-environment
@@ -12,6 +13,7 @@ ENV HOME="/root"
 RUN cd ${HOME}
 COPY ${LIBRARY_REQUIREMENTS_FILE} .
 COPY ${LIBRARY_TAR_FILE} .
+COPY ${DATA_MODEL_TAR_FILE} .
 
 RUN git clone https://github.com/pyenv/pyenv.git ${HOME}/.pyenv
 RUN cd ${HOME}/.pyenv && src/configure && make -C src
@@ -27,26 +29,11 @@ RUN mkdir -p /asset/python
 
 RUN cd ${HOME}
 
-ENV PYTHON_VERSION=3.9
-RUN pyenv install ${PYTHON_VERSION}
-RUN pyenv global ${PYTHON_VERSION}
-
-RUN pip install -r ${LIBRARY_REQUIREMENTS_FILE} --platform manylinux2014_x86_64 --only-binary=:all: --target /asset/python --upgrade
-RUN pip install ${LIBRARY_TAR_FILE} --target /asset/python
-RUN rm -rf /asset/python/bin || true
-
-ENV PYTHON_VERSION=3.11
-RUN pyenv install ${PYTHON_VERSION}
-RUN pyenv global ${PYTHON_VERSION}
-
-RUN pip install -r ${LIBRARY_REQUIREMENTS_FILE} --platform manylinux2014_x86_64 --only-binary=:all: --target /asset/python --upgrade
-RUN pip install ${LIBRARY_TAR_FILE} --target /asset/python
-RUN rm -rf /asset/python/bin || true
-
 ENV PYTHON_VERSION=3.12
 RUN pyenv install ${PYTHON_VERSION}
 RUN pyenv global ${PYTHON_VERSION}
 
 RUN pip install -r ${LIBRARY_REQUIREMENTS_FILE} --platform manylinux2014_x86_64 --only-binary=:all: --target /asset/python --upgrade
 RUN pip install ${LIBRARY_TAR_FILE} --target /asset/python
+RUN pip install ${DATA_MODEL_TAR_FILE} --target /asset/python
 RUN rm -rf /asset/python/bin || true

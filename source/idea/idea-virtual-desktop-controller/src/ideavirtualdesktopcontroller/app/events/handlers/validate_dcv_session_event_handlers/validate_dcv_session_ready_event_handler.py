@@ -17,16 +17,26 @@ from ideasdk.utils import Utils
 from ideavirtualdesktopcontroller.app.clients.events_client.events_client import VirtualDesktopEvent
 from ideavirtualdesktopcontroller.app.events.handlers.base_event_handler import BaseVirtualDesktopControllerEventHandler
 from ideavirtualdesktopcontroller.app.sessions.virtual_desktop_session_counters_db import VirtualDesktopSessionCounterType
-
+from res.resources import cluster_settings
 
 class ValidateDCVSessionReadyEventHandler(BaseVirtualDesktopControllerEventHandler):
-    VALIDATION_REQUEST_THRESHOLD = 50
-    SESSION_DELETED_THRESHOLD = 15
 
     def __init__(self, context: ideavirtualdesktopcontroller.AppContext):
         super().__init__(context, 'validate-session-ready-handler')
 
+    def _get_threshold(self, message_id: str, key: str, default: int) -> int:
+        try:
+            return int(cluster_settings.get_setting(key))
+        except Exception:
+            self.log_info(message_id=message_id, message=f'{key} not found in cluster settings, using default: {default}')
+            return default
+
     def handle_event(self, message_id: str, sender_id: str, event: VirtualDesktopEvent):
+        validation_request_threshold = self._get_threshold(message_id, 'vdc.controller.thresholds.session_validation', 50)
+        session_deleted_threshold = self._get_threshold(message_id, 'vdc.controller.thresholds.session_deleted', 15)
+
+        self.log_info(message_id=message_id, message=f'Dynamic thresholds - validation_request_threshold: {validation_request_threshold}, session_deleted_threshold: {session_deleted_threshold}')
+
         if not self.is_sender_controller_role(sender_id):
             raise self.message_source_validation_failed(f'Corrupted sender_id: {sender_id}. Ignoring message')
 
@@ -62,12 +72,12 @@ class ValidateDCVSessionReadyEventHandler(BaseVirtualDesktopControllerEventHandl
             session.state = VirtualDesktopSessionState.READY
             _ = self.session_db.update(session)
             self.session_counter_db.delete(counter_db_entry)
-        elif counter_db_entry.counter > self.SESSION_DELETED_THRESHOLD and state == 'DELETED':
+        elif counter_db_entry.counter > session_deleted_threshold and state == 'DELETED':
             # session in DELETED state. Error state.
             session.state = VirtualDesktopSessionState.ERROR
             session = self.session_db.update(session)
             self.log_error(message_id=message_id, message=f'RES Session ID: session in DELETED state {session.idea_session_id}:{session.name} Validation ERROR. count: {counter_db_entry.counter}')
-        elif counter_db_entry.counter > self.VALIDATION_REQUEST_THRESHOLD:
+        elif counter_db_entry.counter > validation_request_threshold:
             # error
             session.state = VirtualDesktopSessionState.ERROR
             session = self.session_db.update(session)

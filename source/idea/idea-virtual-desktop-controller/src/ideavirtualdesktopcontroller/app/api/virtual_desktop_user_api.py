@@ -70,10 +70,6 @@ class VirtualDesktopUserAPI(VirtualDesktopAPI):
                 'scope': self.SCOPE_WRITE,
                 'method': self.delete_sessions,
             },
-            'VirtualDesktop.GetSessionInfo': {
-                'scope': self.SCOPE_READ,
-                'method': self.get_session_info,
-            },
             'VirtualDesktop.GetSessionScreenshot': {
                 'scope': self.SCOPE_READ,
                 'method': self.get_session_screenshots,
@@ -81,10 +77,6 @@ class VirtualDesktopUserAPI(VirtualDesktopAPI):
             'VirtualDesktop.GetSessionConnectionInfo': {
                 'scope': self.SCOPE_READ,
                 'method': self.get_session_connection_info,
-            },
-            'VirtualDesktop.ListSessions': {
-                'scope': self.SCOPE_READ,
-                'method': self.list_sessions,
             },
             'VirtualDesktop.StopSessions': {
                 'scope': self.SCOPE_WRITE,
@@ -109,10 +101,6 @@ class VirtualDesktopUserAPI(VirtualDesktopAPI):
             'VirtualDesktop.ListSessionPermissions': {
                 'scope': self.SCOPE_READ,
                 'method': self.list_session_permissions,
-            },
-            'VirtualDesktop.UpdateSessionPermissions': {
-                'scope': self.SCOPE_WRITE,
-                'method': self.update_session_permission
             },
         }
 
@@ -216,13 +204,6 @@ class VirtualDesktopUserAPI(VirtualDesktopAPI):
             connection_info.failure_reason = message
 
         return connection_info, is_valid
-
-    @staticmethod
-    def _validate_update_session_permission_request(request: UpdateSessionPermissionRequest, context: ApiInvocationContext) -> (str, bool):
-        for permission in request.create + request.delete + request.update:
-            if permission.idea_session_owner != context.get_username():
-                return 'Can update permission for session owned by user only', False
-        return '', True
 
     def _validate_update_session_request(self, session: VirtualDesktopSession, context: ApiInvocationContext) -> (VirtualDesktopSession, bool):
         message, is_valid = self._validate_owner(session.owner, context)
@@ -393,35 +374,6 @@ class VirtualDesktopUserAPI(VirtualDesktopAPI):
             failed=fail_list
         ))
 
-    def get_session_info(self, context: ApiInvocationContext):
-        session = context.get_request_payload_as(GetSessionInfoRequest).session
-        session, is_valid = self._validate_get_session_info_request(session, context)
-        if not is_valid:
-            self._logger.error(session.failure_reason)
-            context.fail(
-                error_code=errorcodes.INVALID_PARAMS,
-                message=session.failure_reason,
-                payload=CreateSessionResponse(
-                    session=session
-                )
-            )
-            return
-
-        session = self.complete_get_session_info_request(session, context)
-        session = self.session_db.get_from_db(session.owner, session.idea_session_id)
-
-        if Utils.is_empty(session.failure_reason):
-            context.success(GetSessionInfoResponse(
-                session=session))
-        else:
-            context.fail(
-                error_code=errorcodes.INVALID_PARAMS,
-                message=session.failure_reason,
-                payload=GetSessionInfoResponse(
-                    session=session
-                )
-            )
-
     def delete_sessions(self, context: ApiInvocationContext):
         """
         Deletes multiple sessions (session ids provided)
@@ -535,23 +487,6 @@ class VirtualDesktopUserAPI(VirtualDesktopAPI):
                 session=session
             ))
 
-    def list_sessions(self, context: ApiInvocationContext):
-        request = context.get_request_payload_as(ListSessionsRequest)
-        result = None
-        username = context.get_username()
-
-        # Get a list of projects where the current user has permission to manage other user sessions
-        user_projects = self.get_user_projects(username=username)
-        projects_to_manage_sessions = [project.project_id for project in user_projects if
-                                       context.is_authorized(elevated_access=False, scopes=[self.acl.get(context.namespace).get('scope')],
-                                                             role_assignment_resource_key=f'{project.project_id}:project', permission='vdis.create_terminate_others_sessions')]
-
-        if not projects_to_manage_sessions:
-            result = self.session_db.list_all_for_user(request, username)
-        else:
-            result = self.session_db.list_all_for_user_and_managed_sessions(request, username, projects_to_manage_sessions)
-        context.success(result)
-
     def list_software_stacks(self, context: ApiInvocationContext):
         request = context.get_request_payload_as(ListSoftwareStackRequest)
         project_id = request.project_id
@@ -606,32 +541,6 @@ class VirtualDesktopUserAPI(VirtualDesktopAPI):
 
         response = self._list_session_permissions(idea_session_id=idea_session_id, request=request)
         context.success(response)
-
-    def update_session_permission(self, context: ApiInvocationContext):
-        request = context.get_request_payload_as(UpdateSessionPermissionRequest)
-        message, is_valid = self._validate_update_session_permission_request(request, context)
-        if not is_valid:
-            context.fail(
-                error_code=errorcodes.INVALID_PARAMS,
-                payload=UpdateSessionPermissionResponse(
-                    permissions=[] + request.create + request.update + request.delete
-                ),
-                message=message
-            )
-        else:
-            is_valid, request = self.validate_update_session_permission_request(request)
-
-        if not is_valid:
-            context.fail(
-                error_code=errorcodes.INVALID_PARAMS,
-                payload=UpdateSessionPermissionResponse(
-                    permissions=[] + request.create + request.update + request.delete
-                ),
-                message='Invalid request. Rejecting all permissions'
-            )
-        else:
-            response = self.session_permissions_utils.update_permission_for_sessions(request)
-            context.success(response)
 
     def invoke(self, context: ApiInvocationContext):
         namespace = context.namespace

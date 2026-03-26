@@ -1,44 +1,42 @@
-import { ListSessionsResponse, SocaDateRange, SocaFilter } from "../client/data-model";
-import { VirtualDesktopClient, VirtualDesktopAdminClient } from "../client";
+import { SocaDateRange, SocaFilter, ListSessionsResponse } from "../client/data-model";
+import { VirtualDesktopClient } from "../client";
 import { OnFlashbarChangeEvent } from "../App";
+import { ListSessionsResponseContent } from "../client/generated/api";
 
 export async function fetchAllSessions(
-    client: VirtualDesktopClient | VirtualDesktopAdminClient,
+    client: VirtualDesktopClient,
     filters: SocaFilter[] | undefined,
     dateRange: SocaDateRange | undefined,
     onFlashbarChange: (event: OnFlashbarChangeEvent) => void,
-    pageSize?: number,
-): Promise<ListSessionsResponse> {
+): Promise<ListSessionsResponseContent> {
 
-    const response: ListSessionsResponse = {
-        filters,
-        paginator: pageSize ? { page_size: pageSize } : {},
-        date_range: dateRange,
-        listing: [],
-    };
+    // Extract individual parameters from filters for the current API
+    const getFilterValue = (key: string): string | undefined => 
+        filters?.find(f => f.key === key)?.value as string | undefined;
 
-    let cursor: string | undefined = undefined;
-    do {
-        const result: ListSessionsResponse = await client.listSessions({
-            filters,
-            paginator: { ...(cursor && { cursor }), ...(pageSize && { page_size: pageSize }) },
-            date_range: dateRange,
-        }).catch((error) => {
-            onFlashbarChange({
-                items: [
-                    {
-                        content: error.message,
-                        type: "error",
-                        dismissible: true,
-                    },
-                ],
-            });
-            throw error;
+    const baseOs = getFilterValue('base_os');
+    const sessionName = getFilterValue('$all');
+    const state = getFilterValue('state');
+
+    try {
+        return await client.listSessions({
+            baseOs: baseOs,
+            sessionName: sessionName,
+            state: state,
+            dateRangeKey: dateRange?.key,
+            after: dateRange?.start ? new Date(dateRange.start).getTime().toString() : undefined,
+            before: dateRange?.end ? new Date(dateRange.end).getTime().toString() : undefined,
         });
-        
-        response.listing?.push(...result.listing ?? []);
-        cursor = result.paginator?.cursor;
-    } while (cursor);
-
-    return response;
+    } catch (error: any) {
+        onFlashbarChange({
+            items: [
+                {
+                    content: error.message,
+                    type: "error",
+                    dismissible: true,
+                },
+            ],
+        });
+        throw error;
+    }
 }

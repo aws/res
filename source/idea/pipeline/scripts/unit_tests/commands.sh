@@ -5,3 +5,4 @@
 set -ex
 
 invoke clean.library build.library package.library
+invoke clean.datamodel build.datamodel package.datamodel

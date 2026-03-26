@@ -151,6 +151,12 @@ class TestListAllowedInstanceTypes:
                 architecture="x86_64",
                 gpu="NO_GPU",
                 ami_id=ami_id,
+                description="test stack description",
+                min_storage={"value": 100, "unit": "gb"},
+                min_ram={"value": 22, "unit": "gb"},
+                placement={"tenancy": "default"},
+                projects=[],
+                allowed_instance_types=[],
             )
 
             # Create request content object with software stack
@@ -204,7 +210,12 @@ class TestListAllowedInstanceTypes:
                 base_os="amzn2023",
                 gpu="NO_GPU",
                 ami_id=ami_id,
-                # Missing architecture
+                description="test stack description",
+                min_storage={"value": 100, "unit": "gb"},
+                min_ram={"value": 22, "unit": "gb"},
+                placement={"tenancy": "default"},
+                projects=[],
+                allowed_instance_types=[],
             )
 
             # Create request content object with software stack
@@ -463,6 +474,12 @@ class TestListAllowedInstanceTypes:
                 architecture="x86_64",
                 gpu="NO_GPU",
                 # Missing ami_id
+                description="test stack description",
+                min_storage={"value": 100, "unit": "gb"},
+                min_ram={"value": 22, "unit": "gb"},
+                placement={"tenancy": "default"},
+                projects=[],
+                allowed_instance_types=[],
             )
 
             # Create request content object
@@ -512,6 +529,12 @@ class TestListAllowedInstanceTypes:
                 architecture="x86_64",
                 gpu="NO_GPU",
                 ami_id="ami-invalid123456789",  # Invalid AMI ID
+                description="test stack description",
+                min_storage={"value": 100, "unit": "gb"},
+                min_ram={"value": 22, "unit": "gb"},
+                placement={"tenancy": "default"},
+                projects=[],
+                allowed_instance_types=[],
             )
 
             # Create request content object
@@ -565,6 +588,12 @@ class TestListAllowedInstanceTypes:
                 architecture="arm64",  # This won't match the x86_64 AMI
                 gpu="NO_GPU",
                 ami_id=ami_id,
+                description="test stack description",
+                min_storage={"value": 100, "unit": "gb"},
+                min_ram={"value": 22, "unit": "gb"},
+                placement={"tenancy": "default"},
+                projects=[],
+                allowed_instance_types=[],
             )
 
             # Create request content object

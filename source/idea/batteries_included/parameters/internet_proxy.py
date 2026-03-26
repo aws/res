@@ -54,22 +54,22 @@ class InternetProxyParameterGroups:
             "default": "Internet proxy configuration for RES deployed in isolated environment."
         },
         "Parameters": [
-            InternetProxyKey.HTTPS_PROXY,
-            InternetProxyKey.HTTP_PROXY,
-            InternetProxyKey.NO_PROXY,
+            InternetProxyKey.HTTPS_PROXY.value,
+            InternetProxyKey.HTTP_PROXY.value,
+            InternetProxyKey.NO_PROXY.value,
         ],
     }
 
 
 class InternetProxyParameterLabels:
     parameter_labels_for_internet_proxy: dict[str, Any] = {
-        InternetProxyKey.HTTPS_PROXY: {
-            "default": f"{InternetProxyKey.HTTPS_PROXY}{OPTIONAL_INPUT_PARAMETER_LABEL_SUFFIX}"
+        InternetProxyKey.HTTPS_PROXY.value: {
+            "default": f"{InternetProxyKey.HTTPS_PROXY.value}{OPTIONAL_INPUT_PARAMETER_LABEL_SUFFIX}"
         },
-        InternetProxyKey.HTTP_PROXY: {
-            "default": f"{InternetProxyKey.HTTP_PROXY}{OPTIONAL_INPUT_PARAMETER_LABEL_SUFFIX}"
+        InternetProxyKey.HTTP_PROXY.value: {
+            "default": f"{InternetProxyKey.HTTP_PROXY.value}{OPTIONAL_INPUT_PARAMETER_LABEL_SUFFIX}"
         },
-        InternetProxyKey.NO_PROXY: {
-            "default": f"{InternetProxyKey.NO_PROXY}{OPTIONAL_INPUT_PARAMETER_LABEL_SUFFIX}"
+        InternetProxyKey.NO_PROXY.value: {
+            "default": f"{InternetProxyKey.NO_PROXY.value}{OPTIONAL_INPUT_PARAMETER_LABEL_SUFFIX}"
         },
     }

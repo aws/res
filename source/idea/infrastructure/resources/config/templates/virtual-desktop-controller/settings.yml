@@ -51,6 +51,9 @@ controller:
   request_handler_threads:
     min: 1
     max: 8
+  thresholds:
+    session_validation: 50
+    session_deleted: 15
   endpoints:
     external:
       priority: 13

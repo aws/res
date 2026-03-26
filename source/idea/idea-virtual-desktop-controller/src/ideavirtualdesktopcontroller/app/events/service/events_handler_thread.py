@@ -39,7 +39,6 @@ from ideavirtualdesktopcontroller.app.events.handlers.ssm_commands_progress_even
 from ideavirtualdesktopcontroller.app.events.handlers.user_management_event_handlers.user_created_event_handler import UserCreatedEventHandler
 from ideavirtualdesktopcontroller.app.events.handlers.user_management_event_handlers.user_disabled_event_handler import UserDisabledEventHandler
 from ideavirtualdesktopcontroller.app.events.handlers.validate_dcv_session_event_handlers.validate_dcv_session_ready_event_handler import ValidateDCVSessionReadyEventHandler
-from ideavirtualdesktopcontroller.app.events.handlers.validate_dcv_session_event_handlers.validate_dcv_session_deletion_event_handler import ValidateDCVSessionDeletionEventHandler
 from ideavirtualdesktopcontroller.app.events.handlers.validate_software_stack_event_handler import ValidateSoftwareStackEventHandler
 
 class EventsHandlerThread(IdeaThread):
@@ -51,7 +50,6 @@ class EventsHandlerThread(IdeaThread):
         self.NUM_OF_MESSAGES = num_of_messages_to_retrieve_per_call
         self.EVENT_HANDLER_MAP: Dict[VirtualDesktopEventType, BaseVirtualDesktopControllerEventHandler] = {
             VirtualDesktopEventType.VALIDATE_SOFTWARE_STACK_CREATION_EVENT: ValidateSoftwareStackEventHandler(context=self.context),
-            VirtualDesktopEventType.VALIDATE_DCV_SESSION_DELETION_EVENT: ValidateDCVSessionDeletionEventHandler(context=self.context),
             VirtualDesktopEventType.VALIDATE_DCV_SESSION_READY_EVENT: ValidateDCVSessionReadyEventHandler(context=self.context),
             VirtualDesktopEventType.IDEA_SESSION_SCHEDULED_RESUME_EVENT: IDEASessionScheduledResumeEventHandler(context=self.context),
             VirtualDesktopEventType.IDEA_SESSION_SCHEDULED_STOP_EVENT: IDEASessionScheduledStopEventHandler(context=self.context),
@@ -108,7 +106,7 @@ class EventsHandlerThread(IdeaThread):
 
             message_body_str = Utils.get_value_as_string('Body', message, None)
             should_delete_message = False
-            
+
             if not self._is_checksum_valid(md5checksum, message_body_str):
                 self._logger.error(f'[msg-id: {message_id}] Invalid checksum. Ignoring message')
                 should_delete_message = True

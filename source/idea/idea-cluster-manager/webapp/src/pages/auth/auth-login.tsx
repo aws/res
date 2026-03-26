@@ -90,6 +90,10 @@ class IdeaAuthLogin extends Component<IdeaAuthProps, IdeaAuthState> {
         const hasSubtitle = () => {
             return Utils.isNotEmpty(getSubtitle());
         };
+        const getLinks = () => {
+            return AppContext.get().getUrlLinks()
+        };
+
         return (
             <AuthLayout
                 content={
@@ -161,7 +165,21 @@ class IdeaAuthLogin extends Component<IdeaAuthProps, IdeaAuthState> {
                                                 Sign in with organization SSO
                                             </Button>
                                         )
-                                    }
+                                    }                        
+                                    <div style={{ display: 'flex', justifyContent: 'space-evenly', marginTop: "10px" }}>
+                                        {getLinks().filter(link => link.title && link.url).map((link, index) => (
+                                            <Button
+                                                key={index}
+                                                variant="link"
+                                                onClick={() => {
+                                                    const url = link.url.startsWith('http') ? link.url : `https://${link.url}`;
+                                                    window.open(url, '_blank', 'noopener,noreferrer');
+                                                }}
+                                            >
+                                                {link.title}
+                                            </Button>
+                                        ))}
+                                    </div>                                    
                                 </div>
                             )}
                             {this.state.loading && (
@@ -170,6 +188,7 @@ class IdeaAuthLogin extends Component<IdeaAuthProps, IdeaAuthState> {
                                 </Box>
                             )}
                         </SpaceBetween>
+                    
                     </ColumnLayout>
                 }
             />

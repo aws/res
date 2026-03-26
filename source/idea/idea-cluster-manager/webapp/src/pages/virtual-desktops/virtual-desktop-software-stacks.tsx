@@ -14,12 +14,12 @@
 import React, { Component, RefObject } from "react";
 
 import IdeaListView from "../../components/list-view";
-import { ProjectsClient, VirtualDesktopAdminClient } from "../../client";
+import { ProjectsClient, VirtualDesktopAdminClient, VirtualDesktopClient } from "../../client";
 import { AppContext } from "../../common";
 import { TableProps } from "@cloudscape-design/components/table/interfaces";
 import IdeaForm from "../../components/form";
 import IdeaConfirm from "../../components/modals";
-import {Project, SocaFilter, SocaMemory, SocaUserInputChoice, VirtualDesktopBaseOS, VirtualDesktopGPU, VirtualDesktopPlacement, VirtualDesktopSession, VirtualDesktopSoftwareStack} from "../../client/data-model";
+import {Project, SocaFilter, SocaUserInputChoice} from "../../client/data-model";
 import Utils from "../../common/utils";
 import { IdeaSideNavigationProps } from "../../components/side-navigation";
 import IdeaAppLayout, { IdeaAppLayoutProps } from "../../components/app-layout";
@@ -27,6 +27,24 @@ import { Link } from "@cloudscape-design/components";
 import VirtualDesktopSoftwareStackEditForm from "./forms/virtual-desktop-software-stack-edit-form";
 import { withRouter } from "../../navigation/navigation-utils";
 import VirtualDesktopUtilsClient from "../../client/virtual-desktop-utils-client";
+import {
+    ResMemory,
+    VirtualDesktopBaseOs,
+    VirtualDesktopGpu,
+    VirtualDesktopPlacement,
+    VirtualDesktopSoftwareStack,
+    VirtualDesktopSession,
+} from "../../client/generated/api";
+import {
+    DEFAULT_SOFTWARE_STACK_BASE_OS,
+    DEFAULT_SOFTWARE_STACK_GPU,
+    DEFAULT_SOFTWARE_STACK_TENANCY,
+    DEFAULT_SOFTWARE_STACK_MIN_RAM,
+    DEFAULT_SOFTWARE_STACK_MIN_STORAGE,
+    handleInstanceTypeUpdate,
+    fetchInstanceTypeChoices,
+    createFieldUpdaters,
+} from "./utils/software-stack-form-utils";
 
 export interface VirtualDesktopSoftwareStacksProps extends IdeaAppLayoutProps, IdeaSideNavigationProps { }
 
@@ -43,6 +61,9 @@ export interface VirtualDesktopSoftwareStacksState {
     tenancyChoices: SocaUserInputChoice[];
     targetHostChoices: SocaUserInputChoice[];
     allowedInstanceTypes: string[];
+    softwareStackForRegister: Partial<VirtualDesktopSoftwareStack>;
+    instanceTypeChoicesForRegister: SocaUserInputChoice[];
+    debounceTimerForRegister: NodeJS.Timeout | null;
 }
 
 const VIRTUAL_DESKTOP_SOFTWARE_STACKS_TABLE_COLUMN_DEFINITIONS: TableProps.ColumnDefinition<VirtualDesktopSoftwareStack>[] = [
@@ -145,25 +166,20 @@ class VirtualDesktopSoftwareStacks extends Component<VirtualDesktopSoftwareStack
             affinityChoices: Utils.getAffinityChoices(),
             targetHostChoices: Utils.getTargetHostChoices(),
             allowedInstanceTypes: [],
+            softwareStackForRegister: {},
+            instanceTypeChoicesForRegister: [],
+            debounceTimerForRegister: null,
         };
     }
 
     componentDidMount() {
-        this.getVirtualDesktopUtilsClient()
-            .listSupportedOses()
-            .then((result) => {
-                this.setState({
-                    supportedOsChoices: Utils.getSupportedOSChoices(result.listing!),
-                });
-            });
+        this.setState({
+            supportedOsChoices: Utils.getSupportedOSChoices(Object.values(VirtualDesktopBaseOs)),
+        });
 
-        this.getVirtualDesktopUtilsClient()
-            .listSupportedGpus()
-            .then((result) => {
-                this.setState({
-                    supportedGPUChoices: Utils.getSupportedGPUChoices(result.listing!),
-                });
-            });
+        this.setState({
+            supportedGPUChoices: Utils.getSupportedGPUChoices(Object.values(VirtualDesktopGpu))
+        })
 
         this.getProjectsClient()
             .listProjects({})
@@ -205,6 +221,10 @@ class VirtualDesktopSoftwareStacks extends Component<VirtualDesktopSoftwareStack
         return AppContext.get().client().virtualDesktopAdmin();
     }
 
+    getVirtualDesktopClient(): VirtualDesktopClient {
+        return AppContext.get().client().virtualDesktop();
+    }
+
     getVirtualDesktopUtilsClient(): VirtualDesktopUtilsClient {
         return AppContext.get().client().virtualDesktopUtils();
     }
@@ -213,10 +233,33 @@ class VirtualDesktopSoftwareStacks extends Component<VirtualDesktopSoftwareStack
         return this.registerSoftwareStackForm.current!;
     }
 
+    getDefaultSoftwareStackForRegister(): Partial<VirtualDesktopSoftwareStack> {
+        return {
+            name: "placeholder",
+            base_os: DEFAULT_SOFTWARE_STACK_BASE_OS,
+            gpu: DEFAULT_SOFTWARE_STACK_GPU,
+            ami_id: "",
+            placement: {
+                tenancy: DEFAULT_SOFTWARE_STACK_TENANCY as any,
+            },
+            min_ram: {
+                value: DEFAULT_SOFTWARE_STACK_MIN_RAM,
+                unit: "gb",
+            },
+            min_storage: {
+                value: DEFAULT_SOFTWARE_STACK_MIN_STORAGE,
+                unit: "gb",
+            },
+            allowed_instance_types: []
+        };
+    }
+
     showRegisterSoftwareStackForm() {
         this.setState(
             {
                 showRegisterSoftwareStackForm: true,
+                softwareStackForRegister: this.getDefaultSoftwareStackForRegister(),
+                instanceTypeChoicesForRegister: [],
             },
             () => {
                 this.getRegisterSoftwareStackForm().showModal();
@@ -228,6 +271,46 @@ class VirtualDesktopSoftwareStacks extends Component<VirtualDesktopSoftwareStack
         this.setState({
             showRegisterSoftwareStackForm: false,
         });
+    }
+
+    async updateInstanceTypesForRegister() {
+        try {
+            const instanceTypeChoices = await fetchInstanceTypeChoices(this.state.softwareStackForRegister);
+            this.setState({ instanceTypeChoicesForRegister: instanceTypeChoices }, () => {
+                this.getRegisterSoftwareStackForm()?.getFormField("allowed_instance_types")?.setOptions({
+                    listing: instanceTypeChoices,
+                });
+            });
+        } catch (error: any) {
+            this.getRegisterSoftwareStackForm()?.setError(error.errorCode || 'FETCH_ERROR', error.message || 'Failed to fetch instance types');
+        }
+    }
+
+    async componentDidUpdate(prevProps: VirtualDesktopSoftwareStacksProps, prevState: VirtualDesktopSoftwareStacksState) {
+        if (!this.state.showRegisterSoftwareStackForm) {
+            return;
+        }
+
+        if (prevState.softwareStackForRegister === this.state.softwareStackForRegister) {
+            return;
+        }
+
+        await handleInstanceTypeUpdate({
+            prevStack: prevState.softwareStackForRegister,
+            currStack: this.state.softwareStackForRegister,
+            debounceTimer: this.state.debounceTimerForRegister,
+            clearTimer: () => this.setState({ debounceTimerForRegister: null }),
+            setTimer: (timer) => this.setState({ debounceTimerForRegister: timer }),
+            clearError: () => this.getRegisterSoftwareStackForm()?.clearError(),
+            updateInstanceTypes: () => this.updateInstanceTypesForRegister(),
+            updateStack: (stack) => this.setState({ softwareStackForRegister: stack }),
+        });
+    }
+
+    componentWillUnmount() {
+        if (this.state.debounceTimerForRegister) {
+            clearTimeout(this.state.debounceTimerForRegister);
+        }
     }
 
     buildRegisterSoftwareStackForm() {
@@ -251,43 +334,46 @@ class VirtualDesktopSoftwareStacks extends Component<VirtualDesktopSoftwareStack
                         });
                     });
 
+                    const softwareStack: VirtualDesktopSoftwareStack = {
+                        ...this.state.softwareStackForRegister,
+                        name: values.name,
+                        description: values.description,
+                        projects: projects,
+                        placement: {
+                            ...this.state.softwareStackForRegister.placement,
+                            affinity: values.affinity,
+                            host_id: (values.target_host_by === "host_id") ? values.host_id : undefined,
+                            host_resource_group_arn: (values.target_host_by === "host_resource_group") ? values.host_resource_group_arn : undefined,
+                        },
+                    } as VirtualDesktopSoftwareStack;
+
                     this.getVirtualDesktopAdminClient()
-                        .createSoftwareStack({
-                            software_stack: {
-                                name: values.name,
-                                description: values.description,
-                                ami_id: values.ami_id.toLowerCase().trim(),
-                                base_os: values.base_os,
-                                gpu: values.gpu,
-                                min_storage: {
-                                    value: values.root_storage_size,
-                                    unit: "gb",
-                                },
-                                min_ram: {
-                                    value: values.ram_size,
-                                    unit: "gb",
-                                },
-                                placement: {
-                                    affinity: values.affinity,
-                                    tenancy: values.tenancy,
-                                    host_id: (values.target_host_by === "host_id") ? values.host_id : undefined,
-                                    host_resource_group_arn: (values.target_host_by === "host_resource_group") ? values.host_resource_group_arn : undefined,
-                                },
-                                projects: projects,
-                                allowed_instance_types: []
-                            },
-                        })
-                        .then(() => {
+                        .createSoftwareStack({ software_stack: softwareStack })
+                        .then((response) => {
                             this.hideRegisterSoftwareStackForm();
                             this.setFlashMessage(<p key={values.name}>Software Stack: {values.name}, Create request submitted</p>, "success");
                             this.getListing().fetchRecords();
                         })
                         .catch((error) => {
-                            this.getRegisterSoftwareStackForm().setError(error.errorCode, error.message);
+                        const errorMessage = error?.response?.data?.message || error?.message || 'Failed to create software stack';
+                            this.getRegisterSoftwareStackForm().setError('CREATE_ERROR', errorMessage);
                         });
                 }}
                 onCancel={() => {
                     this.hideRegisterSoftwareStackForm();
+                }}
+                onStateChange={(event) => {
+                    const paramName = event.param.name;
+                    if (!paramName) return;
+
+                    const values = this.getRegisterSoftwareStackForm().getValues();
+                    const updatedStack = { ...this.state.softwareStackForRegister };
+                    const fieldUpdaters = createFieldUpdaters(values, updatedStack);
+
+                    if (fieldUpdaters[paramName]) {
+                        fieldUpdaters[paramName]();
+                        this.setState({ softwareStackForRegister: updatedStack });
+                    }
                 }}
                 params={[
                     {
@@ -333,7 +419,7 @@ class VirtualDesktopSoftwareStacks extends Component<VirtualDesktopSoftwareStack
                         validate: {
                             required: true,
                         },
-                        default: "amazonlinux2",
+                        default: DEFAULT_SOFTWARE_STACK_BASE_OS,
                         choices: this.state.supportedOsChoices,
                     },
                     {
@@ -345,7 +431,7 @@ class VirtualDesktopSoftwareStacks extends Component<VirtualDesktopSoftwareStack
                         validate: {
                             required: true,
                         },
-                        default: "NO_GPU",
+                        default: DEFAULT_SOFTWARE_STACK_GPU,
                         choices: this.state.supportedGPUChoices,
                     },
                     {
@@ -354,7 +440,7 @@ class VirtualDesktopSoftwareStacks extends Component<VirtualDesktopSoftwareStack
                         description: "Enter the min. storage size for your virtual desktop in GBs",
                         data_type: "int",
                         param_type: "text",
-                        default: 50,
+                        default: DEFAULT_SOFTWARE_STACK_MIN_STORAGE,
                         validate: {
                             required: true,
                         },
@@ -365,7 +451,7 @@ class VirtualDesktopSoftwareStacks extends Component<VirtualDesktopSoftwareStack
                         description: "Enter the min. ram for your virtual desktop in GBs",
                         data_type: "int",
                         param_type: "text",
-                        default: 10,
+                        default: DEFAULT_SOFTWARE_STACK_MIN_RAM,
                         validate: {
                             required: true,
                         },
@@ -388,7 +474,7 @@ class VirtualDesktopSoftwareStacks extends Component<VirtualDesktopSoftwareStack
                         validate: {
                             required: true,
                         },
-                        default: "default",
+                        default: DEFAULT_SOFTWARE_STACK_TENANCY,
                         choices: this.state.tenancyChoices,
                     },
                     {
@@ -469,6 +555,16 @@ class VirtualDesktopSoftwareStacks extends Component<VirtualDesktopSoftwareStack
                             ]
                         },
                     },
+                    {
+                        name: "allowed_instance_types",
+                        title: "Allowed Instance Families and Types",
+                        description: "Select instance families and types allowed for this software stack",
+                        data_type: "str",
+                        param_type: "select",
+                        multiple: true,
+                        choices: this.state.instanceTypeChoicesForRegister,
+                        default: this.state.softwareStackForRegister.allowed_instance_types || [],
+                    },
                 ]}
             />
         );
@@ -536,12 +632,14 @@ class VirtualDesktopSoftwareStacks extends Component<VirtualDesktopSoftwareStack
                 allowedInstanceTypes={this.state.allowedInstanceTypes}
                 supportedOsChoices={this.state.supportedOsChoices}
                 supportedGPUChoices={this.state.supportedGPUChoices}
-                onSubmit={(stack_id: string, base_os: VirtualDesktopBaseOS, name: string, description: string, ami_id: string, gpu: VirtualDesktopGPU, min_storage: SocaMemory,
-                    min_ram: SocaMemory, projects: Project[], placement: VirtualDesktopPlacement, allowed_instance_types: string[]) => {
-                    return this.getVirtualDesktopAdminClient()
-                        .updateSoftwareStack({
+                onSubmit={(stack_id: string, base_os: VirtualDesktopBaseOs, name: string, description: string, ami_id: string, gpu: VirtualDesktopGpu, min_storage: ResMemory,
+                    min_ram: ResMemory, projects: Project[], placement: VirtualDesktopPlacement, allowed_instance_types: string[]) => {
+                        return this.getVirtualDesktopAdminClient()
+                        .updateSoftwareStack(
+                            stack_id,
+                            {
                             software_stack: {
-                                stack_id: stack_id,
+
                                 base_os: base_os,
                                 name: name,
                                 description: description,
@@ -582,10 +680,15 @@ class VirtualDesktopSoftwareStacks extends Component<VirtualDesktopSoftwareStack
                 ref={this.deleteStackConfirmModal}
                 title={"Delete Software Stack: " + selectedSoftwareStack?.name}
                 onConfirm={() => {
+                    if (!selectedSoftwareStack) return;
+
                     this.getVirtualDesktopAdminClient()
-                        .deleteSoftwareStack({
-                            software_stack: selectedSoftwareStack,
-                        })
+                        .deleteSoftwareStack(
+                            selectedSoftwareStack.stack_id!,
+                            {
+                                base_os: selectedSoftwareStack.base_os!
+                            }
+                        )
                         .then((_) => {
                             this.setState(
                                 {
@@ -633,34 +736,6 @@ class VirtualDesktopSoftwareStacks extends Component<VirtualDesktopSoftwareStack
         return this.getListing().getSelectedItems()[0];
     }
 
-    convertSoftwareStackObjectToSocaFilter(): SocaFilter {
-        const softwareStack = this.getSelectedSoftwareStack();
-        let eq = {};
-        if (softwareStack != null) {
-            eq = {
-                'base_os': softwareStack.base_os,
-                'stack_id': softwareStack.stack_id,
-                'name': softwareStack.name,
-                'description': softwareStack.description,
-                'created_on': softwareStack.created_on? new Date(softwareStack.created_on).getTime():0,
-                'updated_on': softwareStack.updated_on? new Date(softwareStack.updated_on).getTime():0,
-                'ami_id': softwareStack.ami_id,
-                'enabled': softwareStack.enabled ?? null,
-                'min_storage_value': String(softwareStack.min_storage?.value.toFixed(1) ?? ''),
-                'min_storage_unit': softwareStack.min_storage?.unit,
-                'min_ram_value': String(softwareStack.min_ram?.value.toFixed(1) ?? ''),
-                'min_ram_unit': softwareStack.min_ram?.unit,
-                'architecture': softwareStack.architecture,
-                'gpu': softwareStack.gpu,
-                'projects': softwareStack.projects?.map((project) => project.project_id)
-            }
-        }
-        return {
-            key: 'software_stack',
-            eq: eq,
-        }
-    }
-
     buildListing() {
         return (
             <IdeaListView
@@ -692,9 +767,10 @@ class VirtualDesktopSoftwareStacks extends Component<VirtualDesktopSoftwareStack
                         text: "Delete Stack",
                         disabled: !this.isSelected(),
                         onClick: () => {
-                            this.getVirtualDesktopAdminClient()
+                            const softwareStack = this.getSelectedSoftwareStack();
+                            this.getVirtualDesktopClient()
                             .listSessions({
-                                filters: [this.convertSoftwareStackObjectToSocaFilter()]
+                                stackId: softwareStack?.stack_id
                             })
                             .then((result) => {
                                 this.setState(
@@ -779,25 +855,40 @@ class VirtualDesktopSoftwareStacks extends Component<VirtualDesktopSoftwareStack
                         softwareStackSelected: true,
                     });
                 }}
-                onFetchRecords={() => {
-                    return this.getVirtualDesktopAdminClient()
-                        .listSoftwareStacks({
-                            disabled_also: true,
-                            filters: this.getListing().getFilters(),
-                            paginator: this.getListing().getPaginator(),
-                        })
-                        .catch((error) => {
-                            this.props.onFlashbarChange({
-                                items: [
-                                    {
-                                        content: error.message,
-                                        type: "error",
-                                        dismissible: true,
-                                    },
-                                ],
+                onFetchRecords={async () => {
+                    // Extract base_os filter from the filters array
+                    const filters = this.getListing().getFilters();
+                    const baseOsFilter = filters?.find(f => f.key === 'base_os');
+                    const baseOs = baseOsFilter?.value || undefined;
+                    const searchFilter = filters?.find(f => f.key === '$all');
+                    const softwareStackName = searchFilter?.value || undefined;
+                    try {
+                        let allItems: VirtualDesktopSoftwareStack[] = [];
+                        let nextToken: string | undefined;
+
+                        do {
+                            const data = await this.getVirtualDesktopClient().listSoftwareStacks({
+                                baseOs: baseOs as any,
+                                softwareStackName: softwareStackName as any,
+                                nextToken: nextToken,
                             });
-                            throw error;
+                            allItems.push(...(data.listing || []));
+                            nextToken = data.nextToken;
+                        } while (nextToken);
+
+                        return { listing: allItems };
+                    } catch (error) {
+                        this.props.onFlashbarChange({
+                            items: [
+                                {
+                                    content: error instanceof Error ? error.message : String(error),
+                                    type: "error",
+                                    dismissible: true,
+                                },
+                            ],
                         });
+                        throw error;
+                    }
                 }}
                 columnDefinitions={VIRTUAL_DESKTOP_SOFTWARE_STACKS_TABLE_COLUMN_DEFINITIONS}
             />

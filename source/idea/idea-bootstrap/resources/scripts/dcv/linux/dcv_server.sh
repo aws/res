@@ -46,7 +46,6 @@ function install_gpu_drivers() {
   /bin/bash "${SCRIPT_DIR}/../dcv/linux/gpu_drivers.sh" -o $BASE_OS -g $GPU_FAMILY -s "${SCRIPT_DIR}"
 }
 
-install_prerequisites
 
 if [[ $GPU_FAMILY =~ ^(NVIDIA|AMD)$ ]]; then
   log_info "Installing GPU drivers"

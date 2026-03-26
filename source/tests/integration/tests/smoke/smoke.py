@@ -30,11 +30,9 @@ from ideadatamodel import (  # type: ignore
     DeleteSoftwareStackRequest,
     DownloadFilesRequest,
     GetModuleSettingsRequest,
-    GetSoftwareStackInfoRequest,
     GetUserRequest,
     ListEmailTemplatesRequest,
     ListFilesRequest,
-    ListSoftwareStackRequest,
     Project,
     ReadFileRequest,
     SaveFileRequest,
@@ -53,7 +51,11 @@ from ideadatamodel import (  # type: ignore
     VirtualDesktopSoftwareStack,
     VirtualDesktopWeekSchedule,
 )
-from tests.integration.framework.client.api_client import ApiClient
+from tests.integration.framework.client.api_client import (
+    ApiClient,
+    DeleteSoftwareStackRequestContent,
+    GetSoftwareStackResponseContent,
+)
 from tests.integration.framework.client.res_client import ResClient
 from tests.integration.framework.fixtures.fixture_request import FixtureRequest
 from tests.integration.framework.fixtures.project import project
@@ -86,6 +88,8 @@ from tests.integration.tests.smoke.config import (
     AL2023_SOFTWARE_STACK,
     BASE_OS,
     LINUX_SOFTWARE_STACKS,
+    MIN_LINUX_STORAGE,
+    MIN_RAM,
     TEST_SOFTWARE_STACKS,
 )
 
@@ -95,6 +99,7 @@ logger = logging.getLogger(__name__)
 @pytest.mark.usefixtures("res_environment")
 @pytest.mark.usefixtures("region")
 class TestsSmoke(object):
+
     @pytest.mark.usefixtures("admin")
     @pytest.mark.parametrize(
         "admin_username",
@@ -134,13 +139,14 @@ class TestsSmoke(object):
             for software_stack in TEST_SOFTWARE_STACKS
         ],
         indirect=True,
+        ids=[stack.name for stack in TEST_SOFTWARE_STACKS],  #
     )
     @pytest.mark.parametrize(
         "session",
         [
             (
                 VirtualDesktopSession(
-                    name="ADVirtualDesktop" + os.environ.get("PYTEST_XDIST_WORKER", ""),
+                    name="AD",
                     description="RES integ test VDI session",
                     hibernation_enabled=False,
                 ),
@@ -212,14 +218,14 @@ class TestsSmoke(object):
             # for software_stack in [AL2_SOFTWARE_STACK]
         ],
         indirect=True,
+        ids=[stack.name for stack in LINUX_SOFTWARE_STACKS],
     )
     @pytest.mark.parametrize(
         "session",
         [
             (
                 VirtualDesktopSession(
-                    name="CognitoVirtualDesktop"
-                    + os.environ.get("PYTEST_XDIST_WORKER", ""),
+                    name="Cog",
                     description="RES integ test VDI session",
                     hibernation_enabled=False,
                 ),
@@ -441,13 +447,9 @@ class TestsSmoke(object):
         """
         Test software stacks table has been populated with default values
         """
-        api_invoker_type = request.config.getoption("--api-invoker-type")
-        admin_client = ResClient(res_environment, admin, api_invoker_type)
-
+        api_client = ApiClient(res_environment, admin)
         default_stack_count = 0
-        stacks = admin_client.list_software_stacks(
-            request=ListSoftwareStackRequest()
-        ).listing
+        stacks = api_client.list_software_stacks().listing  # type: ignore
 
         assert stacks is not None
         for stack in stacks:
@@ -564,7 +566,7 @@ class TestsSmoke(object):
         [
             (
                 VirtualDesktopSession(
-                    name="VirtualDesktop-sssd-config-update",
+                    name="sssd",
                     description="RES integ test VDI session",
                     hibernation_enabled=False,
                 ),
@@ -679,7 +681,22 @@ class TestsSmoke(object):
     )
     @pytest.mark.parametrize(
         "software_stack",
-        [(AL2023_SOFTWARE_STACK, "project", "admin")],
+        [
+            (
+                VirtualDesktopSoftwareStack(
+                    name=f"res-integ-test-stack-creation-{VirtualDesktopBaseOS.AMAZON_LINUX2023.value}-{VirtualDesktopArchitecture.X86_64.value}",
+                    description="RES integ test software stack creation",
+                    base_os=VirtualDesktopBaseOS.AMAZON_LINUX2023,
+                    architecture=VirtualDesktopArchitecture.X86_64,
+                    min_storage=MIN_LINUX_STORAGE,
+                    min_ram=MIN_RAM,
+                    gpu=VirtualDesktopGPU.NO_GPU,
+                    allowed_instance_types=["t3", "m6a"],
+                ),
+                "project",
+                "admin",
+            )
+        ],
         indirect=True,
     )
     @pytest.mark.parametrize(
@@ -687,7 +704,7 @@ class TestsSmoke(object):
         [
             (
                 VirtualDesktopSession(
-                    name="VirtualDesktop-soft-stack",
+                    name="stack",
                     description="RES integ test VDI session",
                     hibernation_enabled=False,
                 ),
@@ -719,13 +736,14 @@ class TestsSmoke(object):
 
         api_invoker_type = request.config.getoption("--api-invoker-type")
         client = ResClient(res_environment, admin, api_invoker_type)
+        api_client = ApiClient(res_environment, admin)
         web_driver = client.join_session(session)
         wait_for_session_connection_count(region, session, 1)
         logger.info(f"leaving session {session.dcv_session_id}...")
         web_driver.quit()
 
         new_software_stack = VirtualDesktopSoftwareStack(
-            name="integ-test-created-software-stack-from-session",
+            name=f"integ-test-created-software-stack-from-session-{str(uuid.uuid4())[:4]}",
             description="integ-test-created-software-stack-from-session",
             projects=[project],
             base_os=session.base_os,
@@ -745,29 +763,63 @@ class TestsSmoke(object):
         logger.info(f"Software stack create response {software_stack_create_response}")
         new_software_stack = software_stack_create_response.software_stack
         new_session = None
+        created_stack = None
         try:
             wait_for_software_stack_to_be_active(
-                client=client,
+                api_client=api_client,
                 software_stack=software_stack_create_response.software_stack,
             )
-            created_stack = client.get_software_stack(
-                request=GetSoftwareStackInfoRequest(
-                    stack_id=new_software_stack.stack_id, base_os=software_stack.base_os
-                )
-            ).software_stack
+            created_stack_response = api_client.get_software_stack(
+                stack_id=new_software_stack.stack_id,
+                base_os=software_stack.base_os.value,
+            )
+            if (
+                created_stack_response is None
+                or created_stack_response.software_stack is None
+            ):
+                raise Exception("Failed to get created software stack")
+            created_stack = created_stack_response.software_stack
+
+            # Convert ResMemory to SocaMemory as create session requires SocaMemory
+            # TODO: Revert this change once create session is migrated
+            created_stack.min_storage = SocaMemory(
+                value=created_stack.min_storage.value,
+                unit=SocaMemoryUnit(created_stack.min_storage.unit),
+            )
+            created_stack.min_ram = SocaMemory(
+                value=created_stack.min_ram.value,
+                unit=SocaMemoryUnit(created_stack.min_ram.unit),
+            )
+
             logger.info(f"Created stack {created_stack}")
             logger.info(f"Creating session from software stack {created_stack.name}...")
             api_client = ApiClient(res_environment, admin)
 
+            # Creating Soca stack due to compatability issues
+            # TODO: Revert this change once create session is migrated
+            serializable_stack = VirtualDesktopSoftwareStack(
+                stack_id=created_stack.stack_id,
+                base_os=created_stack.base_os,
+                ami_id=created_stack.ami_id,
+                min_ram=created_stack.min_ram,
+                min_storage=created_stack.min_storage,
+                name=created_stack.name,
+                gpu=created_stack.gpu,
+                allowed_instance_types=created_stack.allowed_instance_types,
+            )
+
+            session_to_create = VirtualDesktopSession(
+                name="newstack",
+                description="RES integ test VDI session new software stack",
+                hibernation_enabled=False,
+                software_stack=serializable_stack,  # Use the serializable version
+                project=project,
+                base_os=created_stack.base_os,
+            )
+
             new_session = create_session(
-                session=VirtualDesktopSession(
-                    name="integ-test-created-session-from-created-software-stack",
-                    description="RES integ test VDI session new software stack",
-                    hibernation_enabled=False,
-                    software_stack=created_stack,
-                    project=project,
-                ),
-                software_stack=created_stack,
+                session=session_to_create,
+                software_stack=created_stack,  # Use the modified created_stack directly
                 client=client,
                 api_client=api_client,
             )
@@ -778,7 +830,7 @@ class TestsSmoke(object):
             wait_for_session_connection_count(region, new_session, 1)
 
             logger.info(
-                f"Leaving session {new_session.name} {new_session.dcv_session_id}..."  # type: ignore
+                f"Leaving session {new_session.name} {new_session.dcv_session_id}..."
             )
             web_driver.quit()
             wait_for_session_connection_count(region, new_session, 0)
@@ -786,11 +838,20 @@ class TestsSmoke(object):
             if new_session:
                 delete_session(
                     client=client,
+                    api_client=api_client,
                     session=new_session,
                 )
-            client.delete_software_stack(
-                request=DeleteSoftwareStackRequest(software_stack=created_stack)
+
+            delete_request = DeleteSoftwareStackRequestContent(
+                base_os=software_stack.base_os
             )
-            deregistered = deregister_ami(created_stack.ami_id)
-            if not deregistered:
-                logger.error(f"AMI {created_stack.ami_id} could not be deregistered")
+            api_client.delete_software_stack(
+                stack_id=new_software_stack.stack_id, request_content=delete_request
+            )
+            # Deregister AMI if it was created
+            if new_software_stack.ami_id:
+                deregistered = deregister_ami(new_software_stack.ami_id)
+                if not deregistered:
+                    logger.error(
+                        f"AMI {new_software_stack.ami_id} could not be deregistered"
+                    )

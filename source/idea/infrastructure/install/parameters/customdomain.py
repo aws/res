@@ -87,30 +87,30 @@ class CustomDomainParameterGroups:
             "default": f"Custom domain details, only needed if you would like to use a custom domain{OPTIONAL_INPUT_PARAMETER_LABEL_SUFFIX}"
         },
         "Parameters": [
-            CustomDomainKey.CUSTOM_DOMAIN_NAME_FOR_WEB_APP,
-            CustomDomainKey.CUSTOM_DOMAIN_NAME_FOR_VDI,
-            CustomDomainKey.ACM_CERTIFICATE_ARN_FOR_WEB_APP,
-            CustomDomainKey.CERTIFICATE_SECRET_ARN_FOR_VDI,
-            CustomDomainKey.PRIVATE_KEY_SECRET_ARN_FOR_VDI,
+            CustomDomainKey.CUSTOM_DOMAIN_NAME_FOR_WEB_APP.value,
+            CustomDomainKey.CUSTOM_DOMAIN_NAME_FOR_VDI.value,
+            CustomDomainKey.ACM_CERTIFICATE_ARN_FOR_WEB_APP.value,
+            CustomDomainKey.CERTIFICATE_SECRET_ARN_FOR_VDI.value,
+            CustomDomainKey.PRIVATE_KEY_SECRET_ARN_FOR_VDI.value,
         ],
     }
 
 
 class CustomDomainParameterLabels:
     parameter_labels_for_custom_domain: dict[str, Any] = {
-        CustomDomainKey.CUSTOM_DOMAIN_NAME_FOR_WEB_APP: {
-            "default": f"{CustomDomainKey.CUSTOM_DOMAIN_NAME_FOR_WEB_APP}{OPTIONAL_INPUT_PARAMETER_LABEL_SUFFIX}"
+        CustomDomainKey.CUSTOM_DOMAIN_NAME_FOR_WEB_APP.value: {
+            "default": f"{CustomDomainKey.CUSTOM_DOMAIN_NAME_FOR_WEB_APP.value}{OPTIONAL_INPUT_PARAMETER_LABEL_SUFFIX}"
         },
-        CustomDomainKey.CUSTOM_DOMAIN_NAME_FOR_VDI: {
-            "default": f"{CustomDomainKey.CUSTOM_DOMAIN_NAME_FOR_VDI}{OPTIONAL_INPUT_PARAMETER_LABEL_SUFFIX}"
+        CustomDomainKey.CUSTOM_DOMAIN_NAME_FOR_VDI.value: {
+            "default": f"{CustomDomainKey.CUSTOM_DOMAIN_NAME_FOR_VDI.value}{OPTIONAL_INPUT_PARAMETER_LABEL_SUFFIX}"
         },
-        CustomDomainKey.ACM_CERTIFICATE_ARN_FOR_WEB_APP: {
-            "default": f"{CustomDomainKey.ACM_CERTIFICATE_ARN_FOR_WEB_APP}{OPTIONAL_INPUT_PARAMETER_LABEL_SUFFIX}"
+        CustomDomainKey.ACM_CERTIFICATE_ARN_FOR_WEB_APP.value: {
+            "default": f"{CustomDomainKey.ACM_CERTIFICATE_ARN_FOR_WEB_APP.value}{OPTIONAL_INPUT_PARAMETER_LABEL_SUFFIX}"
         },
-        CustomDomainKey.CERTIFICATE_SECRET_ARN_FOR_VDI: {
-            "default": f"{CustomDomainKey.CERTIFICATE_SECRET_ARN_FOR_VDI}{OPTIONAL_INPUT_PARAMETER_LABEL_SUFFIX}"
+        CustomDomainKey.CERTIFICATE_SECRET_ARN_FOR_VDI.value: {
+            "default": f"{CustomDomainKey.CERTIFICATE_SECRET_ARN_FOR_VDI.value}{OPTIONAL_INPUT_PARAMETER_LABEL_SUFFIX}"
         },
-        CustomDomainKey.PRIVATE_KEY_SECRET_ARN_FOR_VDI: {
-            "default": f"{CustomDomainKey.PRIVATE_KEY_SECRET_ARN_FOR_VDI}{OPTIONAL_INPUT_PARAMETER_LABEL_SUFFIX}"
+        CustomDomainKey.PRIVATE_KEY_SECRET_ARN_FOR_VDI.value: {
+            "default": f"{CustomDomainKey.PRIVATE_KEY_SECRET_ARN_FOR_VDI.value}{OPTIONAL_INPUT_PARAMETER_LABEL_SUFFIX}"
         },
     }

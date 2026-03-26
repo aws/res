@@ -73,10 +73,12 @@ def compare_instance_types(a: Dict[str, Any], b: Dict[str, Any]) -> int:
         return 1 if a_instance_family.lower() > b_instance_family.lower() else -1
 
 
-def delete_session(client: ResClient, session: VirtualDesktopSession) -> None:
+def delete_session(
+    client: ResClient, api_client: ApiClient, session: VirtualDesktopSession
+) -> None:
     session.force = True
     client.delete_sessions(DeleteSessionRequest(sessions=[session]))
-    wait_for_deleting_session(client, session)
+    wait_for_deleting_session(api_client, session)
 
 
 def create_session(
@@ -114,9 +116,9 @@ def create_session(
     session = create_session_response.session
 
     try:
-        session = wait_for_launching_session(client, session)
+        session = wait_for_launching_session(api_client, session)
     except Exception as e:
-        delete_session(client, session)
+        delete_session(client, api_client, session)
         raise e
 
     # Update the schedule to make sure that the virtual desktop session can be active every day.
@@ -165,6 +167,9 @@ def session(
     session.software_stack = software_stack
     session.base_os = software_stack.base_os
 
+    # Append stack name to session name for easier identification
+    session.name = f"{session.name}-{software_stack.base_os.value}-{software_stack.architecture.value}"
+
     api_invoker_type = request.config.getoption("--api-invoker-type")
     client = ResClient(res_environment, clientAuth, api_invoker_type)
     api_client = ApiClient(res_environment, clientAuth)
@@ -172,7 +177,7 @@ def session(
     session = create_session(session, software_stack, client, api_client)
 
     def tear_down() -> None:
-        delete_session(client, session)
+        delete_session(client, api_client, session)
 
     request.addfinalizer(tear_down)
 

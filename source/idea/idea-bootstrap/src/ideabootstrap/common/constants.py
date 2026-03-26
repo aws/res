@@ -19,8 +19,8 @@ REBOOT_REQUIRED_FILE_PATH="/root/bootstrap/reboot_required.txt"
 
 LINUX_BOOTSTRAP_LOG_FILES = "/opt/idea/app/logs/**.log"
 LINUX_DCV_LOG_FILES = "/var/log/dcv/**.log"
-WINDOWS_BOOTSTRAP_LOG_FILES = "C:\\Program Files\\RES\\app\logs\\**.log"
-WINDOWS_DCV_LOG_FILES = "C:\\ProgramData\\nice\\dcv\\log\\**.log"
+WINDOWS_BOOTSTRAP_LOG_FILES = r"C:\Program Files\RES\app\logs\**.log"
+WINDOWS_DCV_LOG_FILES = r"C:\ProgramData\nice\dcv\log\**.log"
 
 
 LINUX_CLOUDWATCH_AGENT_CONFIG_FILE_PATH="/opt/aws/amazon-cloudwatch-agent/etc/amazon-cloudwatch-agent.json"

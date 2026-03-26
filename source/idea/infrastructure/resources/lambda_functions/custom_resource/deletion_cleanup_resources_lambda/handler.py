@@ -232,7 +232,12 @@ def _delete_vdi_roles() -> None:
         policy_arns = []
 
         try:
-            _, policy_arns = iam_utils.get_role_attached_policies_arns(role_name)
+            role_exists, policy_arns = iam_utils.get_role_attached_policies_arns(
+                role_name
+            )
+            if not role_exists:
+                logger.info(f"No VDI role created for current project, continue...")
+                continue
             # Detach managed policy from role
             for policy_arn in policy_arns:
                 iam_utils.detach_policy_from_role(role_name, policy_arn)
@@ -335,7 +340,7 @@ def _get_network_interface_id(security_groups: List[str]) -> List[str]:
                 },
                 {
                     "Name": "interface-type",
-                    "Values": ["lambda"],
+                    "Values": ["lambda", "interface"],
                 },
             ]
         ):

@@ -169,7 +169,7 @@ class ConfigureDesktopSharingProfile extends Component<ConfigureDesktopSharingPr
 
     editProfile(permissionProfile: VirtualDesktopPermissionProfile) {
         this.getVirtualDesktopAdminClient()
-            .updatePermissionProfile({
+            .updatePermissionProfile(permissionProfile.profile_id, {
                 profile: permissionProfile,
             })
             .then((response) => {
@@ -293,7 +293,7 @@ class ConfigureDesktopSharingProfile extends Component<ConfigureDesktopSharingPr
         const basicSettings = ownerProfile?.permissions?.filter((p) => Constants.DCV_SETTINGS_DESKTOP_SETTINGS.getAllColumns().includes(p.key!));
         const advancedSettings = ownerProfile?.permissions?.filter((p) => Constants.DCV_SETTINGS_DESKTOP_ADVANCED_SETTINGS.getAllColumns().includes(p.key!));
         return <Container header={
-            <Header 
+            <Header
                 description="Permissions granted to this sharing profile. To enable the permissions that are 'Disabled globally', go back to the Environment boundaries and enable them there."
             >
                 Permissions

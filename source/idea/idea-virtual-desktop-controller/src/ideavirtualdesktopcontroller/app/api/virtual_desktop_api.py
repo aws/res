@@ -64,6 +64,8 @@ from ideavirtualdesktopcontroller.app.ssm_commands.virtual_desktop_ssm_commands_
 from ideavirtualdesktopcontroller.app.virtual_desktop_controller_utils import VirtualDesktopControllerUtils
 from res.exceptions import SoftwareStackNotFound, UserSessionNotFound
 from res.resources import software_stacks, vdi_management, sessions
+from res.constants import SESSION_NAME_REGEX, SESSION_NAME_ERROR_MESSAGE
+from res.utils import string_utils
 
 class VirtualDesktopAPI(BaseAPI):
     TEMP_IMAGE_ID = 'TEMP_IMAGE_ID'
@@ -108,120 +110,12 @@ class VirtualDesktopAPI(BaseAPI):
         return self.session_db.get_from_db(idea_session_id=idea_session_id, idea_session_owner=username)
 
     @staticmethod
-    def _validate_actors_for_session_permission_requests(session_permissions: List[VirtualDesktopSessionPermission]) -> (bool, str):
-        if Utils.is_empty(session_permissions):
-            return False, 'Invalid session_permissions'
-
-        actors_seen = set()
-        duplicate_actors = set()
-        is_valid = True
-        for session_permission in session_permissions:
-            if session_permission.actor_name not in actors_seen:
-                actors_seen.add(session_permission.actor_name)
-            else:
-                duplicate_actors.add(session_permission.actor_name)
-                is_valid = False
-
-        message = ''
-        if not is_valid:
-            message = f'actors: {duplicate_actors} not unique'
-        return is_valid, message
-
-    def _validate_session_for_session_permission_request(self, session: VirtualDesktopSession) -> (bool, str):
-        if Utils.is_empty(session):
-            return False, 'Invalid session'
-
-        if session.base_os == VirtualDesktopBaseOS.WINDOWS and not self.controller_utils.is_active_directory():
-            return False, 'Windows sessions do not support sessions permissions for OpenLDAP'
-        return True, ''
-
-    @staticmethod
     def _validate_session_permission_update_request(permission: VirtualDesktopSessionPermission) -> (VirtualDesktopSession, bool):
         is_valid = True
         if Utils.is_empty(permission.idea_session_id):
             permission.failure_reason = 'missing res_session_id'
             is_valid = False
         return permission, is_valid
-
-    def _validate_session_permission_create_request(self, permission: VirtualDesktopSessionPermission) -> (VirtualDesktopSession, bool):
-        is_valid, message = self.validate_create_session_permission_request(permission)
-        if not is_valid:
-            permission.failure_reason = message
-
-        return permission, is_valid
-
-    def validate_update_session_permission_request(self, request: UpdateSessionPermissionRequest) -> (bool, UpdateSessionPermissionRequest):
-        is_valid_request = True
-        if Utils.is_not_empty(request.create):
-            for permission in request.create:
-                permission, is_valid = self._validate_session_permission_create_request(permission)
-                if is_valid:
-                    session = self.get_session_if_owner(username=permission.idea_session_owner, idea_session_id=permission.idea_session_id)
-                    is_valid, message = self._validate_session_for_session_permission_request(session)
-                    if not is_valid:
-                        permission.failure_reason = message
-                is_valid_request = is_valid_request and is_valid
-
-        if Utils.is_not_empty(request.update):
-            for permission in request.update:
-                permission, is_valid = self._validate_session_permission_update_request(permission)
-                if is_valid:
-                    session = self.get_session_if_owner(username=permission.idea_session_owner, idea_session_id=permission.idea_session_id)
-                    is_valid, message = self._validate_session_for_session_permission_request(session)
-                    if not is_valid:
-                        permission.failure_reason = message
-                is_valid_request = is_valid_request and is_valid
-
-        '''
-        for permission in request.delete:
-            pass
-        '''
-
-        if is_valid_request:
-            is_valid, message = self._validate_actors_for_session_permission_requests(request.create + request.update + request.delete)
-            is_valid_request = is_valid_request and is_valid
-
-        if not is_valid_request:
-            for permission in request.create:
-                if Utils.is_empty(permission.failure_reason):
-                    permission.failure_reason = 'Invalid request. Rejecting all permissions'
-            for permission in request.update:
-                if Utils.is_empty(permission.failure_reason):
-                    permission.failure_reason = 'Invalid request. Rejecting all permissions'
-            for permission in request.delete:
-                if Utils.is_empty(permission.failure_reason):
-                    permission.failure_reason = 'Invalid request. Rejecting all permissions'
-        return is_valid_request, request
-
-    @staticmethod
-    def validate_create_session_permission_request(permission: VirtualDesktopSessionPermission) -> (bool, str):
-        if Utils.is_empty(permission):
-            return False, 'missing permission object'
-        if Utils.is_empty(permission.idea_session_id):
-            return False, 'missing res_session_id'
-        if Utils.is_empty(permission.idea_session_owner):
-            return False, 'missing res_session_owner'
-        if Utils.is_empty(permission.idea_session_name):
-            return False, 'missing res_session_name'
-        if Utils.is_empty(permission.idea_session_instance_type):
-            return False, 'missing res_session_instance_type'
-        if Utils.is_empty(permission.idea_session_state):
-            return False, 'missing res_session_state'
-        if Utils.is_empty(permission.idea_session_base_os):
-            return False, 'missing res_session_base_os'
-        if Utils.is_empty(permission.idea_session_created_on):
-            return False, 'missing res_session_created_on'
-        if Utils.is_empty(permission.idea_session_type):
-            return False, 'missing res_session_type'
-        if Utils.is_empty(permission.permission_profile) or Utils.is_empty(permission.permission_profile.profile_id):
-            return False, 'missing permission_profile.profile_id'
-        if Utils.is_empty(permission.actor_type):
-            return False, 'missing actor_type'
-        if Utils.is_empty(permission.actor_name):
-            return False, 'missing actor_name'
-        if Utils.is_empty(permission.expiry_date):
-            return False, 'missing expiry_date'
-        return True, ''
 
     @staticmethod
     def validate_reboot_session_request(session: VirtualDesktopSession) -> bool:
@@ -264,6 +158,10 @@ class VirtualDesktopAPI(BaseAPI):
     def validate_create_session_request(self, session: VirtualDesktopSession) -> (VirtualDesktopSession, bool):
         if Utils.is_empty(session.project) or Utils.is_empty(session.project.project_id):
             session.failure_reason = 'missing session.project.project_id'
+            return session, False
+
+        if Utils.is_not_empty(session.name) and not string_utils.validate_input(session.name, SESSION_NAME_REGEX):
+            session.failure_reason = SESSION_NAME_ERROR_MESSAGE
             return session, False
 
         # validate if the user belongs to this project
@@ -345,19 +243,26 @@ class VirtualDesktopAPI(BaseAPI):
             session.failure_reason = 'missing session.server.instance_type'
             return session, False
 
+        # Instance profile ARN validation
+        if not Utils.is_empty(session.server.instance_profile_arn):
+            session.failure_reason = f'Invalid session.server.instance_profile_arn {session.server.instance_profile_arn}. External instance_profile_arn not allowed.'
+            return session, False
+
         valid_instance_types_dict = self.controller_utils.get_valid_instance_types_by_allowed_list(session.hibernation_enabled, session.software_stack.allowed_instance_types)
         if session.server.instance_type not in valid_instance_types_dict.keys():
             session.failure_reason = f'Invalid session.server.instance_type: {session.server.instance_type}. Not allowed for current configuration'
             return session, False
 
         # Technical Validation for Hibernation.
-        if session.hibernation_enabled and session.software_stack.base_os is VirtualDesktopBaseOS.WINDOWS:
-            ram = self.controller_utils.get_instance_ram(session.server.instance_type).as_unit(SocaMemoryUnit.GiB)
-            if ram.value > 16:
-                session.failure_reason = f'OS {session.software_stack.base_os} does not support Instance Hibernation for instances with RAM greater than 16GiB.'
+        if session.hibernation_enabled:
+            if session.software_stack.base_os is VirtualDesktopBaseOS.UBUNTU2404:
+                session.failure_reason = f'OS {session.software_stack.base_os} does not support Instance Hibernation.'
                 return session, False
-        else:
-            pass
+            elif session.software_stack.base_os is VirtualDesktopBaseOS.WINDOWS:
+                ram = self.controller_utils.get_instance_ram(session.server.instance_type).as_unit(SocaMemoryUnit.GiB)
+                if ram.value > 16:
+                    session.failure_reason = f'OS {session.software_stack.base_os} does not support Instance Hibernation for instances with RAM greater than 16GiB.'
+                    return session, False
 
         # Technical Validations for Session Type
         # // https://docs.aws.amazon.com/dcv/latest/adminguide/servers.html - AMD GPU, Windows support Console sessions only
@@ -395,7 +300,7 @@ class VirtualDesktopAPI(BaseAPI):
             return session, False
 
         return session, True
-    
+
     def validate_update_session_request(self, session: VirtualDesktopSession) -> (VirtualDesktopSession, bool):
         if Utils.is_empty(session.idea_session_id):
             session.failure_reason = "missing session.res_session_id"
@@ -403,6 +308,10 @@ class VirtualDesktopAPI(BaseAPI):
 
         if Utils.is_empty(session.owner):
             session.failure_reason = "missing session.owner"
+            return session, False
+
+        if Utils.is_not_empty(session.name) and not string_utils.validate_input(session.name, SESSION_NAME_REGEX):
+            session.failure_reason = SESSION_NAME_ERROR_MESSAGE
             return session, False
 
         try:
@@ -413,20 +322,20 @@ class VirtualDesktopAPI(BaseAPI):
         except UserSessionNotFound:
             session.failure_reason = f"session.res_session_id: {session.idea_session_id} does not exist"
             return session, False
-        
+
         try:
             software_stack_dict = software_stacks.get_software_stack(stack_id=software_stack_id, base_os=base_os)
         except SoftwareStackNotFound:
             session.failure_reason = f"software_stack.stack_id: {software_stack_id} and software_stack.base_os: {base_os} does not exist"
             return session, False
-        
+
         valid_instance_types_dict = self.controller_utils.get_valid_instance_types_by_allowed_list(hibernation_support=session_dict["hibernation_enabled"], allowed_instance_types=software_stack_dict["allowed_instance_types"])
         if session.server.instance_type not in valid_instance_types_dict.keys():
             session.failure_reason = f'Invalid session.server.instance_type: {session.server.instance_type}. Not allowed for current configuration.'
             return session, False
-        
+
         return session, True
-            
+
 
     @staticmethod
     def validate_delete_session_request(session: VirtualDesktopSession) -> (VirtualDesktopSession, bool):
@@ -549,14 +458,11 @@ class VirtualDesktopAPI(BaseAPI):
         if Utils.is_empty(session.server.root_volume_iops):
             session.server.root_volume_iops = self.DEFAULT_ROOT_VOL_IOPS
 
-        if Utils.is_empty(session.server.instance_profile_arn):
-            if Utils.is_empty(session.project.policy_arns):
-                session.server.instance_profile_arn = self.context.config().get_string(
-                    'virtual-desktop-controller.dcv_host_instance_profile_arn', required=True)
-            else:
-                session.server.instance_profile_arn = self.arn_builder.get_vdi_iam_instance_profile_arn(project_name=session.project.name)
-            # self.default_instance_profile_arn = self.context.app_config.virtual_desktop_dcv_host_profile_arn
-            # self.default_security_group = self.context.app_config.virtual_desktop_dcv_host_security_group_id
+        if Utils.is_empty(session.project.policy_arns):
+            session.server.instance_profile_arn = self.context.config().get_string(
+                'virtual-desktop-controller.dcv_host_instance_profile_arn', required=True)
+        else:
+            session.server.instance_profile_arn = self.arn_builder.get_vdi_iam_instance_profile_arn(project_name=session.project.name)
 
         if Utils.is_empty(session.server.key_pair_name):
             session.server.key_pair_name = self.context.config().get_string('cluster.network.ssh_key_pair', required=True)
@@ -726,6 +632,7 @@ class VirtualDesktopAPI(BaseAPI):
             value=self.controller_utils.get_instance_ram(session.server.instance_type).gb(),
             unit=SocaMemoryUnit.GB
         )
+        new_software_stack.allowed_instance_types = session.software_stack.allowed_instance_types
         new_software_stack = self._create_software_stack(new_software_stack)
 
         if session.base_os == VirtualDesktopBaseOS.WINDOWS:

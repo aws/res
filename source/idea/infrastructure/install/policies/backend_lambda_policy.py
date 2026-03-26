@@ -130,6 +130,16 @@ class BackendLambdaPolicy(Policy):
                     }
                 },
             ),
+            iam.PolicyStatement(
+                actions=["sqs:SendMessage"],
+                resources=["*"],
+                conditions={
+                    "StringEquals": {
+                        "aws:ResourceTag/res:EnvironmentName": arn_builder.cluster_name,
+                        "aws:ResourceTag/res:ModuleName": "virtual-desktop-controller",
+                    }
+                },
+            ),
         ]
 
         return policy_statements

@@ -223,6 +223,18 @@ class SocaDevelopmentProps:
         return os.path.join(self.library_project_dir, 'tests')
 
     @property
+    def datamodel_project_dir(self) -> str:
+        return os.path.join(self.project_source_dir, 'data-model')
+
+    @property
+    def datamodel_src(self) -> str:
+        return os.path.join(self.datamodel_project_dir, 'src')
+
+    @property
+    def datamodel_tests_src(self) -> str:
+        return os.path.join(self.datamodel_project_dir, 'tests')
+
+    @property
     def bootstrap_project_dir(self) -> str:
         return os.path.join(self.project_source_dir, 'idea-bootstrap')
 

@@ -68,7 +68,7 @@ class VirtualDesktopScheduleUtils:
             self._logger.debug("No Schedule to delete. Returning")
             return
 
-        if Utils.is_any_empty(schedule.schedule_id, schedule.day_of_week):
+        if Utils.is_any_empty(getattr(schedule, 'schedule_id', None), getattr(schedule, 'day_of_week', None)):
             return
 
         self._schedule_db.delete(schedule)
@@ -79,10 +79,10 @@ class VirtualDesktopScheduleUtils:
             return self._schedule_db.get_empty_schedule(day_of_week)
 
         schedules_dict = schedules.create_schedule({
-            "day_of_week": DayOfWeek(day_of_week),
+            "day_of_week": day_of_week.value,
             "idea_session_id": idea_session_id,
             "idea_session_owner": idea_session_owner,
-            "schedule_type": schedule.schedule_type,
+            "schedule_type": schedule.schedule_type.value,
             "start_up_time": schedule.start_up_time,
             "shut_down_time": schedule.shut_down_time
         })

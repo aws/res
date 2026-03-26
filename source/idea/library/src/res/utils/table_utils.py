@@ -1,15 +1,25 @@
 #  Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 #  SPDX-License-Identifier: Apache-2.0
 
+import base64
+import json
 import os
 from decimal import Decimal
+from enum import Enum
 from functools import lru_cache
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 import boto3
-from boto3.dynamodb.conditions import Attr, Key
+from boto3.dynamodb.conditions import And, Attr, Key
 from python_dynamodb_lock.python_dynamodb_lock import DynamoDBLockClient
 from res.constants import ENVIRONMENT_NAME_KEY
+
+
+class FilterOperator(str, Enum):
+    EQ = "eq"
+    NE = "ne"
+    CONTAINS = "contains"
+    IS_IN = "is_in"
 
 
 @lru_cache
@@ -51,6 +61,39 @@ def list_items(
     return items
 
 
+def list_items_paginated(
+    table_name: str,
+    filter_expression: Any = None,
+    next_token: Optional[str] = None,
+    limit: int = 100,
+) -> Tuple[List[Dict[str, Any]], Optional[str]]:
+    """
+    Retrieve one page of items from DDB with pagination support
+    :param table_name: Name of the DynamoDB table
+    :param filter_expression: Optional FilterExpression for modern filtering
+    :param next_token: Pagination token from previous request
+    :return: tuple of (list of items, next_token or None)
+    """
+    scan_params: Dict[str, Any] = {"Limit": limit}
+
+    if filter_expression is not None:
+        scan_params["FilterExpression"] = filter_expression
+
+    if next_token is not None:
+        scan_params["ExclusiveStartKey"] = json.loads(base64.b64decode(next_token))
+
+    response = table(table_name).scan(**scan_params)
+    items: List[Dict[str, Any]] = response.get("Items", [])
+
+    response_next_token = None
+    if "LastEvaluatedKey" in response:
+        response_next_token = base64.b64encode(
+            json.dumps(response["LastEvaluatedKey"]).encode()
+        ).decode()
+
+    return items, response_next_token
+
+
 def create_item(
     table_name: str,
     item: Dict[str, Any],
@@ -59,7 +102,7 @@ def create_item(
     if attribute_names_to_check:
         condition = Attr(attribute_names_to_check[0]).not_exists()
         for attribute_name in attribute_names_to_check[1:]:
-            condition += Attr(attribute_name).not_exists()  # type: ignore
+            condition = condition and Attr(attribute_name).not_exists()  # type: ignore
 
         table(table_name).put_item(
             Item=item,
@@ -117,7 +160,6 @@ def batch_get_items(
     result = []
     for key in keys:
         result.append(item_map.get(key["key"]))
-
     return result
 
 
@@ -273,3 +315,73 @@ def check_and_convert_decimal_value(value: Any) -> Any:
     if updated_value is None:
         return value
     return updated_value
+
+
+def construct_date_range_filter(
+    date_range_key: str, after: Optional[str] = None, before: Optional[str] = None
+) -> Optional[Any]:
+    """
+    Construct a DynamoDB filter expression for date range filtering.
+
+    Assumes inputs are already validated and after or before is not None
+
+    :param date_range_key: The attribute name to filter on
+    :param after: Start of the date range in milliseconds as string
+    :param before: End of the date range in milliseconds as string
+    :return: DynamoDB filter expression or None
+    """
+    if after and before:
+        return Attr(date_range_key).between(int(after), int(before))
+    elif after:
+        return Attr(date_range_key).gte(int(after))
+    else:
+        return Attr(date_range_key).lte(int(before))
+
+
+def construct_filter_expression(
+    filter_specs: Dict[str, Any],
+    date_range_key: Optional[str] = None,
+    after: Optional[str] = None,
+    before: Optional[str] = None,
+) -> Any:
+    """
+    Construct DynamoDB filter expression from filter specifications
+    :param filter_specs: Dict mapping attribute names to values or (FilterOperator, value) tuples
+    :param date_range_key: Optional date range attribute name
+    :param after: Optional start date for range filter
+    :param before: Optional end date for range filter
+    :return: DynamoDB filter expression or None
+    """
+    filter_conditions = []
+
+    for attr_name, spec in filter_specs.items():
+        if spec is None:
+            continue
+        if isinstance(spec, tuple):
+            operator, value = spec
+            if value is None:
+                continue
+            if operator == FilterOperator.EQ:
+                filter_conditions.append(Attr(attr_name).eq(value))
+            elif operator == FilterOperator.NE:
+                filter_conditions.append(Attr(attr_name).ne(value))
+            elif operator == FilterOperator.CONTAINS:
+                filter_conditions.append(Attr(attr_name).contains(value))
+            elif operator == FilterOperator.IS_IN:
+                filter_conditions.append(Attr(attr_name).is_in(value))
+        else:
+            filter_conditions.append(Attr(attr_name).eq(spec))
+
+    if date_range_key:
+        filter_conditions.append(
+            construct_date_range_filter(date_range_key, after, before)
+        )
+
+    if not filter_conditions:
+        return None
+
+    filter_expression = filter_conditions[0]
+    for condition in filter_conditions[1:]:
+        filter_expression = And(filter_expression, condition)
+
+    return filter_expression

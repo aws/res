@@ -4,6 +4,7 @@
 from typing import List
 
 from aws_cdk import aws_iam as iam
+from res.constants import MODULE_NAME_VDC  # type: ignore
 
 from idea.infrastructure.install.constructs.iam import ManagedPolicy
 from idea.infrastructure.install.infra_utils.arn_builder import ArnBuilder
@@ -53,7 +54,7 @@ class VdiHelperPolicy(ManagedPolicy):
                 conditions={
                     "StringEquals": {
                         "aws:ResourceTag/res:EnvironmentName": arn_builder.cluster_name,
-                        "aws:ResourceTag/res:ModuleName": "vdc",
+                        "aws:ResourceTag/res:ModuleName": MODULE_NAME_VDC,
                         "aws:ResourceTag/res:NodeType": "virtual-desktop-dcv-host",
                     }
                 },

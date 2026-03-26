@@ -75,6 +75,13 @@ class ArnBuilder:
             region="",
         )
 
+    def get_iam_role_arn_no_custom_path(self, role_name: str) -> str:
+        return self.get_arn(
+            service="iam",
+            resource=f"role/{self.parameters.iam_resource_prefix_string}{role_name}",
+            region="",
+        )
+
     @property
     @lru_cache
     def get_ddb_table_export_arn(self) -> str:

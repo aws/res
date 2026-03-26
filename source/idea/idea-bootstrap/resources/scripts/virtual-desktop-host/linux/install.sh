@@ -21,8 +21,9 @@ INSTALL_FINISHED_LOCK="${SEMAPHORE_DIR}/install_finished.lock"
 # recipe we published in User Guide did not include this argument.
 PREBAKING_AMI="true"
 MODULE_ID="vdi-app"
+ENABLE_LUSTRE="false"
 
-while getopts m:g:p:e:n:o:d:i:h:t:u:a: opt
+while getopts m:g:p:e:n:o:d:i:h:t:u:a:l: opt
 do
     case "${opt}" in
         m) MODULE_ID=${OPTARG};;
@@ -37,6 +38,7 @@ do
         t) BOOTSTRAP_TOKEN=${OPTARG};;
         u) CUSTOM_BROKER_URL=${OPTARG};;
         a) AWS_REGION=${OPTARG};;
+        l) ENABLE_LUSTRE=${OPTARG};;
         ?) echo "Invalid option for install.sh script: -${opt}."
            exit 1;;
     esac
@@ -59,6 +61,7 @@ SCRIPT_DIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
 if [[ ! -f ${INSTALL_FINISHED_LOCK} ]]; then
 
   source "${SCRIPT_DIR}/../../common/linux/bootstrap_common.sh"
+  source "${SCRIPT_DIR}/../../common/linux/config_common.sh"
 
   BASE_OS=$(get_base_os)
 
@@ -115,8 +118,16 @@ if [[ ! -f ${INSTALL_FINISHED_LOCK} ]]; then
     idea_pip install -r ${SCRIPT_DIR}/../../vdi-helper/requirements.txt
     # End: Install vdi helper requirements
 
-    # Begin : Install Fsx Lustre client
-    /bin/bash "${SCRIPT_DIR}/../../common/linux/fsx_lustre_client.sh" -o $BASE_OS -s "${SCRIPT_DIR}/.."
+    # Begin : Install Fsx Lustre client (only if enabled via -l parameter)
+    if [[ "${ENABLE_LUSTRE}" == "true" ]]; then
+      log_info "Lustre enabled, installing FSx Lustre client"
+      /bin/bash "${SCRIPT_DIR}/../../common/linux/fsx_lustre_client.sh" -o $BASE_OS -s "${SCRIPT_DIR}/.."
+      # Avoid Kernel version updates after installing Lustre client which may break Lustre file system mounting
+      source "${SCRIPT_DIR}/../../common/linux/kernel_hold.sh"
+      enable_kernel_hold $BASE_OS
+    else
+      log_info "Lustre not enabled (use -l true to enable), skipping FSx Lustre client and kernel hold"
+    fi
     # End: Install Fsx Lustre client
 
     # Begin : Install Host Modules
@@ -132,6 +143,18 @@ if [[ ! -f ${INSTALL_FINISHED_LOCK} ]]; then
       # Begin: Install and enable hibernate agent
       /bin/bash "${SCRIPT_DIR}/../../common/linux/red_hat/hibinit_agent.sh"
     fi
+
+    SUB_DIR=""
+    if [[ $BASE_OS =~ ^(amzn2|amzn2023|rhel8|rhel9|rocky9)$ ]]; then
+      SUB_DIR="red_hat"
+    elif [[ $BASE_OS =~ ^(ubuntu2204|ubuntu2404)$ ]]; then
+      SUB_DIR="debian"
+    else
+      log_warning "Base OS not supported."
+      exit 1
+    fi
+    source "$SCRIPT_DIR/../../dcv/linux/$SUB_DIR/dcv_server.sh"
+    install_prerequisites
 
     set_reboot_required "RES software dependencies and packages have been installed, reboot required for changes to take effect..."
   else
@@ -159,5 +182,5 @@ fi
 # Only chain to the next script when we are NOT baking on EC2 Image Builder
 # On EC2 Image Builder, the next script will be triggered by the Image Builder itself
 if [[ "${PREBAKING_AMI}" == "false" ]]; then
-  /bin/bash ${SCRIPT_DIR}/../../virtual-desktop-host/linux/install_post_reboot.sh -m "${MODULE_ID}" -g "${GPU_FAMILY}" -p "${PREBAKING_AMI}" -e "${ENVIRONMENT_NAME}" -n "${PROJECT_NAME}" -o "${SESSION_OWNER}" -d "${SESSION_TYPE}" -i "${SESSION_ID}" -t "${CUSTOM_BROKER_URL}"
+  /bin/bash ${SCRIPT_DIR}/../../virtual-desktop-host/linux/install_post_reboot.sh -m "${MODULE_ID}" -g "${GPU_FAMILY}" -p "${PREBAKING_AMI}" -e "${ENVIRONMENT_NAME}" -n "${PROJECT_NAME}" -o "${SESSION_OWNER}" -d "${SESSION_TYPE}" -i "${SESSION_ID}" -t "${CUSTOM_BROKER_URL}" -l "${ENABLE_LUSTRE}"
 fi

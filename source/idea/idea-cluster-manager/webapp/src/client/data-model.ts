@@ -15,6 +15,8 @@
  * and limitations under the License.
  */
 
+import { VirtualDesktopBaseOs, VirtualDesktopSessionPermission } from "./generated/api";
+
 export type SocaUserInputParamType =
     | "text"
     | "password"
@@ -60,7 +62,6 @@ export type VirtualDesktopSessionType = "CONSOLE" | "VIRTUAL" | undefined;
 export type VirtualDesktopSessionState = "PROVISIONING" | "CREATING" | "INITIALIZING" | "READY" | "RESUMING" | "STOPPING" | "STOPPED" | "STOPPED_IDLE" | "ERROR" | "DELETING" | "DELETED";
 export type DayOfWeek = "monday" | "tuesday" | "wednesday" | "thursday" | "friday" | "saturday" | "sunday";
 export type VirtualDesktopScheduleType = "WORKING_HOURS" | "STOP_ALL_DAY" | "START_ALL_DAY" | "CUSTOM_SCHEDULE" | "NO_SCHEDULE";
-export type VirtualDesktopSessionPermissionActorType = "USER" | "GROUP";
 export type DryRunOption = "true" | "json:job" | "json:bom" | "json:budget" | "json:quota" | "json:queue" | "notification:email" | "debug";
 export type SocaComputeNodeState = "busy" | "down" | "free" | "offline" | "job-busy" | "job-exclusive" | "provisioning" | "resv-exclusive" | "stale" | "stale-unknown" | "unresolvable" | "wait-provisioning" | "initializing";
 export type SocaComputeNodeSharing = "default-excl" | "default-exlchost" | "default-shared" | "force-excl" | "force-exclhost" | "ignore-excl";
@@ -222,6 +223,7 @@ export interface SocaUserInputParamMetadata {
     dynamic_choices?: boolean;
     choices_empty_label?: string;
     refreshable?: boolean;
+    refresh_on_dependency_change?: string[];
     ignore_case?: boolean;
     match_middle?: boolean;
     tag?: string;
@@ -997,9 +999,6 @@ export interface UpdateRoleResponse {
 export interface CreateFileSystemRequest {
     filesystem?: FileSystem;
 }
-export interface GetSoftwareStackInfoResponse {
-    software_stack?: VirtualDesktopSoftwareStack;
-}
 export interface AuthResult {
     access_token?: string;
     id_token?: string;
@@ -1252,7 +1251,7 @@ export interface DeleteSessionRequest {
 export interface VirtualDesktopSession {
     dcv_session_id?: string;
     idea_session_id?: string;
-    base_os?: VirtualDesktopBaseOS;
+    base_os?: VirtualDesktopBaseOS | VirtualDesktopBaseOs;
     name?: string;
     owner?: string;
     type?: VirtualDesktopSessionType;
@@ -1349,24 +1348,6 @@ export interface UpdateSessionPermissionRequest {
     create?: VirtualDesktopSessionPermission[];
     delete?: VirtualDesktopSessionPermission[];
     update?: VirtualDesktopSessionPermission[];
-}
-export interface VirtualDesktopSessionPermission {
-    idea_session_id?: string;
-    idea_session_owner?: string;
-    idea_session_name?: string;
-    idea_session_instance_type?: string;
-    idea_session_state?: VirtualDesktopSessionState;
-    idea_session_base_os?: VirtualDesktopBaseOS;
-    idea_session_created_on?: string;
-    idea_session_hibernation_enabled?: boolean;
-    idea_session_type?: VirtualDesktopSessionType;
-    permission_profile?: VirtualDesktopPermissionProfile;
-    actor_type?: VirtualDesktopSessionPermissionActorType;
-    actor_name?: string;
-    created_on?: string;
-    updated_on?: string;
-    expiry_date?: string;
-    failure_reason?: string;
 }
 export interface VirtualDesktopPermissionProfile {
     profile_id?: string;
@@ -1715,6 +1696,10 @@ export enum UpdateModuleSettingsValuesDCVSession {
     SCHEDULE = "schedule",
 }
 
+export enum UpdateModuleSettingsDCVBroker {
+    SESSION_TOKEN_VALIDITY = "session_token_validity",
+}
+
 export enum UpdateModuleSettingsValuesSever {
     ENABLE_ADV_OPTIONS_NON_ADMIN = "enable_adv_options_non_admin",
 }
@@ -1722,7 +1707,10 @@ export enum UpdateModuleSettingsValuesSever {
 export type UpdateModuleSettingsVDC = {
     dcv_session: {
         [key in UpdateModuleSettingsValuesDCVSession]?: unknown;
-    };
+    },
+    dcv_broker?: {
+        [key in UpdateModuleSettingsDCVBroker]?: unknown;
+    }
 };
 
 export type UpdateModuleSettingsServer = {
@@ -1740,6 +1728,7 @@ export enum UpdateModuleSettingsValuesWebPortal {
     TITLE = "title",
     SUBTITLE = "subtitle",
     COPYRIGHT_TEXT = "copyright_text",
+    LINKS = "links",
 }
 export type UpdateModuleSettingsWebPortal = {
     web_portal: {
@@ -1872,15 +1861,6 @@ export interface CreateHpcLicenseResourceResult {
     license_resource?: HpcLicenseResource;
 }
 export interface DeleteHpcApplicationResult {}
-export interface ListSoftwareStackRequest {
-    paginator?: SocaPaginator;
-    sort_by?: SocaSortBy;
-    date_range?: SocaDateRange;
-    listing?: (SocaBaseModel | unknown)[];
-    filters?: SocaFilter[];
-    disabled_also?: boolean;
-    project_id?: string;
-}
 export interface SignOutResult {}
 export interface JobUpdates {
     queued: JobUpdate[];
@@ -2016,9 +1996,6 @@ export interface ListSessionsRequest {
     listing?: (SocaBaseModel | unknown)[];
     filters?: SocaFilter[];
 }
-export interface UpdatePermissionProfileRequest {
-    profile?: VirtualDesktopPermissionProfile;
-}
 export interface UpdateProjectResult {
     project?: Project;
 }
@@ -2075,13 +2052,6 @@ export interface CreateEmailTemplateResult {
 }
 export interface ForgotPasswordResult {}
 export interface SocaPayload {}
-export interface ListSoftwareStackResponse {
-    paginator?: SocaPaginator;
-    sort_by?: SocaSortBy;
-    date_range?: SocaDateRange;
-    listing?: VirtualDesktopSoftwareStack[];
-    filters?: SocaFilter[];
-}
 export interface ReadFileRequest {
     file?: string;
 }
@@ -2215,9 +2185,6 @@ export interface SocaBatchResponsePayload {
 export interface AddUserToGroupRequest {
     usernames?: string[];
     group_name?: string;
-}
-export interface UpdatePermissionProfileResponse {
-    profile?: VirtualDesktopPermissionProfile;
 }
 export interface GetParamsResult {
     params?: {
@@ -2559,10 +2526,6 @@ export interface ConfigureSSORequest {
     saml_metadata_file?: string;
 }
 export interface ConfigureSSOResponse {}
-export interface GetSoftwareStackInfoRequest {
-    stack_id?: string;
-    base_os?: string
-}
 export interface AddAdminUserResult {
     user?: User;
 }

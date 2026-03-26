@@ -18,12 +18,7 @@ function Download-And-Execute-Script {
     Start-Transcript -Path $DownloadAndExecuteScript -NoClobber -IncludeInvocationHeader
 
     if ($uri -like "s3://*") {
-        $urlParts = $uri -split "/", 4
-        $bucketName = $urlParts[2]
-        $key = $urlParts[3]
-        $fullPath = (Resolve-Path -Path $launchScriptsPath).Path
-        $destination = Join-Path $fullPath (Split-Path $uri -Leaf)
-        Copy-S3Object -BucketName $bucketName -Key $key -LocalFile $destination -Force
+        aws s3 cp $uri $destination
     }
     elseif ($uri -like "https://*") {
         Invoke-WebRequest -Uri $uri -OutFile $destination

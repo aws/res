@@ -26,7 +26,7 @@ if [[ -z $CLUSTERADMIN_USERNAME || -z $CLUSTERADMIN_PASSWORD ]]; then
 else
   USERPOOLID=`aws cognito-idp list-user-pools --region $AWS_REGION --max-results 60 --query 'UserPools[?Name==\`'$CLUSTER_NAME-user-pool'\`].Id' --output text`
 
-  aws cognito-idp admin-set-user-password --user-pool-id $USERPOOLID --region $AWS_REGION --username $CLUSTERADMIN_USERNAME --password $CLUSTERADMIN_PASSWORD --permanent
+  aws cognito-idp admin-set-user-password --user-pool-id "$USERPOOLID" --region "$AWS_REGION" --username "$CLUSTERADMIN_USERNAME" --password "$CLUSTERADMIN_PASSWORD" --permanent
 fi
 
 SG_EXTERNAL_ALB_INFO=$(aws ec2 describe-security-groups --region $AWS_REGION --filters Name=group-name,Values=$CLUSTER_NAME-external-load-balancer-security-group)

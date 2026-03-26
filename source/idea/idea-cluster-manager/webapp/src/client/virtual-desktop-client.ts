@@ -30,23 +30,214 @@ import {
     ResumeSessionsResponse,
     GetSessionConnectionInfoRequest,
     GetSessionConnectionInfoResponse,
-    ListSoftwareStackRequest,
-    ListSoftwareStackResponse,
     GetModuleInfoRequest,
     GetModuleInfoResult,
     RebootSessionResponse,
     RebootSessionRequest,
-    UpdateSessionPermissionRequest,
-    UpdateSessionPermissionResponse,
-    ListPermissionsRequest,
-    ListPermissionsResponse,
-    VirtualDesktopSessionConnectionInfo,
 } from "./data-model";
 import IdeaBaseClient, { IdeaBaseClientProps } from "./base-client";
+
+import {
+    VirtualDesktopApi,
+    ListSoftwareStacksResponseContent,
+    VirtualDesktopApiListSoftwareStacksRequest,
+    ListSessionPermissionsResponseContent,
+    VirtualDesktopApiListSessionPermissionsRequest,
+    UpdateSessionPermissionsRequestContent,
+    UpdateSessionPermissionsResponseContent,
+    ListSharedPermissionsResponseContent,
+    VirtualDesktopApiListSharedPermissionsRequest,
+    VirtualDesktopSessionPermission,
+    VirtualDesktopSession,
+    VirtualDesktopApiListSessionsRequest,
+    ListSessionsResponseContent,
+    VirtualDesktopApiGetSessionRequest,
+    GetSessionResponseContent,
+} from "./generated/api";
+import { Configuration } from "./generated/configuration";
 
 export interface VirtualDesktopClientProps extends IdeaBaseClientProps {}
 
 class VirtualDesktopClient extends IdeaBaseClient<VirtualDesktopClientProps> {
+
+    private generatedClient: VirtualDesktopApi;
+
+    constructor(props: VirtualDesktopClientProps) {
+        super(props);
+
+        const config = new Configuration({
+            basePath: this.getApiEndpoint(),
+            accessToken: async () => await this.getAccessToken(),
+        });
+
+        this.generatedClient = new VirtualDesktopApi(config);
+    }
+
+    private getApiEndpoint(): string {
+        return this.props.baseUrl;
+    }
+
+    private async getAccessToken(): Promise<string> {
+        if (this.props.authContext?.getAccessToken) {
+            return await this.props.authContext.getAccessToken();
+        }
+        return '';
+    }
+
+    async listSoftwareStacks(request: VirtualDesktopApiListSoftwareStacksRequest): Promise<ListSoftwareStacksResponseContent> {
+        try {
+            const response = await this.generatedClient.listSoftwareStacks({
+                baseOs: request.baseOs,
+                projectId: request.projectId,
+                softwareStackName: request.softwareStackName,
+                nextToken: request.nextToken,
+            });
+
+            return response.data;
+        } catch (error) {
+            console.warn('Generated client failed, returning empty response:', error);
+            return {
+                paginator: undefined,
+                sort_by: undefined,
+                data_range: undefined,
+                listing: [],
+                filters: []
+            };
+        }
+    }
+
+    async updateSessionPermissions(req: UpdateSessionPermissionsRequestContent): Promise<UpdateSessionPermissionsResponseContent> {
+        const response = await this.generatedClient.updateSessionPermissions({
+            updateSessionPermissionsRequestContent: req
+        });
+        return response.data;
+    }
+
+    async listSessionPermissions(request: VirtualDesktopApiListSessionPermissionsRequest): Promise<ListSessionPermissionsResponseContent> {
+        try {
+
+            let allPermissions: VirtualDesktopSessionPermission[] = [];
+            let nextToken = request.nextToken;
+            let lastResponse;
+
+            do {
+                const response = await this.generatedClient.listSessionPermissions({
+                    resSessionId: request.resSessionId,
+                    nextToken: nextToken,
+                });
+
+                lastResponse = response;
+                allPermissions.push(...(response.data.listing || []));
+                nextToken = response.data.nextToken;
+            } while (nextToken);
+
+            return {
+                ...lastResponse.data,
+                listing: allPermissions,
+                nextToken: undefined
+            };
+        } catch (error) {
+            console.warn('Failed to list session permissions, returning empty response:', error);
+            return {
+                paginator: undefined,
+                sort_by: undefined,
+                data_range: undefined,
+                listing: [],
+                filters: []
+            };
+        }
+    }
+
+    async listSharedPermissions(request: VirtualDesktopApiListSharedPermissionsRequest): Promise<ListSharedPermissionsResponseContent> {
+        try {
+
+            let allPermissions: VirtualDesktopSessionPermission[] = [];
+            let nextToken = request.nextToken;
+            let lastResponse;
+
+            do {
+                const response = await this.generatedClient.listSharedPermissions({
+                    username: request.username,
+                    sessionName: request.sessionName,
+                    state: request.state,
+                    baseOs: request.baseOs,
+                    dateRangeKey: request.dateRangeKey,
+                    after: request.after,
+                    before: request.before,
+                    nextToken: nextToken,
+                });
+
+                lastResponse = response;
+                allPermissions.push(...(response.data.listing || []));
+                nextToken = response.data.nextToken;
+            } while (nextToken);
+
+            return {
+                ...lastResponse.data,
+                listing: allPermissions,
+                nextToken: undefined
+            };
+        } catch (error) {
+            console.warn('Failed to list shared permissions, returning empty response:', error);
+            return {
+                paginator: undefined,
+                sort_by: undefined,
+                data_range: undefined,
+                listing: [],
+                filters: []
+            };
+        }
+    }
+
+    async listSessions(request: VirtualDesktopApiListSessionsRequest): Promise<ListSessionsResponseContent> {
+        try {
+
+            let allSessions: VirtualDesktopSession[] = [];
+            let nextToken = request.nextToken;
+            let lastResponse;
+
+            do {
+                const response = await this.generatedClient.listSessions({
+                    baseOs: request.baseOs,
+                    state: request.state,
+                    sessionName: request.sessionName,
+                    stackId: request.stackId,
+                    dateRangeKey: request.dateRangeKey,
+                    after: request.after,
+                    before: request.before,
+                    nextToken: nextToken,
+                    owner: request.owner,
+                });
+
+                lastResponse = response;
+                allSessions.push(...(response.data.listing || []));
+                nextToken = response.data.nextToken;
+            } while (nextToken);
+
+            return {
+                ...lastResponse.data,
+                listing: allSessions
+            };
+        } catch (error) {
+            console.warn('Generated client failed, returning empty response:', error);
+            return {
+                paginator: undefined,
+                sort_by: undefined,
+                data_range: undefined,
+                listing: [],
+                filters: []
+            };
+        }
+    }
+
+    async getSession(request: VirtualDesktopApiGetSessionRequest): Promise<GetSessionResponseContent> {
+            const response = await this.generatedClient.getSession({
+                resSessionId: request.resSessionId,
+                owner: request.owner
+            });
+            return response.data;
+        }
+
     getModuleInfo(): Promise<GetModuleInfoRequest> {
         return this.apiInvoker.invoke_alt<GetModuleInfoRequest, GetModuleInfoResult>("App.GetModuleInfo", {});
     }
@@ -63,20 +254,12 @@ class VirtualDesktopClient extends IdeaBaseClient<VirtualDesktopClientProps> {
         return this.apiInvoker.invoke_alt<DeleteSessionRequest, DeleteSessionResponse>("VirtualDesktop.DeleteSessions", req);
     }
 
-    getSessionInfo(req: GetSessionInfoRequest): Promise<GetSessionInfoResponse> {
-        return this.apiInvoker.invoke_alt<GetSessionInfoRequest, GetSessionInfoResponse>("VirtualDesktop.GetSessionInfo", req);
-    }
-
     getSessionScreenshot(req: GetSessionScreenshotRequest): Promise<GetSessionScreenshotResponse> {
         return this.apiInvoker.invoke_alt<GetSessionScreenshotRequest, GetSessionScreenshotResponse>("VirtualDesktop.GetSessionScreenshot", req);
     }
 
     getSessionConnectionInfo(req: GetSessionConnectionInfoRequest): Promise<GetSessionConnectionInfoResponse> {
         return this.apiInvoker.invoke_alt<GetSessionConnectionInfoRequest, GetSessionConnectionInfoResponse>("VirtualDesktop.GetSessionConnectionInfo", req);
-    }
-
-    listSessions(req: ListSessionsRequest): Promise<ListSessionsResponse> {
-        return this.apiInvoker.invoke_alt<ListSessionsRequest, ListSessionsResponse>("VirtualDesktop.ListSessions", req);
     }
 
     stopSessions(req: StopSessionRequest): Promise<StopSessionResponse> {
@@ -89,22 +272,6 @@ class VirtualDesktopClient extends IdeaBaseClient<VirtualDesktopClientProps> {
 
     rebootSessions(req: RebootSessionRequest): Promise<RebootSessionResponse> {
         return this.apiInvoker.invoke_alt<RebootSessionRequest, RebootSessionResponse>("VirtualDesktop.RebootSessions", req);
-    }
-
-    listSoftwareStacks(req: ListSoftwareStackRequest): Promise<ListSoftwareStackResponse> {
-        return this.apiInvoker.invoke_alt<ListSoftwareStackRequest, ListSoftwareStackResponse>("VirtualDesktop.ListSoftwareStacks", req);
-    }
-
-    listSharedPermissions(req: ListPermissionsRequest): Promise<ListPermissionsResponse> {
-        return this.apiInvoker.invoke_alt<ListPermissionsRequest, ListPermissionsResponse>("VirtualDesktop.ListSharedPermissions", req);
-    }
-
-    listSessionPermissions(req: ListPermissionsRequest): Promise<ListPermissionsResponse> {
-        return this.apiInvoker.invoke_alt<ListPermissionsRequest, ListPermissionsResponse>("VirtualDesktop.ListSessionPermissions", req);
-    }
-
-    updateSessionPermissions(req: UpdateSessionPermissionRequest): Promise<UpdateSessionPermissionResponse> {
-        return this.apiInvoker.invoke_alt<UpdateSessionPermissionRequest, UpdateSessionPermissionResponse>("VirtualDesktop.UpdateSessionPermissions", req);
     }
 }
 

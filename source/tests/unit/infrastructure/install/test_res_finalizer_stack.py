@@ -279,32 +279,41 @@ def test_clean_up_resources_role_policy_creation(
                             "Action": [
                                 "iam:DeleteRole",
                                 "iam:DetachRolePolicy",
-                                "iam:ListAttachedRolePolicies",
                             ],
                             "Effect": "Allow",
+                            "Resource": {
+                                "Fn::Join": [
+                                    "",
+                                    [
+                                        "arn:",
+                                        {"Ref": "AWS::Partition"},
+                                        ":iam::",
+                                        {"Ref": "AWS::AccountId"},
+                                        ":role",
+                                        res_finalizer_stack.nested_stack.resolve(
+                                            res_finalizer_stack.parameters.iam_resource_path_string
+                                        ),
+                                        res_finalizer_stack.nested_stack.resolve(
+                                            res_finalizer_stack.cluster_name
+                                        ),
+                                        "-",
+                                        {"Ref": "AWS::Region"},
+                                        "/vdi/",
+                                        res_finalizer_stack.nested_stack.resolve(
+                                            res_finalizer_stack.parameters.iam_resource_prefix_string
+                                        ),
+                                        res_finalizer_stack.nested_stack.resolve(
+                                            res_finalizer_stack.cluster_name
+                                        ),
+                                        "-vdi-*",
+                                    ],
+                                ]
+                            },
+                        },
+                        {
+                            "Action": "iam:ListAttachedRolePolicies",
+                            "Effect": "Allow",
                             "Resource": [
-                                {
-                                    "Fn::Join": [
-                                        "",
-                                        [
-                                            "arn:",
-                                            {"Ref": "AWS::Partition"},
-                                            ":iam::",
-                                            {"Ref": "AWS::AccountId"},
-                                            ":role",
-                                            res_finalizer_stack.nested_stack.resolve(
-                                                res_finalizer_stack.parameters.iam_resource_path_string
-                                            ),
-                                            res_finalizer_stack.nested_stack.resolve(
-                                                res_finalizer_stack.parameters.iam_resource_prefix_string
-                                            ),
-                                            res_finalizer_stack.nested_stack.resolve(
-                                                res_finalizer_stack.cluster_name
-                                            ),
-                                            "-vdi-*",
-                                        ],
-                                    ]
-                                },
                                 {
                                     "Fn::Join": [
                                         "",
@@ -323,6 +332,25 @@ def test_clean_up_resources_role_policy_creation(
                                             "-",
                                             {"Ref": "AWS::Region"},
                                             "/vdi/",
+                                            res_finalizer_stack.nested_stack.resolve(
+                                                res_finalizer_stack.parameters.iam_resource_prefix_string
+                                            ),
+                                            res_finalizer_stack.nested_stack.resolve(
+                                                res_finalizer_stack.cluster_name
+                                            ),
+                                            "-vdi-*",
+                                        ],
+                                    ]
+                                },
+                                {
+                                    "Fn::Join": [
+                                        "",
+                                        [
+                                            "arn:",
+                                            {"Ref": "AWS::Partition"},
+                                            ":iam::",
+                                            {"Ref": "AWS::AccountId"},
+                                            ":role/",
                                             res_finalizer_stack.nested_stack.resolve(
                                                 res_finalizer_stack.parameters.iam_resource_prefix_string
                                             ),

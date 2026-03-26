@@ -11,23 +11,23 @@ import pytest
 backend_path = os.path.abspath(
     os.path.join(
         os.path.dirname(__file__),
-        "../../../../../../idea/infrastructure/resources/lambda_functions/backend",
+        "../../../../../idea/backend",
     )
 )
 sys.path.insert(0, backend_path)
 
 from api.controllers import virtual_desktop_dcv_controller
 from api.exceptions import BadRequestException
-from api.models.bad_request_exception_response_content import (
+from datamodel.models.bad_request_exception_response_content import (
     BadRequestExceptionResponseContent,
 )
-from api.models.batch_get_dcv_sessions_response_content import (
+from datamodel.models.batch_get_dcv_sessions_response_content import (
     BatchGetDCVSessionsResponseContent,
 )
-from api.models.internal_service_exception_response_content import (
+from datamodel.models.internal_service_exception_response_content import (
     InternalServiceExceptionResponseContent,
 )
-from api.models.list_dcv_servers_response_content import ListDCVServersResponseContent
+from datamodel.models.list_dcv_servers_response_content import ListDCVServersResponseContent
 from connexion.exceptions import OAuthProblem
 
 
