@@ -6,8 +6,8 @@ import re
 from typing import Any, Dict
 
 import boto3
-from res.exceptions import ServerNotFound  # type: ignore
-from res.resources import servers  # type: ignore
+from res.exceptions import UserSessionNotFound  # type: ignore
+from res.resources import sessions  # type: ignore
 
 from .actions import VDIHelperActions
 
@@ -54,15 +54,11 @@ def validate_instance_origin(instance_id: str, source_ip: str) -> bool:
 
 def run_common_validations(instance_id: str, source_ip: str) -> bool:
     try:
-        server_details = servers.get_server(instance_id=instance_id)
-        owner_id = server_details.get(servers.SERVER_DB_SESSION_OWNER_KEY)
-        session_id = server_details.get(servers.SERVER_DB_SESSION_ID_KEY)
-        if not all([owner_id, session_id]):
-            return False
+        sessions.get_session_by_instance_id(instance_id)
         if not validate_instance_origin(instance_id, source_ip):
             return False
         return True
-    except ServerNotFound as e:
+    except UserSessionNotFound:
         logger.error(f"Invalid instance, instance_id {instance_id} is not a VDI")
         return False
 

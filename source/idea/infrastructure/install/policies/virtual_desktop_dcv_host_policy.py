@@ -108,6 +108,34 @@ class VirtualDesktopDcvPolicy(Policy):
             iam.PolicyStatement(
                 effect=iam.Effect.ALLOW,
                 actions=[
+                    "dynamodb:GetItem",
+                    "dynamodb:UpdateItem",
+                ],
+                resources=[
+                    arn_builder.get_ddb_table_arn("vdc.controller.user-sessions"),
+                ],
+            ),
+            iam.PolicyStatement(
+                effect=iam.Effect.ALLOW,
+                actions=[
+                    "dynamodb:GetItem",
+                ],
+                resources=[
+                    arn_builder.get_ddb_table_arn("vdc.controller.permission-profiles"),
+                ],
+            ),
+            iam.PolicyStatement(
+                effect=iam.Effect.ALLOW,
+                actions=[
+                    "dynamodb:Query",
+                ],
+                resources=[
+                    arn_builder.get_ddb_table_arn("vdc.controller.session-permissions"),
+                ],
+            ),
+            iam.PolicyStatement(
+                effect=iam.Effect.ALLOW,
+                actions=[
                     "execute-api:Invoke",
                 ],
                 resources=[

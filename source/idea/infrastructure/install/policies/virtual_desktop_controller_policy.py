@@ -146,6 +146,15 @@ class VirtualDesktopControllerPolicy(Policy):
             iam.PolicyStatement(
                 effect=iam.Effect.ALLOW,
                 actions=[
+                    "dynamodb:GetItem",
+                ],
+                resources=[
+                    arn_builder.get_ddb_table_arn("projects"),
+                ],
+            ),
+            iam.PolicyStatement(
+                effect=iam.Effect.ALLOW,
+                actions=[
                     "kinesis:CreateStream",
                     "kinesis:ListShards",
                     "kinesis:GetRecords",
@@ -164,7 +173,10 @@ class VirtualDesktopControllerPolicy(Policy):
                 conditions={
                     "StringEquals": {
                         "secretsmanager:ResourceTag/res:EnvironmentName": arn_builder.cluster_name,
-                        "secretsmanager:ResourceTag/res:ModuleName": "virtual-desktop-controller",
+                        "secretsmanager:ResourceTag/res:ModuleName": [
+                            "virtual-desktop-controller",
+                            "directoryservice",
+                        ],
                     }
                 },
             ),

@@ -50,8 +50,10 @@ class CustomCredentialBrokerPolicy(ManagedPolicy):
                     "dynamodb:Scan",
                 ],
                 resources=[
-                    arn_builder.get_ddb_table_arn("vdc.controller.servers"),
                     arn_builder.get_ddb_table_arn("vdc.controller.user-sessions"),
+                    arn_builder.get_ddb_table_arn(
+                        "vdc.controller.user-sessions/index/*"
+                    ),
                 ],
             ),
             iam.PolicyStatement(

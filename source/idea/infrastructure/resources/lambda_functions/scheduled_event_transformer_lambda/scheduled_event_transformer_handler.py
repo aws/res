@@ -6,6 +6,7 @@ Scheduled event transformer
 This function is triggered by an event-bridge event rule periodically. It repackages the event and forwards it to the
 Controller Events Queue.
 """
+
 import json
 import logging
 import os

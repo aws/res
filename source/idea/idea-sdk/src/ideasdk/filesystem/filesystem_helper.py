@@ -31,13 +31,14 @@ from ideasdk.protocols import SocaContextProtocol
 from ideasdk.shell import ShellInvoker
 
 import os
+import asyncio
+import errno
 import arrow
 import stat
 import mimetypes
 import shutil
 import pathlib
 from pwd import getpwnam
-import aiofiles
 from typing import Dict, List, Any
 from zipfile import ZipFile
 from collections import deque
@@ -91,7 +92,74 @@ class FileSystemHelper:
 
     def get_user_home(self) -> str:
         return os.path.join(self.context.config().get_string('shared-storage.home.mount_dir', required=True), self.username)
-        # return os.path.join(self.context.config().get_string('shared-storage.home.mount_dir', required=True), self.username)
+
+    def safe_open(self, file: str, mode: str):
+        """
+        Prevents symlink-swap attacks by combining realpath containment check
+        with O_NOFOLLOW on every path component.
+
+        :param file: absolute path to the file
+        :param mode: Python file mode ('r', 'w', 'rb', 'wb')
+        :return: file object
+        """
+        user_home = os.path.realpath(self.get_user_home())
+
+        # Resolve symlinks and validate path is within user's home directory
+        resolved = os.path.realpath(file)
+        if not (resolved == user_home or resolved.startswith(user_home + '/')):
+            raise exceptions.unauthorized_access()
+
+        # Walk resolved path component by component with O_NOFOLLOW
+        rel_path = os.path.relpath(resolved, user_home)
+        components = rel_path.split(os.sep)
+
+        dir_fd = os.open(user_home, os.O_RDONLY | os.O_DIRECTORY)
+        try:
+            # Walk intermediate directories
+            for component in components[:-1]:
+                try:
+                    next_fd = os.open(component, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW, dir_fd=dir_fd)
+                except OSError as e:
+                    if e.errno in (errno.ELOOP, errno.ENOTDIR):
+                        raise exceptions.unauthorized_access()
+                    raise
+                os.close(dir_fd)
+                dir_fd = next_fd
+
+            # Open final file with O_NOFOLLOW relative to verified dir_fd
+            filename = components[-1]
+            flags = self._mode_to_flags(mode) | os.O_NOFOLLOW
+            try:
+                fd = os.open(filename, flags, 0o644, dir_fd=dir_fd)
+            except OSError as e:
+                if e.errno in (errno.ELOOP, errno.ENOTDIR):
+                    raise exceptions.unauthorized_access()
+                raise
+        finally:
+            os.close(dir_fd)
+
+        return os.fdopen(fd, mode)
+
+    @staticmethod
+    def _mode_to_flags(mode: str) -> int:
+        """Map Python file mode string to os.O_* flags."""
+        if mode in ('r', 'rb'):
+            return os.O_RDONLY
+        elif mode in ('w', 'wb'):
+            return os.O_WRONLY | os.O_CREAT | os.O_TRUNC
+        elif mode in ('a', 'ab'):
+            return os.O_WRONLY | os.O_CREAT | os.O_APPEND
+        else:
+            raise ValueError(f'Unsupported file mode: {mode}')
+
+    def _sync_write(self, file_path: str, data: bytes):
+        """Synchronous write using safe_open for use with run_in_executor."""
+        primary_group_id = self.get_primary_group_id(self.username)
+        uid = getpwnam(self.username).pw_uid
+        gid = primary_group_id if primary_group_id is not None else -1
+        with self.safe_open(file_path, 'wb') as f:
+            f.write(data)
+            os.fchown(f.fileno(), uid, gid)
 
     def is_file_browser_enabled(self) -> bool:
         return self.context.config().get_bool('shared-storage.enable_file_browser', required=True)
@@ -178,7 +246,10 @@ class FileSystemHelper:
                 if file in RESTRICTED_ROOT_FOLDERS:
                     continue
 
-            file_stat = os.stat(file_path)
+            try:
+                file_stat = os.lstat(file_path)
+            except FileNotFoundError:
+                continue
             is_dir = stat.S_ISDIR(file_stat.st_mode)
             is_hidden = file.startswith('.')
             file_size = None
@@ -218,7 +289,7 @@ class FileSystemHelper:
                 message='file is not a text file. download the binary file instead'
             )
 
-        with open(file, 'r') as f:
+        with self.safe_open(file, 'r') as f:
             content = f.read()
 
         return ReadFileResult(
@@ -257,7 +328,7 @@ class FileSystemHelper:
 
             file_handle = None
             try:
-                file_handle = open(file, 'r')
+                file_handle = self.safe_open(file, 'r')
                 offset = Utils.get_as_int(cursor_tokens[0])
                 file_handle.seek(offset)
 
@@ -273,7 +344,7 @@ class FileSystemHelper:
                     file_handle.close()
         else:
             # if cursor file does not exist, prefetch last N lines
-            with open(file, 'r') as f:
+            with self.safe_open(file, 'r') as f:
                 prefetch_lines = list(deque(f, max_line_count))
                 for line in prefetch_lines:
                     lines.append(line.strip())
@@ -305,7 +376,7 @@ class FileSystemHelper:
         content_base64 = request.content
         content = Utils.base64_decode(content_base64)
 
-        with open(file, 'w') as f:
+        with self.safe_open(file, 'w') as f:
             f.write(content)
 
         self.logger.info(f'{self.username} has modified the following file: "{file}"')
@@ -346,14 +417,11 @@ class FileSystemHelper:
                 files_skipped.append(file.name)
                 continue
             file_path = os.path.join(cwd, secure_file_name)
-            # use aiofiles to not block the event loop
-            async with aiofiles.open(file_path, 'wb') as f:
-                await f.write(file.body)
+            # use safe_open to prevent symlink-based TOCTOU attacks
+            await asyncio.get_event_loop().run_in_executor(
+                None, self._sync_write, file_path, file.body
+            )
 
-            primary_group_id = self.get_primary_group_id(self.username)
-            if primary_group_id is None:
-                self.logger.warning('primary group id not found, chown will not change group ownership')
-            shutil.chown(file_path, user=self.username, group=primary_group_id)
             files_uploaded.append(file_path)
 
         files_uploaded_to_string = '\n'.join([f'"{file}"' for file in files_uploaded])
@@ -400,7 +468,10 @@ class FileSystemHelper:
         zip_file_path = os.path.join(downloads_dir, f'{short_uuid}.zip')
         with ZipFile(zip_file_path, 'w') as zipfile:
             for download_file in download_list:
-                zipfile.write(download_file)
+                with self.safe_open(download_file, 'rb') as f:
+                    archive_name = os.path.relpath(download_file, self.get_user_home())
+                    with zipfile.open(archive_name, 'w') as zf:
+                        shutil.copyfileobj(f, zf)
 
         shutil.chown(zip_file_path, user=self.username, group=primary_group_id)
 
@@ -435,20 +506,23 @@ class FileSystemHelper:
             raise exceptions.invalid_params(f'a symbolic link already exists at: {create_path}')
 
         is_folder = Utils.get_as_bool(request.is_folder, False)
+        primary_group_id = self.get_primary_group_id(self.username)
+        if primary_group_id is None:
+            self.logger.warning('primary group id not found, chown will not change group ownership')
+
         if is_folder:
             if Utils.is_dir(create_path):
                 raise exceptions.invalid_params(f'directory: {filename} already exists under: {cwd}')
             os.makedirs(create_path)
+            shutil.chown(create_path, self.username, primary_group_id)
         else:
             if Utils.is_file(create_path):
                 raise exceptions.invalid_params(f'file: {filename} already exists under: {cwd}')
-            with open(create_path, 'w') as f:
+            uid = getpwnam(self.username).pw_uid
+            gid = primary_group_id if primary_group_id is not None else -1
+            with self.safe_open(create_path, 'w') as f:
                 f.write('')
-
-        primary_group_id = self.get_primary_group_id(self.username)
-        if primary_group_id is None:
-            self.logger.warning('primary group id not found, chown will not change group ownership')
-        shutil.chown(create_path, self.username, primary_group_id)
+                os.fchown(f.fileno(), uid, gid)
 
         self.logger.info(f'{self.username} has created the following file: "{create_path}"')
         return CreateFileResult()
@@ -464,13 +538,16 @@ class FileSystemHelper:
 
         for file in files:
 
-            self.check_access(file, check_read=False, check_write=True)
-
-            if Utils.is_dir(file):
-                directories.append(file)
-            elif os.path.islink(file):
+            file = file.rstrip('/')
+            if os.path.islink(file):
+                parent_dir = os.path.dirname(file)
+                self.check_access(parent_dir, check_dir=True, check_read=False, check_write=True)
                 symlinks.append(file)
+            elif Utils.is_dir(file):
+                self.check_access(file, check_read=False, check_write=True)
+                directories.append(file)
             else:
+                self.check_access(file, check_read=False, check_write=True)
                 regular_files.append(file)
 
         for file in regular_files:

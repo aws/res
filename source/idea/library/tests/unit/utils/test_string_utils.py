@@ -22,3 +22,43 @@ class TestStringUtils:
         """Test validate_input with empty string."""
         result = string_utils.validate_input("", r"^[a-z0-9]+$")
         assert result is False
+
+
+class TestValidateActorName:
+    """Tests for validate_actor_name."""
+
+    @pytest.mark.parametrize(
+        "name",
+        [
+            "alice",
+            "bob.smith",
+            "first-last",
+            "under_score",
+            "Mix.Of-All_3.chars",
+        ],
+    )
+    def test_valid_actor_names(self, name):
+        string_utils.validate_actor_name(name)  # should not raise
+
+    @pytest.mark.parametrize(
+        "name",
+        [
+            "",
+            " ",
+            "user name",
+            "user;rm -rf /",
+            "$(whoami)",
+            "`id`",
+            'user"quote',
+            "user\ninjection",
+            "user\x00null",
+            "alice\n",
+        ],
+    )
+    def test_invalid_actor_names(self, name):
+        with pytest.raises(ValueError):
+            string_utils.validate_actor_name(name)
+
+    def test_none_actor_name(self):
+        with pytest.raises(ValueError):
+            string_utils.validate_actor_name(None)

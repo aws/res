@@ -132,7 +132,7 @@ def test_configure_sso(
     """
 
     sso_helper.configure_sso(request=saml_payload)
-    assert mock_config_entry_update.call_count == 2
+    assert mock_config_entry_update.call_count == 3
     mock_create_or_update_identity_provider.assert_called_with(saml_payload)
     mock_create_or_update_user_pool_client.assert_called_with(
         provider_name=saml_payload.get("provider_name"),

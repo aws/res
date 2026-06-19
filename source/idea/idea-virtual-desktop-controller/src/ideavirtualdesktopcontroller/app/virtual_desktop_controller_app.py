@@ -21,13 +21,11 @@ from ideasdk.metrics.cloudwatch.cloudwatch_agent_config import (
 
 import ideavirtualdesktopcontroller
 from ideavirtualdesktopcontroller.app.api import VirtualDesktopApiInvoker
-from ideavirtualdesktopcontroller.app.clients.dcv_broker_client.dcv_broker_client import DCVBrokerClient
 from ideavirtualdesktopcontroller.app.clients.events_client.events_client import EventsClient
 from ideavirtualdesktopcontroller.app.events.service.controller_queue_monitor_service import ControllerQueueMonitorService
 from ideavirtualdesktopcontroller.app.events.service.event_queue_monitoring_service import EventsQueueMonitoringService
 from ideavirtualdesktopcontroller.app.permission_profiles.virtual_desktop_permission_profile_db import VirtualDesktopPermissionProfileDB
 from ideavirtualdesktopcontroller.app.schedules.virtual_desktop_schedule_db import VirtualDesktopScheduleDB
-from ideavirtualdesktopcontroller.app.servers.virtual_desktop_server_db import VirtualDesktopServerDB
 from ideavirtualdesktopcontroller.app.session_permissions.virtual_desktop_session_permission_db import VirtualDesktopSessionPermissionDB
 from ideavirtualdesktopcontroller.app.sessions.virtual_desktop_session_counters_db import VirtualDesktopSessionCounterDB
 from ideavirtualdesktopcontroller.app.sessions.virtual_desktop_session_db import VirtualDesktopSessionDB
@@ -154,12 +152,10 @@ class VirtualDesktopControllerApp(ideasdk.app.SocaApp):
     def _initialize_dbs(self):
         self._session_counter_db = VirtualDesktopSessionCounterDB(self.context)
         self._ssm_commands_db = VirtualDesktopSSMCommandsDB(self.context)
-        self._server_db = VirtualDesktopServerDB(self.context)
         self._software_stack_db = VirtualDesktopSoftwareStackDB(self.context)
         self._schedule_db = VirtualDesktopScheduleDB(self.context)
         self._session_db = VirtualDesktopSessionDB(
             context=self.context,
-            server_db=self._server_db,
             software_stack_db=self._software_stack_db,
             schedule_db=self._schedule_db
         )
@@ -250,7 +246,6 @@ class VirtualDesktopControllerApp(ideasdk.app.SocaApp):
 
         self.context.notification_async_client = NotificationsAsyncClient(context=self.context)
         self.context.events_client = EventsClient(context=self.context)
-        self.context.dcv_broker_client = DCVBrokerClient(context=self.context)
 
     def _initialize_services(self):
         self.context.event_queue_monitor_service = EventsQueueMonitoringService(context=self.context)

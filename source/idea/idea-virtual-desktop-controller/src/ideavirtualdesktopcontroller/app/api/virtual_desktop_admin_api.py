@@ -81,17 +81,9 @@ class VirtualDesktopAdminAPI(VirtualDesktopAPI):
         self.SCOPE_READ = f'{self.context.cluster_name()}-{self.context.module_id()}/read'
 
         self.acl = {
-            'VirtualDesktopAdmin.CreateSession': {
-                'scope': self.SCOPE_WRITE,
-                'method': self.create_session,
-            },
             'VirtualDesktopAdmin.BatchCreateSessions':  {
                 'scope': self.SCOPE_WRITE,
                 'method': self.batch_create_sessions,
-            },
-            'VirtualDesktopAdmin.UpdateSession': {
-                'scope': self.SCOPE_WRITE,
-                'method': self.update_session,
             },
             'VirtualDesktopAdmin.DeleteSessions': {
                 'scope': self.SCOPE_WRITE,
@@ -104,10 +96,6 @@ class VirtualDesktopAdminAPI(VirtualDesktopAPI):
             'VirtualDesktopAdmin.StopSessions': {
                 'scope': self.SCOPE_WRITE,
                 'method': self.stop_sessions,
-            },
-            'VirtualDesktopAdmin.RebootSessions': {
-                'scope': self.SCOPE_WRITE,
-                'method': self.reboot_sessions,
             },
             'VirtualDesktopAdmin.ResumeSessions': {
                 'scope': self.SCOPE_WRITE,
@@ -260,7 +248,7 @@ class VirtualDesktopAdminAPI(VirtualDesktopAPI):
                 fail_list.append(screenshot)
 
         valid_screenshots = self.complete_get_session_screenshots_request(valid_screenshots, context)
-        success_list, fail_list_response = self._get_session_screenshots(valid_screenshots)
+        success_list, fail_list_response = self._get_session_screenshots(valid_screenshots, context.get_username())
         fail_list.extend(fail_list_response)
 
         context.success(GetSessionScreenshotResponse(
@@ -302,27 +290,6 @@ class VirtualDesktopAdminAPI(VirtualDesktopAPI):
         context.success(DeleteSessionResponse(
             success=success_list,
             failed=failed_list
-        ))
-
-    def reboot_sessions(self, context: ApiInvocationContext):
-        sessions = context.get_request_payload_as(RebootSessionRequest).sessions
-        failed_sessions = []
-        sessions_to_reboot = []
-
-        for session in sessions:
-            is_valid = self._validate_reboot_session_request(session)
-            if not is_valid:
-                failed_sessions.append(session)
-                continue
-
-            self.complete_reboot_session_request(session, context)
-            sessions_to_reboot.append(session)
-
-        success, failed = self._reboot_sessions(sessions_to_reboot)
-        failed.extend(failed_sessions)
-        context.success(RebootSessionResponse(
-            success=success,
-            failed=failed
         ))
 
     def stop_sessions(self, context: ApiInvocationContext):

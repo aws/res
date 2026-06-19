@@ -4,9 +4,10 @@
 # This script modifies generated controller files to add user and token_info parameters
 
 GENERATED_DIR="$1"
+LAMBDA_NAME="${2:-}"
 
 if [ -z "$GENERATED_DIR" ]; then
-    echo "Usage: $0 <generated_directory>"
+    echo "Usage: $0 <generated_directory> [lambda-name]"
     exit 1
 fi
 
@@ -39,16 +40,18 @@ find "$GENERATED_DIR" -name "*security_controller*.py" -exec sed -i '' '/^    ""
     """
 ' {} \;
 
-# Inject username and token_info parameters into controller function signatures (only if not already present)
-find "$GENERATED_DIR" -name "*controller*.py" -not -name "*security_controller*.py" -exec sed -i '' 's/def \([^(]*\)(\([^)]*[^)]\)):  # noqa: E501/def \1(\2, user=None, token_info=None):  # noqa: E501/g' {} \;
-find "$GENERATED_DIR" -name "*controller*.py" -not -name "*security_controller*.py" -exec sed -i '' 's/def \([^(]*\)():  # noqa: E501/def \1(user=None, token_info=None):  # noqa: E501/g' {} \;
+# Inject username and token_info parameters into controller function signatures (backend only)
+if [ "$LAMBDA_NAME" = "backend" ]; then
+    find "$GENERATED_DIR" -name "*controller*.py" -not -name "*security_controller*.py" -exec sed -i '' 's/def \([^(]*\)(\([^)]*[^)]\)):  # noqa: E501/def \1(\2, user=None, token_info=None):  # noqa: E501/g' {} \;
+    find "$GENERATED_DIR" -name "*controller*.py" -not -name "*security_controller*.py" -exec sed -i '' 's/def \([^(]*\)():  # noqa: E501/def \1(user=None, token_info=None):  # noqa: E501/g' {} \;
 
-# Add parameter descriptions for user and token_info in controller docstrings
-find "$GENERATED_DIR" -name "*controller*.py" -not -name "*security_controller*.py" -exec sed -i '' '/^    :rtype:/i\
+    # Add parameter descriptions for user and token_info in controller docstrings
+    find "$GENERATED_DIR" -name "*controller*.py" -not -name "*security_controller*.py" -exec sed -i '' '/^    :rtype:/i\
     :param user: The authenticated user information\
     :type user: str\
     :param token_info: The token information from authentication\
     :type token_info: dict
 ' {} \;
+fi
 
 echo "Authentication parameter injection completed!"

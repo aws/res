@@ -184,23 +184,24 @@ class ClusterSettingsAPI(BaseAPI):
         :param enable: True to enable self-signup, False to disable
         """
         user_pool_id = self.context.config().get_string('identity-provider.cognito.user_pool_id', required=True)
-        
-        try:
-            update_params = {
-                'UserPoolId': user_pool_id,
-                'AdminCreateUserConfig': {
-                    'AllowAdminCreateUserOnly': not enable
-                }
-            }
 
+        try:
+            client = self.context.aws().cognito_idp()
+            pool = client.describe_user_pool(UserPoolId=user_pool_id)['UserPool']
+            pool['AdminCreateUserConfig'] = {
+                **(pool.get('AdminCreateUserConfig') or {}),
+                'AllowAdminCreateUserOnly': not enable,
+            }
             if enable:
-                update_params['AutoVerifiedAttributes'] = ['email']
-                update_params['VerificationMessageTemplate'] = {
+                pool['AutoVerifiedAttributes'] = ['email']
+                pool['VerificationMessageTemplate'] = {
                     'DefaultEmailOption': 'CONFIRM_WITH_CODE',
                     'EmailSubject': 'Verify your email for RES',
                 }
-
-            self.context.aws().cognito_idp().update_user_pool(**update_params)
+            client.update_user_pool(
+                UserPoolId=user_pool_id,
+                **{k: pool[k] for k in res_constants.COGNITO_UPDATE_USER_POOL_ARGUMENTS if k in pool},
+            )
             self.logger.info(f"Successfully toggled Cognito self-signup to {'ON' if enable else 'OFF'} for user pool: {user_pool_id}")
         except Exception as e:
             self.logger.error(f"Failed to toggle Cognito self-signup for user pool {user_pool_id}: {e}")

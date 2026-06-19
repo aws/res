@@ -4,7 +4,7 @@
 
 set -ex
 
-n 18.18.0
+n 20.19.0
 pyenv install 3.12.11
 pyenv global 3.12.11
 apt-get update

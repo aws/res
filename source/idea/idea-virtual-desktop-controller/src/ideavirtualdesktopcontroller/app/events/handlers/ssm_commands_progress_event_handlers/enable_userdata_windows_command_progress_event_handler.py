@@ -64,7 +64,6 @@ class EnableUserdataWindowsCommandProgressEventListener(BaseVirtualDesktopContro
                 session.state = VirtualDesktopSessionState.ERROR
                 self.log_error(message_id=message_id, message=f'Session: {session.idea_session_id}:{session.name} moved to Error state')
 
-            _ = self.server_db.update(session.server)
             _ = self.session_db.update(session)
         else:
             self.log_error(message_id=message_id, message=f'Ignoring message because state is {status} for idea_session_id: {idea_session_id}')

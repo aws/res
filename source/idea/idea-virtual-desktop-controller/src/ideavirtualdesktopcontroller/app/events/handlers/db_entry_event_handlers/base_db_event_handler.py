@@ -19,7 +19,6 @@ from ideavirtualdesktopcontroller.app.events.handlers.base_event_handler import 
 from ideavirtualdesktopcontroller.app.permission_profiles.virtual_desktop_permission_profile_db import VirtualDesktopPermissionProfileDB
 from ideavirtualdesktopcontroller.app.schedules.virtual_desktop_schedule_db import VirtualDesktopScheduleDB
 from ideavirtualdesktopcontroller.app.schedules.virtual_desktop_schedule_utils import VirtualDesktopScheduleUtils
-from ideavirtualdesktopcontroller.app.servers.virtual_desktop_server_db import VirtualDesktopServerDB
 from ideavirtualdesktopcontroller.app.servers.virtual_desktop_server_utils import VirtualDesktopServerUtils
 from ideavirtualdesktopcontroller.app.session_permissions.virtual_desktop_session_permission_db import VirtualDesktopSessionPermissionDB
 from ideavirtualdesktopcontroller.app.session_permissions.virtual_desktop_session_permission_utils import VirtualDesktopSessionPermissionUtils
@@ -34,17 +33,15 @@ class BaseDBEventHandler(BaseVirtualDesktopControllerEventHandler, ABC):
         self.context = context
         super().__init__(context, logger_prefix)
         self.software_stack_db: VirtualDesktopSoftwareStackDB = VirtualDesktopSoftwareStackDB(context=self.context)
-        self.server_db: VirtualDesktopServerDB = VirtualDesktopServerDB(context=self.context)
         self.schedule_db: VirtualDesktopScheduleDB = VirtualDesktopScheduleDB(context=self.context)
         self.session_db: VirtualDesktopSessionDB = VirtualDesktopSessionDB(
             context=self.context,
-            server_db=self.server_db,
             software_stack_db=self.software_stack_db,
             schedule_db=self.schedule_db)
         self.permission_profile_db: VirtualDesktopPermissionProfileDB = VirtualDesktopPermissionProfileDB(context=self.context)
         self.session_permissions_db: VirtualDesktopSessionPermissionDB = VirtualDesktopSessionPermissionDB(context=self.context)
         self.software_stack_utils: VirtualDesktopSoftwareStackUtils = VirtualDesktopSoftwareStackUtils(context=self.context, db=self.software_stack_db)
-        self.server_utils: VirtualDesktopServerUtils = VirtualDesktopServerUtils(context=self.context, db=self.server_db)
+        self.server_utils: VirtualDesktopServerUtils = VirtualDesktopServerUtils(context=self.context)
         self.schedule_utils: VirtualDesktopScheduleUtils = VirtualDesktopScheduleUtils(context=self.context, db=self.schedule_db)
         self.session_permission_utils: VirtualDesktopSessionPermissionUtils = VirtualDesktopSessionPermissionUtils(
             context=self.context,

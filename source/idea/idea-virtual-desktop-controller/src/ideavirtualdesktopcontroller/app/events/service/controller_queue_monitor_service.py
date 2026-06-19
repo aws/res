@@ -15,9 +15,10 @@ import ideavirtualdesktopcontroller
 from ideadatamodel import SocaEnvelope
 from ideasdk.service import SocaService
 from ideasdk.utils import Utils
+from res.exceptions import UserSessionNotFound
 from ideavirtualdesktopcontroller.app.events.events_utils import EventsUtils
-from ideavirtualdesktopcontroller.app.servers.virtual_desktop_server_db import VirtualDesktopServerDB
 from ideavirtualdesktopcontroller.app.ssm_commands.virtual_desktop_ssm_commands_db import VirtualDesktopSSMCommandsDB, VirtualDesktopSSMCommandType
+from res.resources import sessions
 
 
 class ControllerQueueMonitorService(SocaService):
@@ -31,7 +32,6 @@ class ControllerQueueMonitorService(SocaService):
 
         self._events_utils = EventsUtils(self.context)
         self._ssm_commands_db = VirtualDesktopSSMCommandsDB(self.context)
-        self._server_db = VirtualDesktopServerDB(self.context)
 
     def _initialize(self):
         self._service_thread = Thread(
@@ -108,8 +108,9 @@ class ControllerQueueMonitorService(SocaService):
         event = SocaEnvelope(**message)
 
         instance_id = Utils.get_value_as_string('instance-id', event.payload, None)
-        server = self._server_db.get(instance_id=instance_id)
-        if Utils.is_empty(server):
+        try:
+            session = sessions.get_session_by_instance_id(instance_id)
+        except UserSessionNotFound:
             self._logger.info(f'[msg-id: {message_id}] Invalid DCV Host Instance-ID {instance_id}. Ignoring Message')
             return
 
@@ -117,8 +118,8 @@ class ControllerQueueMonitorService(SocaService):
         self._logger.info(f'[msg-id: {message_id}] Sending Ec2 state change message for instance id: {instance_id} for state {state}')
         self._events_utils.publish_ec2_state_updated_event(
             instance_id=instance_id,
-            idea_session_id=server.idea_sesssion_id,
-            idea_session_owner=server.idea_session_owner,
+            idea_session_id=session.get("idea_session_id"),
+            idea_session_owner=session.get("owner"),
             state=state
         )
 
@@ -138,15 +139,7 @@ class ControllerQueueMonitorService(SocaService):
 
         self._logger.info(f'[msg-id: {message_id}] Handling SSM Command message for command id {command_id}')
 
-        if ssm_command.command_type == VirtualDesktopSSMCommandType.RESUME_SESSION:
-            self._events_utils.publish_resume_session_command_status_event(
-                idea_session_id=Utils.get_value_as_string('idea_session_id', ssm_command.additional_payload, ''),
-                idea_session_owner=Utils.get_value_as_string('idea_session_owner', ssm_command.additional_payload, ''),
-                command_id=command_id,
-                instance_id=Utils.get_value_as_string('instance_id', ssm_command.additional_payload, ''),
-                status=status
-            )
-        elif ssm_command.command_type == VirtualDesktopSSMCommandType.WINDOWS_ENABLE_USERDATA_EXECUTION:
+        if ssm_command.command_type == VirtualDesktopSSMCommandType.WINDOWS_ENABLE_USERDATA_EXECUTION:
             self._events_utils.publish_enable_userdata_windows_status_event(
                 idea_session_id=Utils.get_value_as_string('idea_session_id', ssm_command.additional_payload, ''),
                 idea_session_owner=Utils.get_value_as_string('idea_session_owner', ssm_command.additional_payload, ''),

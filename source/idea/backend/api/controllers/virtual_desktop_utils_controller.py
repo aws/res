@@ -82,7 +82,7 @@ def list_allowed_instance_types(body=None, user=None, token_info=None):  # noqa:
     request = ListAllowedInstanceTypesRequestContent.from_dict(body)
 
     hibernation_enabled = request.hibernation_support
-
+    
     if request.software_stack is None:
         allowed_instance_types = (
             software_stacks.get_valid_instance_types_by_software_stack(
@@ -118,6 +118,16 @@ def list_allowed_instance_types_for_session(
     request = ListAllowedInstanceTypesForSessionRequestContent.from_dict(body)
     session = request.session
 
+    if session.hibernation_enabled is None or not session.software_stack:
+        missing = []
+        if session.hibernation_enabled is None:
+            missing.append("'hibernation_enabled'")
+        if not session.software_stack:
+            missing.append("'software_stack'")
+        raise api_exceptions.BadRequestException(
+            message=f"Invalid request: {', '.join(missing)} is a required property"
+        )
+    
     software_stack_utils.set_software_stack_architecture(session.software_stack)
 
     allowed_instance_types_dict = ec2_utils.get_valid_instance_types_by_allowed_list(

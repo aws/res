@@ -265,6 +265,28 @@ class TestSoftwareStackUtils:
         assert "software_stack.project.project_id missing" in result_stack.failure_reason
 
     @patch('res.resources.software_stacks.get_software_stack_by_name')
+    @patch.object(software_stack_utils, 'set_software_stack_architecture')
+    @patch.object(software_stack_utils, 'validate_placement')
+    @patch('res.utils.table_utils.get_item')
+    def test_validate_software_stack_fields_preserves_enabled_when_none(self, mock_get_item, mock_validate_placement, mock_set_arch, mock_get_by_name):
+        """Test validate_software_stack_fields preserves existing enabled value when input enabled is None."""
+        stack_id = "ss-existing"
+        software_stack = VirtualDesktopSoftwareStack(
+            name="Test Stack",
+            stack_id=stack_id,
+            projects=[Project(project_id="proj-123")],
+            enabled=None,
+        )
+        mock_get_by_name.return_value = {"stack_id": stack_id, "enabled": True}
+        mock_validate_placement.return_value = True
+        mock_get_item.return_value = {"project_id": "proj-123"}
+
+        result_stack, is_valid = software_stack_utils.validate_software_stack_fields(software_stack)
+
+        assert is_valid is True
+        assert result_stack.enabled is True
+
+    @patch('res.resources.software_stacks.get_software_stack_by_name')
     @patch('res.resources.projects._get_project_by_id')
     @patch('res.utils.ec2_utils.describe_image_id')
     def test_validate_software_stack_fields_invalid_project_id(self, mock_describe_image, mock_get_project, mock_get_stack):

@@ -5,7 +5,9 @@ from typing import Any, Dict, List, Optional, Tuple
 
 import res.exceptions as exceptions
 from res.clients.events import events_client
+from res.resources import sessions
 from res.utils import logging_utils, table_utils, time_utils
+from res.utils.string_utils import validate_actor_name
 from res.utils.table_utils import FilterOperator
 
 SESSION_PERMISSION_TABLE_NAME = "vdc.controller.session-permissions"
@@ -17,6 +19,8 @@ SESSION_PERMISSION_DB_SESSION_OWNER_KEY = "idea_session_owner"
 SESSION_PERMISSION_DB_BASE_OS_KEY = "idea_session_base_os"
 SESSION_PERMISSION_DB_STATE_KEY = "idea_session_state"
 SESSION_PERMISSION_DB_NAME_KEY = "idea_session_name"
+
+ACCESS_DENIED_MSG = "Session not found or access denied"
 
 logger = logging_utils.get_logger(SESSION_PERMISSION_TABLE_NAME)
 
@@ -155,6 +159,7 @@ def create_session_permission(session_permission: Dict[str, Any]) -> Dict[str, A
 
     session_id = session_permission[SESSION_PERMISSION_DB_HASH_KEY]
     actor_name = session_permission[SESSION_PERMISSION_DB_RANGE_KEY]
+    validate_actor_name(actor_name)
     logger.info(
         f"Creating session permission with session_id {session_id} and actor_name {actor_name}."
     )
@@ -197,6 +202,7 @@ def update_session_permission(session_permission: Dict[str, Any]) -> Dict[str, A
 
     session_id = session_permission[SESSION_PERMISSION_DB_HASH_KEY]
     actor_name = session_permission[SESSION_PERMISSION_DB_RANGE_KEY]
+    validate_actor_name(actor_name)
     logger.info(
         f"Updating session permission with session_id {session_id} and actor_name {actor_name}."
     )
@@ -298,3 +304,24 @@ def update_permissions_for_sessions(
         )
 
     return permissions
+
+
+def validate_session_access(session_id: str, username: str) -> Dict[str, Any]:
+    """Validate that a session exists and the user has access.
+
+    Returns the session record on success.
+    Raises SessionAccessDenied if the session doesn't exist or the user lacks access.
+    """
+    session_map = sessions.get_sessions_by_ids([session_id])
+    session = session_map.get(session_id)
+    if not session:
+        raise exceptions.SessionAccessDenied(ACCESS_DENIED_MSG)
+
+    owner = session.get("owner")
+    if username != owner:
+        try:
+            get_session_permission(session_id, username)
+        except exceptions.SessionPermissionsNotFound:
+            raise exceptions.SessionAccessDenied(ACCESS_DENIED_MSG) from None
+
+    return session

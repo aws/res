@@ -152,7 +152,6 @@ def handler(event: Dict[str, Any], context: Dict[str, Any]) -> None:
                 _update_tags_existing_hosts(
                     custom_tags, old_custom_tag_keys, cluster_name, iam_resource_prefix
                 )
-                _update_tags_dcv_ddb(custom_tags, old_custom_tag_keys, cluster_name)
 
     except Exception as e:
         error_message = f"Failed to tag resources not supporting Cloudformation level tagging: {str(e)}"
@@ -522,34 +521,6 @@ def _update_tags_existing_hosts(
                 logger.error(
                     f"Failed to update tags for IAM role and instance profile {role_name}: {e}"
                 )
-
-
-def _update_tags_dcv_ddb(
-    tags: List[Dict[str, Any]], old_tags_keys: List[str], cluster_name: str
-) -> None:
-
-    # Update tags for DCV created DDB tables
-    PARTITION = os.environ.get("partition", "")
-    REGION = os.environ.get("region", "")
-    ACCOUNT_ID = os.environ.get("account_id", "")
-    dcv_table_name_prefix = f"{cluster_name}.vdc.dcv-broker"
-    ddb_client = boto3.client("dynamodb")
-    try:
-        table_paginator = ddb_client.get_paginator("list_tables")
-        for page in table_paginator.paginate():
-            for table_name in page.get("TableNames", []):
-                if table_name.startswith(dcv_table_name_prefix):
-                    table_arn = f"arn:{PARTITION}:dynamodb:{REGION}:{ACCOUNT_ID}:table/{table_name}"
-
-                    if old_tags_keys:
-                        ddb_client.untag_resource(
-                            ResourceArn=table_arn, TagKeys=old_tags_keys
-                        )
-                    if tags:
-                        ddb_client.tag_resource(ResourceArn=table_arn, Tags=tags)
-        logger.info("Successfully tagged DCV DDB tables.")
-    except Exception as e:
-        logger.error(f"Failed to update tags for DCV DDB tables: {e}")
 
 
 def _tag_network_interface(

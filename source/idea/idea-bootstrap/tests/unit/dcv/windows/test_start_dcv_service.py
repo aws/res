@@ -13,14 +13,6 @@ def test_configure(monkeypatch) -> None:
         call(
             ["powershell.exe", "-Command", "Start-Service -Name dcvserver"], check=True
         ),
-        call(
-            [
-                "powershell.exe",
-                "-Command",
-                "Start-Service -Name DcvSessionManagerAgentService",
-            ],
-            check=True,
-        ),
     ]
 
     monkeypatch.setattr("os.path.exists", lambda x: True)

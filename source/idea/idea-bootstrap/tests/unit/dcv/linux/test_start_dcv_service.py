@@ -28,27 +28,6 @@ def test_start_and_configure_dcv_service(monkeypatch) -> None:
     assert mock_run.call_args_list == expected_calls
 
 
-def test_start_and_configure_dcv_agent_service(monkeypatch) -> None:
-    mock_run = Mock()
-    monkeypatch.setattr("subprocess.run", mock_run)
-    expected_calls = [
-        call(["sudo", "systemctl", "enable", "dcv-session-manager-agent"], check=True),
-        call(["sudo", "systemctl", "daemon-reload"], check=True),
-        call(["sudo", "systemctl", "restart", "dcv-session-manager-agent"], check=True),
-    ]
-
-    with tempfile.NamedTemporaryFile(mode="w", delete=True) as temp_file:
-        temp_file_name = temp_file.name
-        monkeypatch.setattr(constants, "DCV_AGENT_SERVICE_PATH", temp_file_name)
-
-        start_dcv_service._start_and_configure_dcv_agent_service()
-        with open(temp_file_name, "r") as f:
-            content = f.read()
-
-    assert "DCV Session Manager" in content
-    assert mock_run.call_args_list == expected_calls
-
-
 def test_is_dcvserver_ready_success(monkeypatch) -> None:
     """Test successful DCV server readiness check"""
     mock_run = Mock()
@@ -132,15 +111,12 @@ def test_is_dcvserver_ready_subprocess_timeout(monkeypatch) -> None:
     assert result is False
 
 
-def test_configure_calls_both_services(monkeypatch) -> None:
-    """Test that configure function calls both DCV service and agent configuration"""
+def test_configure_calls_dcv_service(monkeypatch) -> None:
+    """Test that configure function calls the DCV service configuration"""
     mock_dcv_service = Mock()
-    mock_agent_service = Mock()
 
     monkeypatch.setattr("ideabootstrap.dcv.linux.start_dcv_service._start_and_configure_dcv_service", mock_dcv_service)
-    monkeypatch.setattr("ideabootstrap.dcv.linux.start_dcv_service._start_and_configure_dcv_agent_service", mock_agent_service)
 
     start_dcv_service.configure()
 
     mock_dcv_service.assert_called_once()
-    mock_agent_service.assert_called_once()

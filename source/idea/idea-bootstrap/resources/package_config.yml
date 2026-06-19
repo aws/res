@@ -114,9 +114,6 @@ package_config:
     build_dependencies:
       red_hat:
         rhel:
-          - rust-toolset
-          - rust
-          - cargo
           - make
           - openssl-devel
           - golang
@@ -124,8 +121,6 @@ package_config:
       debian:
         ubuntu:
           - binutils
-          - rustc
-          - cargo
           - pkg-config
           - libssl-dev
           - golang-go
@@ -349,7 +344,7 @@ package_config:
         - gcc
         - make
         - linux-headers-$(uname -r)
-        - gcc-12
+        - linux-modules-extra-$(uname -r)
       red_hat:
         - gcc
         - make

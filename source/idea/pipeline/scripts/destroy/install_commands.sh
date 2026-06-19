@@ -4,6 +4,6 @@
 
 set -ex
 
-pip install --upgrade pip
+pip install --upgrade "pip>=23.0,<26.1" pip-tools==7.5.3
 pip uninstall -y pyOpenSSL
 pip install -r requirements/dev.txt

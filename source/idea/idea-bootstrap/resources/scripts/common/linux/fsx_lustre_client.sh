@@ -93,7 +93,8 @@ elif [[ $BASE_OS == "rhel9" ]] || [[ $BASE_OS == "rocky9" ]]; then
     log_info "Found kernel version: $kernel running on: $machine"
 
     declare -A kernel_versions=(
-      ["5.14.0-611"]=""
+      ["5.14.0-687"]=""
+      ["5.14.0-611"]="9.7"
       ["5.14.0-570"]="9.6"
       ["5.14.0-503"]="9.5"
       ["5.14.0-427"]="9.4"
@@ -122,7 +123,7 @@ elif [[ $BASE_OS == "rhel9" ]] || [[ $BASE_OS == "rocky9" ]]; then
     done
 
     if [[ "$unmatch" == true ]]; then
-      log_error "Can't install FSx for Lustre client as kernel version $kernel isn't matching expected versions: (x86_64: 5.14.0-362, -70)!"
+      log_error "Can't install FSx for Lustre client as kernel version $kernel isn't matching expected versions: (x86_64: 5.14.0-687, -611, -570, -503, -427, -362, -70)!"
     fi
   fi
 elif [[ $BASE_OS =~ ^(ubuntu2204|ubuntu2404)$ ]]; then
@@ -131,7 +132,7 @@ elif [[ $BASE_OS =~ ^(ubuntu2204|ubuntu2404)$ ]]; then
   IFS=$'\n'
   LUSTRE_PKGS=($(get_list 'package_config.fsx_lustre_client.debian.ubuntu'))
   wget -O - ${PUBLIC_KEY} | gpg --dearmor | sudo tee /usr/share/keyrings/fsx-ubuntu-public-key.gpg >/dev/null
-  bash -c 'echo "deb [signed-by=/usr/share/keyrings/fsx-ubuntu-public-key.gpg] '"${REPO}"' jammy main" > /etc/apt/sources.list.d/fsxlustreclientrepo.list && apt-get update'
+  bash -c 'echo "deb [signed-by=/usr/share/keyrings/fsx-ubuntu-public-key.gpg] '"${REPO}"' '$(lsb_release -cs)' main" > /etc/apt/sources.list.d/fsxlustreclientrepo.list && apt-get update'
 
   # Evaluate embedded commands
   EVALUATED_LUSTRE_PKGS=()

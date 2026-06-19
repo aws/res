@@ -23,6 +23,7 @@ GetSecretValue does not support IAM condition keys based on Name of the secret. 
 scheduled for deletion at a later date, add additional res:SecretName tag is added to individual secrets. This allows for searching
 for applicable secrets using the res:SecretName tag and also, individual permissions can be granted based on this tag.
 """
+
 import datetime
 import json
 import logging

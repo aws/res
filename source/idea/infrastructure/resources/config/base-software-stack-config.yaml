@@ -10,78 +10,78 @@ amzn2023:
     default-allowed-instance-types:
     - m6g
     ap-northeast-1:
-    - ami-id: ami-00837aff5c97e8f1b
+    - ami-id: ami-01fec6097b327bbce
       ss-id-suffix: base
     ap-northeast-2:
-    - ami-id: ami-0885e191a9bcf28b0
+    - ami-id: ami-097913a70d9668327
       ss-id-suffix: base
     ap-northeast-3:
-    - ami-id: ami-049bb4f70c960a96e
+    - ami-id: ami-0325b91cbf56a6708
       ss-id-suffix: base
     ap-south-1:
-    - ami-id: ami-059efda11696be710
+    - ami-id: ami-07c687ff88f7820e6
       ss-id-suffix: base
     ap-southeast-1:
-    - ami-id: ami-00eee70fa6babc6da
+    - ami-id: ami-0469a81a8271485e8
       ss-id-suffix: base
     ap-southeast-2:
-    - ami-id: ami-035deaeb0ffe4ca26
+    - ami-id: ami-08d966145e3bb62be
       ss-id-suffix: base
     ap-southeast-3:
-    - ami-id: ami-02fd78714781924fb
+    - ami-id: ami-01a8a2e2c41a2167f
       ss-id-suffix: base
     ap-southeast-5:
-    - ami-id: ami-0d70e386bba460f3b
+    - ami-id: ami-0335dfc4c963a8cce
       ss-id-suffix: base
     ca-central-1:
-    - ami-id: ami-01a4fe890a30c4c4e
+    - ami-id: ami-086da02c58c89768d
       ss-id-suffix: base
     eu-central-1:
-    - ami-id: ami-0024be6ca4c9c6301
+    - ami-id: ami-0bb1934e84af31b71
       ss-id-suffix: base
     eu-north-1:
-    - ami-id: ami-014c99d1d69f08b5f
+    - ami-id: ami-08dd99dd3489c8806
       ss-id-suffix: base
     eu-south-1:
-    - ami-id: ami-01d59d66af6ac5e45
+    - ami-id: ami-039c0e31385ba42d5
       ss-id-suffix: base
     eu-west-1:
-    - ami-id: ami-043ff01cdbb028a9d
+    - ami-id: ami-0075e80a491268493
       ss-id-suffix: base
     eu-west-2:
-    - ami-id: ami-036d2ee60c5211dfb
+    - ami-id: ami-03b9fc3a0623de656
       ss-id-suffix: base
     eu-west-3:
-    - ami-id: ami-07f0bc3b15db9946a
+    - ami-id: ami-059085e02e995b968
       ss-id-suffix: base
     il-central-1:
-    - ami-id: ami-09bf60c22e9079a2c
+    - ami-id: ami-0265b0355c2b070e4
       ss-id-suffix: base
     me-central-1:
-    - ami-id: ami-0a0eaa19e06c69fd5
+    - ami-id: ami-008016473a33eb632
       ss-id-suffix: base
     sa-east-1:
-    - ami-id: ami-06f8e6f33470447b5
+    - ami-id: ami-030b097b971eca6db
       ss-id-suffix: base
     us-east-1:
-    - ami-id: ami-01a1b1a4d93797ddc
+    - ami-id: ami-06d5c141ec5b90893
       ss-id-suffix: base
     us-east-2:
-    - ami-id: ami-03561af9da946adfb
+    - ami-id: ami-01233be22f6657077
       ss-id-suffix: base
     us-gov-west-1:
-    - ami-id: ami-0805d22685afe30e3
+    - ami-id: ami-0b1b5e1ae54fb69e1
       default: Y
       ss-id-suffix: base
     us-gov-east-1:
-    - ami-id: ami-0dd2c117aedae2000
+    - ami-id: ami-023640f7905fd065f
       default: Y
       ss-id-suffix: base
     us-west-1:
-    - ami-id: ami-01aa7a5245c25c5f1
+    - ami-id: ami-08bdac2eca4c8ad98
       ss-id-suffix: base
     us-west-2:
-    - ami-id: ami-026e762d27b9ad952
+    - ami-id: ami-08c28b6151a0ba92f
       ss-id-suffix: base
   x86-64:
     default-description: AL2023 - x86_64
@@ -95,78 +95,78 @@ amzn2023:
     - t3
     - m6a
     ap-northeast-1:
-    - ami-id: ami-06af9e90838e72fa6
+    - ami-id: ami-08f122f8e6e9d868f
       ss-id-suffix: base
     ap-northeast-2:
-    - ami-id: ami-0389ea382ca31bd7f
+    - ami-id: ami-010502f62836f0c67
       ss-id-suffix: base
     ap-northeast-3:
-    - ami-id: ami-0630db3a500230f48
+    - ami-id: ami-050e19643b8e4a951
       ss-id-suffix: base
     ap-south-1:
-    - ami-id: ami-051a31ab2f4d498f5
+    - ami-id: ami-085c5e1d88d722545
       ss-id-suffix: base
     ap-southeast-1:
-    - ami-id: ami-0735421d48de8bcb6
+    - ami-id: ami-05b741ae2ab9f1742
       ss-id-suffix: base
     ap-southeast-2:
-    - ami-id: ami-0713baffcb605bf1a
+    - ami-id: ami-024050934c1c66b27
       ss-id-suffix: base
     ap-southeast-3:
-    - ami-id: ami-0091f88be5bf6c99c
+    - ami-id: ami-0b1a7d9fc455877c5
       ss-id-suffix: base
     ap-southeast-5:
-    - ami-id: ami-0de1023f4e53c3a2c
+    - ami-id: ami-04032a1a46e6cce85
       ss-id-suffix: base
     ca-central-1:
-    - ami-id: ami-066ab5c7bf87a3e58
+    - ami-id: ami-0344a23c782460e34
       ss-id-suffix: base
     eu-central-1:
-    - ami-id: ami-07849b8ceca31dd47
+    - ami-id: ami-036bdae36143a955f
       ss-id-suffix: base
     eu-north-1:
-    - ami-id: ami-0d5323a080e2e5b40
+    - ami-id: ami-048a4ba4502b46dd7
       ss-id-suffix: base
     eu-south-1:
-    - ami-id: ami-0a3471e3e89878cda
+    - ami-id: ami-093fbcd9ec41a255d
       ss-id-suffix: base
     eu-west-1:
-    - ami-id: ami-01822cd09d9cdfea7
+    - ami-id: ami-07da2223cc32a6898
       ss-id-suffix: base
     eu-west-2:
-    - ami-id: ami-00741a72127fa48ef
+    - ami-id: ami-0272ade54c4f22c84
       ss-id-suffix: base
     eu-west-3:
-    - ami-id: ami-0c5c1b3399d21cdc6
+    - ami-id: ami-01f71c6770cfff327
       ss-id-suffix: base
     il-central-1:
-    - ami-id: ami-052dea36aca9f0b4e
+    - ami-id: ami-01a7bea286eb84096
       ss-id-suffix: base
     me-central-1:
-    - ami-id: ami-0b41630d96e91daa9
+    - ami-id: ami-0df6aa23903f06b06
       ss-id-suffix: base
     sa-east-1:
-    - ami-id: ami-025f404fafb21297b
+    - ami-id: ami-032dfc01c7f1df070
       ss-id-suffix: base
     us-east-1:
-    - ami-id: ami-0f3caa1cf4417e51b
+    - ami-id: ami-01bda64f81b5f8e4f
       ss-id-suffix: base
     us-east-2:
-    - ami-id: ami-09256c524fab91d36
+    - ami-id: ami-097a65b0520ee672f
       ss-id-suffix: base
     us-gov-west-1:
-    - ami-id: ami-081174b69cec2ccd8
+    - ami-id: ami-001f5163d903ef5dd
       default: Y
       ss-id-suffix: base
     us-gov-east-1:
-    - ami-id: ami-079c33729652f6925
+    - ami-id: ami-059a7766742eefb2e
       default: Y
       ss-id-suffix: base
     us-west-1:
-    - ami-id: ami-0bbc93885e3d459ba
+    - ami-id: ami-031776b784341ba93
       ss-id-suffix: base
     us-west-2:
-    - ami-id: ami-03e73877aee33eaf9
+    - ami-id: ami-00563078bca04e287
       ss-id-suffix: base
 ubuntu2204:
   x86-64:
@@ -181,76 +181,76 @@ ubuntu2204:
     - t3
     - m6a
     ap-northeast-1:
-    - ami-id: ami-02c675df87c692fb0
+    - ami-id: ami-0379a1f991c2beceb
       ss-id-suffix: base
     ap-northeast-2:
-    - ami-id: ami-04d25ae66444b2b10
+    - ami-id: ami-0596f7562954deb8e
       ss-id-suffix: base
     ap-northeast-3:
-    - ami-id: ami-0cf329e3086407433
+    - ami-id: ami-074e887b4a8f0a4d1
       ss-id-suffix: base
     ap-south-1:
-    - ami-id: ami-07216ac99dc46a187
+    - ami-id: ami-07b301a23def3266d
       ss-id-suffix: base
     ap-southeast-1:
-    - ami-id: ami-0c1d28734eb221b6d
+    - ami-id: ami-0a010a0312b1400ee
       ss-id-suffix: base
     ap-southeast-2:
-    - ami-id: ami-0818a4d7794d429b1
+    - ami-id: ami-0e04e402c10e358ef
       ss-id-suffix: base
     ap-southeast-3:
-    - ami-id: ami-086e8d92dfd64deda
+    - ami-id: ami-090813c1b06f13dba
       ss-id-suffix: base
     ap-southeast-5:
-    - ami-id: ami-0216550e9afa5eaaa
+    - ami-id: ami-02b4907e4bd874327
       ss-id-suffix: base
     ca-central-1:
-    - ami-id: ami-07e8817e6e54a82ee
+    - ami-id: ami-0ce67f36025e17786
       ss-id-suffix: base
     eu-central-1:
-    - ami-id: ami-027066fb16fc18634
+    - ami-id: ami-0c905937c14bd22b0
       ss-id-suffix: base
     eu-north-1:
-    - ami-id: ami-025d7bea93113b6cc
+    - ami-id: ami-0eed6a7e3bd86ff98
       ss-id-suffix: base
     eu-south-1:
-    - ami-id: ami-0bb2baa8dc6c0689c
+    - ami-id: ami-06e46ee9bb3d8f688
       ss-id-suffix: base
     eu-west-1:
-    - ami-id: ami-09d0c9a85bf1b9ea7
+    - ami-id: ami-017d3e24afcd69bab
       ss-id-suffix: base
     eu-west-2:
-    - ami-id: ami-090f0cf86291c77fa
+    - ami-id: ami-02b81edd0fb821197
       ss-id-suffix: base
     eu-west-3:
-    - ami-id: ami-04c332520bd9cedb4
+    - ami-id: ami-073bfc958ad7786ad
       ss-id-suffix: base
     il-central-1:
-    - ami-id: ami-033b3593b3a2bac50
+    - ami-id: ami-03a5ec5af9624ca11
       ss-id-suffix: base
     me-central-1:
-    - ami-id: ami-0c4e134b12eddd283
+    - ami-id: ami-066aefb9693cfbd7f
       ss-id-suffix: base
     sa-east-1:
-    - ami-id: ami-03a79217ca48f4d1e
+    - ami-id: ami-0f9115282727a06b5
       ss-id-suffix: base
     us-east-1:
-    - ami-id: ami-04680790a315cd58d
+    - ami-id: ami-02fd066b86800f60c
       ss-id-suffix: base
     us-east-2:
-    - ami-id: ami-04a131f50a7b86648
+    - ami-id: ami-0d03e71aa609a9ffa
       ss-id-suffix: base
     us-gov-west-1:
-    - ami-id: ami-00e36827e1d6d83f0
+    - ami-id: ami-04636581d28bcfd9e
       ss-id-suffix: base
     us-gov-east-1:
-    - ami-id: ami-0b5d19278a4c85781
+    - ami-id: ami-0fbd43b89783e4368
       ss-id-suffix: base
     us-west-1:
-    - ami-id: ami-02ff48e800d3550ab
+    - ami-id: ami-00e0c7cb3b1822981
       ss-id-suffix: base
     us-west-2:
-    - ami-id: ami-0ba80f8099420ac44
+    - ami-id: ami-0ababc7e5826abb79
       ss-id-suffix: base
 ubuntu2404:
   x86-64:
@@ -265,70 +265,70 @@ ubuntu2404:
     - t3
     - m6a
     ap-northeast-1:
-    - ami-id: ami-04ae19f2563b23082
+    - ami-id: ami-0bf052f8a9dd8bf42
       ss-id-suffix: base
     ap-northeast-2:
-    - ami-id: ami-04f851a80be515079
+    - ami-id: ami-08d212701172cba2a
       ss-id-suffix: base
     ap-northeast-3:
-    - ami-id: ami-0ea874b1ea1d9ee7c
+    - ami-id: ami-03dda1c40c7812d68
       ss-id-suffix: base
     ap-south-1:
-    - ami-id: ami-0a14f53a6fe4dfcd1
+    - ami-id: ami-0c54f8b78468b2ba2
       ss-id-suffix: base
     ap-southeast-1:
-    - ami-id: ami-0ed0867532b47cc2c
+    - ami-id: ami-04592e28abc2b9fc9
       ss-id-suffix: base
     ap-southeast-2:
-    - ami-id: ami-0312bcacbe51d03c8
+    - ami-id: ami-09a977aafd83c55e7
       ss-id-suffix: base
     ap-southeast-3:
-    - ami-id: ami-07746edc25b4b8771
+    - ami-id: ami-07dc53065d17edee7
       ss-id-suffix: base
     ap-southeast-5:
-    - ami-id: ami-07da8d61e72713a1f
+    - ami-id: ami-0d06e21ef1f9969b8
       ss-id-suffix: base
     ca-central-1:
-    - ami-id: ami-0f5ec6dfce1d71ca7
+    - ami-id: ami-024208b0e77830ebe
       ss-id-suffix: base
     eu-central-1:
-    - ami-id: ami-005f97cc4a61dd3b4
+    - ami-id: ami-0a1856b54e6f47c20
       ss-id-suffix: base
     eu-north-1:
-    - ami-id: ami-0974a2c5ddf10f442
+    - ami-id: ami-0122da1d0b4a30ec4
       ss-id-suffix: base
     eu-south-1:
-    - ami-id: ami-0bbdb93491708e313
+    - ami-id: ami-0dd41db19bc0cf79c
       ss-id-suffix: base
     eu-west-1:
-    - ami-id: ami-01d0334e94e895e89
+    - ami-id: ami-07dcad2e028cc44c9
       ss-id-suffix: base
     eu-west-2:
-    - ami-id: ami-0c17cb8e234335014
+    - ami-id: ami-0d534b76b00352b50
       ss-id-suffix: base
     eu-west-3:
-    - ami-id: ami-0bb8b77ad97138af1
+    - ami-id: ami-030cfb51a08050cad
       ss-id-suffix: base
     il-central-1:
-    - ami-id: ami-05a5f95a77432f4be
+    - ami-id: ami-0cbade6e9fd947c09
       ss-id-suffix: base
     me-central-1:
-    - ami-id: ami-021ddb3a2c3b73eff
+    - ami-id: ami-0f1da3b0bb18ed1be
       ss-id-suffix: base
     sa-east-1:
-    - ami-id: ami-032ab7316dbf1ea74
+    - ami-id: ami-07bd3113fa895305a
       ss-id-suffix: base
     us-east-1:
-    - ami-id: ami-0071174ad8cbb9e17
+    - ami-id: ami-0fc0d6e8d70ab2d42
       ss-id-suffix: base
     us-east-2:
-    - ami-id: ami-0198cdf7458a7a932
+    - ami-id: ami-094e02db75d74beed
       ss-id-suffix: base
     us-west-1:
-    - ami-id: ami-06b527a1e4cb6f265
+    - ami-id: ami-0d1c4f45c2b23d0a6
       ss-id-suffix: base
     us-west-2:
-    - ami-id: ami-0e5e1413a3bf2d262
+    - ami-id: ami-06af99ca40d168b3b
       ss-id-suffix: base
 rhel9:
   x86-64:
@@ -343,76 +343,76 @@ rhel9:
     - t3
     - m6a
     ap-northeast-1:
-    - ami-id: ami-06a26515cac4b48cf
+    - ami-id: ami-06b08b819edcd2cf0
       ss-id-suffix: base
     ap-northeast-2:
-    - ami-id: ami-0cf612e525c28d985
+    - ami-id: ami-04f9ce8b34396d6aa
       ss-id-suffix: base
     ap-northeast-3:
-    - ami-id: ami-08c6d8145fbe21b28
+    - ami-id: ami-0b7d0687fe794017c
       ss-id-suffix: base
     ap-south-1:
-    - ami-id: ami-03044d11720270e82
+    - ami-id: ami-0a314bace0ee4b705
       ss-id-suffix: base
     ap-southeast-1:
-    - ami-id: ami-04b86cbd3c3c9c1d7
+    - ami-id: ami-017e8c7959fcd7be7
       ss-id-suffix: base
     ap-southeast-2:
-    - ami-id: ami-0888ea87e9870d6d6
+    - ami-id: ami-0bb048de29870137f
       ss-id-suffix: base
     ap-southeast-3:
-    - ami-id: ami-082651a7e7e388c4e
+    - ami-id: ami-02e238bfe416b969b
       ss-id-suffix: base
     ap-southeast-5:
-    - ami-id: ami-00a7d6820eaf45b64
+    - ami-id: ami-0f00b977f6dbfeaa2
       ss-id-suffix: base
     ca-central-1:
-    - ami-id: ami-0683c4ec33f58d9d1
+    - ami-id: ami-0e25faa3aa9e314b5
       ss-id-suffix: base
     eu-central-1:
-    - ami-id: ami-028d1ae9d549ba4ac
+    - ami-id: ami-0e5aed7a95371965c
       ss-id-suffix: base
     eu-north-1:
-    - ami-id: ami-0b1fa24ab4359058c
+    - ami-id: ami-05f0e1fe543949a8f
       ss-id-suffix: base
     eu-south-1:
-    - ami-id: ami-0d41522208c22715a
+    - ami-id: ami-01bb730964179dfdf
       ss-id-suffix: base
     eu-west-1:
-    - ami-id: ami-054bd95d0b099396f
+    - ami-id: ami-01c46c4df3f52dbde
       ss-id-suffix: base
     eu-west-2:
-    - ami-id: ami-070e83f6ca1e43229
+    - ami-id: ami-0a004d51dd2cb6939
       ss-id-suffix: base
     eu-west-3:
-    - ami-id: ami-01c0b31ad90f3291f
+    - ami-id: ami-0a6342a0f6065ecb3
       ss-id-suffix: base
     il-central-1:
-    - ami-id: ami-000a0bfa6fe1201c8
+    - ami-id: ami-0143909e59dd265d8
       ss-id-suffix: base
     me-central-1:
     - ami-id: ami-048d21bb0d69b31b3
       ss-id-suffix: base
     sa-east-1:
-    - ami-id: ami-04bb1387a7ea5f475
+    - ami-id: ami-0e6a0a7b2a2865698
       ss-id-suffix: base
     us-east-1:
-    - ami-id: ami-03137f1c4d12e4ac5
+    - ami-id: ami-031486069c5cdd00e
       ss-id-suffix: base
     us-east-2:
-    - ami-id: ami-0b0817721c711f7e9
+    - ami-id: ami-0889361165cd6f1d1
       ss-id-suffix: base
     us-gov-west-1:
-    - ami-id: ami-05d99e0e18db4906b
+    - ami-id: ami-0ac54f3d7969bc55b
       ss-id-suffix: base
     us-gov-east-1:
-    - ami-id: ami-0a0317b082ebf01dd
+    - ami-id: ami-0927a1f2f154ff3d6
       ss-id-suffix: base
     us-west-1:
-    - ami-id: ami-0767f269081b7325f
+    - ami-id: ami-0f7f3776d57ecbc20
       ss-id-suffix: base
     us-west-2:
-    - ami-id: ami-0b2a6471005dabfcf
+    - ami-id: ami-0c944ab49a7721a6b
       ss-id-suffix: base
 rocky9:
   x86-64:
@@ -505,245 +505,56 @@ windows:
     - t3
     - m6a
     ap-northeast-1:
-    - ami-id: ami-09aa5aa9960830408
+    - ami-id: ami-0c368c58e2020eca2
       ss-id-suffix: base
-    - ami-id: ami-0c216418be26140f0
-      description: Windows - AMD
-      gpu-manufacturer: AMD
-      name: Windows - AMD
-      ss-id-suffix: base-amd
-      allowed-instance-types:
-      - g4ad
-    - ami-id: ami-070ffbbbc446087f0
-      description: Windows - NVIDIA
-      gpu-manufacturer: NVIDIA
-      name: Windows - NVIDIA
-      ss-id-suffix: base-nvidia
-      allowed-instance-types:
-      - g4dn
-      - g5
     ap-northeast-2:
-    - ami-id: ami-0c8efbd0de607dba9
+    - ami-id: ami-05f28d8de96249faf
       ss-id-suffix: base
-    - ami-id: ami-060366bb891a0d9b3
-      description: Windows - NVIDIA
-      gpu-manufacturer: NVIDIA
-      name: Windows - NVIDIA
-      ss-id-suffix: base-nvidia
-      allowed-instance-types:
-      - g4dn
-      - g5
+    ap-northeast-3:
+    - ami-id: ami-04956bfcb4ab0dd00
+      ss-id-suffix: base
     ap-south-1:
-    - ami-id: ami-0ff1117c58634a033
+    - ami-id: ami-05f035b6ae19778b1
       ss-id-suffix: base
-    - ami-id: ami-09597da154f1f7467
-      description: Windows - NVIDIA
-      gpu-manufacturer: NVIDIA
-      name: Windows - NVIDIA
-      ss-id-suffix: base-nvidia
-      allowed-instance-types:
-      - g4dn
-      - g5
     ap-southeast-1:
-    - ami-id: ami-097849f949b6645df
+    - ami-id: ami-033712975633946ce
       ss-id-suffix: base
-    - ami-id: ami-02e4537badf5bec05
-      description: Windows - NVIDIA
-      gpu-manufacturer: NVIDIA
-      name: Windows - NVIDIA
-      ss-id-suffix: base-nvidia
-      allowed-instance-types:
-      - g4dn
-      - g5
     ap-southeast-2:
-    - ami-id: ami-0b3a9f205adb6a9bd
+    - ami-id: ami-003d3c2ade4ab43bb
       ss-id-suffix: base
-    - ami-id: ami-0b325064fab711628
-      description: Windows - NVIDIA
-      gpu-manufacturer: NVIDIA
-      name: Windows - NVIDIA
-      ss-id-suffix: base-nvidia
-      allowed-instance-types:
-      - g4dn
-      - g5
     ca-central-1:
-    - ami-id: ami-07e2d9926b8333cfa
+    - ami-id: ami-0c16e3cbd60ee79c1
       ss-id-suffix: base
-    - ami-id: ami-0fb8cdaedf778978f
-      description: Windows - AMD
-      gpu-manufacturer: AMD
-      name: Windows - AMD
-      ss-id-suffix: base-amd
-      allowed-instance-types:
-      - g4ad
-    - ami-id: ami-0a20341e8f8723a98
-      description: Windows - NVIDIA
-      gpu-manufacturer: NVIDIA
-      name: Windows - NVIDIA
-      ss-id-suffix: base-nvidia
-      allowed-instance-types:
-      - g4dn
-      - g5
     eu-central-1:
-    - ami-id: ami-0f9de0e6547613419
+    - ami-id: ami-0d3d8e3989cb4a7da
       ss-id-suffix: base
-    - ami-id: ami-02f68df0880c1f397
-      description: Windows - AMD
-      gpu-manufacturer: AMD
-      name: Windows - AMD
-      ss-id-suffix: base-amd
-      allowed-instance-types:
-      - g4ad
-    - ami-id: ami-03b78a72de9ee07ef
-      description: Windows - NVIDIA
-      gpu-manufacturer: NVIDIA
-      name: Windows - NVIDIA
-      ss-id-suffix: base-nvidia
-      allowed-instance-types:
-      - g4dn
-      - g5
     eu-north-1:
-    - ami-id: ami-04d24c9028df70ed9
+    - ami-id: ami-0f7cfea37bb21e8f4
       ss-id-suffix: base
-    - ami-id: ami-00299a4678ee77a09
-      description: Windows - NVIDIA
-      gpu-manufacturer: NVIDIA
-      name: Windows - NVIDIA
-      ss-id-suffix: base-nvidia
-      allowed-instance-types:
-      - g4dn
-      - g5
     eu-south-1:
-    - ami-id: ami-0be2afdf7b5eec278
+    - ami-id: ami-03a957f4788bf477e
       ss-id-suffix: base
-    - ami-id: ami-0f597fff4ef0d2060
-      description: Windows - NVIDIA
-      gpu-manufacturer: NVIDIA
-      name: Windows - NVIDIA
-      ss-id-suffix: base-nvidia
-      allowed-instance-types:
-      - g4dn
-      - g5
     eu-west-1:
-    - ami-id: ami-01ad3e8d5daba94d3
+    - ami-id: ami-0f625b90f35024136
       ss-id-suffix: base
-    - ami-id: ami-0729b45f956a22f19
-      description: Windows - AMD
-      gpu-manufacturer: AMD
-      name: Windows - AMD
-      ss-id-suffix: base-amd
-      allowed-instance-types:
-      - g4ad
-    - ami-id: ami-07316ad5cf203db6c
-      description: Windows - NVIDIA
-      gpu-manufacturer: NVIDIA
-      name: Windows - NVIDIA
-      ss-id-suffix: base-nvidia
-      allowed-instance-types:
-      - g4dn
-      - g5
     eu-west-2:
-    - ami-id: ami-0bfcfb387a0cdf713
+    - ami-id: ami-0d878dff49c3b7945
       ss-id-suffix: base
-    - ami-id: ami-0b7ebce89ff8d2128
-      description: Windows - AMD
-      gpu-manufacturer: AMD
-      name: Windows - AMD
-      ss-id-suffix: base-amd
-      allowed-instance-types:
-      - g4ad
-    - ami-id: ami-0c331334b07b921ad
-      description: Windows - NVIDIA
-      gpu-manufacturer: NVIDIA
-      name: Windows - NVIDIA
-      ss-id-suffix: base-nvidia
-      allowed-instance-types:
-      - g4dn
-      - g5
     eu-west-3:
-    - ami-id: ami-089443ca5f2fc51f3
+    - ami-id: ami-03b8a5ce341fcd73a
       ss-id-suffix: base
-    - ami-id: ami-084575f3f366d40ea
-      description: Windows - NVIDIA
-      gpu-manufacturer: NVIDIA
-      name: Windows - NVIDIA
-      ss-id-suffix: base-nvidia
-      allowed-instance-types:
-      - g4dn
-      - g5
     sa-east-1:
-    - ami-id: ami-04ca2f7ffe83b8b76
+    - ami-id: ami-06036d0f74c7b1614
       ss-id-suffix: base
-    - ami-id: ami-04b32ee839a7a5c4c
-      description: Windows - NVIDIA
-      gpu-manufacturer: NVIDIA
-      name: Windows - NVIDIA
-      ss-id-suffix: base-nvidia
-      allowed-instance-types:
-      - g4dn
-      - g5
     us-east-1:
-    - ami-id: ami-06244562918e090e8
+    - ami-id: ami-0909cee4864578472
       ss-id-suffix: base
-    - ami-id: ami-0c204e78e7e8c343b
-      description: Windows - AMD
-      gpu-manufacturer: AMD
-      name: Windows - AMD
-      ss-id-suffix: base-amd
-      allowed-instance-types:
-      - g4ad
-    - ami-id: ami-06871ff48caabe79e
-      description: Windows - NVIDIA
-      gpu-manufacturer: NVIDIA
-      name: Windows - NVIDIA
-      ss-id-suffix: base-nvidia
-      allowed-instance-types:
-      - g4dn
-      - g5
     us-east-2:
-    - ami-id: ami-021f003e3636a6f30
+    - ami-id: ami-00b5771a0180e1763
       ss-id-suffix: base
-    - ami-id: ami-0249fa55e0cdfad19
-      description: Windows - AMD
-      gpu-manufacturer: AMD
-      name: Windows - AMD
-      ss-id-suffix: base-amd
-      allowed-instance-types:
-      - g4ad
-    - ami-id: ami-0037c4d2fd44f63aa
-      description: Windows - NVIDIA
-      gpu-manufacturer: NVIDIA
-      name: Windows - NVIDIA
-      ss-id-suffix: base-nvidia
-      allowed-instance-types:
-      - g4dn
-      - g5
     us-west-1:
-    - ami-id: ami-04dbb1c61ff241748
+    - ami-id: ami-051eb131c7bfa3ecb
       ss-id-suffix: base
-    - ami-id: ami-0e2655fc8958f3bb8
-      description: Windows - NVIDIA
-      gpu-manufacturer: NVIDIA
-      name: Windows - NVIDIA
-      ss-id-suffix: base-nvidia
-      allowed-instance-types:
-      - g4dn
-      - g5
     us-west-2:
-    - ami-id: ami-0c3d03c46ddcbed18
+    - ami-id: ami-0fb8e4006e2af065e
       ss-id-suffix: base
-    - ami-id: ami-03265ce81c5c184e4
-      description: Windows - AMD
-      gpu-manufacturer: AMD
-      name: Windows - AMD
-      ss-id-suffix: base-amd
-      allowed-instance-types:
-      - g4ad
-    - ami-id: ami-049332112750cf05b
-      description: Windows - NVIDIA
-      gpu-manufacturer: NVIDIA
-      name: Windows - NVIDIA
-      ss-id-suffix: base-nvidia
-      allowed-instance-types:
-      - g4dn
-      - g5

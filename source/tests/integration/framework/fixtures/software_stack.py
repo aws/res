@@ -10,6 +10,7 @@
 #  and limitations under the License.
 
 import json
+import logging
 import os
 import uuid
 
@@ -36,6 +37,8 @@ from tests.integration.framework.model.client_auth import ClientAuth
 from tests.integration.framework.utils.virtual_desktop import api_model_to_ideadatamodel
 from tests.integration.tests.smoke.config import TEST_SOFTWARE_STACKS_GOVCLOUD
 
+logger = logging.getLogger(__name__)
+
 
 @pytest.fixture
 def software_stack(
@@ -50,10 +53,6 @@ def software_stack(
     admin = request.getfixturevalue(request.param[2])
     software_stack.projects = [project]
 
-    # Add unique short ID to stack name to avoid collisions in parallel test runs
-    unique_id = str(uuid.uuid4())[:4]
-    software_stack.name = f"{software_stack.name}-{unique_id}"
-
     api_client = ApiClient(res_environment, admin)
     api_invoker_type = request.config.getoption("--api-invoker-type")
     res_client = ResClient(res_environment, admin, api_invoker_type)
@@ -63,6 +62,10 @@ def software_stack(
         or res_environment.region == "us-gov-east-1"
     ) and (software_stack.name not in TEST_SOFTWARE_STACKS_GOVCLOUD):
         pytest.skip(f"Software stack: {software_stack.name} not supported in GovCloud")
+
+    # Add unique short ID to stack name to avoid collisions in parallel test runs
+    unique_id = str(uuid.uuid4())[:4]
+    software_stack.name = f"{software_stack.name}-{unique_id}"
 
     # If no AMI ID is provided, find AMI ID from VDI AMI config file
     if not software_stack.ami_id:
@@ -84,7 +87,6 @@ def software_stack(
 
     request.addfinalizer(tear_down)
 
-    # Return the created software stack (converted back to ideadatamodel)
     return api_model_to_ideadatamodel(response.software_stack)  # type: ignore
 
 
@@ -93,6 +95,9 @@ def get_ami_id(
 ) -> str:
     """
     Retrieve AMI ID from base-software-stack-config.yaml
+
+    Prefers an exact gpu-manufacturer AMI match when present. Falls back to the
+    first (base) AMI otherwise.
     """
     base_os = software_stack.base_os
     architecture = "x86-64" if software_stack.architecture == "x86_64" else "arm64"
@@ -111,6 +116,8 @@ def get_ami_id(
         for ami_data in ami_list:
             if ami_data.get("gpu-manufacturer", "NO_GPU") == gpu:
                 return str(ami_data["ami-id"])
+        if ami_list:
+            return str(ami_list[0]["ami-id"])
     except (KeyError, IndexError):
         raise ValueError(f"AMI IDs not found for {base_os}/{architecture} in {region}")
     pytest.skip(

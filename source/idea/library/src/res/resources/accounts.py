@@ -1,9 +1,7 @@
 #  Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 #  SPDX-License-Identifier: Apache-2.0
 
-import grp
 import os
-import pwd
 import re
 from typing import Any, Dict, List, Optional
 
@@ -90,6 +88,9 @@ def create_group(group: Dict[str, Any]) -> Dict[str, Any]:
 
 def _get_gid_for_group(group_name: str) -> Optional[int]:
     try:
+        # Unix-only module; imported locally to avoid ImportError on Windows
+        import grp
+
         group_info = grp.getgrnam(group_name)
 
         gid = group_info.gr_gid
@@ -307,6 +308,9 @@ def _get_uid_and_gid_for_username(username: str) -> tuple[Optional[int], Optiona
     :return: UID and GID
     """
     try:
+        # Unix-only module; imported locally to avoid ImportError on Windows
+        import pwd
+
         user_info = pwd.getpwnam(username)
 
         uid = user_info.pw_uid

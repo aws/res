@@ -17,6 +17,7 @@ import { ModalProps } from "@cloudscape-design/components/modal/interfaces";
 import { GetUserResult, SocaUserInputChoice, SocaUserInputParamMetadata, User, VirtualDesktopPermissionProfile, VirtualDesktopSession } from "../../../client/data-model";
 import { AuthClient, ProjectsClient, VirtualDesktopClient } from "../../../client";
 import { AppContext } from "../../../common";
+import { OnFlashbarChangeEvent } from "../../../App";
 import { IdeaFormField, IdeaFormFieldLifecycleEvent, IdeaFormFieldStateChangeEvent, IdeaFormFieldStateChangeEventHandler } from "../../../components/form-field";
 import Utils from "../../../common/utils";
 import { faTrash, faUndo } from "@fortawesome/free-solid-svg-icons";
@@ -275,6 +276,7 @@ export interface UpdateSessionPermissionModalProps {
     onCancel: () => void;
     onSubmit: (createdPermissions: VirtualDesktopSessionPermission[], updatedPermissions: VirtualDesktopSessionPermission[], deletedPermissions: VirtualDesktopSessionPermission[]) => Promise<boolean>;
     session: VirtualDesktopSession;
+    onFlashbarChange?: (event: OnFlashbarChangeEvent) => void;
 }
 
 export interface UpdateSessionPermissionModalState {
@@ -410,20 +412,43 @@ class UpdateSessionPermissionModal extends Component<UpdateSessionPermissionModa
                 }
             }
 
-            const group_response = await this.getAuthClient()
-                .listUsersInGroup({
-                    group_names: groups,
-                });
-            group_response.listing?.forEach((user) => {
-                if (username === user.username || userSet.has(user.username!)) {
-                    return;
+            if (groups.length > 0) {
+                try {
+                    const group_response = await this.getAuthClient()
+                        .listUsersInGroup({
+                            group_names: groups,
+                        });
+                    group_response.listing?.forEach((user) => {
+                        if (username === user.username || userSet.has(user.username!)) {
+                            return;
+                        }
+                        userSet.add(user.username!);
+                        users.push(user);
+                    });
+                } catch (error) {
+                    console.error("Failed to fetch users in groups:", error);
+                    this.props.onFlashbarChange?.({
+                        items: [{ content: "Failed to load some users from group membership. Showing individually assigned users only.", dismissible: true, type: "warning" }],
+                    });
                 }
-                userSet.add(user.username!);
-                users.push(user);
-            });
+            }
             this.setState(
                 {
                     users: users,
+                    userListLoaded: true,
+                },
+                () => {
+                    this.createInitRows();
+                }
+            );
+        }).catch((error) => {
+            console.error("Failed to fetch role assignments:", error);
+            this.props.onFlashbarChange?.({
+                items: [{ content: "Failed to load users for sharing. Please close and try again.", dismissible: true, type: "error" }],
+            });
+            this.setState(
+                {
+                    users: [],
                     userListLoaded: true,
                 },
                 () => {

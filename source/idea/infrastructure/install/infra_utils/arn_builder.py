@@ -148,7 +148,7 @@ class ArnBuilder:
         return [
             ArnBuilder.get_arn(
                 "s3",
-                f"{constants.ARTIFACTS_BUCKET_PREFIX_NAME}-{cdk.Aws.REGION}/host_modules/*",
+                f"{self.cluster_settings.staging_bucket}/host_modules/*",
                 "",
                 "",
             )
@@ -181,6 +181,18 @@ class ArnBuilder:
                 region="",
                 account_id="",
                 resource=self.cluster_settings.staging_bucket,  # type: ignore
+            ),
+        ]
+
+    @property
+    @lru_cache
+    def ssm_command_output_bucket_arn(self) -> List[str]:
+        return [
+            self.get_arn(
+                service="s3",
+                region="",
+                account_id="",
+                resource=f"{self.cluster_settings.ssm_command_output_bucket}/*",
             ),
         ]
 

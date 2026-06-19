@@ -1097,39 +1097,6 @@ class VirtualDesktopSettings extends Component<VirtualDesktopSettingsProps, Virt
                                     ),
                                 },
                                 {
-                                    label: "Broker",
-                                    id: "broker",
-                                    content: (
-                                        <SpaceBetween size={"m"}>
-                                            <Container header={<Header variant={"h2"}>Amazon DCV Broker</Header>}>
-                                                <ColumnLayout variant={"text-grid"} columns={3}>
-                                                    <KeyValue title="Base OS" value={Utils.getOsTitle(dot.pick("dcv_broker.autoscaling.base_os", this.state.vdcSettings))} />
-                                                    <KeyValue title="Instance Type" value={dot.pick("dcv_broker.autoscaling.instance_type", this.state.vdcSettings)} />
-                                                    <KeyValue
-                                                        title="Volume"
-                                                        value={{
-                                                            value: dot.pick("dcv_broker.autoscaling.volume_size", this.state.vdcSettings),
-                                                            unit: "GB",
-                                                        }}
-                                                        type={"memory"}
-                                                    />
-                                                </ColumnLayout>
-                                            </Container>
-                                            {buildAutoScalingSettingContainer(dot.pick("dcv_broker", this.state.vdcSettings))}
-                                            <Container header={<Header variant={"h2"}>Connection Details</Header>}>
-                                                <ColumnLayout variant={"text-grid"} columns={3}>
-                                                    <KeyValue title="Client Port" value={dot.pick("dcv_broker.client_communication_port", this.state.vdcSettings)} />
-                                                    <KeyValue title="Agent Port" value={dot.pick("dcv_broker.agent_communication_port", this.state.vdcSettings)} />
-                                                    <KeyValue title="Gateway Port" value={dot.pick("dcv_broker.gateway_communication_port", this.state.vdcSettings)} />
-                                                    <KeyValue title="Client URL" value={`${getInternalALBUrl()}:${dot.pick("dcv_broker.client_communication_port", this.state.vdcSettings)}`} clipboard={true} />
-                                                    <KeyValue title="Agent URL" value={`${getInternalALBUrl()}:${dot.pick("dcv_broker.agent_communication_port", this.state.vdcSettings)}`} clipboard={true} />
-                                                    <KeyValue title="Gateway URL" value={`${getInternalALBUrl()}:${dot.pick("dcv_broker.gateway_communication_port", this.state.vdcSettings)}`} clipboard={true} />
-                                                </ColumnLayout>
-                                            </Container>
-                                        </SpaceBetween>
-                                    ),
-                                },
-                                {
                                     label: "Connection Gateway",
                                     id: "connection-gateway",
                                     content: (

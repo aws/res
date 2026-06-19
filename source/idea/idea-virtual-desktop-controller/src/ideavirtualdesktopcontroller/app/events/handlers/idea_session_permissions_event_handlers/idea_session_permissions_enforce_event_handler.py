@@ -16,6 +16,7 @@ from ideadatamodel import (
 from ideasdk.utils import Utils
 from ideavirtualdesktopcontroller.app.clients.events_client.events_client import VirtualDesktopEvent
 from ideavirtualdesktopcontroller.app.events.handlers.base_event_handler import BaseVirtualDesktopControllerEventHandler
+from res.clients.dcv_session_manager import dcv_session_manager_client
 
 
 class IDEASessionPermissionsEnforceEventHandler(BaseVirtualDesktopControllerEventHandler):
@@ -26,6 +27,8 @@ class IDEASessionPermissionsEnforceEventHandler(BaseVirtualDesktopControllerEven
     def handle_event(self, message_id: str, sender_id: str, event: VirtualDesktopEvent):
         if not self.is_sender_controller_role(sender_id) and not self.is_sender_backend_lambda(sender_id):
             raise self.message_source_validation_failed(f'Corrupted sender_id: {sender_id}. Ignoring message')
+
+        self.log_info(message_id=message_id, message=f'Received enforce permissions event: {event.detail}')
 
         idea_session_id = Utils.get_value_as_string('idea_session_id', event.detail, None)
         idea_session_owner = Utils.get_value_as_string('idea_session_owner', event.detail, None)
@@ -42,4 +45,11 @@ class IDEASessionPermissionsEnforceEventHandler(BaseVirtualDesktopControllerEven
             raise self.do_not_delete_message_exception(f'Session {idea_session_id} in {session.state}. Will handle later')
 
         # session is READY
-        self.context.dcv_broker_client.enforce_session_permissions(session)
+        permissions_content = self.session_permission_utils.generate_permissions_for_session(session, True)
+        permissions_content_base_64 = None if Utils.is_empty(permissions_content) else Utils.base64_encode(permissions_content)
+        self.log_info(message_id=message_id, message=f'Sending UpdateSessionPermissions to DCV Lambda: session={session}')
+        dcv_session_manager_client.update_session_permissions(
+            session_id=idea_session_id,
+            owner=session.owner,
+            permissions_file=permissions_content_base_64
+        )

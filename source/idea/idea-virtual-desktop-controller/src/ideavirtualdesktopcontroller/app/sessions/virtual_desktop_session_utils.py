@@ -38,7 +38,7 @@ class VirtualDesktopSessionUtils:
             db=self._session_permission_db,
             permission_profile_db=self._permission_profile_db
         )
-        self._server_utils = VirtualDesktopServerUtils(context=self.context, db=self._session_db.server_db)
+        self._server_utils = VirtualDesktopServerUtils(context=self.context)
         self._logger = context.logger('virtual-desktop-session-utils')
 
     def create_session(self, session: VirtualDesktopSession) -> VirtualDesktopSession:
@@ -97,50 +97,3 @@ class VirtualDesktopSessionUtils:
 
         return success_response_list, fail_response_list
 
-    def reboot_sessions(self, sessions: List[VirtualDesktopSession]) -> (List[VirtualDesktopSession], List[VirtualDesktopSession]):
-        success_response_list: List[VirtualDesktopSession] = []
-        fail_response_list: List[VirtualDesktopSession] = []
-        servers_to_reboot: List[VirtualDesktopServer] = []
-        sessions_to_reboot: List[VirtualDesktopSession] = []
-        sessions_to_reboot_pending_validation: List[VirtualDesktopSession] = []
-
-        for session_orig in sessions:
-            session = self._session_db.get_from_db(idea_session_owner=session_orig.owner, idea_session_id=session_orig.idea_session_id)
-            if Utils.is_empty(session):
-                # Invalid IDEA Session.
-                session.failure_reason = f'Invalid RES Session ID: {session.idea_session_id}:{session.name} for user: {session.owner}. Nothing to stop'
-                self._logger.error(session.failure_reason)
-                fail_response_list.append(session)
-                continue
-
-            if session.state not in {VirtualDesktopSessionState.READY, VirtualDesktopSessionState.ERROR}:
-                session.failure_reason = f'RES Session ID: {session.idea_session_id}:{session.name} for user: {session.owner} is in {session.state} state. Can\'t reboot. Wait for it to be READY or ERROR.'
-                self._logger.error(session.failure_reason)
-                fail_response_list.append(session)
-                continue
-
-            session.force = session_orig.force
-            if Utils.is_not_empty(session.force) and session.force:
-                sessions_to_reboot.append(session)
-            else:
-                sessions_to_reboot_pending_validation.append(session)
-
-        sessions_with_count = self.context.dcv_broker_client.get_active_counts_for_sessions(sessions_to_reboot_pending_validation)
-
-        for session in sessions_with_count:
-            if session.connection_count > 0:
-                session.failure_reason = f'There exists {session.connection_count} active connection(s) for idea_session_id: {session.idea_session_id}:{session.name}. Please terminate.'
-                self._logger.error(session.failure_reason)
-                fail_response_list.append(session)
-                continue
-
-            sessions_to_reboot.append(session)
-
-        for session in sessions_to_reboot:
-            session.state = VirtualDesktopSessionState.RESUMING
-            session = self._session_db.update(session)
-            servers_to_reboot.append(session.server)
-            success_response_list.append(session)
-
-        self._server_utils.reboot_dcv_hosts(servers_to_reboot)
-        return success_response_list, fail_response_list

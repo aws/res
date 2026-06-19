@@ -333,42 +333,6 @@ def test_internal_load_balancer_security_group_creation(
                         "IpProtocol": "tcp",
                         "ToPort": 443,
                     },
-                    {
-                        "CidrIp": {
-                            "Fn::GetAtt": [
-                                vpc_lookup_custom_resource_logical_id,
-                                "cidr_block",
-                            ]
-                        },
-                        "Description": "Allow HTTPS traffic from DCV Clients to DCV Broker",
-                        "FromPort": 8444,
-                        "IpProtocol": "tcp",
-                        "ToPort": 8444,
-                    },
-                    {
-                        "CidrIp": {
-                            "Fn::GetAtt": [
-                                vpc_lookup_custom_resource_logical_id,
-                                "cidr_block",
-                            ]
-                        },
-                        "Description": "Allow HTTPS traffic from DCV Agents to DCV Broker",
-                        "FromPort": 8445,
-                        "IpProtocol": "tcp",
-                        "ToPort": 8445,
-                    },
-                    {
-                        "CidrIp": {
-                            "Fn::GetAtt": [
-                                vpc_lookup_custom_resource_logical_id,
-                                "cidr_block",
-                            ]
-                        },
-                        "Description": "Allow HTTPS traffic from DCV Connection Gateway to DCV Broker",
-                        "FromPort": 8446,
-                        "IpProtocol": "tcp",
-                        "ToPort": 8446,
-                    },
                 ],
             }
         },

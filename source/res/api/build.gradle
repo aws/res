@@ -5,8 +5,24 @@ plugins {
     id("org.openapi.generator") version "7.17.0"
 }
 
-openApiValidate {
-    inputSpec = "$projectDir/spec/openapi/RES.openapi.yaml".toString()
+// ==========================================
+// Shared tasks
+// ==========================================
+
+task buildBackendSmithyModel(type:Exec) {
+    workingDir "$projectDir/spec"
+    commandLine "./build-model.sh", "backend"
+}
+
+task buildDcvSessionManagementSmithyModel(type:Exec) {
+    workingDir "$projectDir/spec"
+    commandLine "./build-model.sh", "dcv-session-management"
+}
+
+task buildSmithyModel {
+    description "Build Smithy model and generate the OpenAPI spec file"
+    group "Research and Engineering Studio API"
+    dependsOn 'buildBackendSmithyModel', 'buildDcvSessionManagementSmithyModel'
 }
 
 task cleanGenerated(type: Delete) {
@@ -15,17 +31,52 @@ task cleanGenerated(type: Delete) {
     delete "$projectDir/generated"
 }
 
-task generatePythonServer(
-        type: org.openapitools.generator.gradle.plugin.tasks.GenerateTask,
-        dependsOn: ['buildSmithyModel', 'openApiValidate', 'cleanGenerated']
-) {
+task cleanGeneratedBackend(type: Delete) {
+    delete "$projectDir/generated/backend"
+}
+
+task cleanGeneratedDcvSessionManagement(type: Delete) {
+    delete "$projectDir/generated/dcv-session-management"
+}
+
+task generatePythonServer {
     description "Generate a Python server using Open API Tools Generator."
     group "Research and Engineering Studio API"
+    dependsOn 'generateBackendPythonServer', 'generateDcvSessionManagementPythonServer'
+}
+
+task generatePythonClient {
+    description "Generate a Python client using Open API Tools Generator."
+    group "Research and Engineering Studio API"
+    dependsOn 'generateBackendPythonClient', 'copyDcvSessionManagementClient'
+}
+
+task generateTypeScriptClient {
+    description "Generate a TypeScript client using Open API Tools Generator."
+    group "Research and Engineering Studio API"
+    dependsOn 'generateBackendTypeScriptClient'
+}
+
+// ==========================================
+// Backend Lambda API tasks
+// ==========================================
+
+task openApiValidateBackend(
+        type: org.openapitools.generator.gradle.plugin.tasks.ValidateTask,
+        dependsOn: 'buildBackendSmithyModel'
+) {
+    inputSpec = "$projectDir/spec/openapi/RES.openapi.yaml".toString()
+}
+
+task generateBackendPythonServer(
+        type: org.openapitools.generator.gradle.plugin.tasks.GenerateTask,
+        dependsOn: ['buildBackendSmithyModel', 'openApiValidateBackend', 'cleanGeneratedBackend']
+) {
     outputs.upToDateWhen { false }
     outputs.cacheIf { false }
     generatorName = "python-flask"
     inputSpec = "$projectDir/spec/openapi/RES.openapi.yaml".toString()
-    outputDir = "$projectDir/generated/server-stub".toString()
+    outputDir = "$projectDir/generated/backend/server-stub".toString()
     configOptions = [
             disallowAdditionalPropertiesIfNotPresent: "false",
             prependFormOrBodyParameters: "true",
@@ -39,50 +90,43 @@ task generatePythonServer(
             "asyncio": "true",
             "generateSourceCodeOnly": "true"
     ]
-    finalizedBy 'postGeneration'
+    finalizedBy 'postGenerationBackend'
 }
 
-task postGeneration(type: Exec) {
-    description "Customize the auto-generated API code and generate serializers"
-    group "Research and Engineering Studio API"
+task postGenerationBackend(type: Exec) {
     workingDir "$projectDir"
-    commandLine "./post-generation-scripts/post-generation.sh"
+    commandLine "./post-generation-scripts/post-generation.sh", "backend"
 }
 
-task basePythonClient(
+task baseBackendPythonClient(
         type: org.openapitools.generator.gradle.plugin.tasks.GenerateTask,
-        dependsOn: ['buildSmithyModel', 'openApiValidate']
+        dependsOn: ['buildBackendSmithyModel', 'openApiValidateBackend']
 ) {
-    description "Generate base Python client code using Open API Tools Generator."
     outputs.upToDateWhen { false }
     outputs.cacheIf { false }
     generatorName = "python"
     inputSpec = "$projectDir/spec/openapi/RES.openapi.yaml".toString()
-    outputDir = "$projectDir/generated/client/python/src".toString()
+    outputDir = "$projectDir/generated/backend/client/python/src".toString()
     configOptions = [
             packageName: "res_client"
     ]
 }
 
-task generatePythonClient(type:Exec, dependsOn: ['basePythonClient']) {
-    description "Generate a Python client using Open API Tools Generator."
-    group "Research and Engineering Studio API"
+task generateBackendPythonClient(type:Exec, dependsOn: ['baseBackendPythonClient']) {
     workingDir "$projectDir"
     environment 'NO_PACKAGE_PREFIX', 'true'
     commandLine "./client/patch-client.sh"
 }
 
-task generateTypeScriptClient(
+task generateBackendTypeScriptClient(
         type: org.openapitools.generator.gradle.plugin.tasks.GenerateTask,
-        dependsOn: ['buildSmithyModel', 'openApiValidate']
+        dependsOn: ['buildBackendSmithyModel', 'openApiValidateBackend']
 ) {
-    description "Generate a TypeScript client using Open API Tools Generator."
-    group "Research and Engineering Studio API"
     outputs.upToDateWhen { false }
     outputs.cacheIf { false }
     generatorName = "typescript-axios"
     inputSpec = "$projectDir/spec/openapi/RES.openapi.yaml".toString()
-    outputDir = "$projectDir/generated/client/typescript/src".toString()
+    outputDir = "$projectDir/generated/backend/client/typescript/src".toString()
     configOptions = [
             npmName: "res-typescript-client",
             npmVersion: "1.0.0",
@@ -97,26 +141,17 @@ task generateTypeScriptClient(
     additionalProperties = [
             "generateSourceCodeOnly": "false"
     ]
-    finalizedBy 'postGenerationTypeScript'
+    finalizedBy 'postGenerationBackendTypeScript'
 }
 
-task postGenerationTypeScript(type: Exec) {
-    description "Add copyright headers to generated TypeScript client files"
-    group "Research and Engineering Studio API"
+task postGenerationBackendTypeScript(type: Exec) {
     workingDir "$projectDir"
-    commandLine "./post-generation-scripts/add_typescript_copyright_headers.sh", "generated/client/typescript/src"
-}
-
-task buildSmithyModel(type:Exec) {
-    description "Build Smithy model and generate the OpenAPI spec file"
-    group "Research and Engineering Studio API"
-    workingDir "$projectDir/spec"
-    commandLine "./build-model.sh"
+    commandLine "./post-generation-scripts/add_typescript_copyright_headers.sh", "generated/backend/client/typescript/src"
 }
 
 task swaggerUI(
         type:Exec,
-        dependsOn: ['buildSmithyModel', 'openApiValidate']
+        dependsOn: ['buildBackendSmithyModel', 'openApiValidateBackend']
 ) {
     description "Run a Docker container hosting a Swagger UI with the Research and Engineering Studio API specs."
     group "Research and Engineering Studio API"
@@ -126,10 +161,92 @@ task swaggerUI(
 
 task redoc(
         type:Exec,
-        dependsOn: ['buildSmithyModel', 'openApiValidate']
+        dependsOn: ['buildBackendSmithyModel', 'openApiValidateBackend']
 ) {
     description "Generate a standalone html page with the redoc documentation of the API"
     group "Research and Engineering Studio API"
     workingDir "$projectDir/spec"
     commandLine "./generate-redoc-bundle.sh"
+}
+
+// ==========================================
+// DCV Session Management Lambda API tasks
+// ==========================================
+
+task openApiValidateDcvSessionManagement(
+        type: org.openapitools.generator.gradle.plugin.tasks.ValidateTask,
+        dependsOn: 'buildDcvSessionManagementSmithyModel'
+) {
+    inputSpec = "$projectDir/spec/openapi/DCVSessionManagement.openapi.yaml".toString()
+}
+
+task generateDcvSessionManagementPythonServer(
+        type: org.openapitools.generator.gradle.plugin.tasks.GenerateTask,
+        dependsOn: ['buildDcvSessionManagementSmithyModel', 'openApiValidateDcvSessionManagement', 'cleanGeneratedDcvSessionManagement']
+) {
+    outputs.upToDateWhen { false }
+    outputs.cacheIf { false }
+    generatorName = "python-flask"
+    inputSpec = "$projectDir/spec/openapi/DCVSessionManagement.openapi.yaml".toString()
+    outputDir = "$projectDir/generated/dcv-session-management/server-stub".toString()
+    configOptions = [
+            disallowAdditionalPropertiesIfNotPresent: "false",
+            prependFormOrBodyParameters: "true",
+            packageName: "api",
+    ]
+    globalProperties = [
+            modelDocs: "false",
+            modelTests: "false"
+    ]
+    additionalProperties = [
+            "asyncio": "true",
+            "generateSourceCodeOnly": "true"
+    ]
+    finalizedBy 'postGenerationDcvSessionManagement'
+}
+
+task postGenerationDcvSessionManagement(type: Exec) {
+    workingDir "$projectDir"
+    commandLine "./post-generation-scripts/post-generation.sh", "dcv-session-management"
+}
+
+task generateDcvSessionManagementClient(
+        type: org.openapitools.generator.gradle.plugin.tasks.GenerateTask,
+        dependsOn: ['buildDcvSessionManagementSmithyModel', 'openApiValidateDcvSessionManagement', 'cleanGeneratedDcvSessionManagementClient']
+) {
+    outputs.upToDateWhen { false }
+    outputs.cacheIf { false }
+    generatorName = "python-pydantic-v1"
+    inputSpec = "$projectDir/spec/openapi/DCVSessionManagement.openapi.yaml".toString()
+    outputDir = "$projectDir/generated/dcv-session-management/client/python/src".toString()
+    configOptions = [
+            packageName: "dcv_session_management_client"
+    ]
+}
+
+task postGenerationDcvSessionManagementClient(type: Exec) {
+    dependsOn 'generateDcvSessionManagementClient'
+    workingDir "$projectDir"
+    commandLine "./post-generation-scripts/add_copyright_headers.sh", "generated/dcv-session-management/client/python/src"
+    finalizedBy 'rewriteDcvClientImports'
+}
+
+task cleanDcvSessionManagementClient(type: Delete) {
+    dependsOn 'postGenerationDcvSessionManagementClient'
+    delete "$projectDir/../../idea/library/src/res/clients/dcv_session_management_client"
+}
+
+task copyDcvSessionManagementClient(type: Copy) {
+    dependsOn 'cleanDcvSessionManagementClient'
+    from "$projectDir/generated/dcv-session-management/client/python/src/dcv_session_management_client"
+    into "$projectDir/../../idea/library/src/res/clients/dcv_session_management_client"
+}
+
+task rewriteDcvClientImports(type: Exec) {
+    workingDir "$projectDir"
+    commandLine "./post-generation-scripts/rewrite_dcv_client_imports.sh", "generated/dcv-session-management/client/python/src/dcv_session_management_client"
+}
+
+task cleanGeneratedDcvSessionManagementClient(type: Delete) {
+    delete "$projectDir/generated/dcv-session-management/client/python/src"
 }

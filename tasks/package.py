@@ -95,13 +95,6 @@ def dcv_connection_gateway(c):
     package_tool.package()
     idea.console.success(f'distribution created: {package_tool.output_archive_name}')
 
-@task
-def dcv_broker(c):
-    package_tool = PackageTool(c, 'idea-dcv-broker')
-    package_tool.package()
-    idea.console.success(f'distribution created: {package_tool.output_archive_name}')
-
-
 @task(name='res_installation_scripts')
 def package_res_installation_scripts(c):
     """
@@ -205,8 +198,6 @@ def package_all(c):
     virtual_desktop_controller(c)
 
     dcv_connection_gateway(c)
-
-    dcv_broker(c)
 
     library(c)
 

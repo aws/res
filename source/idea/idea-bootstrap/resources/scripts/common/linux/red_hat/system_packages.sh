@@ -41,16 +41,20 @@ done
 
 case $BASE_OS in
   amzn2|amzn2023)
+    # Clear package cache to avoid stale metadata causing installation failures
+    yum clean all
     yum install -y ${EVALUATED_SYSTEM_PKGS[*]} --skip-broken
     ;;
   rhel8)
     dnf config-manager --set-enabled codeready-builder-for-rhel-8-rhui-rpms
     sss_cache -E
+    dnf clean all
     dnf install -y ${EVALUATED_SYSTEM_PKGS[*]} --enablerepo codeready-builder-for-rhel-8-rhui-rpms --skip-broken
     ;;
   rhel9|rocky9)
     dnf config-manager --set-enabled codeready-builder-for-rhel-9-rhui-rpms
     sss_cache -E
+    dnf clean all
     dnf install -y ${EVALUATED_SYSTEM_PKGS[*]} --enablerepo codeready-builder-for-rhel-9-rhui-rpms --skip-broken
     ;;
   *)

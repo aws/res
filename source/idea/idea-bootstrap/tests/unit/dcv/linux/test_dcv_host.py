@@ -29,7 +29,6 @@ def test_configure_dcv_conf(monkeypatch) -> None:
     mock_settings = {
         constants.IDLE_TIMEOUT_KEY: 3600,
         constants.IDLE_TIMEOUT_WARNING_KEY: 300,
-        constants.AGENT_COMMUNICATION_PORT_KEY: 8443,
     }
     mock_get_setting = Mock(side_effect=lambda x: mock_settings[x])
 
@@ -39,6 +38,7 @@ def test_configure_dcv_conf(monkeypatch) -> None:
     )
     monkeypatch.setattr("res.resources.cluster_settings.get_setting", mock_get_setting)
     monkeypatch.setattr("os.path.exists", lambda x: False)
+    monkeypatch.setenv("IDEA_SESSION_ID", "ses-test-123")
 
     with tempfile.NamedTemporaryFile(mode="w", delete=True) as temp_file:
         temp_file_name = temp_file.name
@@ -50,7 +50,16 @@ def test_configure_dcv_conf(monkeypatch) -> None:
 
     assert "idle-timeout = 3600" in content
     assert "idle-timeout-warning = 300" in content
-    assert "internal-alb.example.com:8443" in content
+    assert 'auth-token-verifier = "internal-alb.example.com/externalAuth/ses-test-123"' in content
+
+
+def test_configure_dcv_conf_missing_session_id(monkeypatch) -> None:
+    import pytest
+
+    monkeypatch.delenv("IDEA_SESSION_ID", raising=False)
+
+    with pytest.raises(ValueError, match="IDEA_SESSION_ID"):
+        dcv_host._configure_dcv_conf()
 
 
 def test_configure_all(monkeypatch) -> None:
@@ -63,3 +72,25 @@ def test_configure_all(monkeypatch) -> None:
 
     mock_storage.assert_called_once()
     mock_dcv.assert_called_once()
+
+
+def test_apply_automatic_console_session_config(monkeypatch, tmp_path) -> None:
+    dcv_conf = tmp_path / "dcv.conf"
+    dcv_conf.write_text("[session-management]\n")
+    monkeypatch.setattr(constants, "DCV_CONFIG_FILE_PATH", str(dcv_conf))
+    mock_run = Mock()
+    monkeypatch.setattr("subprocess.run", mock_run)
+
+    dcv_host.apply_automatic_console_session_config(
+        session_owner="test-user",
+        storage_root="/home/test-user/storage-root",
+        permissions_file_path="/etc/dcv/console/idea.perm",
+    )
+
+    with open(str(dcv_conf)) as f:
+        content = f.read()
+    assert "create-session = true" in content
+    assert '"test-user"' in content
+    assert '"/home/test-user/storage-root"' in content
+    assert '"/etc/dcv/console/idea.perm"' in content
+    mock_run.assert_called_once_with(["systemctl", "restart", "dcvserver"], check=True)

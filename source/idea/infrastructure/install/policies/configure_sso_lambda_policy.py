@@ -56,7 +56,8 @@ class ConfigureSSOLambdaPolicy(Policy):
                     "secretsmanager:TagResource",
                 ],
                 resources=[
-                    f"arn:{cdk.Aws.PARTITION}:secretsmanager:*:*:secret:{arn_builder.cluster_name}-sso-client-secret*"
+                    f"arn:{cdk.Aws.PARTITION}:secretsmanager:*:*:secret:{arn_builder.cluster_name}-sso-client-secret*",
+                    f"arn:{cdk.Aws.PARTITION}:secretsmanager:*:*:secret:{arn_builder.cluster_name}-sso-oidc-client-secret*",
                 ],
             )
         )

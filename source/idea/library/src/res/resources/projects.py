@@ -4,7 +4,9 @@
 from typing import Any, Dict, List, Optional
 
 import res.constants as constants  # type: ignore
-from res.resources import accounts, role_assignments, roles  # type: ignore
+from res.resources import accounts, cluster_settings
+from res.resources import projects as res_projects  # type: ignore
+from res.resources import role_assignments, roles
 from res.utils import logging_utils, table_utils  # type: ignore
 
 GSI_PROJECT_NAME = "project-name-index"
@@ -122,3 +124,38 @@ def list_user_manage_sessions_projects(username: str) -> List[str]:
     }
 
     return sorted(project_ids)
+
+
+def get_user_projects(username: str) -> List[Dict[str, Any]]:
+    user_role_assignments = role_assignments.list_role_assignments_for_user_and_groups(
+        username
+    )
+
+    user_project_ids = {
+        assignment["resource_id"]
+        for assignment in user_role_assignments
+        if assignment.get("resource_type") == "project"
+    }
+
+    user_projects = []
+    for project_id in user_project_ids:
+        project = res_projects._get_project_by_id(project_id)
+        if project is not None:
+            user_projects.append(project)
+
+    return user_projects
+
+
+def get_allowed_sessions_per_user(project_id: str) -> int:
+    """
+    Get the allowed number of sessions per user for a project.
+    Falls back to the cluster-level default if not set on the project.
+    """
+    project = _get_project_by_id(project_id)
+    allowed = project.get("allowed_sessions_per_user") if project else None
+
+    if allowed is None:
+        allowed = cluster_settings.get_setting(
+            "vdc.dcv_session.default_allowed_sessions_per_user_per_project",
+        )
+    return allowed

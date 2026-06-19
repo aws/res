@@ -15,3 +15,6 @@ for module in $modules; do
         echo "No test files found in module: $module, skipping..."
     fi
 done
+
+echo "Running unit tests on util package"
+go test ./util

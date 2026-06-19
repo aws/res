@@ -12,28 +12,10 @@
  */
 
 import {
-    CreateSessionRequest,
-    CreateSessionResponse,
-    GetSessionInfoRequest,
-    GetSessionInfoResponse,
-    UpdateSessionRequest,
-    UpdateSessionResponse,
-    DeleteSessionRequest,
-    DeleteSessionResponse,
-    ListSessionsRequest,
-    ListSessionsResponse,
     GetSessionScreenshotRequest,
     GetSessionScreenshotResponse,
-    StopSessionRequest,
-    StopSessionResponse,
-    ResumeSessionsRequest,
-    ResumeSessionsResponse,
-    GetSessionConnectionInfoRequest,
-    GetSessionConnectionInfoResponse,
     GetModuleInfoRequest,
     GetModuleInfoResult,
-    RebootSessionResponse,
-    RebootSessionRequest,
 } from "./data-model";
 import IdeaBaseClient, { IdeaBaseClientProps } from "./base-client";
 
@@ -53,6 +35,20 @@ import {
     ListSessionsResponseContent,
     VirtualDesktopApiGetSessionRequest,
     GetSessionResponseContent,
+    CreateSessionRequestContent,
+    CreateSessionResponseContent,
+    UpdateSessionResponseContent,
+	UpdateSessionRequestContent,
+    BatchStopSessionRequestContent,
+    BatchStopSessionResponseContent,
+    BatchDeleteSessionRequestContent,
+    BatchDeleteSessionResponseContent,
+    BatchRebootSessionRequestContent,
+    BatchRebootSessionResponseContent,
+    BatchStartSessionRequestContent,
+    BatchStartSessionResponseContent,
+    GetSessionConnectionRequestContent,
+    GetSessionConnectionResponseContent,
 } from "./generated/api";
 import { Configuration } from "./generated/configuration";
 
@@ -231,47 +227,74 @@ class VirtualDesktopClient extends IdeaBaseClient<VirtualDesktopClientProps> {
     }
 
     async getSession(request: VirtualDesktopApiGetSessionRequest): Promise<GetSessionResponseContent> {
-            const response = await this.generatedClient.getSession({
-                resSessionId: request.resSessionId,
-                owner: request.owner
+        const response = await this.generatedClient.getSession({
+            resSessionId: request.resSessionId,
+            owner: request.owner
+        });
+        return response.data;
+    }
+
+    async createSession(request: CreateSessionRequestContent): Promise<CreateSessionResponseContent> {
+        try {
+            const response = await this.generatedClient.createSession({
+                createSessionRequestContent: request
             });
+
             return response.data;
+        } catch (error) {
+            console.warn('Generated client failed:', error);
+            throw error;
         }
+    }
+
+    async updateSession(resSessionId: string, req: UpdateSessionRequestContent): Promise<UpdateSessionResponseContent> {
+        const response = await this.generatedClient.updateSession({
+            resSessionId: resSessionId,
+            updateSessionRequestContent: req
+        });
+        return response.data;
+    }
+
+    async batchStopSession(req: BatchStopSessionRequestContent): Promise<BatchStopSessionResponseContent> {
+        const response = await this.generatedClient.batchStopSession({
+            batchStopSessionRequestContent: req
+        });
+        return response.data;
+    }
+
+    async batchDeleteSession(req: BatchDeleteSessionRequestContent): Promise<BatchDeleteSessionResponseContent> {
+        const response = await this.generatedClient.batchDeleteSession({
+            batchDeleteSessionRequestContent: req
+        });
+        return response.data;
+    }
+
+    async batchRebootSession(req: BatchRebootSessionRequestContent): Promise<BatchRebootSessionResponseContent> {
+        const response = await this.generatedClient.batchRebootSession({
+            batchRebootSessionRequestContent: req
+        });
+        return response.data;
+    }
+    async batchStartSession(req: BatchStartSessionRequestContent): Promise<BatchStartSessionResponseContent> {
+        const response = await this.generatedClient.batchStartSession({
+            batchStartSessionRequestContent: req
+        });
+        return response.data;
+    }
 
     getModuleInfo(): Promise<GetModuleInfoRequest> {
         return this.apiInvoker.invoke_alt<GetModuleInfoRequest, GetModuleInfoResult>("App.GetModuleInfo", {});
-    }
-
-    createSession(req: CreateSessionRequest): Promise<CreateSessionResponse> {
-        return this.apiInvoker.invoke_alt<CreateSessionRequest, CreateSessionResponse>("VirtualDesktop.CreateSession", req);
-    }
-
-    updateSession(req: UpdateSessionRequest): Promise<UpdateSessionResponse> {
-        return this.apiInvoker.invoke_alt<UpdateSessionRequest, UpdateSessionResponse>("VirtualDesktop.UpdateSession", req);
-    }
-
-    deleteSessions(req: DeleteSessionRequest): Promise<DeleteSessionResponse> {
-        return this.apiInvoker.invoke_alt<DeleteSessionRequest, DeleteSessionResponse>("VirtualDesktop.DeleteSessions", req);
     }
 
     getSessionScreenshot(req: GetSessionScreenshotRequest): Promise<GetSessionScreenshotResponse> {
         return this.apiInvoker.invoke_alt<GetSessionScreenshotRequest, GetSessionScreenshotResponse>("VirtualDesktop.GetSessionScreenshot", req);
     }
 
-    getSessionConnectionInfo(req: GetSessionConnectionInfoRequest): Promise<GetSessionConnectionInfoResponse> {
-        return this.apiInvoker.invoke_alt<GetSessionConnectionInfoRequest, GetSessionConnectionInfoResponse>("VirtualDesktop.GetSessionConnectionInfo", req);
-    }
-
-    stopSessions(req: StopSessionRequest): Promise<StopSessionResponse> {
-        return this.apiInvoker.invoke_alt<StopSessionRequest, StopSessionResponse>("VirtualDesktop.StopSessions", req);
-    }
-
-    resumeSessions(req: ResumeSessionsRequest): Promise<ResumeSessionsResponse> {
-        return this.apiInvoker.invoke_alt<ResumeSessionsRequest, ResumeSessionsResponse>("VirtualDesktop.ResumeSessions", req);
-    }
-
-    rebootSessions(req: RebootSessionRequest): Promise<RebootSessionResponse> {
-        return this.apiInvoker.invoke_alt<RebootSessionRequest, RebootSessionResponse>("VirtualDesktop.RebootSessions", req);
+    async getSessionConnection(req: GetSessionConnectionRequestContent): Promise<GetSessionConnectionResponseContent> {
+        const response = await this.generatedClient.getSessionConnection({
+            getSessionConnectionRequestContent: req
+        });
+        return response.data;
     }
 }
 

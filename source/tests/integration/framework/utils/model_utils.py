@@ -43,12 +43,26 @@ def import_backend_model(model_name: str) -> Any:
     )
     data_model_path = os.path.join(source_dir, "idea", "data-model", "src")
 
-    model_file_path = os.path.join(
-        data_model_path, "datamodel", "models", f"{model_name}.py"
-    )
+    SUBDIRS = ["backend", "dcv_session_management"]
 
-    if not os.path.exists(model_file_path):
-        raise ImportError(f"Data model file not found: {model_file_path}")
+    model_file_path = None
+    # Check parent models/ dir first (shared models live here)
+    candidate = os.path.join(data_model_path, "datamodel", "models", f"{model_name}.py")
+    if os.path.exists(candidate):
+        model_file_path = candidate
+    else:
+        for subdir in SUBDIRS:
+            candidate = os.path.join(
+                data_model_path, "datamodel", "models", subdir, f"{model_name}.py"
+            )
+            if os.path.exists(candidate):
+                model_file_path = candidate
+                break
+
+    if model_file_path is None:
+        raise ImportError(
+            f"Data model file not found in subdirs {SUBDIRS}: {model_name}"
+        )
 
     spec = importlib.util.spec_from_file_location(
         f"datamodel.models.{model_name}", model_file_path

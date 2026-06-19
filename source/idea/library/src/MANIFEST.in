@@ -1,0 +1,1 @@
+recursive-include res/utils/_templates *.jinja2

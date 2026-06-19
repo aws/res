@@ -673,10 +673,8 @@ class TestListAllowedInstanceTypesForSession:
                 # Missing hibernation_enabled
             }
 
-            # Create VirtualDesktopSession object
             session_obj = VirtualDesktopSession.from_dict(session_without_hibernation)
 
-            # Create request content object
             request_content = ListAllowedInstanceTypesForSessionRequestContent(
                 session=session_obj
             )
@@ -691,8 +689,8 @@ class TestListAllowedInstanceTypesForSession:
                 response_content = e.response.text
 
                 if (
-                    "'hibernation_enabled' is a required property - 'session'"
-                    in response_content
+                    "hibernation_enabled" in response_content
+                    and "required" in response_content
                 ):
                     logger.info(
                         f"Missing hibernation_enabled correctly received BadRequestException: {str(e)}"
@@ -747,8 +745,8 @@ class TestListAllowedInstanceTypesForSession:
                 response_content = e.response.text
 
                 if (
-                    "'software_stack' is a required property - 'session'"
-                    in response_content
+                    "software_stack" in response_content
+                    and "required" in response_content
                 ):
                     logger.info(
                         f"Missing software_stack correctly received BadRequestException: {str(e)}"

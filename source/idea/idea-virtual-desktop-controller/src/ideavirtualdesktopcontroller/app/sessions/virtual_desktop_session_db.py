@@ -30,7 +30,7 @@ from ideadatamodel import exceptions
 
 from ideasdk.utils import Utils, scan_db_records
 from ideavirtualdesktopcontroller.app.schedules.virtual_desktop_schedule_db import VirtualDesktopScheduleDB
-from ideavirtualdesktopcontroller.app.servers.virtual_desktop_server_db import VirtualDesktopServerDB
+from ideavirtualdesktopcontroller.app.servers.virtual_desktop_server_utils import VirtualDesktopServerUtils
 from ideavirtualdesktopcontroller.app.software_stacks.virtual_desktop_software_stack_db import VirtualDesktopSoftwareStackDB
 from ideavirtualdesktopcontroller.app.virtual_desktop_controller_utils import VirtualDesktopControllerUtils
 from ideavirtualdesktopcontroller.app.virtual_desktop_notifiable_db import VirtualDesktopNotifiableDB
@@ -40,12 +40,11 @@ from ideavirtualdesktopcontroller.app.sessions import constants as sessions_cons
 class VirtualDesktopSessionDB(VirtualDesktopNotifiableDB):
     DEFAULT_PAGE_SIZE = 10
 
-    def __init__(self, context: ideavirtualdesktopcontroller.AppContext, server_db: VirtualDesktopServerDB, software_stack_db: VirtualDesktopSoftwareStackDB, schedule_db: VirtualDesktopScheduleDB):
+    def __init__(self, context: ideavirtualdesktopcontroller.AppContext, software_stack_db: VirtualDesktopSoftwareStackDB, schedule_db: VirtualDesktopScheduleDB):
         self.context = context
         self._logger = self.context.logger('virtual-desktop-session-db')
 
         self._table_obj = None
-        self._server_db = server_db
         self._software_stack_db = software_stack_db
         self._schedule_db = schedule_db
         self._ec2_client = self.context.aws().ec2()
@@ -67,10 +66,6 @@ class VirtualDesktopSessionDB(VirtualDesktopNotifiableDB):
     def schedule_db(self):
         return self._schedule_db
 
-    @property
-    def server_db(self):
-        return self._server_db
-
     def convert_db_dict_to_session_object(self, db_entry: Dict) -> Optional[VirtualDesktopSession]:
         if Utils.is_empty(db_entry):
             return None
@@ -82,7 +77,7 @@ class VirtualDesktopSessionDB(VirtualDesktopNotifiableDB):
             created_on=Utils.to_datetime(Utils.get_value_as_int(sessions_constants.USER_SESSION_DB_CREATED_ON_KEY, db_entry)),
             updated_on=Utils.to_datetime(Utils.get_value_as_int(sessions_constants.USER_SESSION_DB_UPDATED_ON_KEY, db_entry)),
             locked=Utils.get_value_as_bool(sessions_constants.USER_SESSION_DB_SESSION_LOCKED_KEY, db_entry, False),
-            server=self._server_db.convert_db_entry_to_server_object(Utils.get_value_as_dict(sessions_constants.USER_SESSION_DB_SERVER_KEY, db_entry)),
+            server=VirtualDesktopServerUtils.convert_db_entry_to_server_object(Utils.get_value_as_dict(sessions_constants.USER_SESSION_DB_SERVER_KEY, db_entry)),
             software_stack=self._software_stack_db.convert_db_dict_to_software_stack_object(Utils.get_value_as_dict(sessions_constants.USER_SESSION_DB_SOFTWARE_STACK_KEY, db_entry)),
             name=Utils.get_value_as_string(sessions_constants.USER_SESSION_DB_NAME_KEY, db_entry),
             description=Utils.get_value_as_string(sessions_constants.USER_SESSION_DB_DESCRIPTION_KEY, db_entry, default=''),
@@ -122,7 +117,7 @@ class VirtualDesktopSessionDB(VirtualDesktopNotifiableDB):
             sessions_constants.USER_SESSION_DB_RANGE_KEY: session.idea_session_id,
             sessions_constants.USER_SESSION_DB_CREATED_ON_KEY: Utils.to_milliseconds(session.created_on),
             sessions_constants.USER_SESSION_DB_UPDATED_ON_KEY: Utils.to_milliseconds(session.updated_on),
-            sessions_constants.USER_SESSION_DB_SERVER_KEY: self._server_db.convert_server_object_to_db_dict(session.server),
+            sessions_constants.USER_SESSION_DB_SERVER_KEY: VirtualDesktopServerUtils.convert_server_object_to_db_dict(session.server),
             sessions_constants.USER_SESSION_DB_SOFTWARE_STACK_KEY: self._software_stack_db.convert_software_stack_object_to_db_dict(session.software_stack),
             sessions_constants.USER_SESSION_DB_BASE_OS_KEY: session.software_stack.base_os,
             sessions_constants.USER_SESSION_DB_NAME_KEY: session.name,

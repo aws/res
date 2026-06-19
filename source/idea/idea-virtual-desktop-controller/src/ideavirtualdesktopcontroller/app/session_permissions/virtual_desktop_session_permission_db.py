@@ -27,6 +27,7 @@ from ideadatamodel import (
 )
 
 from ideasdk.utils import Utils
+from res.utils.string_utils import validate_actor_name
 from ideavirtualdesktopcontroller.app.session_permissions import constants as session_permissions_constants
 from ideavirtualdesktopcontroller.app.virtual_desktop_notifiable_db import VirtualDesktopNotifiableDB
 
@@ -97,6 +98,7 @@ class VirtualDesktopSessionPermissionDB(VirtualDesktopNotifiableDB):
         }
 
     def create(self, session_permission: VirtualDesktopSessionPermission) -> VirtualDesktopSessionPermission:
+        validate_actor_name(session_permission.actor_name)
         db_entry = self.convert_session_permission_object_to_db_dict(session_permission)
         db_entry[session_permissions_constants.SESSION_PERMISSIONS_DB_CREATED_ON_KEY] = Utils.current_time_ms()
         db_entry[session_permissions_constants.SESSION_PERMISSIONS_DB_UPDATED_ON_KEY] = Utils.current_time_ms()
@@ -107,6 +109,7 @@ class VirtualDesktopSessionPermissionDB(VirtualDesktopNotifiableDB):
         return self.convert_db_dict_to_session_permission_object(db_entry)
 
     def update(self, session_permission: VirtualDesktopSessionPermission) -> VirtualDesktopSessionPermission:
+        validate_actor_name(session_permission.actor_name)
         db_entry = self.convert_session_permission_object_to_db_dict(session_permission)
         db_entry[session_permissions_constants.SESSION_PERMISSIONS_DB_UPDATED_ON_KEY] = Utils.current_time_ms()
         update_expression_tokens = []

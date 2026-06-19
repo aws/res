@@ -25,7 +25,6 @@ import EmailTemplatesClient from "./email-templates-client";
 import Utils from "../common/utils";
 import { Constants } from "../common/constants";
 import VirtualDesktopUtilsClient from "./virtual-desktop-utils-client";
-import VirtualDesktopDCVClient from "./virtual-desktop-dcv-client";
 import { IdeaAuthenticationContext } from "../common/authentication-context";
 import IdeaBaseClient, { IdeaBaseClientProps } from "./base-client";
 import FileSystemClient from "./filesystem-client";
@@ -50,7 +49,6 @@ class IdeaClients {
     private readonly virtualDesktopClient: VirtualDesktopClient;
     private readonly virtualDesktopAdminClient: VirtualDesktopAdminClient;
     private readonly virtualDesktopUtilsClient: VirtualDesktopUtilsClient;
-    private readonly virtualDesktopDCVClient: VirtualDesktopDCVClient;
     private readonly clusterSettingsClient: ClusterSettingsClient;
     private readonly projectsClient: ProjectsClient;
     private readonly filesystemClient: FileSystemClient;
@@ -159,14 +157,6 @@ class IdeaClients {
         });
         this.clients.push(this.virtualDesktopUtilsClient);
 
-        this.virtualDesktopDCVClient = new VirtualDesktopDCVClient({
-            name: "virtual-desktop-dcv-client",
-            baseUrl: props.baseUrl,
-            authContext: props.authContext,
-            apiContextPath: Utils.getApiContextPath(Constants.MODULE_VIRTUAL_DESKTOP_CONTROLLER),
-        });
-        this.clients.push(this.virtualDesktopDCVClient);
-
         this.clusterSettingsClient = new ClusterSettingsClient({
             name: "cluster-settings-client",
             baseUrl: props.baseUrl,
@@ -242,10 +232,6 @@ class IdeaClients {
 
     virtualDesktopUtils(): VirtualDesktopUtilsClient {
         return this.virtualDesktopUtilsClient;
-    }
-
-    virtualDesktopDCV(): VirtualDesktopDCVClient {
-        return this.virtualDesktopDCVClient;
     }
 
     clusterSettings(): ClusterSettingsClient {

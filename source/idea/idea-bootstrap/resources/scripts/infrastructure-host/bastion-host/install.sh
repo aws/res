@@ -13,10 +13,12 @@
 
 set -x
 
-while getopts s: opt
+while getopts s:e:b: opt
 do
   case "${opt}" in
     s) SCRIPT_DIR=${OPTARG};;
+    e) ENVIRONMENT_NAME=${OPTARG};;
+    b) STAGING_BUCKET=${OPTARG};;
     ?) echo "Invalid option for bastion-host install.sh script: -${opt}."
       exit 1;;
   esac
@@ -39,5 +41,5 @@ BASE_OS=$(get_base_os)
 # End: Install SSSD packages
 
 # Begin : Install Host Modules
-/bin/bash "${SCRIPT_DIR}/../common/linux/host_modules.sh" -o $BASE_OS -s "${SCRIPT_DIR}"
+/bin/bash "${SCRIPT_DIR}/../common/linux/host_modules.sh" -o $BASE_OS -s "${SCRIPT_DIR}" -e "${ENVIRONMENT_NAME}" -b "${STAGING_BUCKET}"
 # End: Install Host Modules

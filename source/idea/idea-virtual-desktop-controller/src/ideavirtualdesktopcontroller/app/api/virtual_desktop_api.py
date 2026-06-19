@@ -50,7 +50,6 @@ from ideavirtualdesktopcontroller.app.events.events_utils import EventsUtils
 from ideavirtualdesktopcontroller.app.permission_profiles.virtual_desktop_permission_profile_db import VirtualDesktopPermissionProfileDB
 from ideavirtualdesktopcontroller.app.schedules.virtual_desktop_schedule_db import VirtualDesktopScheduleDB
 from ideavirtualdesktopcontroller.app.schedules.virtual_desktop_schedule_utils import VirtualDesktopScheduleUtils
-from ideavirtualdesktopcontroller.app.servers.virtual_desktop_server_db import VirtualDesktopServerDB
 from ideavirtualdesktopcontroller.app.servers.virtual_desktop_server_utils import VirtualDesktopServerUtils
 from ideavirtualdesktopcontroller.app.session_permissions.constants import SESSION_PERMISSIONS_FILTER_SESSION_ID_KEY, SESSION_PERMISSIONS_FILTER_ACTOR_KEY
 from ideavirtualdesktopcontroller.app.session_permissions.virtual_desktop_session_permission_db import VirtualDesktopSessionPermissionDB
@@ -63,9 +62,10 @@ from ideavirtualdesktopcontroller.app.ssm_commands.virtual_desktop_ssm_commands_
 from ideavirtualdesktopcontroller.app.ssm_commands.virtual_desktop_ssm_commands_utils import VirtualDesktopSSMCommandsUtils
 from ideavirtualdesktopcontroller.app.virtual_desktop_controller_utils import VirtualDesktopControllerUtils
 from res.exceptions import SoftwareStackNotFound, UserSessionNotFound
-from res.resources import software_stacks, vdi_management, sessions
+from res.resources import software_stacks, vdi_management, sessions, ad_automation
 from res.constants import SESSION_NAME_REGEX, SESSION_NAME_ERROR_MESSAGE
 from res.utils import string_utils
+from res.clients.dcv_session_manager import dcv_session_manager_client
 
 class VirtualDesktopAPI(BaseAPI):
     TEMP_IMAGE_ID = 'TEMP_IMAGE_ID'
@@ -76,19 +76,17 @@ class VirtualDesktopAPI(BaseAPI):
         self.events_utils: EventsUtils = EventsUtils(context=self.context)
         self.controller_utils: VirtualDesktopControllerUtils = VirtualDesktopControllerUtils(context=self.context)
         self.software_stack_db: VirtualDesktopSoftwareStackDB = VirtualDesktopSoftwareStackDB(context=self.context)
-        self.server_db: VirtualDesktopServerDB = VirtualDesktopServerDB(context=self.context)
         self.schedule_db: VirtualDesktopScheduleDB = VirtualDesktopScheduleDB(context=self.context)
         self.permission_profile_db: VirtualDesktopPermissionProfileDB = VirtualDesktopPermissionProfileDB(context=self.context)
         self.session_db: VirtualDesktopSessionDB = VirtualDesktopSessionDB(
             context=self.context,
-            server_db=self.server_db,
             software_stack_db=self.software_stack_db,
             schedule_db=self.schedule_db)
         self.ssm_commands_db: VirtualDesktopSSMCommandsDB = VirtualDesktopSSMCommandsDB(context=self.context)
         self.session_permissions_db: VirtualDesktopSessionPermissionDB = VirtualDesktopSessionPermissionDB(self.context)
 
         self.software_stack_utils: VirtualDesktopSoftwareStackUtils = VirtualDesktopSoftwareStackUtils(context=self.context, db=self.software_stack_db)
-        self.server_utils: VirtualDesktopServerUtils = VirtualDesktopServerUtils(context=self.context, db=self.server_db)
+        self.server_utils: VirtualDesktopServerUtils = VirtualDesktopServerUtils(context=self.context)
         self.schedule_utils: VirtualDesktopScheduleUtils = VirtualDesktopScheduleUtils(context=self.context, db=self.schedule_db)
         self.ssm_commands_utils: VirtualDesktopSSMCommandsUtils = VirtualDesktopSSMCommandsUtils(context=self.context, db=self.ssm_commands_db)
         self.session_permissions_utils: VirtualDesktopSessionPermissionUtils = VirtualDesktopSessionPermissionUtils(
@@ -482,7 +480,7 @@ class VirtualDesktopAPI(BaseAPI):
 
         return session
 
-    def _get_session_screenshots(self, screenshots: List[VirtualDesktopSessionScreenshot]) -> (List[VirtualDesktopSessionScreenshot], List[VirtualDesktopSessionScreenshot]):
+    def _get_session_screenshots(self, screenshots: List[VirtualDesktopSessionScreenshot], requester: str) -> (List[VirtualDesktopSessionScreenshot], List[VirtualDesktopSessionScreenshot]):
         if Utils.is_empty(screenshots):
             return [], []
 
@@ -508,9 +506,38 @@ class VirtualDesktopAPI(BaseAPI):
             else:
                 valid_screenshots.append(screenshot)
 
-        success_response, fail_response = self.context.dcv_broker_client.get_session_screenshots(valid_screenshots)
+        success_response, fail_response = self._call_session_screenshots(valid_screenshots, requester)
         fail_response.extend(failed_requests)
         return success_response, fail_response
+
+    def _call_session_screenshots(self, screenshots: List[VirtualDesktopSessionScreenshot], requester: str) -> (List[VirtualDesktopSessionScreenshot], List[VirtualDesktopSessionScreenshot]):
+
+        session_ids = [s.idea_session_id for s in screenshots]
+        response = dcv_session_manager_client.get_session_screenshots(session_ids, requester=requester)
+
+        successful_list = []
+        for entry in Utils.get_value_as_list('successful_list', response, []):
+            screenshot_entry = Utils.get_value_as_dict('session_screenshot', entry, {})
+            for image in Utils.get_value_as_list('images', screenshot_entry, []):
+                if not Utils.get_value_as_bool('primary', image, False):
+                    continue
+                successful_list.append(VirtualDesktopSessionScreenshot(
+                    idea_session_id=Utils.get_value_as_string('session_id', screenshot_entry, None),
+                    image_data=Utils.get_value_as_string('data', image, None),
+                    image_type=Utils.get_value_as_string('format', image, 'png'),
+                    create_time=Utils.get_value_as_string('created_on', image, None),
+                ))
+                break
+
+        unsuccessful_list = []
+        for entry in Utils.get_value_as_list('unsuccessful_list', response, []):
+            req_data = Utils.get_value_as_dict('get_session_screenshot_request_data', entry, {})
+            unsuccessful_list.append(VirtualDesktopSessionScreenshot(
+                dcv_session_id=Utils.get_value_as_string('session_id', req_data, None),
+                failure_reason=Utils.get_value_as_string('failure_reason', entry, None),
+            ))
+
+        return successful_list, unsuccessful_list
 
     def _update_session(self, new_session: VirtualDesktopSession) -> VirtualDesktopSession:
         old_session = self.session_db.get_from_db(idea_session_id=new_session.idea_session_id, idea_session_owner=new_session.owner)
@@ -533,13 +560,12 @@ class VirtualDesktopAPI(BaseAPI):
             old_session.description = new_session.description
 
         if not operation_failed and Utils.is_not_empty(new_session.server) and Utils.is_not_empty(new_session.server.instance_type):
-            old_server = self.server_db.get(instance_id=new_session.server.instance_id)
-            if Utils.is_not_empty(old_server) and old_server.instance_type != new_session.server.instance_type:
+            if Utils.is_not_empty(old_session.server) and old_session.server.instance_type != new_session.server.instance_type:
                 if old_session.hibernation_enabled:
                     error = f'Not allowed to change Instance type for session: {new_session.idea_session_id} because hibernation is enabled'
                     success = False
                 else:
-                    error, success = self.controller_utils.change_instance_type(instance_id=new_session.server.instance_id, instance_type_name=new_session.server.instance_type)
+                    error, success = self.controller_utils.change_instance_type(instance_id=old_session.server.instance_id, instance_type_name=new_session.server.instance_type)
 
                 if not success:
                     new_session.failure_reason = error
@@ -554,19 +580,13 @@ class VirtualDesktopAPI(BaseAPI):
             is_session_updated = True
 
         if not operation_failed and is_server_updated:
-            _ = self.server_db.update(old_session.server)
+            pass  # Server state is persisted via session_db.update below
 
         if not operation_failed and is_session_updated:
             new_session = self.session_db.update(old_session)
             self.controller_utils.create_tag(new_session.server.instance_id, constants.IDEA_TAG_NAME, f'{self.context.cluster_name()}-{new_session.name}-{new_session.owner}')
 
         return new_session
-
-    def _reboot_sessions(self, sessions: List[VirtualDesktopSession]) -> (List[VirtualDesktopSession], List[VirtualDesktopSession]):
-        if Utils.is_empty(sessions):
-            return [], []
-
-        return self.session_utils.reboot_sessions(sessions)
 
     def _stop_sessions(self, sessions: List[VirtualDesktopSession]) -> (List[VirtualDesktopSession], List[VirtualDesktopSession]):
         if Utils.is_empty(sessions):
@@ -650,11 +670,13 @@ class VirtualDesktopAPI(BaseAPI):
                 software_stack_id=new_software_stack.stack_id
             )
 
+        # Clear stale AD automation record so the VDI gets a fresh OTP on rejoin after reboot
+        ad_automation.remove_ad_authorization([session.server.instance_id])
+
         session.locked = True
         session.server.locked = True
         # Set the session state to PROVISIONING so that RES will re-create the DCV session after reboot.
         session.state = VirtualDesktopSessionState.PROVISIONING
-        _ = self.server_db.update(session.server)
         _ = self.session_db.update(session)
 
         return new_software_stack
@@ -719,10 +741,18 @@ class VirtualDesktopAPI(BaseAPI):
                 connection_info_request.dcv_session_id = session.dcv_session_id
 
         if is_valid_idea_session:
-            connection_info = self.context.dcv_broker_client.get_session_connection_data(dcv_session_id=connection_info_request.dcv_session_id, username=connection_info_request.username)
+            try:
+                response = dcv_session_manager_client.get_session_connection_data(
+                    session_id=connection_info_request.idea_session_id,
+                    username=connection_info_request.username,
+                )
+                connection_info = VirtualDesktopSessionConnectionInfo.parse_obj(response)
+            except Exception:
+                self._logger.exception("Failed to get session connection data for IDEA Session: %s", connection_info_request.idea_session_id)
+                connection_info.failure_reason = f"Error in retrieving session connection data for IDEA Session: {connection_info_request.idea_session_id}"
             if Utils.is_not_empty(connection_info.failure_reason):
                 # Invalid connection
-                self._logger.error(f'Error in getting connection info data for DCV Session: {connection_info_request.dcv_session_id}, Trying to switch to error state.')
+                self._logger.error(f'Error in getting connection info data for IDEA Session: {connection_info_request.idea_session_id}, Trying to switch to error state.')
                 if Utils.is_empty(session) and Utils.is_not_empty(connection_info_request.idea_session_id):
                     self._logger.error(f'We have RES session ID {connection_info_request.idea_session_id}, using it to get session db entry...')
                     session = self.session_db.get_from_db(idea_session_id=connection_info_request.idea_session_id, idea_session_owner=connection_info_request.idea_session_owner)

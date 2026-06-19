@@ -2,12 +2,14 @@
 #  SPDX-License-Identifier: Apache-2.0
 
 from typing import Any, Dict, List
+
 from datamodel.models.virtual_desktop_session_permission import VirtualDesktopSessionPermission
-from datamodel.models.update_session_permissions_request_content import (
+from datamodel.models.backend.update_session_permissions_request_content import (
     UpdateSessionPermissionsRequestContent,
 )
 
 from res.resources import sessions
+from res.utils.string_utils import INVALID_ACTOR_NAME_MESSAGE, validate_actor_name
 
 UPDATE_SESSION_PERMISSION_INVALID_REQUEST_ERROR_MESSAGE = (
     "Invalid request. No session permission modified."
@@ -71,17 +73,28 @@ def _validate_actors_for_session_permission_requests(
 
     actors_seen = set()
     duplicate_actors = set()
+    invalid_actor_count = 0
     is_valid = True
     for session_permission in session_permissions:
-        if session_permission.actor_name not in actors_seen:
-            actors_seen.add(session_permission.actor_name)
+        actor_name = session_permission.actor_name
+        try:
+            validate_actor_name(actor_name)
+        except ValueError:
+            invalid_actor_count += 1
+            is_valid = False
+            continue
+        if actor_name not in actors_seen:
+            actors_seen.add(actor_name)
         else:
-            duplicate_actors.add(session_permission.actor_name)
+            duplicate_actors.add(actor_name)
             is_valid = False
 
     message = ""
-    if not is_valid:
-        message = f"actors: {duplicate_actors} not unique"
+    if invalid_actor_count:
+        message = f"{invalid_actor_count} actor name(s) contain invalid characters. {INVALID_ACTOR_NAME_MESSAGE}"
+    if duplicate_actors:
+        dup_msg = f"actors: {duplicate_actors} not unique"
+        message = f"{message} {dup_msg}" if message else dup_msg
     return is_valid, message
 
 

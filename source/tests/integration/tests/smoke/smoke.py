@@ -17,6 +17,7 @@ import time
 import uuid
 from typing import Optional
 
+import boto3
 import pytest
 from res.constants import CLUSTER_ADMIN_USERNAME  # type: ignore
 from res.utils import auth_utils  # type: ignore
@@ -78,7 +79,10 @@ from tests.integration.framework.utils.ec2_utils import (
     deregister_ami,
 )
 from tests.integration.framework.utils.model_utils import get_backend_model_class
-from tests.integration.framework.utils.remote_command_runner import EC2InstancePlatform
+from tests.integration.framework.utils.remote_command_runner import (
+    EC2InstancePlatform,
+    RemoteCommandRunner,
+)
 from tests.integration.framework.utils.session_utils import (
     wait_for_session_connection_count,
     wait_for_software_stack_to_be_active,
@@ -404,6 +408,242 @@ class TestsSmoke(object):
                 assert tail_file_response.next_token is not None
                 assert tail_file_response.lines is not None
                 assert download_files_response.download_url is not None
+
+    @pytest.mark.usefixtures("admin")
+    @pytest.mark.parametrize(
+        "admin_username",
+        [
+            "admin1",
+        ],
+    )
+    @pytest.mark.usefixtures("non_admin")
+    @pytest.mark.parametrize(
+        "non_admin_username",
+        [
+            "user1",
+        ],
+    )
+    def test_file_browser_rejects_symlinks(
+        self,
+        request: FixtureRequest,
+        region: str,
+        admin: ClientAuth,
+        admin_username: str,
+        non_admin: ClientAuth,
+        non_admin_username: str,
+        res_environment: ResEnvironment,
+    ) -> None:
+        """
+        Test that FileBrowser APIs reject symlink-based access attempts and
+        that ListFiles skips symlinks and DeleteFiles removes only the symlink.
+        """
+        api_invoker_type = request.config.getoption("--api-invoker-type")
+        admin_client = ResClient(res_environment, admin, api_invoker_type)
+        non_admin_client = ResClient(res_environment, non_admin, api_invoker_type)
+
+        admin_client.update_module_settings(
+            request=UpdateModuleSettingsRequest(
+                module_id="shared-storage",
+                settings={"enable_file_browser": True},
+            )
+        )
+
+        user_home = f"/home/{non_admin_username}"
+        cluster_manager_instance_id = cluster_manager_instances(request.session)[0].get(
+            "InstanceId", ""
+        )
+        runner = RemoteCommandRunner(region, EC2InstancePlatform.LINUX)
+
+        test_id = str(uuid.uuid4())[:8]
+        symlink_file = f"symlink_file_{test_id}.txt"
+        symlink_dir = f"symlink_dir_{test_id}"
+        regular_file = f"regular_file_{test_id}.txt"
+        internal_link = f"internal_link_{test_id}.txt"
+
+        try:
+            runner.run(
+                cluster_manager_instance_id,
+                [
+                    f"mkdir -p {user_home}",
+                    f"chown {non_admin_username}: {user_home}",
+                    f"echo 'regular content' > {user_home}/{regular_file}",
+                    f"chown {non_admin_username}: {user_home}/{regular_file}",
+                    f"ln -sf /etc/hostname {user_home}/{symlink_file}",
+                    f"ln -sf /etc {user_home}/{symlink_dir}",
+                ],
+            )
+
+            # Retry until the enable_file_browser setting is picked up by the cluster manager
+            max_wait = 60
+            poll_interval = 5
+            start = time.time()
+            while time.time() - start < max_wait:
+                try:
+                    non_admin_client.read_file(
+                        request=ReadFileRequest(file=f"{user_home}/{symlink_file}"),
+                        should_succeed=False,
+                        expected_error_code="UNAUTHORIZED_ACCESS",
+                    )
+                    break
+                except AssertionError as e:
+                    if "DISABLED_FEATURE" in str(e):
+                        time.sleep(poll_interval)
+                    else:
+                        raise
+            else:
+                pytest.fail("File browser config did not propagate within 60s")
+
+            non_admin_client.tail_file(
+                request=TailFileRequest(file=f"{user_home}/{symlink_file}"),
+                should_succeed=False,
+                expected_error_code="UNAUTHORIZED_ACCESS",
+            )
+            non_admin_client.save_file(
+                request=SaveFileRequest(
+                    file=f"{user_home}/{symlink_file}",
+                    content=base64.b64encode(b"malicious").decode(),
+                ),
+                should_succeed=False,
+                expected_error_code="UNAUTHORIZED_ACCESS",
+            )
+            non_admin_client.download_files(
+                request=DownloadFilesRequest(files=[f"{user_home}/{symlink_file}"]),
+                should_succeed=False,
+                expected_error_code="UNAUTHORIZED_ACCESS",
+            )
+            non_admin_client.create_file(
+                request=CreateFileRequest(
+                    cwd=user_home,
+                    filename=symlink_file,
+                    is_folder=False,
+                ),
+                should_succeed=False,
+                expected_error_code="INVALID_PARAMS",
+            )
+
+            non_admin_client.read_file(
+                request=ReadFileRequest(file=f"{user_home}/{symlink_dir}/hostname"),
+                should_succeed=False,
+                expected_error_code="UNAUTHORIZED_ACCESS",
+            )
+            non_admin_client.tail_file(
+                request=TailFileRequest(file=f"{user_home}/{symlink_dir}/hostname"),
+                should_succeed=False,
+                expected_error_code="UNAUTHORIZED_ACCESS",
+            )
+            non_admin_client.save_file(
+                request=SaveFileRequest(
+                    file=f"{user_home}/{symlink_dir}/hostname",
+                    content=base64.b64encode(b"malicious").decode(),
+                ),
+                should_succeed=False,
+                expected_error_code="UNAUTHORIZED_ACCESS",
+            )
+            non_admin_client.download_files(
+                request=DownloadFilesRequest(
+                    files=[f"{user_home}/{symlink_dir}/hostname"]
+                ),
+                should_succeed=False,
+                expected_error_code="UNAUTHORIZED_ACCESS",
+            )
+            non_admin_client.create_file(
+                request=CreateFileRequest(
+                    cwd=f"{user_home}/{symlink_dir}/",
+                    filename="newfile.txt",
+                    is_folder=False,
+                ),
+                should_succeed=False,
+                expected_error_code="UNAUTHORIZED_ACCESS",
+            )
+
+            list_response = non_admin_client.list_files(
+                request=ListFilesRequest(cwd=user_home),
+                should_succeed=True,
+            )
+            listed_names = [f.name for f in list_response.listing]
+            assert (
+                regular_file in listed_names
+            ), f"Regular file {regular_file} should appear in listing"
+            assert (
+                symlink_file not in listed_names
+            ), f"Symlink {symlink_file} should NOT appear in listing"
+            assert (
+                symlink_dir not in listed_names
+            ), f"Symlink dir {symlink_dir} should NOT appear in listing"
+
+            non_admin_client.delete_files(
+                request=DeleteFilesRequest(files=[f"{user_home}/{symlink_file}"]),
+                should_succeed=True,
+            )
+            non_admin_client.delete_files(
+                request=DeleteFilesRequest(files=[f"{user_home}/{symlink_dir}/"]),
+                should_succeed=True,
+            )
+            verify_output = runner.run(
+                cluster_manager_instance_id,
+                [
+                    f"test -L {user_home}/{symlink_file} && echo FILE_LINK_EXISTS || echo FILE_LINK_GONE",
+                    f"test -L {user_home}/{symlink_dir} && echo DIR_LINK_EXISTS || echo DIR_LINK_GONE",
+                    "test -f /etc/hostname && echo TARGET_OK || echo TARGET_MISSING",
+                    "test -d /etc && echo DIR_TARGET_OK || echo DIR_TARGET_MISSING",
+                ],
+            )
+            assert "FILE_LINK_GONE" in verify_output
+            assert "DIR_LINK_GONE" in verify_output
+            assert "TARGET_OK" in verify_output
+            assert "DIR_TARGET_OK" in verify_output
+
+            internal_link = f"internal_link_{test_id}.txt"
+            runner.run(
+                cluster_manager_instance_id,
+                [
+                    f"ln -sf {user_home}/{regular_file} {user_home}/{internal_link}",
+                    f"chown -h {non_admin_username}: {user_home}/{internal_link}",
+                ],
+            )
+
+            non_admin_client.read_file(
+                request=ReadFileRequest(file=f"{user_home}/{internal_link}"),
+                should_succeed=True,
+            )
+            non_admin_client.tail_file(
+                request=TailFileRequest(file=f"{user_home}/{internal_link}"),
+                should_succeed=True,
+            )
+
+            list_response = non_admin_client.list_files(
+                request=ListFilesRequest(cwd=user_home),
+                should_succeed=True,
+            )
+            listed_names = [f.name for f in list_response.listing]
+            assert (
+                internal_link not in listed_names
+            ), f"Internal symlink {internal_link} should NOT appear in listing"
+
+            non_admin_client.delete_files(
+                request=DeleteFilesRequest(files=[f"{user_home}/{internal_link}"]),
+                should_succeed=True,
+            )
+            verify_output = runner.run(
+                cluster_manager_instance_id,
+                [
+                    f"test -L {user_home}/{internal_link} && echo INTERNAL_LINK_EXISTS || echo INTERNAL_LINK_GONE",
+                    f"test -f {user_home}/{regular_file} && echo REGULAR_FILE_OK || echo REGULAR_FILE_MISSING",
+                ],
+            )
+            assert "INTERNAL_LINK_GONE" in verify_output
+            assert "REGULAR_FILE_OK" in verify_output
+
+        finally:
+            runner.run(
+                cluster_manager_instance_id,
+                [
+                    f"rm -f {user_home}/{symlink_file}",
+                    f"rm -rf {user_home}/{symlink_dir}",
+                    f"rm -f {user_home}/{regular_file}",
+                    f"rm -f {user_home}/internal_link_{test_id}.txt",
+                ],
+            )
 
     @pytest.mark.usefixtures("admin")
     @pytest.mark.parametrize(
@@ -745,15 +985,23 @@ class TestsSmoke(object):
         new_software_stack = VirtualDesktopSoftwareStack(
             name=f"integ-test-created-software-stack-from-session-{str(uuid.uuid4())[:4]}",
             description="integ-test-created-software-stack-from-session",
-            projects=[project],
             base_os=session.base_os,
             min_storage=session.software_stack.min_storage,
             allowed_instance_types=session.software_stack.allowed_instance_types,
         )
 
         logger.info(f"New software stack {new_software_stack}")
+
+        # Send a minimal session with only the fields the backend needs.
+        # The backend re-fetches the full session from DB using these two fields.
+        # Sending the full session object causes pydantic deserialization errors
+        minimal_session = VirtualDesktopSession(
+            idea_session_id=session.idea_session_id,
+            owner=session.owner,
+        )
+
         software_stack_create_request = CreateSoftwareStackFromSessionRequest(
-            session=session,
+            session=minimal_session,
             new_software_stack=new_software_stack,
         )
 
@@ -769,6 +1017,7 @@ class TestsSmoke(object):
                 api_client=api_client,
                 software_stack=software_stack_create_response.software_stack,
             )
+
             created_stack_response = api_client.get_software_stack(
                 stack_id=new_software_stack.stack_id,
                 base_os=software_stack.base_os.value,
@@ -780,49 +1029,57 @@ class TestsSmoke(object):
                 raise Exception("Failed to get created software stack")
             created_stack = created_stack_response.software_stack
 
-            # Convert ResMemory to SocaMemory as create session requires SocaMemory
-            # TODO: Revert this change once create session is migrated
-            created_stack.min_storage = SocaMemory(
-                value=created_stack.min_storage.value,
-                unit=SocaMemoryUnit(created_stack.min_storage.unit),
-            )
-            created_stack.min_ram = SocaMemory(
-                value=created_stack.min_ram.value,
-                unit=SocaMemoryUnit(created_stack.min_ram.unit),
-            )
+            project = created_stack.projects[0]
+            project_dict = {
+                "project_id": project.project_id,
+                "name": project.name,
+                "title": project.title,
+            }
+            software_stack_dict = {
+                "stack_id": created_stack.stack_id,
+                "name": created_stack.name,
+                "description": created_stack.description,
+                "base_os": created_stack.base_os,
+                "ami_id": created_stack.ami_id,
+                "architecture": created_stack.architecture,
+                "gpu": created_stack.gpu,
+                "min_storage": {
+                    "value": created_stack.min_storage.value,
+                    "unit": created_stack.min_storage.unit,
+                },
+                "min_ram": {
+                    "value": created_stack.min_ram.value,
+                    "unit": created_stack.min_ram.unit,
+                },
+                "placement": {
+                    "affinity": created_stack.placement.affinity,
+                    "host_id": created_stack.placement.host_id,
+                    "host_resource_group_arn": created_stack.placement.host_resource_group_arn,
+                    "tenancy": created_stack.placement.tenancy,
+                },
+                "projects": [project_dict],
+                "allowed_instance_types": created_stack.allowed_instance_types,
+            }
 
-            logger.info(f"Created stack {created_stack}")
             logger.info(f"Creating session from software stack {created_stack.name}...")
             api_client = ApiClient(res_environment, admin)
 
-            # Creating Soca stack due to compatability issues
-            # TODO: Revert this change once create session is migrated
-            serializable_stack = VirtualDesktopSoftwareStack(
-                stack_id=created_stack.stack_id,
-                base_os=created_stack.base_os,
-                ami_id=created_stack.ami_id,
-                min_ram=created_stack.min_ram,
-                min_storage=created_stack.min_storage,
-                name=created_stack.name,
-                gpu=created_stack.gpu,
-                allowed_instance_types=created_stack.allowed_instance_types,
-            )
-
             session_to_create = VirtualDesktopSession(
-                name="newstack",
+                name="integ-new-stack-sess",
                 description="RES integ test VDI session new software stack",
                 hibernation_enabled=False,
-                software_stack=serializable_stack,  # Use the serializable version
-                project=project,
+                software_stack=software_stack_dict,
+                project=project_dict,
                 base_os=created_stack.base_os,
             )
 
             new_session = create_session(
                 session=session_to_create,
-                software_stack=created_stack,  # Use the modified created_stack directly
+                software_stack=created_stack,
                 client=client,
                 api_client=api_client,
             )
+
             logger.info(f"Joining session {session.name}...")
             web_driver = client.join_session(new_session)
 
@@ -835,6 +1092,19 @@ class TestsSmoke(object):
             web_driver.quit()
             wait_for_session_connection_count(region, new_session, 0)
         finally:
+
+            # Retrieve the created stack from the API to get the real AMI ID
+            ami_to_deregister = ""
+            try:
+                fetched_stack = api_client.get_software_stack(
+                    stack_id=new_software_stack.stack_id,
+                    base_os=software_stack.base_os.value,
+                )
+                if fetched_stack and fetched_stack.software_stack:  # type: ignore
+                    ami_to_deregister = fetched_stack.software_stack.ami_id or ""  # type: ignore
+            except Exception as e:
+                logger.warning(f"Failed to fetch created stack for AMI cleanup: {e}")
+
             if new_session:
                 delete_session(
                     client=client,
@@ -848,10 +1118,9 @@ class TestsSmoke(object):
             api_client.delete_software_stack(
                 stack_id=new_software_stack.stack_id, request_content=delete_request
             )
-            # Deregister AMI if it was created
-            if new_software_stack.ami_id:
-                deregistered = deregister_ami(new_software_stack.ami_id)
+
+            logger.info(f"ami_to_deregister: {ami_to_deregister}")
+            if ami_to_deregister:
+                deregistered = deregister_ami(ami_to_deregister, region)
                 if not deregistered:
-                    logger.error(
-                        f"AMI {new_software_stack.ami_id} could not be deregistered"
-                    )
+                    logger.error(f"AMI {ami_to_deregister} could not be deregistered")

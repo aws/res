@@ -15,7 +15,6 @@ import React, { Component, RefObject } from "react";
 
 import { Link } from "@cloudscape-design/components";
 import { AppContext } from "../../common";
-import { VirtualDesktopSessionConnectionInfo } from "../../client/data-model";
 import { VirtualDesktopClient } from "../../client";
 import Utils from "../../common/utils";
 import { IdeaSideNavigationProps } from "../../components/side-navigation";
@@ -118,20 +117,19 @@ class MySharedVirtualDesktopSessions extends Component<MySharedVirtualDesktopPro
             });
     }
 
-    onDownloadDcvSessionFile = (idea_session_name: string, idea_session_id: string, idea_session_owner: string, username: string): Promise<boolean> => {
+    onDownloadDcvSessionFile = (idea_session_name: string, idea_session_id: string, idea_session_owner: string, _username: string): Promise<boolean> => {
         return AppContext.get()
             .client()
             .virtualDesktop()
-            .getSessionConnectionInfo({
-                connection_info: {
-                    idea_session_id: idea_session_id,
-                    idea_session_owner: idea_session_owner,
-                    username: username,
+            .getSessionConnection({
+                connection: {
+                    'idea-session-id': idea_session_id,
+                    'idea-session-owner': idea_session_owner,
                 },
             })
             .then((result) => {
                 let certificatevalidationpolicy = this.virtualDesktopSettings.dcv_connection_gateway.certificate.provided === "true" ? "strict" : "ask-user";
-                let endpoint = result.connection_info?.endpoint;
+                let endpoint = result.connection?.endpoint;
                 if (endpoint === undefined) {
                     endpoint = AppContext.get().getAlbEndpoint();
                 }
@@ -140,13 +138,13 @@ class MySharedVirtualDesktopSessions extends Component<MySharedVirtualDesktopPro
                 sessionFileContent += "format=1.0\n";
                 sessionFileContent += "[connect]\n";
                 sessionFileContent += `user=${AppContext.get().auth().getUsername()}\n`;
-                sessionFileContent += `sessionid=${result.connection_info?.dcv_session_id}\n`;
+                sessionFileContent += `sessionid=${result.connection?.['idea-session-id']}\n`;
                 sessionFileContent += `host=${url.host}\n`;
                 sessionFileContent += `port=443\n`;
                 sessionFileContent += `webport=443\n`;
                 sessionFileContent += `quicport=443\n`;
                 sessionFileContent += `certificatevalidationpolicy=${certificatevalidationpolicy}\n`;
-                sessionFileContent += `authtoken=${result.connection_info?.access_token}\n`;
+                sessionFileContent += `authtoken=${result.connection?.['access-token']}\n`;
 
                 const element = document.createElement("a");
                 element.setAttribute("href", "data:text/plain;charset=utf-8," + encodeURIComponent(sessionFileContent));
@@ -159,7 +157,6 @@ class MySharedVirtualDesktopSessions extends Component<MySharedVirtualDesktopPro
             })
             .catch((error) => {
                 console.error(error);
-                // Popup error with message to reboot the VDI
                 if (error.errorCode === "SESSION_CONNECTION_ERROR") {
                     this.setFlashMessage(`${idea_session_name} - Error retrieving session connection information. Please reboot the Virtual Desktop and try again.`, "error");
                 } else {
@@ -169,20 +166,16 @@ class MySharedVirtualDesktopSessions extends Component<MySharedVirtualDesktopPro
             });
     };
 
-    onJoinSession = (idea_session_id: string, idea_session_owner: string, idea_session_name: string, username: string): Promise<boolean> => {
-        let connection_info: VirtualDesktopSessionConnectionInfo = {
-            idea_session_id: idea_session_id,
-            idea_session_owner: idea_session_owner,
-        };
-
-        if (username) {
-            connection_info.username = username;
-        }
-
+    onJoinSession = (idea_session_id: string, idea_session_owner: string, idea_session_name: string, _username: string): Promise<boolean> => {
         return AppContext.get().client().virtualDesktop()
-            .getSessionConnectionInfo({ connection_info: connection_info })
+            .getSessionConnection({
+                connection: {
+                    'idea-session-id': idea_session_id,
+                    'idea-session-owner': idea_session_owner,
+                },
+            })
             .then((result) => {
-                return `${result.connection_info?.endpoint}${result.connection_info?.web_url_path}?authToken=${result.connection_info?.access_token}#${result.connection_info?.dcv_session_id}`;
+                return `${result.connection?.endpoint}${result.connection?.['web-url-path']}?authToken=${result.connection?.['access-token']}#${result.connection?.['idea-session-id']}`;
             })
             .then((url) => {
                 window.open(url);
@@ -190,7 +183,6 @@ class MySharedVirtualDesktopSessions extends Component<MySharedVirtualDesktopPro
             })
             .catch((error) => {
                 console.error(error);
-                // Popup error with message to reboot the VDI
                 if (error.errorCode === "SESSION_CONNECTION_ERROR") {
                     this.setFlashMessage(`${idea_session_name} - Error retrieving session connection information. Please reboot the Virtual Desktop and try again.`, "error");
                 } else {

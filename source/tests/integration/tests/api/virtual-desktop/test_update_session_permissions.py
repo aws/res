@@ -8,7 +8,6 @@ This module contains comprehensive tests for the update session permission REST 
 using the RES framework ResClient for proper API interaction.
 """
 
-
 import logging
 from typing import Any, Dict
 

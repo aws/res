@@ -1,6 +1,31 @@
 # Change Log
 This file is used to list changes made in each release of Research and Engineering Studio (RES).
 
+2026.06
+------
+
+**SECURITY FIXES**
+
+- Fixed a security vulnerability where an authenticated user could exploit symlink handling in the File System API on the cluster manager host to read arbitrary files.
+
+**ENHANCEMENTS**
+
+- Replaced DCV broker infrastructure host with serverless Lambda-based session management, reducing infrastructure overhead and improving scalability.
+- Included QUIC, default schedule, and other cluster settings in snapshot restore functionality.
+
+**CHANGES**
+
+- Continued migration of VDC-related APIs from the VDC infra host to the backend Lambda.
+
+**BUG FIXES**
+
+- Fixed "Create Software Stack from Session" workflow failing due to stale AD credentials, missing IAM permissions, and incompatible EC2Launch version on Windows.
+- Fixed Ubuntu VDI login failure caused by SSSD configuration parsing error with special characters in home directory paths.
+- Fixed list project owners and members in the user drop‐down when sharing a Virtual Desktop.
+- Fixed VDI login failures on RHEL8, RHEL9, Ubuntu 22.04, and Ubuntu 24.04 caused by amazon-efs-utils build incompatibility preventing EFS /home directory mounting.
+- Fixed IAM policies not appearing in "add policies" dropdown when account has more than 1000 policies.
+- Updated default AMIs across all supported OS types and regions, resolving Linux kernel local privilege escalation vulnerability.
+
 2026.03
 ------
 

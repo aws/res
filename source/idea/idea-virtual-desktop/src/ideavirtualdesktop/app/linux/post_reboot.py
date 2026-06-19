@@ -11,13 +11,12 @@ from res.utils import logging_utils
 from ideabootstrap import bootstrap_common
 from ideabootstrap.dcv import dcv
 
-import ideabootstrap
 import tempfile
 import os
 import subprocess
 import time
 
-from ideavirtualdesktop.app.utils import send_sqs_host_messages
+from ideabootstrap.bootstrap_common import update_session_host_info, update_session_state
 
 logger = logging_utils.get_logger("bootstrap")
 
@@ -25,10 +24,11 @@ def run():
     if os.path.isfile(LINUX_VDI_CONFIG_HOST_READY_LOCK):
         logger.info(f"Instance Ready Lock File Already Exists: {LINUX_VDI_CONFIG_HOST_READY_LOCK}")
 
-        if not dcv.is_dcvserver_ready(timeout_seconds=300, retry_interval=5):
-            logger.warning("DCV server is not ready for creating session")
+        update_session_host_info()
 
-        send_sqs_host_messages("DCV_HOST_REBOOT_COMPLETE_EVENT")
+        if dcv.configure_automatic_console_session():
+            session_state = dcv.poll_dcv_session_ready()
+            update_session_state(session_state)
         return
 
     logger.info(f"Running post reboot process: {LINUX_VDI_CONFIG_HOST_READY_LOCK}")
@@ -74,5 +74,9 @@ def run():
 
     logger.info(f"Created instance ready lock file: {LINUX_VDI_CONFIG_HOST_READY_LOCK}")
 
-    send_sqs_host_messages("DCV_HOST_READY_EVENT")
-    logger.info("Host ready event sent")
+    update_session_host_info()
+
+    if dcv.configure_automatic_console_session():
+        session_state = dcv.poll_dcv_session_ready()
+        update_session_state(session_state)
+        logger.info("DCV session placement complete with state: %s", session_state)

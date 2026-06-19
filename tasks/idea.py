@@ -211,6 +211,14 @@ class SocaDevelopmentProps:
         return os.path.join(self.project_unit_tests_dir, 'infrastructure')
 
     @property
+    def dcv_session_management_src(self) -> str:
+        return os.path.join(self.project_source_dir, 'dcv_session_management')
+
+    @property
+    def dcv_session_management_tests_src(self) -> str:
+        return os.path.join(self.project_unit_tests_dir, 'dcv_session_management')
+
+    @property
     def library_project_dir(self) -> str:
         return os.path.join(self.project_source_dir, 'library')
 

@@ -11,7 +11,6 @@ from aws_cdk import aws_iam as iam
 from aws_cdk import aws_lambda as lambda_
 from aws_cdk import aws_s3 as s3
 from aws_cdk import aws_secretsmanager as secretsmanager
-from aws_cdk import custom_resources as cr
 from res.constants import (  # type: ignore
     ENVIRONMENT_NAME_KEY,
     ENVIRONMENT_NAME_TAG_KEY,
@@ -46,9 +45,6 @@ from idea.infrastructure.install.parameters.parameters import RESParameters
 from idea.infrastructure.install.parameters.shared_storage import SharedStorageKey
 from idea.infrastructure.resources.lambda_functions.custom_resource.delete_target_groups_lambda import (
     handler,
-)
-from idea.infrastructure.resources.lambda_functions.delete_dcv_broker_tables_lambda import (
-    delete_dcv_broker_tables_handler,
 )
 
 
@@ -104,59 +100,6 @@ class ResBaseStack(ResBaseConstruct):
                     else None
                 ),
             )
-
-        dcvBrokerTableDeletionPolicy = iam.PolicyDocument(
-            statements=[
-                iam.PolicyStatement(
-                    actions=["dynamodb:DeleteTable"],
-                    resources=[
-                        f"arn:{cdk.Aws.PARTITION}:dynamodb:{cdk.Aws.REGION}:{cdk.Aws.ACCOUNT_ID}:table/{self.cluster_name}.vdc.dcv-broker*"
-                    ],
-                ),
-                iam.PolicyStatement(
-                    actions=["dynamodb:ListTables"],
-                    resources=[
-                        f"arn:{cdk.Aws.PARTITION}:dynamodb:{cdk.Aws.REGION}:{cdk.Aws.ACCOUNT_ID}:table/*"
-                    ],
-                ),
-            ]
-        )
-        brokerDeletionLambdaName = "dcvBrokerTableDeletionLambda"
-        dcvBrokerTableDeletionRole = iam.Role(
-            self.nested_stack,
-            f"{brokerDeletionLambdaName}Role",
-            assumed_by=iam.ServicePrincipal("lambda.amazonaws.com"),
-            managed_policies=[
-                iam.ManagedPolicy.from_aws_managed_policy_name(
-                    "service-role/AWSLambdaBasicExecutionRole"
-                )
-            ],
-            inline_policies={"DDBPolicy": dcvBrokerTableDeletionPolicy},
-            role_name=f"{self.cluster_name}{brokerDeletionLambdaName}Role",
-        )
-
-        dcvBrokerTableDeletionLambda = lambda_.Function(
-            self.nested_stack,
-            brokerDeletionLambdaName,
-            runtime=RES_COMMON_LAMBDA_RUNTIME,
-            timeout=cdk.Duration.seconds(300),
-            description="Lambda to handle deletion of the NICE DCV Broker tables",
-            role=dcvBrokerTableDeletionRole,
-            **utils.InfraUtils.get_handler_and_code_for_function(
-                delete_dcv_broker_tables_handler.delete_dcv_broker_tables
-            ),
-        )
-        provider = cr.Provider(
-            self,
-            "dcvBrokerTableDeletionProvider",
-            on_event_handler=dcvBrokerTableDeletionLambda,
-        )
-        cdk.CustomResource(
-            self,
-            "dcvBrokerTableDeletionCustomResource",
-            service_token=provider.service_token,
-            properties={"environment_name": self.cluster_name},
-        )
 
         self.parameters.root_user_dn_secret_arn = self.get_directory_service_secret_arn(
             DirectoryServiceKey.ROOT_USER_DN

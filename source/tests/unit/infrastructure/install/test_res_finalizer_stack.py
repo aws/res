@@ -905,31 +905,6 @@ def test_tag_resources_role_policy_creation(
                             },
                         },
                         {
-                            "Action": [
-                                "dynamodb:TagResource",
-                                "dynamodb:UntagResource",
-                            ],
-                            "Effect": "Allow",
-                            "Resource": {
-                                "Fn::Join": [
-                                    "",
-                                    [
-                                        "arn:",
-                                        {"Ref": "AWS::Partition"},
-                                        ":dynamodb:",
-                                        {"Ref": "AWS::Region"},
-                                        ":",
-                                        {"Ref": "AWS::AccountId"},
-                                        ":table/",
-                                        res_finalizer_stack.nested_stack.resolve(
-                                            res_finalizer_stack.cluster_name
-                                        ),
-                                        ".vdc.dcv-broker.*",
-                                    ],
-                                ]
-                            },
-                        },
-                        {
                             "Action": ["ec2:CreateTags", "ec2:DeleteTags"],
                             "Effect": "Allow",
                             "Resource": [

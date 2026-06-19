@@ -99,13 +99,6 @@ def virtual_desktop_controller(c):
     apispec_virtual_desktop_controller(c, output_file=os.path.join(tool.output_dir, 'resources', 'api', 'openapi.yml'))
 
 
-@task
-def dcv_broker(c):
-    # type: (Context) -> None
-    """
-    build DCV broker
-    """
-    BuildTool(c, 'idea-dcv-broker').build()
 
 
 @task
@@ -175,8 +168,6 @@ def build_all(c):
     dcv_connection_gateway(c)
 
     virtual_desktop_controller(c)
-
-    dcv_broker(c)
 
     library(c)
 

@@ -36,14 +36,6 @@ STATIC_SETTINGS: Dict[str, Any] = {
         },
         "base_os": "amzn2023",
     },
-    "virtual-desktop-controller": {
-        "dcv_broker": {
-            "client_communication_port": 8444,
-            "agent_communication_port": 8445,
-            "gateway_communication_port": 8446,
-            "ssl_policy": "ELBSecurityPolicy-TLS13-1-2-2021-06",
-        },
-    },
     "identity-provider": {
         "cognito": {"removal_policy": "DESTROY", "advanced_security_mode": "AUDIT"},
     },
@@ -228,18 +220,6 @@ class ClusterSettings:
 
     @property
     @lru_cache
-    def dcv_broker_ssl_policy(self) -> Any:
-        return (
-            self.static_settings.get("virtual-desktop-controller", {})
-            .get("dcv_broker", {})
-            .get(
-                "ssl_policy",
-                "ELBSecurityPolicy-TLS13-1-2-2021-06",
-            )
-        )
-
-    @property
-    @lru_cache
     def internal_alb_ssl_policy(self) -> Any:
         return (
             self.static_settings.get("cluster", {})
@@ -296,6 +276,15 @@ class ClusterSettings:
 
     @property
     @lru_cache
+    def ssm_command_output_bucket(self) -> str:
+        return InfraUtils.get_cluster_setting_string(
+            self.scope,
+            "cluster.ssm_command_output_bucket_name",
+            self.cluster_name,
+        )
+
+    @property
+    @lru_cache
     def installation_scripts_uri(self) -> str:
         return InfraUtils.get_cluster_setting_string(
             self.scope,
@@ -310,57 +299,6 @@ class ClusterSettings:
             self.scope,
             "cluster.load_balancers.external_alb.certificates.acm_certificate_arn",
             self.cluster_name,
-        )
-
-    @property
-    @lru_cache
-    def dcv_broker_client_listener_arn(self) -> str:
-        return InfraUtils.get_cluster_setting_string(
-            self.scope,
-            "cluster.load_balancers.internal_alb.dcv_broker_client_listener_arn",
-            self.cluster_name,
-        )
-
-    @property
-    def dcv_broker_client_communication_port(self) -> Any:
-        return (
-            self.static_settings.get("virtual-desktop-controller", {})
-            .get("dcv_broker", {})
-            .get("client_communication_port", 8444)
-        )
-
-    @property
-    @lru_cache
-    def dcv_broker_agent_listener_arn(self) -> str:
-        return InfraUtils.get_cluster_setting_string(
-            self.scope,
-            "cluster.load_balancers.internal_alb.dcv_broker_agent_listener_arn",
-            self.cluster_name,
-        )
-
-    @property
-    def dcv_broker_agent_communication_port(self) -> Any:
-        return (
-            self.static_settings.get("virtual-desktop-controller", {})
-            .get("dcv_broker", {})
-            .get("agent_communication_port", 8445)
-        )
-
-    @property
-    @lru_cache
-    def dcv_broker_gateway_listener_arn(self) -> str:
-        return InfraUtils.get_cluster_setting_string(
-            self.scope,
-            "cluster.load_balancers.internal_alb.dcv_broker_gateway_listener_arn",
-            self.cluster_name,
-        )
-
-    @property
-    def dcv_broker_gateway_communication_port(self) -> Any:
-        return (
-            self.static_settings.get("virtual-desktop-controller", {})
-            .get("dcv_broker", {})
-            .get("gateway_communication_port", 8446)
         )
 
     @property

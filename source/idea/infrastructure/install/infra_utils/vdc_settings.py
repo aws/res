@@ -28,7 +28,6 @@ STATIC_SETTINGS: Dict[str, Any] = {
         "metadata_http_tokens": "required",
         # add corresponding key value pair to customize setting for specific infra host
         "controller": {},
-        "dcv_broker": {},
         "dcv_connection_gateway": {},
     },
     "endpoints": {

@@ -476,3 +476,42 @@ class TestEC2Utils:
         assert "t3.micro" in result
         assert "t3.large" in result
         assert "t3.small" not in result  # Denied
+
+    def test_get_ec2_block_device_name_amzn2023(self):
+        """Test get_ec2_block_device_name returns /dev/xvda for amzn2023."""
+        result = ec2_utils.get_ec2_block_device_name("amzn2023")
+        assert result == "/dev/xvda"
+
+    def test_get_ec2_block_device_name_windows(self):
+        """Test get_ec2_block_device_name returns /dev/sda1 for windows."""
+        result = ec2_utils.get_ec2_block_device_name("windows")
+        assert result == "/dev/sda1"
+
+    def test_get_ec2_block_device_name_rhel8(self):
+        """Test get_ec2_block_device_name returns /dev/sda1 for rhel8."""
+        result = ec2_utils.get_ec2_block_device_name("rhel8")
+        assert result == "/dev/sda1"
+
+    @patch.object(ec2_utils._aws_client_provider, "ec2")
+    def test_change_instance_type(self, mock_ec2):
+        """Test change_instance_type calls modify_instance_attribute correctly."""
+        mock_ec2_client = MagicMock()
+        mock_ec2.return_value = mock_ec2_client
+
+        ec2_utils.change_instance_type("i-123456", "m5.xlarge")
+
+        mock_ec2_client.modify_instance_attribute.assert_called_once_with(
+            InstanceId="i-123456", Attribute="instanceType", Value="m5.xlarge"
+        )
+
+    @patch.object(ec2_utils._aws_client_provider, "ec2")
+    def test_create_tag(self, mock_ec2):
+        """Test create_tag calls create_tags correctly."""
+        mock_ec2_client = MagicMock()
+        mock_ec2.return_value = mock_ec2_client
+
+        ec2_utils.create_tag("i-123456", "Name", "test-instance")
+
+        mock_ec2_client.create_tags.assert_called_once_with(
+            Resources=["i-123456"], Tags=[{"Key": "Name", "Value": "test-instance"}]
+        )

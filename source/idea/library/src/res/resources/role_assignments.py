@@ -4,7 +4,7 @@
 from typing import Any, Dict, List, Optional
 
 import res.constants as constants  # type: ignore
-from res.resources import accounts, projects  # type: ignore
+from res.resources import accounts, projects, roles  # type: ignore
 from res.utils import logging_utils, table_utils  # type: ignore
 
 GSI_RESOURCE_KEY = "resource-key-index"
@@ -14,6 +14,7 @@ ROLE_ASSIGNMENTS_RESOURCE_TYPE_KEY = "resource_type"
 ROLE_ASSIGNMENTS_ROLE_ID_KEY = "role_id"
 GSI_RESOURCE_KEY_RANGE_KEY = ROLE_ASSIGNMENTS_DB_HASH_KEY = "actor_key"
 ROLE_ASSIGNMENTS_TABLE_NAME = "authz.role-assignments"
+PERMISSION_CATEGORIES = ["vdis", "projects"]
 
 logger = logging_utils.get_logger(ROLE_ASSIGNMENTS_TABLE_NAME)
 
@@ -146,6 +147,38 @@ def list_role_assignments(
             )
 
     return role_assignments
+
+
+def get_user_permissions(username: str, resource_key: str) -> set:
+    """
+    Resolve a user's effective permissions for a given resource.
+
+    Flow:
+    1. Get all role assignments for the user and their groups
+    2. Filter to assignments matching the resource_key (e.g., "project-id:project")
+    3. Collect the role_ids from those matching assignments
+    4. Batch-fetch the role definitions
+    5. Extract enabled permissions from each role's "vdis" and "projects" categories
+    6. Return a flat set (e.g., {"vdis.create_sessions", "vdis.create_terminate_others_sessions"})
+    """
+    # Step 1-3: Find role_ids assigned to this user for the given resource
+    role_ids = []
+    list_role_assignments = list_role_assignments_for_user_and_groups(username)
+    for item in list_role_assignments:
+        if item.get(ROLE_ASSIGNMENTS_DB_RANGE_KEY) == resource_key:
+            role_ids.append(item.get(ROLE_ASSIGNMENTS_ROLE_ID_KEY))
+
+    # Step 4-6: Resolve roles into a flat permission set
+    permissions = set()
+    if role_ids:
+        roles_data = roles.get_roles_batch(role_ids)
+        for role in roles_data.values():
+            for category in PERMISSION_CATEGORIES:
+                if role.get(category):
+                    for key, value in role[category].items():
+                        if value:
+                            permissions.add(f"{category}.{key}")
+    return permissions
 
 
 def list_role_assignments_for_user_and_groups(username: str) -> List[Dict[str, Any]]:

@@ -1048,7 +1048,7 @@ class IdeaFileBrowser extends Component<IdeaFileBrowserProps, IdeaFileBrowserSta
                                                     if (event.state.selectedFiles && event.state.selectedFiles.length > 0) {
                                                         this.listFiles(this.getCwd(-1))
                                                         .then(() => {
-                                                            Utils.openNewTab(`/#/home/file-browser/tail?file=${this.getCwd(-1)}/${event.state.selectedFiles[0].name}&cwd=${this.getCwd(-1)}`);
+                                                            this.props.navigate(`/home/file-browser/tail?file=${this.getCwd(-1)}/${event.state.selectedFiles[0].name}&cwd=${this.getCwd(-1)}`);
                                                         })
                                                         .catch((error) => {
                                                             if (error.errorCode === ErrorCodes.DISABLED_FEATURE) {

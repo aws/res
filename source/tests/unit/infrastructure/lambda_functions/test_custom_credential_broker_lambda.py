@@ -30,34 +30,35 @@ def test_get_filesystem_name_from_request_context():
     assert filesystem_name == "myfilesystem"
 
 
-@patch("boto3.client")
-def test_validate_instance_origin(mock_boto_client):
-    ec2_client = MagicMock()
-    ec2_client.describe_instances.return_value = {
+@patch(
+    "idea.infrastructure.resources.lambda_functions_with_utils.custom_credential_broker_lambda.utils.get_aws_provider"
+)
+def test_validate_instance_origin(mock_get_provider):
+    mock_get_provider.return_value.ec2.return_value.describe_instances.return_value = {
         "Reservations": [{"Instances": [{"PrivateIpAddress": "192.168.1.1"}]}]
     }
-    mock_boto_client.return_value = ec2_client
 
     is_valid = Utils.validate_instance_origin("i-1234567890abcdef0", "192.168.1.1")
     assert is_valid is True
 
 
-@patch("boto3.client")
-def test_validate_instance_origin_with_invalid_origin(mock_boto_client):
-    ec2_client = MagicMock()
-    ec2_client.describe_instances.return_value = {
+@patch(
+    "idea.infrastructure.resources.lambda_functions_with_utils.custom_credential_broker_lambda.utils.get_aws_provider"
+)
+def test_validate_instance_origin_with_invalid_origin(mock_get_provider):
+    mock_get_provider.return_value.ec2.return_value.describe_instances.return_value = {
         "Reservations": [{"Instances": [{"PrivateIpAddress": "192.168.1.1"}]}]
     }
-    mock_boto_client.return_value = ec2_client
 
     is_valid = Utils.validate_instance_origin("i-1234567890abcdef0", "192.168.1.5")
     assert is_valid is False
 
 
-@patch("boto3.client")
-def test_get_temporary_credentials(mock_boto_client):
-    sts_client = MagicMock()
-    sts_client.assume_role.return_value = {
+@patch(
+    "idea.infrastructure.resources.lambda_functions_with_utils.custom_credential_broker_lambda.utils.get_aws_provider"
+)
+def test_get_temporary_credentials(mock_get_provider):
+    mock_get_provider.return_value.sts.return_value.assume_role.return_value = {
         "Credentials": {
             "AccessKeyId": "AKIA...",
             "SecretAccessKey": "secret",
@@ -67,7 +68,6 @@ def test_get_temporary_credentials(mock_boto_client):
             ),
         }
     }
-    mock_boto_client.return_value = sts_client
 
     credentials = Utils.get_temporary_credentials(
         "role_arn", "session_name", True, "bucket_arn"

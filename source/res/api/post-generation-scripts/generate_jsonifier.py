@@ -14,7 +14,7 @@ import sys
 
 def remove_old_encoder_files(generated_dir):
     """Remove old encoder.py files if they exist."""
-    old_encoder_file = os.path.join(generated_dir, "server-stub", "api", "encoder.py")
+    old_encoder_file = os.path.join(generated_dir, "api", "encoder.py")
     if os.path.exists(old_encoder_file):
         os.remove(old_encoder_file)
         print("Removed old encoder.py file")
@@ -22,7 +22,7 @@ def remove_old_encoder_files(generated_dir):
 
 def generate_custom_jsonifier(generated_dir):
     """Generate the CustomJsonifier class in jsonifier.py."""
-    jsonifier_file = os.path.join(generated_dir, "server-stub", "api", "jsonifier.py")
+    jsonifier_file = os.path.join(generated_dir, "api", "jsonifier.py")
     
     # Ensure the directory exists
     os.makedirs(os.path.dirname(jsonifier_file), exist_ok=True)

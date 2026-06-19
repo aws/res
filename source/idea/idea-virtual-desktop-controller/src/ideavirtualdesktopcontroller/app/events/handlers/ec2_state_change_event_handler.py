@@ -45,18 +45,12 @@ class EC2StateChangeEventHandler(BaseVirtualDesktopControllerEventHandler):
             session.state = VirtualDesktopSessionState.ERROR
         else:
             # was waiting for ec2 stopped/stopping event.
-            server = self.server_db.get(instance_id=instance_id)
             if state == 'stopping':
                 session.state = VirtualDesktopSessionState.STOPPING
-                server.state = 'STOPPING'
             elif session.is_idle:
                 session.state = VirtualDesktopSessionState.STOPPED_IDLE
-                server.state = 'STOPPED_IDLE'
-                _ = self.server_db.update(server)
             else:
                 session.state = VirtualDesktopSessionState.STOPPED
-                server.state = 'STOPPED'
-                _ = self.server_db.update(server)
 
         _ = self.session_db.update(session)
 
@@ -71,18 +65,9 @@ class EC2StateChangeEventHandler(BaseVirtualDesktopControllerEventHandler):
         if Utils.is_empty(session):
             self.log_error(message_id=message_id, message='Invalid RES Session. Should probably do some DB cleanup for instances.')
             return
-        if session.hibernation_enabled:
-            self.events_utils.publish_validate_dcv_session_ready_event(
-                idea_session_id=session.idea_session_id,
-                idea_session_owner=session.owner
-            )
 
         session.is_idle = False
         _ = self.session_db.update(session)
-
-        server = self.server_db.get(instance_id=instance_id)
-        server.state = 'CREATED'
-        _ = self.server_db.update(server)
 
     def handle_event(self, message_id: str, sender_id: str, event: VirtualDesktopEvent):
         if not self.is_sender_controller_role(sender_id):

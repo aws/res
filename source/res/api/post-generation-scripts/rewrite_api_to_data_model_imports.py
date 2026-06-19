@@ -39,6 +39,15 @@ def rewrite_imports_in_file(file_path: str) -> bool:
         
         # Replace all 'import api.' imports with 'import datamodel.'
         content = re.sub(r'import api\.', 'import datamodel.', content)
+
+        # In models/__init__.py and serializers/__init__.py, convert absolute
+        # imports to relative so backend/__init__.py can be used directly
+        if os.path.basename(file_path) == '__init__.py':
+            parent_dir = os.path.basename(os.path.dirname(file_path))
+            if parent_dir == 'models':
+                content = re.sub(r'from datamodel\.models\.', 'from .', content)
+            elif parent_dir == 'serializers':
+                content = re.sub(r'from datamodel\.serializers\.', 'from .', content)
         
         # Only write if content changed
         if content != original_content:

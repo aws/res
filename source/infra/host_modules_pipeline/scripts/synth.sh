@@ -11,7 +11,7 @@ SYNTH_CMD="npx cdk synth RESHostModulesPipelineStack -c repository_name=$PIPELIN
 
 if [ "$PIPELINE_PUBLISH_MODULES" = "true" ]; then
     SYNTH_CMD="$SYNTH_CMD -c public_release=$PIPELINE_PUBLIC_RELEASE"
-    if [ "$PIPELINE_PUBLIC_RELEASE" = "false" ] && [ -n "$PIPELINE_S3_BUCKET_NAME" ]; then
+    if [ -n "$PIPELINE_S3_BUCKET_NAME" ]; then
         SYNTH_CMD="$SYNTH_CMD -c s3_bucket_name=$PIPELINE_S3_BUCKET_NAME"
     fi
 fi

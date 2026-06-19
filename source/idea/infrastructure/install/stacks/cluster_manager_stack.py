@@ -676,7 +676,7 @@ class ClusterManagerStack(ResBaseConstruct):
         return pam_modules + nss_modules  # type: ignore
 
     def build_host_module_s3_url(self, host_module_name: str, os_arch: str) -> str:
-        return f"s3://{constants.ARTIFACTS_BUCKET_PREFIX_NAME}-{self.aws_region}/host_modules/{host_module_name}/latest/{os_arch}/{host_module_name}.so"
+        return f"s3://{self.cluster_settings.staging_bucket}/host_modules/{host_module_name}/latest/{os_arch}/{host_module_name}.so"
 
     def build_cluster_settings(self) -> None:
 

@@ -41,6 +41,7 @@ def project(request: FixtureRequest, res_environment: ResEnvironment) -> Project
     groups = request.param[2]
     users = request.param[3]
     admin = request.getfixturevalue(request.param[4])
+    role_id = request.param[5] if len(request.param) > 5 else PROJECT_MEMBER_ROLE_ID
     create_project_request = CreateProjectRequest(
         project=project, filesystem_names=filesystem_names
     )
@@ -55,7 +56,7 @@ def project(request: FixtureRequest, res_environment: ResEnvironment) -> Project
             resource_type=PROJECT_ROLE_ASSIGNMENT_TYPE,
             actor_id=group,
             actor_type=ROLE_ASSIGNMENT_ACTOR_GROUP_TYPE,
-            role_id=PROJECT_MEMBER_ROLE_ID,
+            role_id=role_id,
             request_id="test",
         )
         for group in groups
@@ -67,7 +68,7 @@ def project(request: FixtureRequest, res_environment: ResEnvironment) -> Project
                 resource_type=PROJECT_ROLE_ASSIGNMENT_TYPE,
                 actor_id=user,
                 actor_type=ROLE_ASSIGNMENT_ACTOR_USER_TYPE,
-                role_id=PROJECT_MEMBER_ROLE_ID,
+                role_id=role_id,
                 request_id="test",
             )
         )

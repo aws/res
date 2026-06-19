@@ -13,11 +13,13 @@
 # Begin: Install Host Modules
 set -x
 
-while getopts o:s: opt
+while getopts o:s:e:b: opt
 do
   case "${opt}" in
     o) BASE_OS=${OPTARG};;
     s) SCRIPT_DIR=${OPTARG};;
+    e) ENVIRONMENT_NAME=${OPTARG};;
+    b) STAGING_BUCKET=${OPTARG};;
     ?) echo "Invalid option for host_modules.sh script: -${opt}."
       exit 1;;
   esac
@@ -62,7 +64,30 @@ function install_modules () {
   modules=($(get_list "package_config.host_modules.${MODULE_TYPE}"))
 
   for module in "${modules[@]}"; do
-    module_s3_uri="s3://research-engineering-studio-${AWS_REGION}/host_modules/${module}/latest/${OS_ARCH}/${module}.so"
+    module_s3_uri=""
+
+    # Priority 1: DynamoDB record (if ENVIRONMENT_NAME and table exist)
+    if [[ -n "${ENVIRONMENT_NAME}" ]]; then
+      module_s3_uri_key="cluster-manager.host_modules.${module}.${OS_ARCH}.s3_url"
+      module_s3_uri=$(aws dynamodb get-item \
+          --region "$AWS_REGION" \
+          --table-name "$ENVIRONMENT_NAME.cluster-settings" \
+          --key '{"key": {"S": "'$module_s3_uri_key'"}}' \
+          --output text \
+          2>/dev/null | awk '/VALUE/ {print $2}')
+    fi
+
+    # Priority 2: Staging bucket
+    if [[ -z "$module_s3_uri" && -n "${STAGING_BUCKET}" ]]; then
+      echo "DynamoDB record not found for module $module, falling back to staging bucket: ${STAGING_BUCKET}"
+      module_s3_uri="s3://${STAGING_BUCKET}/host_modules/${module}/latest/${OS_ARCH}/${module}.so"
+    fi
+
+    # Priority 3: Default bucket
+    if [[ -z "$module_s3_uri" ]]; then
+      echo "DynamoDB record and staging bucket not available for module $module, falling back to default bucket"
+      module_s3_uri="s3://research-engineering-studio-${AWS_REGION}/host_modules/${module}/latest/${OS_ARCH}/${module}.so"
+    fi
     if [[ $MODULE_TYPE = "nss" ]]; then
       target_location="$TARGET_DIR/$module.so.2"
     else

@@ -95,7 +95,7 @@ def create_software_stack(software_stack: Dict[str, Any]) -> Dict[str, Any]:
         software_stack.get(SOFTWARE_STACK_DB_VERSION_KEY) or 1
     )
 
-    created_software_stack = table_utils.create_item(
+    table_utils.create_item(
         table_name=SOFTWARE_STACK_TABLE_NAME,
         item=software_stack,
         attribute_names_to_check=[SOFTWARE_STACK_DB_RANGE_KEY],
@@ -105,7 +105,9 @@ def create_software_stack(software_stack: Dict[str, Any]) -> Dict[str, Any]:
         f"Created software stack {SOFTWARE_STACK_DB_HASH_KEY}: {base_os}, {SOFTWARE_STACK_DB_RANGE_KEY}: {stack_id} successfully"
     )
 
-    return created_software_stack
+    return get_software_stack(
+        base_os=base_os, stack_id=stack_id, get_project_details=True
+    )
 
 
 def get_software_stack_by_name(software_stack_name: str):

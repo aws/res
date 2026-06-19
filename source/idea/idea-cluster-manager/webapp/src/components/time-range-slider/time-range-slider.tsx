@@ -60,7 +60,8 @@ class IdeaTimeRangeSlider extends React.Component<IdeaTimeRangeSliderProps, Idea
 
     /**
      * converts minutes to 12 hour display time with am/pm
-     * convert 0 to 00:00am
+     * convert 0 to 12:00am
+     * convert 720 to 12:00pm
      * convert 1439 to 11:59pm
      * @param minutes
      */
@@ -68,16 +69,11 @@ class IdeaTimeRangeSlider extends React.Component<IdeaTimeRangeSliderProps, Idea
         let h = Math.trunc(minutes / 60);
         let ampm = "am";
         if (h > 11) {
-            h = h % 12;
             ampm = "pm";
         }
+        h = h % 12 || 12;
         let m = minutes % 60;
-        const displayTime = `${h.toFixed().padStart(2, "0")}:${m.toFixed().padStart(2, "0")}${ampm}`;
-        if (displayTime == "00:00pm") {
-            return "12:00pm";
-        }
-
-        return displayTime;
+        return `${h.toFixed().padStart(2, "0")}:${m.toFixed().padStart(2, "0")}${ampm}`;
     }
 
     getStartTime(): string {

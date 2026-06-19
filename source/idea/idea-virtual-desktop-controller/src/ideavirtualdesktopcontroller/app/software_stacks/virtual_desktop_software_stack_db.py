@@ -90,8 +90,17 @@ class VirtualDesktopSoftwareStackDB(VirtualDesktopNotifiableDB):
             version=Utils.get_value_as_int(software_stacks_constants.SOFTWARE_STACK_DB_VERSION_KEY, db_entry, 1)
         )
 
-        for project_id in Utils.get_value_as_list(software_stacks_constants.SOFTWARE_STACK_DB_PROJECTS_KEY, db_entry, []):
-            software_stack.projects.append(Project(project_id=project_id))
+        # Projects can be either enriched dicts (when get_project_details=True) or raw string IDs from DynamoDB
+        for project_entry in Utils.get_value_as_list(software_stacks_constants.SOFTWARE_STACK_DB_PROJECTS_KEY, db_entry, []):
+            if isinstance(project_entry, dict):
+                software_stack.projects.append(Project(
+                    project_id=Utils.get_value_as_string('project_id', project_entry),
+                    name=Utils.get_value_as_string('name', project_entry),
+                    title=Utils.get_value_as_string('title', project_entry),
+                    description=Utils.get_value_as_string('description', project_entry),
+                ))
+            else:
+                software_stack.projects.append(Project(project_id=project_entry))
 
         return software_stack
 

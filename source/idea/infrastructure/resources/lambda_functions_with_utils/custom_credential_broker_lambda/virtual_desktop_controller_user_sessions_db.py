@@ -5,8 +5,8 @@ import logging
 import os
 from typing import Any, Optional
 
-import boto3
 from botocore.exceptions import BotoCoreError, ClientError
+from res.clients.aws import get_aws_provider  # type: ignore
 
 USER_SESSION_OWNER_KEY = os.environ.get("USER_SESSION_OWNER_KEY", "")
 USER_SESSION_SESSION_ID_KEY = os.environ.get("USER_SESSION_SESSION_ID_KEY", "")
@@ -16,7 +16,7 @@ class VirtualDesktopControllerUserSessionsDB:
     def __init__(self, cluster_name: str, module_id: str, logger: logging.Logger):
         self.cluster_name = cluster_name
         self.module_id = module_id
-        self.dynamodb = boto3.resource("dynamodb")
+        self.dynamodb = get_aws_provider().dynamodb_table()
         self.table = self.dynamodb.Table(self.table_name)
         self.logger = logger
 

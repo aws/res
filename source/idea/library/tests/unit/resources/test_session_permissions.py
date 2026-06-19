@@ -321,3 +321,55 @@ class TestSessionPermissions(unittest.TestCase):
 
         assert result == []
         assert next_token is None
+
+
+class TestValidateSessionAccess:
+
+    @patch("res.resources.session_permissions.sessions.get_sessions_by_ids")
+    def test_returns_session_when_user_is_owner(self, mock_get_sessions):
+        session = {
+            "owner": "alice",
+            "idea_session_id": "ses-1",
+            "dcv_session_id": "dcv-1",
+        }
+        mock_get_sessions.return_value = {"ses-1": session}
+
+        result = session_permissions.validate_session_access("ses-1", "alice")
+        assert result == session
+
+    @patch("res.resources.session_permissions.sessions.get_sessions_by_ids")
+    def test_raises_when_session_not_found(self, mock_get_sessions):
+        mock_get_sessions.return_value = {}
+
+        with pytest.raises(exceptions.SessionAccessDenied):
+            session_permissions.validate_session_access("ses-1", "alice")
+
+    @patch("res.resources.session_permissions.get_session_permission")
+    @patch("res.resources.session_permissions.sessions.get_sessions_by_ids")
+    def test_returns_session_when_user_has_permission(
+        self, mock_get_sessions, mock_get_perm
+    ):
+        session = {
+            "owner": "bob",
+            "idea_session_id": "ses-1",
+            "dcv_session_id": "dcv-1",
+        }
+        mock_get_sessions.return_value = {"ses-1": session}
+        mock_get_perm.return_value = {"actor_name": "alice"}
+
+        result = session_permissions.validate_session_access("ses-1", "alice")
+        assert result == session
+
+    @patch("res.resources.session_permissions.get_session_permission")
+    @patch("res.resources.session_permissions.sessions.get_sessions_by_ids")
+    def test_raises_when_user_lacks_permission(self, mock_get_sessions, mock_get_perm):
+        session = {
+            "owner": "bob",
+            "idea_session_id": "ses-1",
+            "dcv_session_id": "dcv-1",
+        }
+        mock_get_sessions.return_value = {"ses-1": session}
+        mock_get_perm.side_effect = exceptions.SessionPermissionsNotFound("not found")
+
+        with pytest.raises(exceptions.SessionAccessDenied):
+            session_permissions.validate_session_access("ses-1", "alice")

@@ -3,6 +3,7 @@
 
 import os
 import re
+import shutil
 import subprocess
 from res.utils import logging_utils
 import res.constants as constants
@@ -71,6 +72,10 @@ def _setup_cognito_config_file():
     if env.get("HTTPS_PROXY"):
             text += f'\nhttps_proxy = {env.get("HTTPS_PROXY", "")}\n'
 
+    if env.get("IDEA_SESSION_OWNER"):
+        # Use bootstrap_profile to get credentials from custom credential broker
+        text += '\naws_profile = bootstrap_profile\n'
+
     with open(config_file, 'w') as file:
         file.write(text)
 
@@ -112,6 +117,17 @@ def _setup_nss():
 
     os.makedirs('/opt/cognito_auth/', exist_ok=True)
     os.chmod('/opt/cognito_auth', 0o700) # nosec
+    # nscd runs as 'nscd' user and needs to write cache.json here
+    try:
+        shutil.chown('/opt/cognito_auth', user='nscd', group='nscd')
+    except (KeyError, LookupError):
+        logger.warning("nscd user/group not found; skipping chown of /opt/cognito_auth")
+    # Grant dbus-daemon read access to the cache for NSS lookups during GDM login.
+    dbus_user = 'messagebus' if 'ubuntu' in get_base_os() else 'dbus'
+    result = subprocess.run(['setfacl', '-m', f'u:{dbus_user}:rx', '/opt/cognito_auth'],
+                           capture_output=True, check=False)
+    if result.returncode != 0:
+        logger.warning(f"setfacl for {dbus_user} failed: {result.stderr.decode().strip()}")
     logger.info(f"Setup to NSS Switch file: {nsswitch_file} was successfully")
 
 def configure():

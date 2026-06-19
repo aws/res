@@ -70,6 +70,8 @@ class VirtualDesktopSSMCommandsUtils:
         if self.context.config().get_string("directoryservice.disable_ad_join") == "false":
             # Leave the AD domain so that new VDIs can re-join the domain
             remote_commands.append(f'realm leave {self.context.config().get_string("directoryservice.name")}')
+        # Remove stale keytab after realm leave so new VDI gets a fresh one after AD join
+        remote_commands.append('rm -f /etc/krb5.keytab')
 
         response = self._ssm_client.send_command(
             InstanceIds=[instance_id],
@@ -162,10 +164,14 @@ class VirtualDesktopSSMCommandsUtils:
                 'Remove-Computer -UnjoinDomainCredential $credential -Force',
             ]
         )
-        remote_commands.append(
-            # Enable user data on next boot
-            'C:\\ProgramData\\Amazon\\EC2-Windows\\Launch\\Scripts\\InitializeInstance.ps1 -Schedule'
-        )
+        # Enable user data on next boot (supports both EC2Launch v2 and legacy)
+        remote_commands.extend([
+            'if (Test-Path "C:\\Program Files\\Amazon\\EC2Launch\\EC2Launch.exe") {',
+            '    & "C:\\Program Files\\Amazon\\EC2Launch\\EC2Launch.exe" reset --clean',
+            '} else {',
+            '    & "C:\\ProgramData\\Amazon\\EC2-Windows\\Launch\\Scripts\\InitializeInstance.ps1" -Schedule',
+            '}',
+        ])
 
 
         response = self._ssm_client.send_command(

@@ -303,9 +303,9 @@ class AWSUtil(AWSUtilProtocol):
                 result += current_result
 
             if marker_based_paging:
-                next_token = Utils.get_value_as_string('Marker')
+                next_token = Utils.get_value_as_string('Marker', response)
             else:
-                next_token = Utils.get_value_as_string('NextToken')
+                next_token = Utils.get_value_as_string('NextToken', response)
 
             if next_token is None:
                 has_more_results = False
@@ -1261,20 +1261,28 @@ class AWSUtil(AWSUtilProtocol):
 
     def list_available_host_policies(self) -> List[Policy]:
         try:
-            def result_cb(result) -> List[Policy]:
-                results = [Policy(policy_arn=policy['Arn'], policy_name=policy['PolicyName'])
-                           for policy in result.get('Policies', [])
-                           if self.is_policy_valid(policy['Arn'])]
-                return results
-
-            # Will currently only grab customer managed policies
-            policies = self.invoke_aws_listing(
-                fn=self.aws().iam().list_policies,
-                result_cb=result_cb,
-                fn_kwargs={
-                    'Scope': 'Local'
+            policies = []
+            pagination_token = ''
+            # IAM is a global service; tagged IAM resources are only visible via the partition's global region
+            partition = self.aws().aws_partition()
+            global_region = {'aws': 'us-east-1', 'aws-us-gov': 'us-gov-west-1', 'aws-cn': 'cn-northwest-1'}.get(partition, 'us-east-1')
+            tagging_client = self.aws().get_client(service_name='resourcegroupstaggingapi', region_name=global_region)
+            while True:
+                kwargs = {
+                    'TagFilters': [{'Key': constants.VDI_RESOURCE_TAG_KEY, 'Values': [constants.VDI_HOST_POLICY_RESOURCE_TAG]}],
+                    'ResourceTypeFilters': ['iam:policy'],
+                    'ResourcesPerPage': 100
                 }
-            )
+                if pagination_token:
+                    kwargs['PaginationToken'] = pagination_token
+                response = tagging_client.get_resources(**kwargs)
+                for resource in response.get('ResourceTagMappingList', []):
+                    arn = resource['ResourceARN']
+                    policy_name = arn.split('/')[-1]
+                    policies.append(Policy(policy_arn=arn, policy_name=policy_name))
+                pagination_token = response.get('PaginationToken', '')
+                if not pagination_token:
+                    break
             return policies
         except Exception as e:
             self.handle_aws_exception(e)

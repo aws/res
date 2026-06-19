@@ -70,3 +70,15 @@ class ADSyncConfigurationNotFound(Exception):
 
 class ADSyncInProcess(Exception):
     pass
+
+
+# DCV External Auth
+class SessionAccessDenied(Exception):
+    pass
+
+
+# Batch operation failure codes (map to BatchOperationErrorCode enum member names)
+FAILURE_CODE_NOT_FOUND = "NOTFOUNDEXCEPTION"
+FAILURE_CODE_BAD_REQUEST = "BADREQUESTEXCEPTION"
+FAILURE_CODE_CONFLICT = "CONFLICTEXCEPTION"
+FAILURE_CODE_INTERNAL_SERVICE = "INTERNALSERVICEEXCEPTION"

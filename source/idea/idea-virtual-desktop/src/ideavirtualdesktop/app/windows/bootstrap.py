@@ -97,12 +97,19 @@ def run():
 
         logger.info(f"Configure File Written: {WINDOWS_VDI_CONFIG_FINISHED_LOCK}")
 
+        register_hibernate_resume_task()
+
         logger.info("Finished Bootstrap Configuration")
         subprocess.run(["powershell", "-Command", "Restart-Computer -Force"], capture_output=True)
     else:
         logger.info(f"Configuration WINDOWS_VDI_CONFIG_FINISHED_LOCK file: {WINDOWS_VDI_CONFIG_FINISHED_LOCK} already exists")
 
         post_reboot.run()
+
+def register_hibernate_resume_task():
+    """Register a scheduled task to restart the VDI app on hibernate resume."""
+    script_path = os.path.join(WINDOWS_BOOTSTRAP_DIR, "scripts", "virtual-desktop-host", "windows", "RegisterHibernateResume.ps1")
+    subprocess.run(["powershell", "-File", script_path], check=True)
 
 def on_vdi_configured():
     script_dir = os.path.join(WINDOWS_BOOTSTRAP_DIR, "scripts", "virtual-desktop-host", "windows")

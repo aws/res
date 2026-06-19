@@ -137,11 +137,6 @@ class ClusterStack(ResBaseConstruct):
         self.external_alb_https_listener: Optional[elbv2.CfnListener] = None
         self.internal_alb: Optional[elbv2.CfnLoadBalancer] = None
         self.internal_alb_https_listener: Optional[elbv2.CfnListener] = None
-        self.internal_alb_dcv_broker_client_listener: Optional[elbv2.CfnListener] = None
-        self.internal_alb_dcv_broker_agent_listener: Optional[elbv2.CfnListener] = None
-        self.internal_alb_dcv_broker_gateway_listener: Optional[elbv2.CfnListener] = (
-            None
-        )
 
         self.private_hosted_zone: Optional[route53.PrivateHostedZone] = None
         self.cluster_prefix_list: Optional[ec2.PrefixList] = None
@@ -842,90 +837,6 @@ class ClusterStack(ResBaseConstruct):
             ),
         )
 
-        self.internal_alb_dcv_broker_client_listener = elbv2.CfnListener(
-            self.internal_alb,
-            "dcv-broker-client-listener",
-            port=self.cluster_settings.dcv_broker_client_communication_port,
-            ssl_policy=self.cluster_settings.dcv_broker_ssl_policy,  # type: ignore
-            load_balancer_arn=self.internal_alb.attr_load_balancer_arn,
-            protocol="HTTPS",
-            certificates=[
-                elbv2.CfnListener.CertificateProperty(
-                    certificate_arn=internal_acm_certificate_arn
-                )
-            ],
-            default_actions=self.get_alb_listener_default_actions(
-                self.cluster_settings.dcv_broker_client_listener_arn,  # type: ignore
-                "dcv-broker-client-listener",
-            ),
-        )
-        self.internal_alb_dcv_broker_client_listener.node.add_dependency(
-            self.internal_certificate
-        )
-        self.security_groups["internal-load-balancer"].add_ingress_rule(
-            cdk.aws_ec2.Peer.ipv4(self.vpc.vpc_cidr_block),
-            cdk.aws_ec2.Port.tcp(
-                self.cluster_settings.dcv_broker_client_communication_port
-            ),
-            description="Allow HTTPS traffic from DCV Clients to DCV Broker",
-        )
-
-        self.internal_alb_dcv_broker_agent_listener = elbv2.CfnListener(
-            self.internal_alb,
-            "dcv-broker-agent-listener",
-            port=self.cluster_settings.dcv_broker_agent_communication_port,
-            ssl_policy=self.cluster_settings.dcv_broker_ssl_policy,  # type: ignore
-            load_balancer_arn=self.internal_alb.attr_load_balancer_arn,
-            protocol="HTTPS",
-            certificates=[
-                elbv2.CfnListener.CertificateProperty(
-                    certificate_arn=internal_acm_certificate_arn
-                )
-            ],
-            default_actions=self.get_alb_listener_default_actions(
-                self.cluster_settings.dcv_broker_agent_listener_arn,  # type: ignore
-                "dcv-broker-agent-listener",
-            ),
-        )
-        self.internal_alb_dcv_broker_agent_listener.node.add_dependency(
-            self.internal_certificate
-        )
-        self.security_groups["internal-load-balancer"].add_ingress_rule(
-            cdk.aws_ec2.Peer.ipv4(self.vpc.vpc_cidr_block),
-            cdk.aws_ec2.Port.tcp(
-                self.cluster_settings.dcv_broker_agent_communication_port
-            ),
-            description="Allow HTTPS traffic from DCV Agents to DCV Broker",
-        )
-
-        self.internal_alb_dcv_broker_gateway_listener = elbv2.CfnListener(
-            self.internal_alb,
-            "dcv-broker-gateway-listener",
-            port=self.cluster_settings.dcv_broker_gateway_communication_port,
-            ssl_policy=self.cluster_settings.dcv_broker_ssl_policy,  # type: ignore
-            load_balancer_arn=self.internal_alb.attr_load_balancer_arn,
-            protocol="HTTPS",
-            certificates=[
-                elbv2.CfnListener.CertificateProperty(
-                    certificate_arn=internal_acm_certificate_arn
-                )
-            ],
-            default_actions=self.get_alb_listener_default_actions(
-                self.cluster_settings.dcv_broker_gateway_listener_arn,  # type: ignore
-                "dcv-broker-gateway-listener",
-            ),
-        )
-        self.internal_alb_dcv_broker_gateway_listener.node.add_dependency(
-            self.internal_certificate
-        )
-        self.security_groups["internal-load-balancer"].add_ingress_rule(
-            cdk.aws_ec2.Peer.ipv4(self.vpc.vpc_cidr_block),
-            cdk.aws_ec2.Port.tcp(
-                self.cluster_settings.dcv_broker_gateway_communication_port
-            ),
-            description="Allow HTTPS traffic from DCV Connection Gateway to DCV Broker",
-        )
-
     def build_cluster_settings(self) -> None:
         # cluster settings are applied in the current module_id scope. module_id should not be provided in the key for settings.
         cluster_settings = {
@@ -1055,16 +966,6 @@ class ClusterStack(ResBaseConstruct):
         cluster_settings["ec2.state_change_notifications_sns_topic_name"] = (
             self.ec2_events_sns_topic.topic_name  # type: ignore
         )
-
-        cluster_settings[
-            "load_balancers.internal_alb.dcv_broker_client_listener_arn"
-        ] = self.internal_alb_dcv_broker_client_listener.attr_listener_arn  # type: ignore
-        cluster_settings[
-            "load_balancers.internal_alb.dcv_broker_agent_listener_arn"
-        ] = self.internal_alb_dcv_broker_agent_listener.attr_listener_arn  # type: ignore
-        cluster_settings[
-            "load_balancers.internal_alb.dcv_broker_gateway_listener_arn"
-        ] = self.internal_alb_dcv_broker_gateway_listener.attr_listener_arn  # type: ignore
 
         cdk.CustomResource(
             self.nested_stack,

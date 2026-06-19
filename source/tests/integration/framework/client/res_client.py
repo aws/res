@@ -11,7 +11,7 @@
 
 import logging
 import time
-from typing import Any, Type
+from typing import Any, Optional, Type
 
 import selenium
 from selenium import webdriver
@@ -258,7 +258,7 @@ class ResClient:
         self, request: GetSessionConnectionInfoRequest, should_succeed: bool = True
     ) -> GetSessionConnectionInfoResponse:
         logger.info(
-            f"getting connection info for session {request.connection_info.dcv_session_id}..."
+            f"getting connection info for session {request.connection_info.idea_session_id}..."
         )
 
         return self._invoke(
@@ -286,7 +286,8 @@ class ResClient:
         start_time = time.time()
         get_session_connection_info_request = GetSessionConnectionInfoRequest(
             connection_info=VirtualDesktopSessionConnectionInfo(
-                dcv_session_id=session.dcv_session_id,
+                idea_session_id=session.idea_session_id,
+                idea_session_owner=session.owner,
             )
         )
         while True:
@@ -300,8 +301,19 @@ class ResClient:
                     raise e
                 else:
                     time.sleep(10)
-        connection_info = get_session_connection_info_response.connection_info
-        logger.info(f"joining session {connection_info.dcv_session_id}...")
+        return ResClient.connect_to_session(
+            get_session_connection_info_response.connection_info
+        )
+
+    @staticmethod
+    def connect_to_session(
+        connection_info: VirtualDesktopSessionConnectionInfo,
+    ) -> WebDriver:
+        """
+        Open a headless Chrome connection to a DCV session using connection info.
+        Returns the WebDriver instance with an active connection.
+        """
+        logger.info(f"joining session {connection_info.idea_session_id}...")
 
         # Open the session connection URL from a Chrome browser and keep the connection active.
         options = webdriver.ChromeOptions()
@@ -318,13 +330,14 @@ class ResClient:
         options.add_argument("--memory-pressure-off")
         options.add_argument("--disable-background-networking")
         options.add_argument("--disk-cache-size=1")
+        options.set_capability("goog:loggingPrefs", {"browser": "SEVERE"})
 
         # Retry mechanism for driver creation and page loading to handle tab crashes
         max_retries = 3
-        connection_url = f"{connection_info.endpoint}{connection_info.web_url_path}?authToken={connection_info.access_token}#{connection_info.dcv_session_id}"
+        connection_url = f"{connection_info.endpoint}{connection_info.web_url_path}?authToken={connection_info.access_token}#{connection_info.idea_session_id}"
 
         for attempt in range(max_retries):
-            driver = None
+            driver: WebDriver = None  # type: ignore[assignment]
             try:
                 driver = webdriver.Chrome(options=options)
                 driver.get(connection_url)
@@ -403,6 +416,7 @@ class ResClient:
         self,
         request: ReadFileRequest,
         should_succeed: bool = True,
+        expected_error_code: Optional[str] = None,
     ) -> ReadFileResult:
         logger.info(f"reading file...")
 
@@ -412,12 +426,14 @@ class ResClient:
             request,
             ReadFileResult,
             should_succeed,
+            expected_error_code,
         )
 
     def tail_file(
         self,
         request: TailFileRequest,
         should_succeed: bool = True,
+        expected_error_code: Optional[str] = None,
     ) -> TailFileResult:
         logger.info(f"tailing file...")
 
@@ -427,12 +443,14 @@ class ResClient:
             request,
             TailFileResult,
             should_succeed,
+            expected_error_code,
         )
 
     def save_file(
         self,
         request: SaveFileRequest,
         should_succeed: bool = True,
+        expected_error_code: Optional[str] = None,
     ) -> SaveFileResult:
         logger.info(f"saving file...")
 
@@ -442,12 +460,14 @@ class ResClient:
             request,
             SaveFileResult,
             should_succeed,
+            expected_error_code,
         )
 
     def download_files(
         self,
         request: DownloadFilesRequest,
         should_succeed: bool = True,
+        expected_error_code: Optional[str] = None,
     ) -> DownloadFilesResult:
         logger.info(f"downloading files...")
 
@@ -457,6 +477,7 @@ class ResClient:
             request,
             DownloadFilesResult,
             should_succeed,
+            expected_error_code,
         )
 
     def create_software_stack_from_session(
@@ -478,6 +499,7 @@ class ResClient:
         self,
         request: CreateFileRequest,
         should_succeed: bool = True,
+        expected_error_code: Optional[str] = None,
     ) -> CreateFileResult:
         logger.info(f"creating file...")
 
@@ -487,12 +509,14 @@ class ResClient:
             request,
             CreateFileResult,
             should_succeed,
+            expected_error_code,
         )
 
     def delete_files(
         self,
         request: DeleteFilesRequest,
         should_succeed: bool = True,
+        expected_error_code: Optional[str] = None,
     ) -> DeleteFilesResult:
         logger.info(f"deleting files...")
 
@@ -502,6 +526,7 @@ class ResClient:
             request,
             DeleteFilesResult,
             should_succeed,
+            expected_error_code,
         )
 
     def list_email_templates(
@@ -524,6 +549,7 @@ class ResClient:
         request: SocaPayload,
         response_type: Type[SocaPayloadType],
         should_succeed: bool = True,
+        expected_error_code: Optional[str] = None,
     ) -> SocaPayloadType:
         header = SocaHeader()
         header.namespace = namespace
@@ -547,6 +573,12 @@ class ResClient:
             or not context.response_is_success()
             and not should_succeed
         ), f'error code: {context.response.get("error_code")} message: {context.response.get("message")}'
+
+        if expected_error_code:
+            actual_error_code = context.response.get("error_code")
+            assert (
+                actual_error_code == expected_error_code
+            ), f"Expected error code '{expected_error_code}' but got '{actual_error_code}'"
 
         return context.get_response_payload_as(response_type)
 

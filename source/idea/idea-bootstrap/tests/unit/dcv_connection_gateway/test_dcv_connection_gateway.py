@@ -13,8 +13,6 @@ def test_dcv_connection_gateway_configure_succeed(monkeypatch):
     def mock_get(key: str):
         if key == "cluster.load_balancers.internal_alb.certificates.custom_dns_name":
             return "internal_alb_endpoint"
-        elif key == "vdc.dcv_broker.gateway_communication_port":
-            return "gateway_to_broker_port"
 
     monkeypatch.setattr(cluster_settings, "get_setting", mock_get)
 
@@ -55,7 +53,7 @@ def test_dcv_connection_gateway_configure_succeed(monkeypatch):
 
         assert (
             config["resolver"]["url"]
-            == '"https://internal_alb_endpoint:gateway_to_broker_port"'
+            == '"https://internal_alb_endpoint"'
         )
         assert config["resolver"]["tls-strict"] == "false"
 

@@ -6,7 +6,6 @@
 -r library.in
 -r bootstrap.in
 -r idea-dcv-connection-gateway.in
--r idea-dcv-broker.in
 -r idea-virtual-desktop.in
 -r idea-bastion-host.in
 -r lint.in

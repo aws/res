@@ -12,33 +12,14 @@
  */
 
 import {
-    CreateSessionRequest,
-    CreateSessionResponse,
-    GetSessionInfoRequest,
-    GetSessionInfoResponse,
-    UpdateSessionRequest,
-    UpdateSessionResponse,
-    DeleteSessionRequest,
-    DeleteSessionResponse,
-    ListSessionsRequest,
-    ListSessionsResponse,
     GetSessionScreenshotRequest,
     GetSessionScreenshotResponse,
     BatchCreateSessionRequest,
     BatchCreateSessionResponse,
-    StopSessionRequest,
-    StopSessionResponse,
-    ResumeSessionsRequest,
-    ResumeSessionsResponse,
     GetModuleInfoRequest,
     GetModuleInfoResult,
-    RebootSessionRequest,
-    RebootSessionResponse,
     CreateSoftwareStackFromSessionRequest,
     CreateSoftwareStackFromSessionResponse,
-    VirtualDesktopSessionConnectionInfo,
-    GetSessionConnectionInfoRequest,
-    GetSessionConnectionInfoResponse
 } from "./data-model";
 import IdeaBaseClient, { IdeaBaseClientProps } from "./base-client";
 import {
@@ -53,12 +34,10 @@ import {
     CreatePermissionProfileResponseContent,
     UpdatePermissionProfileRequestContent,
     UpdatePermissionProfileResponseContent,
-    UpdateSessionPermissionsRequestContent,
-    UpdateSessionPermissionsResponseContent,
     VirtualDesktopApiGetSoftwareStackRequest,
     GetSoftwareStackResponseContent,
-    VirtualDesktopApiGetSessionRequest,
-    GetSessionResponseContent
+    GetSessionConnectionRequestContent,
+    GetSessionConnectionResponseContent,
 } from "./generated/api";
 import { Configuration } from "./generated/configuration";
 
@@ -146,62 +125,35 @@ class VirtualDesktopAdminClient extends IdeaBaseClient<VirtualDesktopAdminClient
         return this.apiInvoker.invoke_alt<GetModuleInfoRequest, GetModuleInfoResult>("App.GetModuleInfo", {});
     }
 
-    createSession(req: CreateSessionRequest): Promise<CreateSessionResponse> {
-        return this.apiInvoker.invoke_alt<CreateSessionRequest, CreateSessionResponse>("VirtualDesktopAdmin.CreateSession", req);
-    }
-
     batchCreateSessions(req: BatchCreateSessionRequest): Promise<BatchCreateSessionResponse> {
         return this.apiInvoker.invoke_alt<BatchCreateSessionRequest, BatchCreateSessionResponse>("VirtualDesktopAdmin.BatchCreateSessions", req);
-    }
-
-    updateSession(req: UpdateSessionRequest): Promise<UpdateSessionResponse> {
-        return this.apiInvoker.invoke_alt<UpdateSessionRequest, UpdateSessionResponse>("VirtualDesktopAdmin.UpdateSession", req);
-    }
-
-    deleteSessions(req: DeleteSessionRequest): Promise<DeleteSessionResponse> {
-        return this.apiInvoker.invoke_alt<DeleteSessionRequest, DeleteSessionResponse>("VirtualDesktopAdmin.DeleteSessions", req);
-    }
-
-    stopSessions(req: StopSessionRequest): Promise<StopSessionResponse> {
-        return this.apiInvoker.invoke_alt<StopSessionRequest, StopSessionResponse>("VirtualDesktopAdmin.StopSessions", req);
-    }
-
-    rebootSessions(req: RebootSessionRequest): Promise<RebootSessionResponse> {
-        return this.apiInvoker.invoke_alt<RebootSessionRequest, RebootSessionResponse>("VirtualDesktopAdmin.RebootSessions", req);
-    }
-
-    resumeSessions(req: ResumeSessionsRequest): Promise<ResumeSessionsResponse> {
-        return this.apiInvoker.invoke_alt<ResumeSessionsRequest, ResumeSessionsResponse>("VirtualDesktopAdmin.ResumeSessions", req);
     }
 
     getSessionScreenshot(req: GetSessionScreenshotRequest): Promise<GetSessionScreenshotResponse> {
         return this.apiInvoker.invoke_alt<GetSessionScreenshotRequest, GetSessionScreenshotResponse>("VirtualDesktopAdmin.GetSessionScreenshot", req);
     }
 
-    getSessionConnectionInfo(req: GetSessionConnectionInfoRequest): Promise<GetSessionConnectionInfoResponse> {
-        return this.apiInvoker.invoke_alt<GetSessionConnectionInfoRequest, GetSessionConnectionInfoRequest>("VirtualDesktopAdmin.GetSessionConnectionInfo", req);
+    async getSessionConnection(req: GetSessionConnectionRequestContent): Promise<GetSessionConnectionResponseContent> {
+        const response = await this.generatedClient.getSessionConnection({
+            getSessionConnectionRequestContent: req
+        });
+        return response.data;
     }
 
     createSoftwareStackFromSession(req: CreateSoftwareStackFromSessionRequest): Promise<CreateSoftwareStackFromSessionResponse> {
         return this.apiInvoker.invoke_alt<CreateSoftwareStackFromSessionRequest, CreateSoftwareStackFromSessionResponse>("VirtualDesktopAdmin.CreateSoftwareStackFromSession", req);
     }
 
-    joinSession(idea_session_id: string, idea_session_owner: string, username?: string): Promise<boolean> {
+    joinSession(idea_session_id: string, idea_session_owner: string): Promise<boolean> {
         return new Promise<boolean>(() => {
-            let connection_info: VirtualDesktopSessionConnectionInfo = {
-                idea_session_id: idea_session_id,
-                idea_session_owner: idea_session_owner,
-            };
-
-            if (username) {
-                connection_info.username = username;
-            }
-
-            this.getSessionConnectionInfo({
-                connection_info: connection_info,
+            this.getSessionConnection({
+                connection: {
+                    'idea-session-id': idea_session_id,
+                    'idea-session-owner': idea_session_owner,
+                },
             })
                 .then((result) => {
-                    return `${result.connection_info?.endpoint}${result.connection_info?.web_url_path}?authToken=${result.connection_info?.access_token}#${result.connection_info?.dcv_session_id}`;
+                    return `${result.connection?.endpoint}${result.connection?.['web-url-path']}?authToken=${result.connection?.['access-token']}#${result.connection?.['idea-session-id']}`;
                 })
                 .then((url) => {
                     window.open(url);

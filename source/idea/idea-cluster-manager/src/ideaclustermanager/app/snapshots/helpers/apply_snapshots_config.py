@@ -16,7 +16,7 @@ from ideaclustermanager.app.snapshots.apply_snapshot_merge_table import (
     users_table_merger,
     permission_profiles_table_merger,
     projects_table_merger,
-    filesystems_cluster_settings_table_merger,
+    cluster_settings_table_merger,
     software_stacks_table_merger,
     role_assignments_table_merger,
     roles_table_merger,
@@ -43,6 +43,7 @@ RES_VERSION_IN_TOPOLOGICAL_ORDER = [
     RESVersion.v_2025_12,
     RESVersion.v_2025_12_01,
     RESVersion.v_2026_03,
+    RESVersion.v_2026_06,
 ]
 
 TABLE_TO_TABLE_KEYS_BY_VERSION: Dict[TableName, Dict[RESVersion, TableKeys]] = {
@@ -101,7 +102,7 @@ TABLE_TO_MERGE_LOGIC_CLASS: Dict[TableName, Type[merge_table.MergeTable]] = {
     TableName.ROLES_TABLE_NAME: roles_table_merger.RolesTableMerger,
     TableName.PERMISSION_PROFILES_TABLE_NAME: permission_profiles_table_merger.PermissionProfilesTableMerger,
     TableName.PROJECTS_TABLE_NAME: projects_table_merger.ProjectsTableMerger,
-    TableName.CLUSTER_SETTINGS_TABLE_NAME: filesystems_cluster_settings_table_merger.FileSystemsClusterSettingTableMerger,
+    TableName.CLUSTER_SETTINGS_TABLE_NAME: cluster_settings_table_merger.ClusterSettingsTableMerger,
     TableName.SOFTWARE_STACKS_TABLE_NAME: software_stacks_table_merger.SoftwareStacksTableMerger,
     TableName.ROLE_ASSIGNMENTS_TABLE_NAME: role_assignments_table_merger.RoleAssignmentsTableMerger,
 }

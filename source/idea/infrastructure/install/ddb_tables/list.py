@@ -23,7 +23,6 @@ from res.resources import (  # type: ignore
     role_assignments,
     roles,
     schedules,
-    servers,
     session_permissions,
     sessions,
     software_stacks,
@@ -307,6 +306,16 @@ vdc_session_table: RESDDBTable = RESDDBTable(
             name=sessions.SESSION_DB_RANGE_KEY, type=AttributeType.STRING
         ),
     ),
+    global_secondary_indexes_props=[
+        GlobalSecondaryIndexProps(
+            index_name=sessions.GSI_SERVER_INSTANCE_ID,
+            partition_key=Attribute(
+                name=sessions.SESSION_DB_SERVER_INSTANCE_ID_KEY,
+                type=AttributeType.STRING,
+            ),
+            projection_type=_dynamodb.ProjectionType.ALL,
+        )
+    ],
 )
 
 vdc_session_counter_table: RESDDBTable = RESDDBTable(
@@ -318,16 +327,6 @@ vdc_session_counter_table: RESDDBTable = RESDDBTable(
         ),
         sort_key=Attribute(
             name=sessions.SESSIONS_COUNTER_DB_RANGE_KEY, type=AttributeType.STRING
-        ),
-    ),
-)
-
-vdc_server_table: RESDDBTable = RESDDBTable(
-    id=servers.SERVER_TABLE_NAME,
-    module_id=constants.MODULE_ID_VDC,
-    table_props=TableProps(
-        partition_key=Attribute(
-            name=servers.SERVER_DB_HASH_KEY, type=AttributeType.STRING
         ),
     ),
 )
@@ -359,6 +358,18 @@ vdc_distributed_lock_table: RESDDBTable = RESDDBTable(
     ),
 )
 
+vdc_connection_token_table: RESDDBTable = RESDDBTable(
+    id=constants.DCV_CONNECTION_TOKEN_TABLE_NAME,
+    module_id=constants.MODULE_ID_VDC,
+    table_props=TableProps(
+        partition_key=Attribute(
+            name=constants.DCV_CONNECTION_TOKEN_DB_HASH_KEY,
+            type=AttributeType.STRING,
+        ),
+        time_to_live_attribute=constants.DCV_CONNECTION_TOKEN_DB_TTL_KEY,
+    ),
+)
+
 
 ddb_tables_list: List[RESDDBTable] = [
     cluster_settings_table,
@@ -381,7 +392,7 @@ ddb_tables_list: List[RESDDBTable] = [
     vdc_software_stack_table,
     vdc_session_table,
     vdc_session_counter_table,
-    vdc_server_table,
     vdc_session_permission_table,
     vdc_distributed_lock_table,
+    vdc_connection_token_table,
 ]
