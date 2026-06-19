@@ -61,12 +61,14 @@ def _all_in_service_instances_from_asgs(
     return instances
 
 
-def deregister_ami(image_id: str) -> bool:
+def deregister_ami(image_id: str, region: str = "") -> bool:
     try:
-        boto3.client("ec2").deregister_image(ImageId=image_id)
+        ec2 = boto3.client("ec2", region_name=region) if region else boto3.client("ec2")
+        ec2.deregister_image(ImageId=image_id)
+        logger.info(f"Successfully deregistered AMI {image_id}")
         return True
     except Exception as e:
-        logger.info(f"Error deregistering AMI {image_id}: {e}")
+        logger.error(f"Error deregistering AMI {image_id}: {e}")
         return False
 
 

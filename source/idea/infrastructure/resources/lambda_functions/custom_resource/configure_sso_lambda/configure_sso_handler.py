@@ -502,8 +502,67 @@ class SingleSignOnHelper:
                 ),
             )
 
+        # persist SSO request parameters for snapshot restore
+        self._persist_sso_request_params(request)
+
         # update cluster settings - this must be last step in the pipeline.
         self._update_config_entry("cognito.sso_enabled", True)
+
+    def _persist_sso_request_params(self, request: Dict[str, Any]) -> None:
+        """
+        Persist SSO request parameters to cluster-settings so they can be
+        replayed during snapshot apply on a new environment.
+        OIDC client secret is stored in Secrets Manager for security.
+        """
+        sso_params = {
+            "cognito.sso_saml_metadata_url": request.get("saml_metadata_url"),
+            "cognito.sso_oidc_client_id": request.get("oidc_client_id"),
+            "cognito.sso_oidc_issuer": request.get("oidc_issuer"),
+            "cognito.sso_oidc_attributes_request_method": request.get(
+                "oidc_attributes_request_method"
+            ),
+            "cognito.sso_oidc_authorize_scopes": request.get("oidc_authorize_scopes"),
+            "cognito.sso_oidc_authorize_url": request.get("oidc_authorize_url"),
+            "cognito.sso_oidc_token_url": request.get("oidc_token_url"),
+            "cognito.sso_oidc_attributes_url": request.get("oidc_attributes_url"),
+            "cognito.sso_oidc_jwks_uri": request.get("oidc_jwks_uri"),
+        }
+        for key, value in sso_params.items():
+            if value is not None:
+                self._update_config_entry(key, value)
+
+        # Store OIDC client secret in Secrets Manager
+        oidc_client_secret = request.get("oidc_client_secret")
+        if oidc_client_secret:
+            secret_name = f"{self.cluster_name}-sso-oidc-client-secret"
+            try:
+                self.secretsmanager_client.describe_secret(SecretId=secret_name)
+                self.secretsmanager_client.update_secret(
+                    SecretId=secret_name,
+                    SecretString=oidc_client_secret,
+                )
+            except botocore.exceptions.ClientError as e:
+                if e.response["Error"]["Code"] == "ResourceNotFoundException":
+                    kms_key_id = self.config.get_item(
+                        "cluster.secretsmanager.kms_key_id"
+                    )
+                    create_request = {
+                        "Name": secret_name,
+                        "Description": f"SSO OIDC Client Secret for Cluster: {self.cluster_name}",
+                        "SecretString": oidc_client_secret,
+                        "Tags": [
+                            {"Key": "res:EnvironmentName", "Value": self.cluster_name},
+                            {"Key": "res:ModuleName", "Value": "cluster-manager"},
+                        ],
+                    }
+                    if kms_key_id:
+                        create_request["KmsKeyId"] = kms_key_id
+                    self.secretsmanager_client.create_secret(**create_request)
+                else:
+                    raise e
+            self._update_config_entry(
+                "cognito.sso_oidc_client_secret_name", secret_name
+            )
 
 
 def handler(event: Dict[str, Any], context: Any) -> bool:

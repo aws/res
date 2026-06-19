@@ -481,6 +481,14 @@ class Projects extends Component<ProjectsProps, ProjectsState> {
         return this.deleteProjectConfirmModal.current!;
     }
 
+    getColumnDefinitions(): TableProps.ColumnDefinition<Project>[] {
+        // Filter out the budgets column for non-admin users
+        if (!this.isAdmin()) {
+            return PROJECT_TABLE_COLUMN_DEFINITIONS.filter(col => col.id !== "budgets");
+        }
+        return PROJECT_TABLE_COLUMN_DEFINITIONS;
+    }
+
     buildListing() {
         return (
             <IdeaListView
@@ -641,7 +649,7 @@ class Projects extends Component<ProjectsProps, ProjectsState> {
                   projects = await this.getProjectsWithPermissions(context, projects);
                   return { listing: projects};
                 }}
-                columnDefinitions={PROJECT_TABLE_COLUMN_DEFINITIONS}
+                columnDefinitions={this.getColumnDefinitions()}
             />
         );
     }

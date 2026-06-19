@@ -7,6 +7,7 @@ from threading import RLock
 from typing import Any, Dict, List, Optional
 
 from botocore.exceptions import ClientError
+from datamodel.models.virtual_desktop_base_os import VirtualDesktopBaseOs
 from res.clients.aws.aws_provider import AwsClientProvider
 from res.resources import cluster_settings, software_stacks
 from res.utils import logging_utils
@@ -141,6 +142,19 @@ def get_gpu_manufacturer(instance_type: str) -> VirtualDesktopGpu:
     return VirtualDesktopGpu.NO_GPU
 
 
+def get_ec2_block_device_name(base_os: str) -> str:
+    """
+    returns the ec2 block device name given a supported base os
+    """
+    if (
+        base_os == VirtualDesktopBaseOs.AMAZONLINUX2
+        or base_os == VirtualDesktopBaseOs.AMZN2023
+    ):
+        return "/dev/xvda"
+    else:
+        return "/dev/sda1"
+
+
 def get_architecture(instance_type: str) -> Optional[str]:
     """Get architecture for instance type"""
     instance_info = get_instance_type_info(instance_type)
@@ -235,3 +249,18 @@ def get_valid_instance_types_by_allowed_list(
 
     logger.debug(f"Returning valid_instance_types: {valid_instance_types_dict.keys()}")
     return valid_instance_types_dict
+
+
+def change_instance_type(instance_id: str, instance_type_name: str):
+    logger.info(f"Changing instance type for {instance_id} to {instance_type_name}")
+    ec2_client = _aws_client_provider.ec2()
+    ec2_client.modify_instance_attribute(
+        InstanceId=instance_id, Attribute="instanceType", Value=instance_type_name
+    )
+
+
+def create_tag(instance_id: str, tag_key: str, tag_value: str):
+    ec2_client = _aws_client_provider.ec2()
+    ec2_client.create_tags(
+        Resources=[instance_id], Tags=[{"Key": tag_key, "Value": tag_value}]
+    )

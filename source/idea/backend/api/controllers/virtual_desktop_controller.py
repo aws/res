@@ -4,10 +4,28 @@ from __future__ import annotations
 
 from connexion.exceptions import OAuthProblem
 import uuid
+import os
 
 from res import exceptions as res_exceptions  # type: ignore
 
 from api import exceptions as api_exceptions
+from datamodel.models.backend.batch_delete_session_request_content import BatchDeleteSessionRequestContent  # noqa: E501
+from datamodel.models.backend.batch_delete_session_response_content import BatchDeleteSessionResponseContent  # noqa: E501
+from datamodel.models.backend.batch_delete_session_failure import BatchDeleteSessionFailure  # noqa: E501
+from datamodel.models.backend.batch_start_session_request_content import BatchStartSessionRequestContent  # noqa: E501
+from datamodel.models.backend.batch_start_session_response_content import BatchStartSessionResponseContent  # noqa: E501
+from datamodel.models.backend.batch_start_session_failure import BatchStartSessionFailure  # noqa: E501
+from datamodel.models.backend.batch_stop_session_request_content import BatchStopSessionRequestContent  # noqa: E501
+from datamodel.models.backend.batch_stop_session_response_content import BatchStopSessionResponseContent  # noqa: E501
+from datamodel.models.backend.batch_stop_session_failure import BatchStopSessionFailure  # noqa: E501
+from datamodel.models.backend.batch_reboot_session_request_content import BatchRebootSessionRequestContent  # noqa: E501
+from datamodel.models.backend.batch_reboot_session_response_content import BatchRebootSessionResponseContent  # noqa: E501
+from datamodel.models.backend.batch_reboot_session_failure import BatchRebootSessionFailure  # noqa: E501
+from datamodel.models.backend.batch_get_session_screenshot_request_content import BatchGetSessionScreenshotRequestContent  # noqa: E501
+from datamodel.models.backend.batch_get_session_screenshot_response_content import BatchGetSessionScreenshotResponseContent  # noqa: E501
+from datamodel.models.backend.batch_get_session_screenshot_failure import BatchGetSessionScreenshotFailure  # noqa: E501
+from datamodel.models.virtual_desktop_session_screenshot import VirtualDesktopSessionScreenshot  # noqa: E501
+from datamodel.models.backend.batch_operation_error_code import BatchOperationErrorCode  # noqa: E501
 from datamodel.models.delete_permission_profile_response_content import (
     DeletePermissionProfileResponseContent,
 )  # noqa: E501
@@ -16,6 +34,12 @@ from datamodel.models.update_permission_profile_response_content import (
 )  # noqa: E501
 from datamodel.models.update_permission_profile_request_content import (
     UpdatePermissionProfileRequestContent,
+)  # noqa: E501
+from datamodel.models.backend.create_software_stack_from_session_request_content import (
+    CreateSoftwareStackFromSessionRequestContent,
+)  # noqa: E501
+from datamodel.models.backend.create_software_stack_from_session_response_content import (
+    CreateSoftwareStackFromSessionResponseContent,
 )  # noqa: E501
 from datamodel.models.create_software_stack_request_content import (
     CreateSoftwareStackRequestContent,
@@ -56,10 +80,10 @@ from datamodel.models.virtual_desktop_session_permission import (
 from datamodel.models.virtual_desktop_session import (
     VirtualDesktopSession,
 )  # noqa: E501
-from datamodel.models.update_session_permissions_request_content import (
+from datamodel.models.backend.update_session_permissions_request_content import (
     UpdateSessionPermissionsRequestContent,
 )  # noqa: E501
-from datamodel.models.update_session_permissions_response_content import (
+from datamodel.models.backend.update_session_permissions_response_content import (
     UpdateSessionPermissionsResponseContent,
 )  # noqa: E501
 
@@ -72,9 +96,25 @@ from datamodel.models.create_permission_profile_request_content import (
 from datamodel.models.create_permission_profile_response_content import (
     CreatePermissionProfileResponseContent,
 )  # noqa: E501
+from datamodel.models.create_session_request_content import (
+    CreateSessionRequestContent,
+)  # noqa: E501
+from datamodel.models.create_session_response_content import (
+    CreateSessionResponseContent,
+)  # noqa: E501
+from datamodel.models.get_session_connection_request_content import GetSessionConnectionRequestContent  # noqa: E501
+from datamodel.models.get_session_connection_response_content import GetSessionConnectionResponseContent  # noqa: E501
+from datamodel.models.virtual_desktop_session_connection import VirtualDesktopSessionConnection  # noqa: E501
+from datamodel.models.backend.virtual_desktop_session_state import VirtualDesktopSessionState  # noqa: E501
 from datamodel.models.get_session_response_content import (
     GetSessionResponseContent,
 )
+from datamodel.models.update_session_request_content import (
+    UpdateSessionRequestContent,
+)  # noqa: E501
+from datamodel.models.update_session_response_content import (
+    UpdateSessionResponseContent,
+)  # noqa: E501
 from datamodel.models.virtual_desktop_session import VirtualDesktopSession
 
 from api.utils.software_stack_utils import (
@@ -93,7 +133,303 @@ from res.resources import (
     permission_profiles,
     session_permissions as res_session_permissions,
     sessions as res_sessions,
+    vdi_management,
 )
+from res.clients.dcv_session_manager import dcv_session_manager_client
+from api.utils.session_utils import (
+    validate_update_session_request,
+)
+from res.utils import logging_utils
+from api.utils import session_utils
+
+logger = logging_utils.get_logger(__name__)
+
+
+def batch_reboot_session(body, user=None, token_info=None):  # noqa: E501
+    """batch_reboot_session
+
+    Batch Reboot Sessions # noqa: E501
+
+    :param batch_reboot_session_request_content:
+    :type batch_reboot_session_request_content: dict | bytes
+
+    :param user: The authenticated user information
+    :type user: str
+    :param token_info: The token information from authentication
+    :type token_info: dict
+    :rtype: Union[BatchRebootSessionResponseContent, Tuple[BatchRebootSessionResponseContent, int], Tuple[BatchRebootSessionResponseContent, int, Dict[str, str]]
+    """
+
+    request = BatchRebootSessionRequestContent.from_dict(body)
+    validated_sessions_list, unsuccessful_list = session_utils.validate_batch_reboot_sessions(request.sessions, user)
+
+    if not validated_sessions_list:
+        return BatchRebootSessionResponseContent(successful_list=[], unsuccessful_list=unsuccessful_list)
+
+    dry_run_enabled = os.environ.get('DRY_RUN_ENABLED', 'false').lower() == 'true'
+    if dry_run_enabled:
+        session_ids = [s.get('idea_session_id') for s in validated_sessions_list]
+        logger.info(f'DRY RUN MODE ENABLED - Batch Reboot Session count: {len(validated_sessions_list)}, session_ids: {session_ids}')
+        return BatchRebootSessionResponseContent(
+            successful_list=[VirtualDesktopSession.from_ddb_dict(s) for s in validated_sessions_list],
+            unsuccessful_list=unsuccessful_list,
+        )
+
+    success_list, fail_list = vdi_management.reboot_sessions(validated_sessions_list)
+
+    successful = [VirtualDesktopSession.from_ddb_dict(s) for s in success_list]
+    for s in fail_list:
+        unsuccessful_list.append(BatchRebootSessionFailure(
+            session=VirtualDesktopSession.from_ddb_dict(s),
+            error_code=BatchOperationErrorCode[s['failure_code']] if 'failure_code' in s else BatchOperationErrorCode.INTERNALSERVICEEXCEPTION,
+            message=s.get('failure_reason', 'Reboot session failed')
+        ))
+
+    return BatchRebootSessionResponseContent(successful_list=successful, unsuccessful_list=unsuccessful_list)
+
+
+def batch_delete_session(body, user=None, token_info=None):  # noqa: E501
+    """batch_delete_session
+
+    Batch Delete Sessions # noqa: E501
+
+    :param batch_delete_session_request_content:
+    :type batch_delete_session_request_content: dict | bytes
+
+    :param user: The authenticated user information
+    :type user: str
+    :param token_info: The token information from authentication
+    :type token_info: dict
+    :rtype: Union[BatchDeleteSessionResponseContent, Tuple[BatchDeleteSessionResponseContent, int], Tuple[BatchDeleteSessionResponseContent, int, Dict[str, str]]
+    """
+
+    request = BatchDeleteSessionRequestContent.from_dict(body)
+    validated_sessions_list, unsuccessful_list = session_utils.validate_batch_delete_sessions(request.sessions, user)
+
+    if not validated_sessions_list:
+        return BatchDeleteSessionResponseContent(successful_list=[], unsuccessful_list=unsuccessful_list)
+
+    dry_run_enabled = os.environ.get('DRY_RUN_ENABLED', 'false').lower() == 'true'
+    if dry_run_enabled:
+        session_ids = [s.idea_session_id for s in validated_sessions_list]
+        logger.info(f'DRY RUN MODE ENABLED - Batch Delete Session count: {len(validated_sessions_list)}, session_ids: {session_ids}')
+        return BatchDeleteSessionResponseContent(successful_list=validated_sessions_list, unsuccessful_list=unsuccessful_list)
+
+    sessions_ddb = [session.to_ddb_dict() for session in validated_sessions_list]
+    try:
+        success_list, fail_list = vdi_management.terminate_sessions(sessions_ddb)
+    except Exception:
+        session_ids = [s.get('idea_session_id') for s in sessions_ddb]
+        logger.error(f"Failed to delete sessions: {session_ids}", exc_info=True)
+        raise
+
+    successful = [VirtualDesktopSession.from_ddb_dict(s) for s in success_list]
+    for s in fail_list:
+        unsuccessful_list.append(BatchDeleteSessionFailure(
+            session=VirtualDesktopSession.from_ddb_dict(s),
+            error_code=BatchOperationErrorCode[s['failure_code']] if 'failure_code' in s else BatchOperationErrorCode.INTERNALSERVICEEXCEPTION,
+            message=s.get('failure_reason', 'Delete session failed')
+        ))
+
+    return BatchDeleteSessionResponseContent(successful_list=successful, unsuccessful_list=unsuccessful_list)
+
+
+def batch_start_session(body, user=None, token_info=None):  # noqa: E501
+    """batch_start_session
+
+    Batch Start Sessions # noqa: E501
+
+    :param batch_start_session_request_content:
+    :type batch_start_session_request_content: dict | bytes
+
+    :param user: The authenticated user information
+    :type user: str
+    :param token_info: The token information from authentication
+    :type token_info: dict
+    :rtype: Union[BatchStartSessionResponseContent, Tuple[BatchStartSessionResponseContent, int], Tuple[BatchStartSessionResponseContent, int, Dict[str, str]]
+    """
+
+    request = BatchStartSessionRequestContent.from_dict(body)
+    validated_sessions_list, unsuccessful_list = session_utils.validate_batch_start_sessions(request.sessions, user)
+
+    if not validated_sessions_list:
+        return BatchStartSessionResponseContent(successful_list=[], unsuccessful_list=unsuccessful_list)
+
+    dry_run_enabled = os.environ.get('DRY_RUN_ENABLED', 'false').lower() == 'true'
+    if dry_run_enabled:
+        session_ids = [s.idea_session_id for s in validated_sessions_list]
+        logger.info(f'DRY RUN MODE ENABLED - Batch Start Session count: {len(validated_sessions_list)}, session_ids: {session_ids}')
+        return BatchStartSessionResponseContent(successful_list=validated_sessions_list, unsuccessful_list=unsuccessful_list)
+
+    sessions_ddb = [session.to_ddb_dict() for session in validated_sessions_list]
+    try:
+        success_list, fail_list = vdi_management.start_sessions(sessions_ddb)
+    except Exception:
+        session_ids = [s.get('idea_session_id') for s in sessions_ddb]
+        logger.error(f"Failed to start sessions: {session_ids}", exc_info=True)
+        raise
+
+    successful = [VirtualDesktopSession.from_ddb_dict(s) for s in success_list]
+    for s in fail_list:
+        unsuccessful_list.append(BatchStartSessionFailure(
+            session=VirtualDesktopSession.from_ddb_dict(s),
+            error_code=BatchOperationErrorCode.INTERNALSERVICEEXCEPTION,
+            message=s.get('failure_reason', 'Start session failed')
+        ))
+
+    return BatchStartSessionResponseContent(successful_list=successful, unsuccessful_list=unsuccessful_list)
+
+
+def batch_get_session_screenshot(body, user=None, token_info=None):  # noqa: E501
+    """batch_get_session_screenshot
+
+    Batch Get Session Screenshots # noqa: E501
+
+    :param batch_get_session_screenshot_request_content:
+    :type batch_get_session_screenshot_request_content: dict | bytes
+
+    :param user: The authenticated user information
+    :type user: str
+    :param token_info: The token information from authentication
+    :type token_info: dict
+    :rtype: Union[BatchGetSessionScreenshotResponseContent, Tuple[BatchGetSessionScreenshotResponseContent, int], Tuple[BatchGetSessionScreenshotResponseContent, int, Dict[str, str]]
+    """
+
+    screenshots = BatchGetSessionScreenshotRequestContent.from_dict(body).screenshots
+
+    dry_run_enabled = os.environ.get('DRY_RUN_ENABLED', 'false').lower() == 'true'
+    if dry_run_enabled:
+        session_ids = [s.idea_session_id for s in screenshots]
+        logger.info(f'DRY RUN MODE ENABLED - Batch Get Session Screenshot count: {len(screenshots)}, session_ids: {session_ids}')
+        return BatchGetSessionScreenshotResponseContent(successful_list=screenshots, unsuccessful_list=[])
+
+    session_ids = [s.idea_session_id for s in screenshots]
+    try:
+        response = dcv_session_manager_client.get_session_screenshots(session_ids, requester=user)
+    except Exception:
+        logger.error(f"Failed to get session screenshots: {session_ids}", exc_info=True)
+        raise
+
+    successful_list = [VirtualDesktopSessionScreenshot.from_ddb_dict(entry) for entry in response.get('successful_list') or []]
+    unsuccessful_list = []
+    for entry in response.get('unsuccessful_list') or []:
+        failure_reason = entry.get('failure_reason', 'Get session screenshot failed')
+        unsuccessful_list.append(BatchGetSessionScreenshotFailure(
+            screenshot=VirtualDesktopSessionScreenshot.from_ddb_dict(entry),
+            error_code=BatchOperationErrorCode.FORBIDDENEXCEPTION if failure_reason == res_session_permissions.ACCESS_DENIED_MSG else BatchOperationErrorCode.INTERNALSERVICEEXCEPTION,
+            message=failure_reason
+        ))
+
+    return BatchGetSessionScreenshotResponseContent(successful_list=successful_list, unsuccessful_list=unsuccessful_list)
+
+
+def batch_stop_session(body, user=None, token_info=None):  # noqa: E501
+    """batch_stop_session
+
+    Batch Stop Sessions # noqa: E501
+
+    :param batch_stop_session_request_content:
+    :type batch_stop_session_request_content: dict | bytes
+
+    :param user: The authenticated user information
+    :type user: str
+    :param token_info: The token information from authentication
+    :type token_info: dict
+    :rtype: Union[BatchStopSessionResponseContent, Tuple[BatchStopSessionResponseContent, int], Tuple[BatchStopSessionResponseContent, int, Dict[str, str]]
+    """
+
+    request = BatchStopSessionRequestContent.from_dict(body)
+    validated_sessions_list, unsuccessful_list = session_utils.validate_batch_stop_sessions(request.sessions, user)
+
+    if not validated_sessions_list:
+        return BatchStopSessionResponseContent(successful_list=[], unsuccessful_list=unsuccessful_list)
+
+    dry_run_enabled = os.environ.get('DRY_RUN_ENABLED', 'false').lower() == 'true'
+    if dry_run_enabled:
+        session_ids = [s.idea_session_id for s in validated_sessions_list]
+        logger.info(f'DRY RUN MODE ENABLED - Batch Stop Session count: {len(validated_sessions_list)}, session_ids: {session_ids}')
+        return BatchStopSessionResponseContent(successful_list=validated_sessions_list, unsuccessful_list=unsuccessful_list)
+
+    sessions_ddb = [session.to_ddb_dict() for session in validated_sessions_list]
+    try:
+        success_list, fail_list = vdi_management.stop_sessions(sessions_ddb)
+    except Exception:
+        session_ids = [s.get('idea_session_id') for s in sessions_ddb]
+        logger.error(f"Failed to stop sessions: {session_ids}", exc_info=True)
+        raise
+
+    successful = [VirtualDesktopSession.from_ddb_dict(s) for s in success_list]
+    for s in fail_list:
+        unsuccessful_list.append(BatchStopSessionFailure(
+            session=VirtualDesktopSession.from_ddb_dict(s),
+            error_code=BatchOperationErrorCode[s['failure_code']] if 'failure_code' in s else BatchOperationErrorCode.INTERNALSERVICEEXCEPTION,
+            message=s.get('failure_reason', 'Stop session failed')
+        ))
+
+    return BatchStopSessionResponseContent(successful_list=successful, unsuccessful_list=unsuccessful_list)
+
+
+def create_session(body, user=None, token_info=None):  # noqa: E501
+    """create_session
+
+    Create Session # noqa: E501
+
+    :param create_session_request_content:
+    :type create_session_request_content: dict | bytes
+
+    :param user: The authenticated user information
+    :type user: str
+    :param token_info: The token information from authentication
+    :type token_info: dict
+    :rtype: Union[CreateSessionResponseContent, Tuple[CreateSessionResponseContent, int], Tuple[CreateSessionResponseContent, int, Dict[str, str]]
+    """
+    logger.info(f'Received create session request from user: {user}')
+
+    request = CreateSessionRequestContent.from_dict(body)
+    session = request.session
+
+    dry_run_enabled = os.environ.get('DRY_RUN_ENABLED', 'false').lower() == 'true'
+    if dry_run_enabled:
+        logger.info(f'DRY RUN MODE ENABLED - Session Request Object: {session}')
+        return {"session": session}
+
+    session.logins = res_sessions.get_session_logins()
+    session, is_valid = session_utils._validate_create_session_request(session, user)
+
+    if not is_valid:
+        raise api_exceptions.BadRequestException(
+            message=f"Invalid params: {session.failure_reason}"
+        )
+
+    session = session_utils.complete_create_session_request(session, user)
+    session = session_utils._create_session(session)
+
+    if not session.failure_reason:
+        logger.info(f'session request created for user: {session.owner} with session name: {session.name} and idea_session_id: {session.idea_session_id}:{session.name}' + ('' if session.owner == user else f' by: {user}'))
+        return CreateSessionResponseContent(
+            session=session
+        )
+    else:
+        raise api_exceptions.BadRequestException(
+            message=f"Error creating sessions: {session.failure_reason}"
+        )
+
+
+def create_software_stack_from_session(body, user=None, token_info=None):  # noqa: E501
+    """create_software_stack_from_session
+
+    Create a software stack from an existing session # noqa: E501
+
+    :param create_software_stack_from_session_request_content:
+    :type create_software_stack_from_session_request_content: dict | bytes
+
+    :param user: The authenticated user information
+    :type user: str
+    :param token_info: The token information from authentication
+    :type token_info: dict
+    :rtype: Union[CreateSoftwareStackFromSessionResponseContent, Tuple[CreateSoftwareStackFromSessionResponseContent, int], Tuple[CreateSoftwareStackFromSessionResponseContent, int, Dict[str, str]]
+    """
+    raise NotImplementedError("create_software_stack_from_session is not yet implemented")
 
 
 def create_software_stack(body, user=None, token_info=None):  # noqa: E501
@@ -673,3 +1009,133 @@ def get_session(res_session_id, owner, user=None, token_info=None):  # noqa: E50
     return GetSessionResponseContent(
         session=VirtualDesktopSession.from_ddb_dict(session_dict)
     )
+
+def get_session_connection(body, user=None, token_info=None):  # noqa: E501
+    """get_session_connection
+
+    Get connection information for a virtual desktop session # noqa: E501
+
+    :param body:
+    :type body: dict | bytes
+
+    :param user: The authenticated user information
+    :type user: str
+    :param token_info: The token information from authentication
+    :type token_info: dict
+    :rtype: Union[GetSessionConnectionResponseContent, Tuple[GetSessionConnectionResponseContent, int], Tuple[GetSessionConnectionResponseContent, int, Dict[str, str]]
+    """
+    request = GetSessionConnectionRequestContent.from_dict(body)
+    connection = request.connection
+
+    # Authorization: user must be admin, session owner, or have shared permission
+    if not accounts.is_active_admin(user):
+        if connection.idea_session_owner != user:
+            try:
+                res_session_permissions.get_session_permission(connection.idea_session_id, user)
+            except res_exceptions.SessionPermissionsNotFound:
+                raise OAuthProblem("User does not have permission to access this session")
+
+    try:
+        session = res_sessions.get_session(connection.idea_session_owner, connection.idea_session_id)
+    except res_exceptions.UserSessionNotFound:
+        raise api_exceptions.BadRequestException(
+            f"Session with session_id {connection.idea_session_id} and owner {connection.idea_session_owner} does not exist."
+        )
+    except Exception as e:
+        logger.error(f"Failed to retrieve session {connection.idea_session_id}: {e}")
+        raise api_exceptions.InternalServiceException(
+            f"Error retrieving session {connection.idea_session_id}"
+        )
+
+    state = session.get("state")
+    if state != VirtualDesktopSessionState.READY:
+        raise api_exceptions.BadRequestException(
+            f"Session {connection.idea_session_id} is not ready for connection. Current state: {state}"
+        )
+
+    dry_run_enabled = os.environ.get('DRY_RUN_ENABLED', 'false').lower() == 'true'
+    if dry_run_enabled:
+        logger.info(f'DRY RUN MODE ENABLED - GetSessionConnection for session: {connection.idea_session_id}, owner: {connection.idea_session_owner}')
+        return GetSessionConnectionResponseContent(
+            connection=VirtualDesktopSessionConnection(
+                idea_session_id=connection.idea_session_id,
+                idea_session_owner=connection.idea_session_owner,
+                endpoint="dry-run-endpoint",
+                web_url_path="dry-run-web-url-path",
+                access_token="dry-run-access-token",
+            )
+        )
+
+    try:
+        connection_result = res_sessions.get_session_connection(
+            session_id=connection.idea_session_id,
+            owner=connection.idea_session_owner,
+            username=user,
+        )
+    except res_exceptions.SettingNotFound as e:
+        logger.error(f"Cluster configuration error for session {connection.idea_session_id}: {e}")
+        raise api_exceptions.InternalServiceException(
+            f"Connection gateway is not configured for session {connection.idea_session_id}"
+        )
+    except Exception as e:
+        logger.error(f"Failed to get session connection data for session {connection.idea_session_id}: {e}")
+        res_sessions.update_session_state(connection.idea_session_owner, connection.idea_session_id, "ERROR")
+        raise api_exceptions.InternalServiceException(
+            f"Error retrieving session connection data for session {connection.idea_session_id}"
+        )
+
+    return GetSessionConnectionResponseContent(
+        connection=VirtualDesktopSessionConnection.from_dict(connection_result)
+    )
+
+
+def update_session(body, res_session_id, user=None, token_info=None):  # noqa: E501
+    """update_session
+
+    Update Session # noqa: E501
+
+    :param update_session_request_content:
+    :type update_session_request_content: dict | bytes
+    :param res_session_id: Session identifier
+    :type res_session_id: str
+
+    :param user: The authenticated user information
+    :type user: str
+    :param token_info: The token information from authentication
+    :type token_info: dict
+    :rtype: Union[UpdateSessionResponseContent, Tuple[UpdateSessionResponseContent, int], Tuple[UpdateSessionResponseContent, int, Dict[str, str]]
+    """
+
+    request = UpdateSessionRequestContent.from_dict(body)
+    session = request.session
+
+    if not accounts.is_active_admin(user) and user != session.owner:
+        raise OAuthProblem(
+            "Unauthorized user. Non Admin users can submit requests for themselves only"
+        )
+
+    dry_run_enabled = os.environ.get('DRY_RUN_ENABLED', 'false').lower() == 'true'
+    if dry_run_enabled:
+        logger.info(f'DRY RUN MODE ENABLED - Update Session Request Object: {session}')
+        return { "session": session }
+
+    try:
+        old_session_dict = res_sessions.get_session(session.owner, res_session_id)
+    except res_exceptions.UserSessionNotFound:
+        raise api_exceptions.BadRequestException(
+            f"Session {res_session_id} does not exist"
+        )
+
+    validate_update_session_request(session, old_session_dict)
+
+    try:
+        updated_session = res_sessions.update_session(
+            session.to_ddb_dict(), old_session_dict
+        )
+    except res_exceptions.ServerNotFound as e:
+        raise api_exceptions.BadRequestException(str(e))
+
+    session_obj = VirtualDesktopSession.from_ddb_dict(updated_session)
+
+    return UpdateSessionResponseContent(session=session_obj)
+

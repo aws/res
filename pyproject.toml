@@ -33,18 +33,20 @@ cdk-app = "idea.app:main"
 [tool.black]
 include = 'source/.*\.py'
 # TODO: Change the path to include all the source files
-extend-exclude = 'source/idea/idea-*|dcv_swagger_client|res_meta|backend|source/res/api|data-model'
+extend-exclude = 'source/idea/idea-*|dcv_swagger_client|dcv_session_management_client|res_meta|backend|dcv_session_management|source/res/api|data-model'
 
 [tool.isort]
 profile = "black"
 known_first_party = "idea,ideadatamodel"
 # TODO: Change the path to include all the source files
-skip_glob = ["source/idea/idea-*", "*dcv_swagger_client*", "*res_meta*", "*backend*", "source/res/api", "*data-model*"]
+skip_glob = ["source/idea/idea-*", "*dcv_swagger_client*", "*dcv_session_management_client*", "*res_meta*", "*backend*", "*dcv_session_management*", "source/res/api", "*data-model*"]
 
 [tool.mypy]
 exclude = [
     "idea-*",
     "lambda_*",
     "backend.*",
-    "source/res/api/"
+    "dcv_session_management.*",
+    "source/res/api/",
+    "bootstrap_userdata_builder"
 ]

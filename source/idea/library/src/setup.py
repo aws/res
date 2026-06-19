@@ -13,6 +13,9 @@ setup(
     license="Apache License, Version 2.0",
     packages=find_packages(),
     package_dir={"res": "res"},
+    package_data={
+        "res.utils": ["_templates/**/*.jinja2"],
+    },
     entry_points="""
         [console_scripts]
         res=res.app_main:main

@@ -1,10 +1,11 @@
-black==24.10.0
-click==8.3.1
+black==26.5.1
+click==8.4.1
 iniconfig==2.3.0
 isort==5.13.2
 mypy-extensions==1.1.0
-packaging==26.0
-pathspec==1.0.4
-platformdirs==4.9.2
+packaging==26.2
+pathspec==1.1.1
+platformdirs==4.10.0
 pluggy==1.6.0
 pytest==7.4.4
+pytokens==0.4.1

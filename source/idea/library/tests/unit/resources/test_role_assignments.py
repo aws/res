@@ -218,3 +218,94 @@ def test_list_role_assignments_for_user_and_groups_no_groups(
     assert len(result) == 1
     mock_get_user.assert_called_once_with("testuser")
     mock_list_assignments.assert_called_once_with(actor_key="testuser:user")
+
+
+@patch("res.resources.role_assignments.roles.get_roles_batch")
+@patch("res.resources.role_assignments.list_role_assignments_for_user_and_groups")
+def test_get_user_permissions_with_permissions(
+    mock_list_assignments, mock_get_roles_batch
+):
+    """
+    Test get_user_permissions returns permissions when user has role assignments
+    """
+    mock_list_assignments.return_value = [
+        {"resource_key": "proj-1:project", "role_id": "role1"},
+        {"resource_key": "proj-2:project", "role_id": "role2"},
+    ]
+    mock_get_roles_batch.return_value = {
+        "role1": {
+            "vdis": {"create_sessions": True, "create_terminate_others_sessions": True},
+            "projects": {"update_personnel": True, "update_status": True},
+        }
+    }
+
+    result = role_assignments.get_user_permissions("testuser", "proj-1:project")
+
+    assert result == {
+        "vdis.create_sessions",
+        "vdis.create_terminate_others_sessions",
+        "projects.update_personnel",
+        "projects.update_status",
+    }
+    mock_list_assignments.assert_called_once_with("testuser")
+    mock_get_roles_batch.assert_called_once_with(["role1"])
+
+
+@patch("res.resources.role_assignments.roles.get_roles_batch")
+@patch("res.resources.role_assignments.list_role_assignments_for_user_and_groups")
+def test_get_user_permissions_no_matching_resource(
+    mock_list_assignments, mock_get_roles_batch
+):
+    """
+    Test get_user_permissions returns empty set when resource doesn't match
+    """
+    mock_list_assignments.return_value = [
+        {"resource_key": "proj-2:project", "role_id": "role1"},
+    ]
+
+    result = role_assignments.get_user_permissions("testuser", "proj-1:project")
+
+    assert result == set()
+    mock_get_roles_batch.assert_not_called()
+
+
+@patch("res.resources.role_assignments.list_role_assignments_for_user_and_groups")
+def test_get_user_permissions_no_assignments(
+    mock_list_assignments,
+):
+    """
+    Test get_user_permissions returns empty set when user has no assignments
+    """
+    mock_list_assignments.return_value = []
+
+    result = role_assignments.get_user_permissions("testuser", "proj-1:project")
+
+    assert result == set()
+
+
+@patch("res.resources.role_assignments.roles.get_roles_batch")
+@patch("res.resources.role_assignments.list_role_assignments_for_user_and_groups")
+def test_get_user_permissions_filters_false_permissions(
+    mock_list_assignments, mock_get_roles_batch
+):
+    """
+    Test get_user_permissions only includes permissions set to True
+    """
+    mock_list_assignments.return_value = [
+        {"resource_key": "proj-1:project", "role_id": "role1"},
+    ]
+    mock_get_roles_batch.return_value = {
+        "role1": {
+            "vdis": {
+                "create_sessions": True,
+                "create_terminate_others_sessions": False,
+            },
+            "projects": {"update_personnel": True, "update_status": False},
+        }
+    }
+
+    result = role_assignments.get_user_permissions("testuser", "proj-1:project")
+
+    assert result == {"vdis.create_sessions", "projects.update_personnel"}
+    assert "vdis.create_terminate_others_sessions" not in result
+    assert "projects.update_status" not in result

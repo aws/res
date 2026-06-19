@@ -58,6 +58,9 @@ from idea.infrastructure.install.policies.custom_credential_broker_policy import
 from idea.infrastructure.install.policies.custom_kms_key_policy import (
     CustomKmsKeyPolicy,
 )
+from idea.infrastructure.install.policies.dcv_session_management_lambda_policy import (
+    DcvSessionManagementLambdaPolicy,
+)
 from idea.infrastructure.install.policies.detach_vpc_from_lambda_policy import (
     DetachVpcFromLambdaPolicy,
 )
@@ -116,9 +119,6 @@ from idea.infrastructure.install.policies.vdc_controller_sqs_kms_key_policy impo
     VdcControllerSqsKmsKeyPolicy,
 )
 from idea.infrastructure.install.policies.vdi_helper_policy import VdiHelperPolicy
-from idea.infrastructure.install.policies.virtual_desktop_broker_policy import (
-    VirtualDesktopBrokerPolicy,
-)
 from idea.infrastructure.install.policies.virtual_desktop_connection_gateway_policy import (
     VirtualDesktopConnectionGatewayPolicy,
 )
@@ -157,6 +157,7 @@ __all__ = [
     "ControllerSSMCommandPassRolePolicy",
     "CustomCredentialBrokerPolicy",
     "CustomKmsKeyPolicy",
+    "DcvSessionManagementLambdaPolicy",
     "DetachVpcFromLambdaPolicy",
     "DisableCognitoProtectionPolicy",
     "Ec2StateEventTransformerPolicy",
@@ -174,7 +175,6 @@ __all__ = [
     "UpdateClusterSettingsPolicy",
     "VdcControllerSqsKmsKeyPolicy",
     "VdiHelperPolicy",
-    "VirtualDesktopBrokerPolicy",
     "VirtualDesktopConnectionGatewayPolicy",
     "VirtualDesktopControllerPolicy",
     "VirtualDesktopDcvHostScopedDownPolicy",

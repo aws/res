@@ -5,7 +5,7 @@ import logging
 import os
 from typing import Any, Optional
 
-import boto3
+from res.clients.aws import get_aws_provider  # type: ignore
 
 from .object_storage_model import ObjectStorageModel
 
@@ -18,7 +18,7 @@ STORAGE_PROVIDER_S3_BUCKET = os.environ.get("STORAGE_PROVIDER_S3_BUCKET", "")
 
 class SharedStorageDB:
     def __init__(self, logger: logging.Logger):
-        self.dynamodb = boto3.resource("dynamodb")
+        self.dynamodb = get_aws_provider().dynamodb_table()
         self.table = self.dynamodb.Table(CLUSTER_SETTINGS_TABLE_NAME)
         self.prefix = SHARED_STORAGE_PREFIX
         self.logger = logger

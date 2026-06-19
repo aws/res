@@ -2,7 +2,7 @@
 #  SPDX-License-Identifier: Apache-2.0
 
 import logging
-from typing import Any, Dict
+from typing import Any, Dict, List
 
 import pytest
 from res.resources import sessions  # type: ignore
@@ -26,10 +26,12 @@ class TestGetSession:
     @pytest.mark.parametrize(
         "session_record",
         [
-            {
-                "session_id": "test-session-admin-123",
-                sessions.SESSION_DB_HASH_KEY: "clusteradmin",
-            }
+            [
+                {
+                    "session_id": "test-session-admin-123",
+                    sessions.SESSION_DB_HASH_KEY: "clusteradmin",
+                }
+            ]
         ],
         indirect=True,
     )
@@ -38,37 +40,39 @@ class TestGetSession:
         self,
         region: str,
         res_environment: ResEnvironment,
-        session_record: Dict[str, Any],
+        session_record: List[Dict[str, Any]],
         admin_username: str,
         admin: ClientAuth,
     ) -> None:
+        record = session_record[0]
         api_client = ApiClient(res_environment, admin)
         response = api_client.get_session(
-            res_session_id=session_record[sessions.SESSION_DB_RANGE_KEY],
-            owner=session_record[sessions.SESSION_DB_HASH_KEY],
+            res_session_id=record[sessions.SESSION_DB_RANGE_KEY],
+            owner=record[sessions.SESSION_DB_HASH_KEY],
         )
 
         assert response is not None, "Response should not be None"
         assert response.session is not None, "Response must contain 'session' field"
         assert (
-            response.session.idea_session_id
-            == session_record[sessions.SESSION_DB_RANGE_KEY]
+            response.session.idea_session_id == record[sessions.SESSION_DB_RANGE_KEY]
         ), "Session ID should match"
         assert (
-            response.session.owner == session_record[sessions.SESSION_DB_HASH_KEY]
+            response.session.owner == record[sessions.SESSION_DB_HASH_KEY]
         ), "Owner should match"
 
         logger.info(
-            f"Successfully retrieved session {session_record[sessions.SESSION_DB_RANGE_KEY]} for owner {session_record[sessions.SESSION_DB_HASH_KEY]}"
+            f"Successfully retrieved session {record[sessions.SESSION_DB_RANGE_KEY]} for owner {record[sessions.SESSION_DB_HASH_KEY]}"
         )
 
     @pytest.mark.parametrize(
         "session_record",
         [
-            {
-                "session_id": "test-session-user1-123",
-                sessions.SESSION_DB_HASH_KEY: "user1",
-            }
+            [
+                {
+                    "session_id": "test-session-user1-123",
+                    sessions.SESSION_DB_HASH_KEY: "user1",
+                }
+            ]
         ],
         indirect=True,
     )
@@ -78,34 +82,36 @@ class TestGetSession:
         request: FixtureRequest,
         region: str,
         res_environment: ResEnvironment,
-        session_record: Dict[str, Any],
+        session_record: List[Dict[str, Any]],
         non_admin_username: str,
         non_admin: ClientAuth,
     ) -> None:
+        record = session_record[0]
         api_client = ApiClient(res_environment, non_admin)
         response = api_client.get_session(
-            res_session_id=session_record[sessions.SESSION_DB_RANGE_KEY],
-            owner=session_record[sessions.SESSION_DB_HASH_KEY],
+            res_session_id=record[sessions.SESSION_DB_RANGE_KEY],
+            owner=record[sessions.SESSION_DB_HASH_KEY],
         )
 
         assert response is not None, "Response should not be None"
         assert response.session is not None, "Response must contain 'session' field"
         assert (
-            response.session.idea_session_id
-            == session_record[sessions.SESSION_DB_RANGE_KEY]
+            response.session.idea_session_id == record[sessions.SESSION_DB_RANGE_KEY]
         ), "Session ID should match"
 
         logger.info(
-            f"Non-admin user successfully retrieved their own session: {session_record[sessions.SESSION_DB_RANGE_KEY]}"
+            f"Non-admin user successfully retrieved their own session: {record[sessions.SESSION_DB_RANGE_KEY]}"
         )
 
     @pytest.mark.parametrize(
         "session_record",
         [
-            {
-                "session_id": "test-session-other-123",
-                sessions.SESSION_DB_HASH_KEY: "other_user",
-            }
+            [
+                {
+                    "session_id": "test-session-other-123",
+                    sessions.SESSION_DB_HASH_KEY: "other_user",
+                }
+            ]
         ],
         indirect=True,
     )
@@ -115,15 +121,16 @@ class TestGetSession:
         request: FixtureRequest,
         region: str,
         res_environment: ResEnvironment,
-        session_record: Dict[str, Any],
+        session_record: List[Dict[str, Any]],
         non_admin_username: str,
         non_admin: ClientAuth,
     ) -> None:
+        record = session_record[0]
         try:
             api_client = ApiClient(res_environment, non_admin)
             api_client.get_session(
-                res_session_id=session_record[sessions.SESSION_DB_RANGE_KEY],
-                owner=session_record[sessions.SESSION_DB_HASH_KEY],
+                res_session_id=record[sessions.SESSION_DB_RANGE_KEY],
+                owner=record[sessions.SESSION_DB_HASH_KEY],
             )
             pytest.fail(
                 "Expected 401 error for non-admin user accessing other user's session"

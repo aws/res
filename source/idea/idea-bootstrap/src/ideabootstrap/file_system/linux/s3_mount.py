@@ -128,7 +128,8 @@ def add_s3_bucket(
 
     service_content = f"""[Unit]
 Description=Mountpoint for Amazon S3 mount
-Wants=network.target
+Wants=network-online.target
+After=network-online.target
 AssertPathIsDirectory={mount_dir}
 
 [Service]
@@ -137,6 +138,7 @@ User=root
 ExecStart=/bin/bash -c 'AWS_PROFILE={profile_name} {" ".join(mount_command)}'
 ExecStop=/usr/bin/fusermount -u {mount_dir}
 Restart=always
+RestartSec=5
 
 [Install]
 WantedBy=remote-fs.target

@@ -27,12 +27,14 @@ class PackageTool:
 
         self.project_build_tool = BuildTool(c, app_name)
         self.data_model_build_tool: Optional[BuildTool] = None
+        self.datamodel_build_tool: Optional[BuildTool] = None
         self.sdk_build_tool: Optional[BuildTool] = None
         self.library_build_tool: Optional[BuildTool] = None
         self.bootstrap_build_tool: Optional[BuildTool] = None
 
         if app_name not in {'idea-bootstrap', 'library', 'data-model'}:
             self.data_model_build_tool = BuildTool(c, 'idea-data-model')
+            self.datamodel_build_tool = BuildTool(c, 'data-model')
             self.sdk_build_tool = BuildTool(c, 'idea-sdk')
             self.library_build_tool = BuildTool(c, 'library')
             self.bootstrap_build_tool = BuildTool(c, 'idea-bootstrap', skip_resources=True)
@@ -110,6 +112,17 @@ class PackageTool:
             idea.console.print(f'copying data-model artifacts ...')
             for file in os.listdir(self.data_model_build_tool.output_dir):
                 file_path = os.path.join(self.data_model_build_tool.output_dir, file)
+                if os.path.isdir(file_path):
+                    shutil.copytree(file_path, os.path.join(output_dir, file))
+                else:
+                    shutil.copy2(file_path, output_dir)
+
+        # copy datamodel
+        if self.datamodel_build_tool is not None:
+            self.datamodel_build_tool.build()
+            idea.console.print(f'copying datamodel artifacts ...')
+            for file in os.listdir(self.datamodel_build_tool.output_dir):
+                file_path = os.path.join(self.datamodel_build_tool.output_dir, file)
                 if os.path.isdir(file_path):
                     shutil.copytree(file_path, os.path.join(output_dir, file))
                 else:

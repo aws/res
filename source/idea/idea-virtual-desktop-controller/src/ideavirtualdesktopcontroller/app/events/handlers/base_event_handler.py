@@ -16,13 +16,11 @@ from ideadatamodel import errorcodes
 from ideadatamodel.exceptions import SocaException
 from ideasdk.utils import Utils
 from ideavirtualdesktopcontroller.app.app_protocols import VirtualDesktopQueueMessageHandlerProtocol
-from ideavirtualdesktopcontroller.app.clients.dcv_broker_client.dcv_broker_client_utils import DCVBrokerClientUtils
 from ideavirtualdesktopcontroller.app.clients.events_client.events_client import VirtualDesktopEvent
 from ideavirtualdesktopcontroller.app.events.events_utils import EventsUtils
 from ideavirtualdesktopcontroller.app.permission_profiles.virtual_desktop_permission_profile_db import VirtualDesktopPermissionProfileDB
 from ideavirtualdesktopcontroller.app.schedules.virtual_desktop_schedule_db import VirtualDesktopScheduleDB
 from ideavirtualdesktopcontroller.app.schedules.virtual_desktop_schedule_utils import VirtualDesktopScheduleUtils
-from ideavirtualdesktopcontroller.app.servers.virtual_desktop_server_db import VirtualDesktopServerDB
 from ideavirtualdesktopcontroller.app.servers.virtual_desktop_server_utils import VirtualDesktopServerUtils
 from ideavirtualdesktopcontroller.app.session_permissions.virtual_desktop_session_permission_db import VirtualDesktopSessionPermissionDB
 from ideavirtualdesktopcontroller.app.session_permissions.virtual_desktop_session_permission_utils import VirtualDesktopSessionPermissionUtils
@@ -45,11 +43,9 @@ class BaseVirtualDesktopControllerEventHandler(VirtualDesktopQueueMessageHandler
         self.events_utils: EventsUtils = EventsUtils(context=self.context)
         self.controller_utils: VirtualDesktopControllerUtils = VirtualDesktopControllerUtils(context=self.context)
         self.software_stack_db: VirtualDesktopSoftwareStackDB = VirtualDesktopSoftwareStackDB(context=self.context)
-        self.server_db: VirtualDesktopServerDB = VirtualDesktopServerDB(context=self.context)
         self.schedule_db: VirtualDesktopScheduleDB = VirtualDesktopScheduleDB(context=self.context)
         self.session_db: VirtualDesktopSessionDB = VirtualDesktopSessionDB(
             context=self.context,
-            server_db=self.server_db,
             software_stack_db=self.software_stack_db,
             schedule_db=self.schedule_db)
         self.session_counter_db: VirtualDesktopSessionCounterDB = VirtualDesktopSessionCounterDB(context=self.context)
@@ -58,7 +54,7 @@ class BaseVirtualDesktopControllerEventHandler(VirtualDesktopQueueMessageHandler
         self.permission_profile_db: VirtualDesktopPermissionProfileDB = VirtualDesktopPermissionProfileDB(context=self.context)
 
         self.software_stack_utils: VirtualDesktopSoftwareStackUtils = VirtualDesktopSoftwareStackUtils(context=self.context, db=self.software_stack_db)
-        self.server_utils: VirtualDesktopServerUtils = VirtualDesktopServerUtils(context=self.context, db=self.server_db)
+        self.server_utils: VirtualDesktopServerUtils = VirtualDesktopServerUtils(context=self.context)
         self.schedule_utils: VirtualDesktopScheduleUtils = VirtualDesktopScheduleUtils(context=self.context, db=self.schedule_db)
         self.ssm_commands_utils: VirtualDesktopSSMCommandsUtils = VirtualDesktopSSMCommandsUtils(context=self.context, db=self.ssm_commands_db)
         self.session_permission_utils: VirtualDesktopSessionPermissionUtils = VirtualDesktopSessionPermissionUtils(
@@ -71,10 +67,6 @@ class BaseVirtualDesktopControllerEventHandler(VirtualDesktopQueueMessageHandler
             db=self.session_db,
             session_permission_db=self.session_permissions_db,
             permission_profile_db=self.permission_profile_db
-        )
-        self.dcv_broker_client_utils: DCVBrokerClientUtils = DCVBrokerClientUtils(
-            context=context,
-            session_permission_utils=self.session_permission_utils,
         )
 
     @staticmethod
@@ -152,12 +144,6 @@ class BaseVirtualDesktopControllerEventHandler(VirtualDesktopQueueMessageHandler
         if Utils.is_empty(sender_id):
             return False
         return self.context.config().get_string('virtual-desktop-controller.scheduled_event_transformer_lambda_role_id', required=True) == sender_id
-
-    def is_sender_dcv_broker_role(self, sender_id: str) -> bool:
-        sender_id = self._retrieve_iam_role_id_from_sender(sender_id)
-        if Utils.is_empty(sender_id):
-            return False
-        return self.context.config().get_string('virtual-desktop-controller.dcv_broker_role_id', required=True) == sender_id
 
     def is_sender_vdi_helper_lambda(self, sender_id: str) -> bool:
         sender_id = self._retrieve_iam_role_id_from_sender(sender_id)

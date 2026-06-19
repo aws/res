@@ -3,10 +3,10 @@ package util
 import (
 	"context"
 	"fmt"
+	"net/http"
+	"net/url"
 	"sort"
 	"strconv"
-	"net/url"
-	"net/http"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/config"
@@ -56,7 +56,8 @@ type CognitoAuthProvider struct {
 
 // Helper functions
 
-// awsConfig() loads the credentials from either the file on the system or from
+// awsConfig() loads the credentials from either the file on the system, from
+// a named AWS profile (e.g. bootstrap_profile with credential_process), or from
 // the provider chain (e.g. profiles, env, IMDS) if they are empty in the
 // config file.
 func awsConfig(auth_config map[string]string) (aws.Config, error) {
@@ -81,6 +82,9 @@ func awsConfig(auth_config map[string]string) (aws.Config, error) {
 	if !exists {
 		sessionToken = ""
 	}
+
+	// Check if an AWS profile is specified (e.g., bootstrap_profile)
+	awsProfile, profileExists := auth_config["aws_profile"]
 
 	const ec2MetadataIP = "169.254.169.254"
 
@@ -116,6 +120,24 @@ func awsConfig(auth_config map[string]string) (aws.Config, error) {
 
 		if err != nil {
 			return aws.Config{}, fmt.Errorf("Unable to load the AWS SDK config")
+		}
+		return cfg, nil
+	} else if profileExists && awsProfile != "" {
+		// Use named AWS profile (e.g., bootstrap_profile with credential_process)
+		// Point directly at /root/.aws/config by default because NSCD/PAM context may not
+		// have HOME set, and the AWS SDK uses $HOME/.aws/ for config file discovery
+		configPath := "/root/.aws/config"
+		if p, ok := auth_config["aws_config_file"]; ok && p != "" {
+			configPath = p
+		}
+		cfg, err := config.LoadDefaultConfig(context.TODO(),
+			config.WithSharedConfigProfile(awsProfile),
+			config.WithSharedConfigFiles([]string{configPath}),
+			config.WithRegion(region),
+			config.WithHTTPClient(httpClient),
+		)
+		if err != nil {
+			return aws.Config{}, fmt.Errorf("Unable to load the AWS SDK config with profile %s: %v", awsProfile, err)
 		}
 		return cfg, nil
 	} else {

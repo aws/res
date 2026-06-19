@@ -2,13 +2,15 @@
 #  SPDX-License-Identifier: Apache-2.0
 
 import re
-from res.utils import logging_utils
+from res.utils import logging_utils, instance_metadata_utils
+from res.resources import sessions
 import os
 import subprocess
 
 from ideabootstrap.common.constants import (
     REBOOT_REQUIRED_FILE_PATH
 )
+from ideabootstrap.dcv.constants import DCV_AUTOMATIC_CONSOLE_SESSION_ID
 
 logger = logging_utils.get_logger("bootstrap")
 
@@ -143,3 +145,38 @@ def check_reboot_required() -> bool:
     except Exception as e:
         logger.error(f"Error checking reboot status: {e}")
         return False
+
+def update_session_state(state: str):
+    try:
+        session_owner = os.environ.get("IDEA_SESSION_OWNER")
+        session_id = os.environ.get("IDEA_SESSION_ID")
+
+        sessions.update_session_state(
+            owner=session_owner,
+            session_id=session_id,
+            state=state,
+            publish_event=True,
+        )
+        logger.info("Updated session state to %s", state)
+    except Exception as e:
+        logger.error("Failed to update session state to %s: %s", state, e)
+
+
+def update_session_host_info():
+    """Update session record with host info: private_dns_name, dcv_session_id."""
+    try:
+        session_owner = os.environ.get("IDEA_SESSION_OWNER")
+        session_id = os.environ.get("IDEA_SESSION_ID")
+        private_dns_name = instance_metadata_utils.get_private_dns_name()
+
+        session = sessions.get_session(owner=session_owner, session_id=session_id)
+        server = session.get(sessions.SESSION_DB_SERVER_KEY, {})
+        server[sessions.SESSION_DB_PRIVATE_DNS_NAME_KEY] = private_dns_name
+        session[sessions.SESSION_DB_SERVER_KEY] = server
+        # TODO: Can be removed when removing dcv_session_id from the user-sessions DDB entirely.
+        session[sessions.SESSION_DB_DCV_SESSION_ID_KEY] = DCV_AUTOMATIC_CONSOLE_SESSION_ID
+
+        sessions.update_session(session)
+        logger.info("Updated session host info: private_dns_name=%s, dcv_session_id=console", private_dns_name)
+    except Exception as e:
+        logger.error("Failed to update session host info: %s", e)

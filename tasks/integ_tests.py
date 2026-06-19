@@ -188,7 +188,7 @@ def smoke(
         params=params,
         capture_output=capture_output,
         keywords=keywords,
-        test_file="smoke.py",
+        test_file="smoke.py test_dcv_session_management.py",
         num_workers=22,
     )
     raise SystemExit(exit_code)

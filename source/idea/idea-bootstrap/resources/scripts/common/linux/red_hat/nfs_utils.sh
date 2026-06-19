@@ -52,12 +52,7 @@ function install_efs_mount_helper_impl() {
       dnf install -y ${EFS_MOUNT_HELPER_BUILD_DEPENDENCIES[*]}
     fi
 
-    local EFS_MOUNT_HELPER_REPO=$(get_string 'package_config.efs_mount_helper.repo')
-    git clone ${EFS_MOUNT_HELPER_REPO}
-    cd efs-utils
-    make rpm
-    yum -y install build/amazon-efs-utils*rpm
-    cd ..
+    install_efs_with_rustup "make rpm-without-system-rust" "yum -y install build/amazon-efs-utils*rpm"
   else
     log_warning "Base OS not supported."
     exit 1

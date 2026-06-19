@@ -134,8 +134,10 @@ class ArnBuilder:
 
     @property
     def s3_public_host_modules(self) -> List[str]:
+        staging_bucket = self.config.get_string('cluster.staging_bucket_name', required=False, default='')
+        bucket = staging_bucket if staging_bucket else f'{constants.ARTIFACTS_BUCKET_PREFIX_NAME}-{self.config.get_string("cluster.aws.region")}'
         return [
-            self.get_arn('s3', f'{constants.ARTIFACTS_BUCKET_PREFIX_NAME}-{self.config.get_string("cluster.aws.region")}/host_modules/*', aws_account_id='', aws_region='')
+            self.get_arn('s3', f'{bucket}/host_modules/*', aws_account_id='', aws_region='')
         ]
 
     @property

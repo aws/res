@@ -6,6 +6,7 @@ Cluster Endpoints
 
 This function is used by individual module stacks to expose module API or web endpoints via External and Internal ALBs.
 """
+
 import json
 import logging
 import time

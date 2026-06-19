@@ -675,7 +675,8 @@ class VirtualDesktopCreateSessionForm extends Component<VirtualDesktopCreateSess
                                     listAllowedInstanceTypesForSessionRequestContent: {
                                         session: {
                                             hibernation_enabled: this.getForm()?.getValue("hibernate_instance"),
-                                            software_stack: this.state.softwareStacks[stackId] as any
+                                            software_stack: this.state.softwareStacks[stackId] as any,
+                                            server: {} as any
                                         }
                                     }
                                 })
@@ -716,7 +717,8 @@ class VirtualDesktopCreateSessionForm extends Component<VirtualDesktopCreateSess
                                         listAllowedInstanceTypesForSessionRequestContent: {
                                             session: {
                                                 hibernation_enabled: event.value,
-                                                software_stack: this.state.softwareStacks[stackId] as any
+                                                software_stack: this.state.softwareStacks[stackId] as any,
+                                                server: {} as any
                                             }
                                         }
                                     })

@@ -22,7 +22,6 @@ from res.resources import (
     modules,
     permission_profiles,
     schedules,
-    servers,
     session_permissions,
     sessions,
     software_stacks,
@@ -166,16 +165,6 @@ def context(ddb_local):
             {"AttributeName": sessions.SESSION_DB_HASH_KEY, "KeyType": "HASH"},
             {"AttributeName": sessions.SESSION_DB_RANGE_KEY, "KeyType": "RANGE"},
         ],
-        BillingMode="PAY_PER_REQUEST",
-    )
-
-    # Create servers table
-    dynamodb_client.create_table(
-        TableName=f"{ENVIRONMENT_NAME}.{servers.SERVER_TABLE_NAME}",
-        AttributeDefinitions=[
-            {"AttributeName": servers.SERVER_DB_HASH_KEY, "AttributeType": "S"},
-        ],
-        KeySchema=[{"AttributeName": servers.SERVER_DB_HASH_KEY, "KeyType": "HASH"}],
         BillingMode="PAY_PER_REQUEST",
     )
 
@@ -364,9 +353,6 @@ def context(ddb_local):
     dynamodb_client.delete_table(TableName=f"{ENVIRONMENT_NAME}.accounts.users")
     dynamodb_client.delete_table(
         TableName=f"{ENVIRONMENT_NAME}.{sessions.SESSIONS_TABLE_NAME}"
-    )
-    dynamodb_client.delete_table(
-        TableName=f"{ENVIRONMENT_NAME}.{servers.SERVER_TABLE_NAME}"
     )
     dynamodb_client.delete_table(
         TableName=f"{ENVIRONMENT_NAME}.{session_permissions.SESSION_PERMISSION_TABLE_NAME}"

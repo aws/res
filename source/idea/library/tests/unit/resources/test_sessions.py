@@ -9,7 +9,7 @@ import pytest
 import res as res
 import res.exceptions as exceptions
 from boto3.dynamodb.conditions import And, Attr
-from res.resources import sessions
+from res.resources import accounts, sessions
 from res.utils import table_utils, time_utils
 
 TEST_OWNER = "test_owner"
@@ -54,6 +54,20 @@ class TestSessions(unittest.TestCase):
                 sessions.SESSION_DB_RANGE_KEY: "session3",
                 sessions.SESSION_DB_STATE_KEY: "READY",
                 "project": {"project_id": "project1"},
+            },
+            {
+                sessions.SESSION_DB_HASH_KEY: "user3",
+                sessions.SESSION_DB_RANGE_KEY: "session4",
+                sessions.SESSION_DB_DCV_SESSION_ID_KEY: "dcv-aaa",
+                sessions.SESSION_DB_BASE_OS_KEY: "linux",
+                "server": {"instance_id": "i-111"},
+            },
+            {
+                sessions.SESSION_DB_HASH_KEY: "user4",
+                sessions.SESSION_DB_RANGE_KEY: "session5",
+                sessions.SESSION_DB_DCV_SESSION_ID_KEY: "dcv-bbb",
+                sessions.SESSION_DB_BASE_OS_KEY: "windows",
+                "server": {"instance_id": "i-222"},
             },
         ]
         for session in self.test_sessions:
@@ -471,3 +485,530 @@ class TestSessions(unittest.TestCase):
         mock_list_for_user.assert_called_once()
         call_args = mock_list_for_user.call_args
         assert call_args.kwargs.get("filter_expression") == Attr("owner").eq("user2")
+
+    @patch("res.resources.cluster_settings.get_setting")
+    def test_get_session_logins_both_enabled(self, mock_get_setting):
+        """Test get_session_logins returns both SSO and Cognito when both enabled."""
+        mock_get_setting.side_effect = [True, True]
+
+        result = sessions.get_session_logins()
+
+        assert len(result) == 2
+        assert "SSO" in result
+        assert "Native user" in result
+
+    @patch("res.resources.cluster_settings.get_setting")
+    def test_get_session_logins_only_sso(self, mock_get_setting):
+        """Test get_session_logins returns only SSO when Cognito disabled."""
+        mock_get_setting.side_effect = [True, False]
+
+        result = sessions.get_session_logins()
+
+        assert len(result) == 1
+        assert "SSO" in result
+
+    @patch("res.resources.cluster_settings.get_setting")
+    def test_get_session_logins_only_cognito(self, mock_get_setting):
+        """Test get_session_logins returns only Cognito when SSO disabled."""
+        mock_get_setting.side_effect = [False, True]
+
+        result = sessions.get_session_logins()
+
+        assert len(result) == 1
+        assert "Native user" in result
+
+    @patch("res.resources.cluster_settings.get_setting")
+    def test_get_session_logins_none_enabled(self, mock_get_setting):
+        """Test get_session_logins returns empty list when both disabled."""
+        mock_get_setting.side_effect = [False, False]
+
+        result = sessions.get_session_logins()
+
+        assert len(result) == 0
+
+    def test_get_sessions_by_dcv_session_ids_returns_matching(self):
+        result = sessions.get_sessions_by_dcv_session_ids(["dcv-aaa", "dcv-bbb"])
+
+        assert len(result) == 2
+        assert result["dcv-aaa"]["server"]["instance_id"] == "i-111"
+        assert result["dcv-bbb"]["server"]["instance_id"] == "i-222"
+
+    def test_get_sessions_by_dcv_session_ids_partial_match(self):
+        result = sessions.get_sessions_by_dcv_session_ids(
+            ["dcv-aaa", "dcv-nonexistent"]
+        )
+
+        assert len(result) == 1
+        assert "dcv-aaa" in result
+        assert "dcv-nonexistent" not in result
+
+    def test_get_sessions_by_dcv_session_ids_no_matches(self):
+        result = sessions.get_sessions_by_dcv_session_ids(["dcv-nonexistent"])
+
+        assert result == {}
+
+    def test_get_sessions_by_dcv_session_ids_empty_input(self):
+        result = sessions.get_sessions_by_dcv_session_ids([])
+
+        assert result == {}
+
+    def test_group_sessions_by_os_linux(self):
+        session_map = sessions.get_sessions_by_ids(["session4"])
+        result, unsuccessful = sessions.group_sessions_by_os(session_map)
+
+        assert "linux" in result
+        assert len(result["linux"]) == 1
+        assert result["linux"][0]["session_id"] == "session4"
+        assert result["linux"][0]["instance_id"] == "i-111"
+        assert len(unsuccessful) == 0
+
+    def test_group_sessions_by_os_windows(self):
+        session_map = sessions.get_sessions_by_ids(["session5"])
+        result, unsuccessful = sessions.group_sessions_by_os(session_map)
+
+        assert "windows" in result
+        assert len(result["windows"]) == 1
+        assert result["windows"][0]["session_id"] == "session5"
+        assert len(unsuccessful) == 0
+
+    def test_group_sessions_by_os_mixed(self):
+        session_map = sessions.get_sessions_by_ids(["session4", "session5"])
+        result, unsuccessful = sessions.group_sessions_by_os(session_map)
+
+        assert len(result["linux"]) == 1
+        assert len(result["windows"]) == 1
+        assert len(unsuccessful) == 0
+
+    def test_group_sessions_by_os_missing_session(self):
+        # When the caller passes a None entry, group_sessions_by_os surfaces
+        # it via unsuccessful_list rather than dropping it silently.
+        result, unsuccessful = sessions.group_sessions_by_os({"nonexistent": None})
+
+        assert result == {}
+        assert len(unsuccessful) == 1
+        assert "nonexistent" in unsuccessful[0]["failure_reason"]
+
+    def test_group_sessions_by_os_empty_input(self):
+        result, unsuccessful = sessions.group_sessions_by_os({})
+
+        assert result == {}
+        assert len(unsuccessful) == 0
+
+
+class TestUpdateSession:
+    """Test update_session function"""
+
+    @patch("res.resources.sessions.ec2_utils.create_tag")
+    @patch("res.resources.sessions.schedules.update_schedule_for_session")
+    @patch("res.resources.sessions._update_session_record")
+    def test_basic_session_update_name_description_only(
+        self, mock_update_record, mock_update_schedule, mock_create_tag
+    ):
+        """Test updating session name and description without instance type change."""
+        old_session = {
+            sessions.SESSION_DB_NAME_KEY: "old-name",
+            sessions.SESSION_DB_DESCRIPTION_KEY: "old-description",
+            sessions.SESSION_DB_SERVER_KEY: {},
+            sessions.SESSION_DB_HASH_KEY: "user1",
+            sessions.SESSION_DB_STATE_KEY: "READY",
+        }
+        new_session = {
+            sessions.SESSION_DB_NAME_KEY: "new-name",
+            sessions.SESSION_DB_DESCRIPTION_KEY: "new-description",
+            sessions.SESSION_DB_STATE_KEY: "READY",
+            sessions.SESSION_DB_SERVER_KEY: {
+                sessions.SESSION_DB_SERVER_NESTED_INSTANCE_ID_KEY: None
+            },  # None instance_id to skip instance logic
+        }
+
+        mock_update_schedule.return_value = {
+            sessions.SESSION_DB_NAME_KEY: "new-name",
+            sessions.SESSION_DB_DESCRIPTION_KEY: "new-description",
+            sessions.SESSION_DB_SERVER_KEY: {},
+            sessions.SESSION_DB_HASH_KEY: "user1",
+        }
+
+        result = sessions.update_session(new_session, old_session)
+
+        assert result[sessions.SESSION_DB_NAME_KEY] == "new-name"
+        assert result[sessions.SESSION_DB_DESCRIPTION_KEY] == "new-description"
+        mock_update_record.assert_called_once()
+        mock_update_schedule.assert_called_once()
+
+    @patch("res.resources.sessions.ec2_utils.create_tag")
+    @patch("res.resources.sessions.ec2_utils.change_instance_type")
+    @patch("res.resources.sessions.schedules.update_schedule_for_session")
+    @patch("res.resources.sessions._update_session_record")
+    def test_instance_type_change_success(
+        self,
+        mock_update_record,
+        mock_update_schedule,
+        mock_change_instance,
+        mock_create_tag,
+    ):
+        """Test successful instance type change."""
+        instance_id = "i-123456"
+        old_session = {
+            sessions.SESSION_DB_NAME_KEY: "test-session",
+            sessions.SESSION_DB_DESCRIPTION_KEY: "test-desc",
+            sessions.SESSION_DB_SERVER_KEY: {
+                "instance_id": instance_id,
+                "instance_type": "m5.large",
+            },
+            sessions.SESSION_DB_HASH_KEY: "user1",
+            sessions.SESSION_DB_STATE_KEY: "READY",
+        }
+        new_session = {
+            sessions.SESSION_DB_NAME_KEY: "test-session",
+            sessions.SESSION_DB_DESCRIPTION_KEY: "test-desc",
+            sessions.SESSION_DB_STATE_KEY: "READY",
+            sessions.SESSION_DB_SERVER_KEY: {
+                "instance_id": instance_id,
+                "instance_type": "m5.xlarge",
+            },
+        }
+
+        mock_update_schedule.return_value = {
+            sessions.SESSION_DB_NAME_KEY: "test-session",
+            sessions.SESSION_DB_DESCRIPTION_KEY: "test-desc",
+            sessions.SESSION_DB_SERVER_KEY: {"instance_type": "m5.xlarge"},
+        }
+
+        result = sessions.update_session(new_session, old_session)
+
+        mock_change_instance.assert_called_once_with(
+            instance_id=instance_id, instance_type_name="m5.xlarge"
+        )
+        mock_update_record.assert_called_once()
+
+    @patch("res.resources.sessions.ec2_utils.create_tag")
+    @patch("res.resources.sessions.ec2_utils.change_instance_type")
+    @patch("res.resources.sessions.schedules.update_schedule_for_session")
+    @patch("res.resources.sessions._update_session_record")
+    def test_instance_type_no_change_skips_ec2_call(
+        self,
+        mock_update_record,
+        mock_update_schedule,
+        mock_change_instance,
+        mock_create_tag,
+    ):
+        """Test that no EC2 call is made when instance type hasn't changed."""
+        instance_id = "i-123456"
+        old_session = {
+            sessions.SESSION_DB_NAME_KEY: "test-session",
+            sessions.SESSION_DB_DESCRIPTION_KEY: "test-desc",
+            sessions.SESSION_DB_SERVER_KEY: {
+                "instance_id": instance_id,
+                "instance_type": "m5.large",
+            },
+            sessions.SESSION_DB_HASH_KEY: "user1",
+            sessions.SESSION_DB_STATE_KEY: "READY",
+        }
+        new_session = {
+            sessions.SESSION_DB_NAME_KEY: "test-session",
+            sessions.SESSION_DB_DESCRIPTION_KEY: "test-desc",
+            sessions.SESSION_DB_STATE_KEY: "READY",
+            sessions.SESSION_DB_SERVER_KEY: {
+                "instance_id": instance_id,
+                "instance_type": "m5.large",
+            },
+        }
+
+        mock_update_schedule.return_value = old_session.copy()
+
+        sessions.update_session(new_session, old_session)
+
+        mock_change_instance.assert_not_called()
+
+    @patch("res.resources.sessions.ec2_utils.create_tag")
+    @patch("res.resources.sessions.schedules.update_schedule_for_session")
+    @patch("res.resources.sessions._update_session_record")
+    def test_no_changes_does_not_update_record(
+        self, mock_update_record, mock_update_schedule, mock_create_tag
+    ):
+        """Test that no update is performed when session data hasn't changed."""
+        old_session = {
+            sessions.SESSION_DB_NAME_KEY: "same-name",
+            sessions.SESSION_DB_DESCRIPTION_KEY: "same-desc",
+            sessions.SESSION_DB_SERVER_KEY: {"instance_type": "m5.large"},
+            sessions.SESSION_DB_HASH_KEY: "user1",
+            sessions.SESSION_DB_STATE_KEY: "READY",
+        }
+        new_session = {
+            sessions.SESSION_DB_NAME_KEY: "same-name",
+            sessions.SESSION_DB_DESCRIPTION_KEY: "same-desc",
+            sessions.SESSION_DB_STATE_KEY: "READY",
+            sessions.SESSION_DB_SERVER_KEY: {
+                sessions.SESSION_DB_SERVER_NESTED_INSTANCE_ID_KEY: None
+            },
+        }
+
+        mock_update_schedule.return_value = old_session.copy()
+
+        result = sessions.update_session(new_session, old_session)
+
+        mock_update_record.assert_not_called()
+        assert result[sessions.SESSION_DB_NAME_KEY] == "same-name"
+
+    @patch("res.resources.sessions.ec2_utils.create_tag")
+    @patch("res.resources.sessions.schedules.update_schedule_for_session")
+    @patch("res.resources.sessions._update_session_record")
+    def test_schedule_only_update(
+        self, mock_update_record, mock_update_schedule, mock_create_tag
+    ):
+        """Test that schedule-only changes trigger an update."""
+        old_session = {
+            sessions.SESSION_DB_NAME_KEY: "test-session",
+            sessions.SESSION_DB_DESCRIPTION_KEY: "test-desc",
+            sessions.SESSION_DB_SERVER_KEY: {"instance_type": "m5.large"},
+            sessions.SESSION_DB_HASH_KEY: "user1",
+            sessions.SESSION_DB_STATE_KEY: "READY",
+            "monday_schedule": {"schedule_type": "NO_SCHEDULE"},
+        }
+        new_session = {
+            sessions.SESSION_DB_NAME_KEY: "test-session",
+            sessions.SESSION_DB_DESCRIPTION_KEY: "test-desc",
+            sessions.SESSION_DB_STATE_KEY: "READY",
+            sessions.SESSION_DB_SERVER_KEY: {
+                sessions.SESSION_DB_SERVER_NESTED_INSTANCE_ID_KEY: None
+            },
+            "monday_schedule": {"schedule_type": "WORKING_HOURS"},
+        }
+
+        updated = old_session.copy()
+        updated["monday_schedule"] = {"schedule_type": "WORKING_HOURS"}
+        mock_update_schedule.return_value = updated
+
+        result = sessions.update_session(new_session, old_session)
+
+        mock_update_schedule.assert_called_once()
+        mock_update_record.assert_called_once()
+        assert result["monday_schedule"]["schedule_type"] == "WORKING_HOURS"
+
+
+class TestUpdateSessionState(unittest.TestCase):
+    @patch("res.resources.sessions.table_utils.update_item")
+    @patch("res.resources.sessions.get_session")
+    def test_no_publish_uses_table_utils(self, mock_get_session, mock_update_item):
+        """publish_event=False (default): direct DDB update, no get_session, no event publish."""
+        mock_update_item.return_value = {sessions.SESSION_DB_STATE_KEY: "READY"}
+
+        result = sessions.update_session_state(
+            owner=TEST_OWNER, session_id=TEST_SESSION_ID, state="READY"
+        )
+
+        mock_get_session.assert_not_called()
+        mock_update_item.assert_called_once()
+        kwargs = mock_update_item.call_args.kwargs
+        assert kwargs["item"][sessions.SESSION_DB_STATE_KEY] == "READY"
+        assert sessions.SESSION_DB_UPDATED_ON_KEY in kwargs["item"]
+        assert result == {sessions.SESSION_DB_STATE_KEY: "READY"}
+
+    @patch("res.resources.sessions._update_session_record")
+    @patch("res.resources.sessions.get_session")
+    def test_publish_event_fetches_old_and_publishes(
+        self, mock_get_session, mock_update_record
+    ):
+        """publish_event=True: fetch old session, merge state, call _update_session_record with publish."""
+        old_session = {
+            sessions.SESSION_DB_HASH_KEY: TEST_OWNER,
+            sessions.SESSION_DB_RANGE_KEY: TEST_SESSION_ID,
+            sessions.SESSION_DB_STATE_KEY: "CREATING",
+        }
+        mock_get_session.return_value = old_session
+        mock_update_record.return_value = {
+            **old_session,
+            sessions.SESSION_DB_STATE_KEY: "READY",
+        }
+
+        result = sessions.update_session_state(
+            owner=TEST_OWNER,
+            session_id=TEST_SESSION_ID,
+            state="READY",
+            publish_event=True,
+        )
+
+        mock_get_session.assert_called_once_with(
+            owner=TEST_OWNER, session_id=TEST_SESSION_ID
+        )
+        mock_update_record.assert_called_once()
+        call_kwargs = mock_update_record.call_args.kwargs
+        # First positional is the new_session dict
+        new_session_arg = mock_update_record.call_args.args[0]
+        assert new_session_arg[sessions.SESSION_DB_STATE_KEY] == "READY"
+        # old_session preserved (unchanged) for diff in event publish
+        assert call_kwargs["old_session"] is old_session
+        assert call_kwargs["publish_event"] is True
+        assert result[sessions.SESSION_DB_STATE_KEY] == "READY"
+
+    @patch("res.resources.sessions._update_session_record")
+    @patch("res.resources.sessions.get_session")
+    def test_publish_event_propagates_get_session_failure(
+        self, mock_get_session, mock_update_record
+    ):
+        """publish_event=True: if get_session raises, the error propagates and no update happens."""
+        mock_get_session.side_effect = exceptions.UserSessionNotFound("not found")
+
+        with pytest.raises(exceptions.UserSessionNotFound):
+            sessions.update_session_state(
+                owner=TEST_OWNER,
+                session_id=TEST_SESSION_ID,
+                state="READY",
+                publish_event=True,
+            )
+
+        mock_update_record.assert_not_called()
+
+
+class TestGetSessionConnection(unittest.TestCase):
+
+    @patch("res.resources.sessions.cluster_settings.get_setting")
+    @patch(
+        "res.clients.dcv_session_manager.dcv_session_manager_client.get_session_connection_data"
+    )
+    def test_returns_connection_with_custom_dns_endpoint(
+        self, mock_get_connection, mock_get_setting
+    ):
+        mock_get_connection.return_value = {
+            "idea_session_id": "session-1",
+            "idea_session_owner": "user1",
+            "username": "user1",
+            "web_url_path": "/",
+            "access_token": "test-token",
+        }
+        mock_get_setting.side_effect = lambda key: (
+            "custom.example.com" if key == sessions.CUSTOM_DNS_NAME_KEY else None
+        )
+
+        result = sessions.get_session_connection("session-1", "user1", "user1")
+
+        assert result["idea-session-id"] == "session-1"
+        assert result["idea-session-owner"] == "user1"
+        assert result["endpoint"] == "https://custom.example.com"
+        assert result["web-url-path"] == "/"
+        assert result["access-token"] == "test-token"
+
+    @patch("res.resources.sessions.cluster_settings.get_setting")
+    @patch(
+        "res.clients.dcv_session_manager.dcv_session_manager_client.get_session_connection_data"
+    )
+    def test_returns_connection_with_nlb_endpoint_when_no_custom_dns(
+        self, mock_get_connection, mock_get_setting
+    ):
+        mock_get_connection.return_value = {
+            "idea_session_id": "session-1",
+            "idea_session_owner": "user1",
+            "username": "user1",
+            "web_url_path": "/",
+            "access_token": "test-token",
+        }
+        mock_get_setting.side_effect = lambda key: (
+            "nlb.example.com" if key == sessions.EXTERNAL_NLB_DNS_NAME_KEY else None
+        )
+
+        result = sessions.get_session_connection("session-1", "user1", "user1")
+
+        assert result["endpoint"] == "https://nlb.example.com"
+
+    @patch("res.resources.sessions.cluster_settings.get_setting")
+    @patch(
+        "res.clients.dcv_session_manager.dcv_session_manager_client.get_session_connection_data"
+    )
+    def test_custom_dns_takes_precedence_over_nlb(
+        self, mock_get_connection, mock_get_setting
+    ):
+        mock_get_connection.return_value = {
+            "idea_session_id": "session-1",
+            "idea_session_owner": "user1",
+            "username": "user1",
+            "web_url_path": "/",
+            "access_token": "test-token",
+        }
+
+        def setting_lookup(key):
+            if key == sessions.CUSTOM_DNS_NAME_KEY:
+                return "custom.example.com"
+            if key == sessions.EXTERNAL_NLB_DNS_NAME_KEY:
+                return "nlb.example.com"
+            return None
+
+        mock_get_setting.side_effect = setting_lookup
+
+        result = sessions.get_session_connection("session-1", "user1", "user1")
+
+        assert result["endpoint"] == "https://custom.example.com"
+
+    @patch("res.resources.sessions.cluster_settings.get_setting")
+    @patch(
+        "res.clients.dcv_session_manager.dcv_session_manager_client.get_session_connection_data"
+    )
+    def test_raises_when_no_endpoint_configured(
+        self, mock_get_connection, mock_get_setting
+    ):
+        mock_get_connection.return_value = {
+            "idea_session_id": "session-1",
+            "idea_session_owner": "user1",
+            "username": "user1",
+            "web_url_path": "/",
+            "access_token": "test-token",
+        }
+        mock_get_setting.return_value = None
+
+        with pytest.raises(
+            exceptions.SettingNotFound,
+            match="No connection gateway endpoint configured",
+        ):
+            sessions.get_session_connection("session-1", "user1", "user1")
+
+    @patch("res.resources.sessions.cluster_settings.get_setting")
+    @patch(
+        "res.clients.dcv_session_manager.dcv_session_manager_client.get_session_connection_data"
+    )
+    def test_passes_correct_params_to_dcv_client(
+        self, mock_get_connection, mock_get_setting
+    ):
+        mock_get_connection.return_value = {
+            "idea_session_id": "session-1",
+            "idea_session_owner": "user1",
+            "username": "user1",
+            "web_url_path": "/",
+            "access_token": "test-token",
+        }
+        mock_get_setting.side_effect = lambda key: (
+            "custom.example.com" if key == sessions.CUSTOM_DNS_NAME_KEY else None
+        )
+
+        sessions.get_session_connection("session-1", "user1", "user1")
+
+        mock_get_connection.assert_called_once_with(
+            session_id="session-1", username="user1"
+        )
+
+    @patch("res.resources.sessions.cluster_settings.get_setting")
+    @patch(
+        "res.clients.dcv_session_manager.dcv_session_manager_client.get_session_connection_data"
+    )
+    def test_shared_user_token_issued_under_connecting_username(
+        self, mock_get_connection, mock_get_setting
+    ):
+        """A non-owner connecting to a shared session must get a DCV token under their own username."""
+        mock_get_connection.return_value = {
+            "idea_session_id": "session-1",
+            "idea_session_owner": "owner_user",
+            "username": "shared_user",
+            "web_url_path": "/",
+            "access_token": "shared-user-token",
+        }
+        mock_get_setting.side_effect = lambda key: (
+            "custom.example.com" if key == sessions.CUSTOM_DNS_NAME_KEY else None
+        )
+
+        result = sessions.get_session_connection(
+            "session-1", "owner_user", "shared_user"
+        )
+
+        # DCV token is requested for the connecting user, not the owner
+        mock_get_connection.assert_called_once_with(
+            session_id="session-1", username="shared_user"
+        )
+        assert result["idea-session-owner"] == "owner_user"

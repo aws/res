@@ -118,14 +118,6 @@ class TagResourcesPolicy(Policy):
             iam.PolicyStatement(
                 effect=iam.Effect.ALLOW,
                 actions=[
-                    "dynamodb:TagResource",
-                    "dynamodb:UntagResource",
-                ],
-                resources=[arn_builder.get_ddb_table_arn(f"vdc.dcv-broker.*")],
-            ),
-            iam.PolicyStatement(
-                effect=iam.Effect.ALLOW,
-                actions=[
                     "ec2:CreateTags",
                     "ec2:DeleteTags",
                 ],

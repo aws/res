@@ -187,10 +187,7 @@ def test_configure_ldap_write_ldap_config():
         [
             call("/etc/openldap/ldap.conf", "w"),
             call().__enter__(),
-            call()
-            .__enter__()
-            .write(
-                """TLS_CACERTDIR /etc/openldap/cacerts/
+            call().__enter__().write("""TLS_CACERTDIR /etc/openldap/cacerts/
 
 # Turning this off breaks GSSAPI used with krb5 when rdns = false
 SASL_NOCANON	on
@@ -199,8 +196,7 @@ URI ldap_connection_uri
 
 BASE ldap_base
 
-TLS_CACERT /etc/openldap/cacerts/openldap-server.pem"""
-            ),
+TLS_CACERT /etc/openldap/cacerts/openldap-server.pem"""),
             call().__exit__(None, None, None),
         ]
     )
@@ -220,10 +216,7 @@ def test_configure_ldap_with_tls_cert_write_ldap_config():
         [
             call("/etc/openldap/ldap.conf", "w"),
             call().__enter__(),
-            call()
-            .__enter__()
-            .write(
-                """TLS_CACERTDIR /etc/openldap/cacerts/
+            call().__enter__().write("""TLS_CACERTDIR /etc/openldap/cacerts/
 
 # Turning this off breaks GSSAPI used with krb5 when rdns = false
 SASL_NOCANON	on
@@ -232,8 +225,7 @@ URI ldap_connection_uri
 
 BASE ldap_base
 
-TLS_CACERT /etc/openldap/cacerts/openldap-server.pem"""
-            ),
+TLS_CACERT /etc/openldap/cacerts/openldap-server.pem"""),
             call().__exit__(None, None, None),
         ]
     )
@@ -278,7 +270,7 @@ def test_configure_sssd_write_sssd_config():
 
     mock_config_parser.assert_has_calls(
         [
-            call(),
+            call(interpolation=None),
             call().read_string(CONNECT_AD_SSSD_CONFIG),
             call().write(ANY),
         ]
@@ -317,10 +309,10 @@ def test_configure_sssd_while_disable_ad_join_is_true():
 
     mock_config_parser.assert_has_calls(
         [
-            call(),
+            call(interpolation=None),
             call().read_string(CONNECT_AD_SSSD_CONFIG),
             call().write(ANY),
-            call(),
+            call(interpolation=None),
             call().read("/etc/sssd/sssd.conf"),
             call().__getitem__(SSSD_DOMAIN_SECTION),
             call()
@@ -360,10 +352,10 @@ def test_configure_sssd_while_disable_ad_join_is_false():
 
     mock_config_parser.assert_has_calls(
         [
-            call(),
+            call(interpolation=None),
             call().read_string(JOIN_AD_SSSSD_CONFIG),
             call().write(ANY),
-            call(),
+            call(interpolation=None),
             call().read("/etc/sssd/sssd.conf"),
             call().__getitem__(SSSD_DOMAIN_SECTION),
             call()
@@ -451,3 +443,52 @@ def test_restart_sssd_sssd_config_updated_restart_sssd_service(
     monkeypatch.setattr(sssd_utils, "restart_sssd", restart_sssd_mock)
     SSSD_CONFIG_EVENT_SUBSCRIBER.restart_sssd_service()
     restart_sssd_mock.assert_called_once()
+
+
+def test_add_additional_sssd_configs_with_percent_in_value(tmp_path):
+    """Verify that % characters in sssd.conf (e.g. fallback_homedir = /home/%u)
+    do not cause configparser interpolation errors."""
+    sssd_conf = tmp_path / "sssd.conf"
+    sssd_conf.write_text(
+        "[sssd]\n"
+        "domains = test.com\n"
+        "\n"
+        "[domain/test.com]\n"
+        "fallback_homedir = /home/%u\n"
+    )
+
+    sssd_settings = {
+        "domain_name": "test.com",
+        "additional_sssd_configs": '{"debug_level": "0xFFF0"}',
+    }
+
+    with patch.object(sssd_utils, "SSSD_FILE_PATH", str(sssd_conf)):
+        sssd_utils._add_additional_sssd_configs(sssd_settings)
+
+    content = sssd_conf.read_text()
+    assert "fallback_homedir = /home/%u" in content
+    assert "debug_level = 0xFFF0" in content
+
+
+def test_add_additional_sssd_configs_with_percent_in_additional_value(tmp_path):
+    """Verify that % characters in additional SSSD configs (e.g. fallback_homedir = /home/%d/%u)
+    are preserved correctly."""
+    sssd_conf = tmp_path / "sssd.conf"
+    sssd_conf.write_text(
+        "[sssd]\n"
+        "domains = test.com\n"
+        "\n"
+        "[domain/test.com]\n"
+        "id_provider = ad\n"
+    )
+
+    sssd_settings = {
+        "domain_name": "test.com",
+        "additional_sssd_configs": '{"fallback_homedir": "/home/%d/%u"}',
+    }
+
+    with patch.object(sssd_utils, "SSSD_FILE_PATH", str(sssd_conf)):
+        sssd_utils._add_additional_sssd_configs(sssd_settings)
+
+    content = sssd_conf.read_text()
+    assert "fallback_homedir = /home/%d/%u" in content

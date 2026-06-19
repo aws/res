@@ -73,6 +73,9 @@ def validate_software_stack_fields(
             )
             return software_stack, False
 
+        if software_stack.enabled is None:
+            software_stack.enabled = existing_software_stack.get("enabled")
+
     set_software_stack_architecture(software_stack)
 
     for project in software_stack.projects:

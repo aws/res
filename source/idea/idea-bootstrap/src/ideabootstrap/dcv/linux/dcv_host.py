@@ -5,6 +5,7 @@ import configparser
 import os
 import shutil
 import pwd
+import subprocess
 import time
 
 import ideabootstrap.dcv.constants as constants
@@ -42,14 +43,14 @@ def _configure_storage_root() -> None:
 
 def _configure_dcv_conf() -> None:
     logger.info("Configuring dcv.conf ...")
+    idea_session_id = os.environ.get("IDEA_SESSION_ID")
+    if not idea_session_id:
+        raise ValueError("IDEA_SESSION_ID environment variable is required")
     try:
         internal_alb_endpoint = dcv_utils.get_cluster_internal_endpoint()
         idle_timeout = cluster_settings.get_setting(constants.IDLE_TIMEOUT_KEY)
         idle_timeout_warning = cluster_settings.get_setting(
             constants.IDLE_TIMEOUT_WARNING_KEY
-        )
-        broker_agent_connection_port = cluster_settings.get_setting(
-            constants.AGENT_COMMUNICATION_PORT_KEY
         )
 
         # Backup existing dcv.conf if it exists
@@ -78,10 +79,9 @@ def _configure_dcv_conf() -> None:
         }
         config["security"] = {
             "supervision-control": '"enforced"',
-            "auth-token-verifier": f'"{internal_alb_endpoint}:{broker_agent_connection_port}/agent/validate-authentication-token"',
+            "auth-token-verifier": f'"{internal_alb_endpoint}/externalAuth/{idea_session_id}"',
             "no-tls-strict": "true",
             "os-auto-lock": "false",
-            "administrators": '["dcvsmagent"]',
         }
         config["windows"] = {"disable-display-sleep": "true"}
 
@@ -91,6 +91,26 @@ def _configure_dcv_conf() -> None:
         logger.info("Successfully configured dcv.conf")
     except Exception as e:
         logger.error(f"Error when configuring dcv.conf: {e}")
+
+
+def apply_automatic_console_session_config(
+    session_owner: str, storage_root: str, permissions_file_path: str
+) -> None:
+    """Update dcv.conf with automatic-console-session settings and restart dcvserver."""
+    config = configparser.ConfigParser()
+    config.read(constants.DCV_CONFIG_FILE_PATH)
+    config["session-management"]["create-session"] = "true"
+    config["session-management/automatic-console-session"] = {
+        "owner": f'"{session_owner}"',
+        "storage-root": f'"{storage_root}"',
+        "permissions-file": f'"{permissions_file_path}"',
+    }
+    with open(constants.DCV_CONFIG_FILE_PATH, "w") as configfile:
+        config.write(configfile)
+    logger.info("Updated dcv.conf with automatic-console-session config")
+
+    subprocess.run(["systemctl", "restart", "dcvserver"], check=True)
+    logger.info("Restarted dcvserver")
 
 
 def configure() -> None:

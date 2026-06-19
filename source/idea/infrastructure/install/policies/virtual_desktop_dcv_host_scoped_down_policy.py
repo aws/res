@@ -22,27 +22,18 @@ class VirtualDesktopDcvHostScopedDownPolicy(ManagedPolicy):
                 actions=["s3:GetObject", "s3:ListBucket"],
                 resources=arn_builder.s3_global_arns,  # type: ignore
             ),
-            iam.PolicyStatement(
-                effect=iam.Effect.ALLOW,
-                actions=["s3:GetObject"],
-                resources=["*"],
-                conditions={
-                    "StringEquals": {
-                        "s3:ExistingObjectTag/res:EnvironmentName": arn_builder.cluster_name
-                    }
-                },
-            ),
             # S3 permissions for bucket ARNs
             iam.PolicyStatement(
                 effect=iam.Effect.ALLOW,
                 actions=["s3:GetObject", "s3:ListBucket"],
                 resources=arn_builder.s3_bucket_arns,  # type: ignore
             ),
-            # DCV license S3 bucket permissions
+            # S3 permission for VDI putting DCV command output
             iam.PolicyStatement(
-                effect=iam.Effect.ALLOW,
-                actions=["s3:GetObject", "s3:ListBucket"],
-                resources=arn_builder.dcv_license_s3_bucket_arns,  # type: ignore
+                actions=[
+                    "s3:PutObject",
+                ],
+                resources=arn_builder.ssm_command_output_bucket_arn,  # type: ignore
             ),
             # Execute API permissions
             iam.PolicyStatement(
@@ -59,24 +50,20 @@ class VirtualDesktopDcvHostScopedDownPolicy(ManagedPolicy):
                 actions=["s3:GetObject"],
                 resources=arn_builder.s3_public_host_modules,  # type: ignore
             ),
-            # Execute API ObjectStorageTempCredentials permissions
-            iam.PolicyStatement(
-                effect=iam.Effect.ALLOW,
-                actions=["execute-api:Invoke"],
-                resources=[arn_builder.custom_credential_broker_api_gateway_execute_post_api_arn],  # type: ignore
-            ),
-            # Cognito permissions
-            # TODO: This should be removed after fixing the issue that VDI cognito modules setup not using bootstrap profile issue.
+            # Cluster settings DDB table permission to get host module URIs
             iam.PolicyStatement(
                 effect=iam.Effect.ALLOW,
                 actions=[
-                    "cognito-idp:AdminInitiateAuth",
-                    "cognito-idp:AdminGetUser",
-                    "cognito-idp:ListGroups",
-                    "cognito-idp:AdminListGroupsForUser",
-                    "cognito-idp:ListUsers",
+                    "dynamodb:GetItem",
                 ],
-                resources=[arn_builder.user_pool_arn],  # type: ignore
+                resources=[
+                    arn_builder.get_ddb_table_arn("cluster-settings"),
+                ],
+                conditions={
+                    "ForAllValues:StringLike": {
+                        "dynamodb:LeadingKeys": ["cluster-manager.host_modules.*"]
+                    }
+                },
             ),
         ]
         policy_statements.extend(

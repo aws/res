@@ -90,29 +90,6 @@ function Install-NiceDCV {
   Get-Service dcvserver -ErrorAction SilentlyContinue
 }
 
-function Install-NiceSessionManagerAgent {
-  Param(
-    [switch]$Update
-  )
-
-  $DCVSMInstalled = $false
-  $DCVSMServiceStatus = Get-Service DcvSessionManagerAgentService -ErrorAction SilentlyContinue -Verbose
-
-  if($DCVSMServiceStatus.Status){
-    $DCVSMInstalled = $true
-  }
-
-  if(!$DCVSMInstalled -or $Update){
-    # Standard distribution link for NICE DCV Session Manager Agent
-    Start-Job -Name SMWebReq -ScriptBlock { Invoke-WebRequest -uri https://d1uj6qtbmh3dt5.cloudfront.net/nice-dcv-session-manager-agent-x64-Release.msi -OutFile C:\Windows\Temp\DCVSMAgent.msi }
-    Wait-Job -Name SMWebReq
-    Invoke-Command -ScriptBlock {Start-Process "msiexec.exe" -ArgumentList "/I C:\Windows\Temp\DCVSMAgent.msi /quiet /norestart " -Wait}
-    while (-not(Get-Service dcvserver -ErrorAction SilentlyContinue)) { Start-Sleep -Milliseconds 250 }
-  }
-
-  Get-Service DcvSessionManagerAgentService -ErrorAction SilentlyContinue
-}
-
 function Install-CloudwatchAgent {
   $CloudwatchInstalled = $false
   $CloudwatchServiceStatus = Get-Service -Name AmazonCloudWatchAgent -ErrorAction SilentlyContinue
@@ -342,7 +319,6 @@ function Install-WindowsEC2Instance {
     $InstanceFamily = $InstanceType.Split('.')[0]
 
     Install-NiceDCV -OSVersion $OSVersion -InstanceType $InstanceType -Update:$Update
-    Install-NiceSessionManagerAgent -Update:$Update
 
     if ($InstanceType.Split('.')[0] -like 'g*')
     {

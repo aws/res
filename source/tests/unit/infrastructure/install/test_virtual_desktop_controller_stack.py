@@ -286,7 +286,7 @@ def test_event_sqs_queue_creation(
                             "Arn",
                         ]
                     },
-                    "maxReceiveCount": 60,
+                    "maxReceiveCount": 120,
                 },
             }
         },
@@ -488,6 +488,9 @@ def test_custom_credential_broker_lambda_creation(
                         "DCV_HOST_DB_HASH_KEY": "instance_id",
                         "DCV_HOST_DB_IDEA_SESSION_ID_KEY": "idea_session_id",
                         "DCV_HOST_DB_IDEA_SESSION_OWNER_KEY": "idea_session_owner",
+                        "environment_name": vdc_stack.nested_stack.resolve(
+                            vdc_stack.cluster_name
+                        ),
                         "MODULE_ID": MODULE_ID_VDC_CONTROLLER,
                         "OBJECT_STORAGE_CUSTOM_PROJECT_NAME_AND_USERNAME_PREFIX": constants.OBJECT_STORAGE_CUSTOM_PROJECT_NAME_AND_USERNAME_PREFIX,
                         "OBJECT_STORAGE_CUSTOM_PROJECT_NAME_PREFIX": constants.OBJECT_STORAGE_CUSTOM_PROJECT_NAME_PREFIX,
@@ -582,6 +585,37 @@ def test_api_gateway_vpc_endpoint_creation(
                 "SubnetIds": vdc_stack.nested_stack.resolve(
                     vdc_stack.cluster_settings.infrastructure_host_subnets
                 ),
+            }
+        },
+    )
+
+
+def test_custom_credential_broker_lambda_security_group_dns_egress(
+    vdc_stack: VirtualDesktopControllerStack, vdc_template: Template
+) -> None:
+    util.assert_resource_name_has_correct_type_and_props(
+        vdc_stack.nested_stack,
+        vdc_template,
+        resources=[
+            f"{MODULE_ID_VDC_CONTROLLER}-custom-credential-broker-lambda-security-group-construct"
+        ],
+        cfn_type="AWS::EC2::SecurityGroup",
+        props={
+            "Properties": {
+                "SecurityGroupEgress": [
+                    {
+                        "CidrIp": "0.0.0.0/0",
+                        "FromPort": 0,
+                        "IpProtocol": "tcp",
+                        "ToPort": 65535,
+                    },
+                    {
+                        "CidrIp": "0.0.0.0/0",
+                        "FromPort": 53,
+                        "IpProtocol": "udp",
+                        "ToPort": 53,
+                    },
+                ],
             }
         },
     )
@@ -830,75 +864,6 @@ def test_controller_role_creation(
                             ),
                             vdc_stack.nested_stack.resolve(vdc_stack.cluster_name),
                             f"-{MODULE_ID_VDC_CONTROLLER}-controller-role",
-                        ],
-                    ]
-                },
-            }
-        },
-    )
-
-
-def test_dcv_broker_role_creation(
-    vdc_stack: VirtualDesktopControllerStack, vdc_template: Template
-) -> None:
-    util.assert_resource_name_has_correct_type_and_props(
-        vdc_stack.nested_stack,
-        vdc_template,
-        resources=[f"{MODULE_ID_VDC_CONTROLLER}-broker-role-construct"],
-        cfn_type="AWS::IAM::Role",
-        props={
-            "Properties": {
-                "AssumeRolePolicyDocument": {
-                    "Statement": [
-                        {
-                            "Action": "sts:AssumeRole",
-                            "Effect": "Allow",
-                            "Principal": {
-                                "Service": {
-                                    "Fn::Join": [
-                                        "",
-                                        ["ssm.", {"Ref": "AWS::URLSuffix"}],
-                                    ]
-                                }
-                            },
-                        },
-                        {
-                            "Action": "sts:AssumeRole",
-                            "Effect": "Allow",
-                            "Principal": {
-                                "Service": {
-                                    "Fn::Join": [
-                                        "",
-                                        ["ec2.", {"Ref": "AWS::URLSuffix"}],
-                                    ]
-                                }
-                            },
-                        },
-                    ],
-                },
-                "PermissionsBoundary": {
-                    "Fn::If": [
-                        "PermissionBoundaryProvided",
-                        vdc_stack.nested_stack.resolve(
-                            vdc_stack.parameters.get_str(
-                                CommonKey.IAM_PERMISSION_BOUNDARY
-                            )
-                        ),
-                        {"Ref": "AWS::NoValue"},
-                    ]
-                },
-                "Path": vdc_stack.nested_stack.resolve(
-                    vdc_stack.parameters.iam_resource_path_string
-                ),
-                "RoleName": {
-                    "Fn::Join": [
-                        "",
-                        [
-                            vdc_stack.nested_stack.resolve(
-                                vdc_stack.parameters.iam_resource_prefix_string
-                            ),
-                            vdc_stack.nested_stack.resolve(vdc_stack.cluster_name),
-                            f"-{MODULE_ID_VDC_CONTROLLER}-broker-role",
                         ],
                     ]
                 },
@@ -1335,87 +1300,6 @@ def test_dcv_connection_gateway_security_group(
     )
 
 
-def test_dcv_broker_security_group(
-    vdc_stack: VirtualDesktopControllerStack, vdc_template: Template
-) -> None:
-    util.assert_resource_name_has_correct_type_and_props(
-        vdc_stack.nested_stack,
-        vdc_template,
-        resources=[f"{MODULE_ID_VDC_CONTROLLER}-broker-security-group-construct"],
-        cfn_type="AWS::EC2::SecurityGroup",
-        props={
-            "Properties": {
-                "GroupDescription": "Security Group for Virtual Desktop DCV Broker",
-                "SecurityGroupEgress": [
-                    {
-                        "CidrIp": "0.0.0.0/0",
-                        "Description": "Allow all egress for TCP",
-                        "FromPort": 0,
-                        "IpProtocol": "tcp",
-                        "ToPort": 65535,
-                    }
-                ],
-                "SecurityGroupIngress": [
-                    {
-                        "CidrIp": {
-                            "Fn::GetAtt": [
-                                util.get_logical_id(
-                                    vdc_stack.nested_stack,
-                                    [
-                                        f"{MODULE_ID_VDC_CONTROLLER}-existing-vpc-vpc-lookup-custom-resource"
-                                    ],
-                                ),
-                                "cidr_block",
-                            ]
-                        },
-                        "Description": "Allow HTTP traffic from all VPC nodes for API access",
-                        "FromPort": 8443,
-                        "IpProtocol": "tcp",
-                        "ToPort": 8443,
-                    },
-                    {
-                        "CidrIp": {
-                            "Fn::GetAtt": [
-                                util.get_logical_id(
-                                    vdc_stack.nested_stack,
-                                    [
-                                        f"{MODULE_ID_VDC_CONTROLLER}-existing-vpc-vpc-lookup-custom-resource"
-                                    ],
-                                ),
-                                "cidr_block",
-                            ]
-                        },
-                        "Description": "Allow all Internal traffic TO DCV Broker",
-                        "IpProtocol": "-1",
-                    },
-                ],
-            }
-        },
-    )
-
-    vdc_template.has_resource_properties(
-        "AWS::EC2::SecurityGroupIngress",
-        {
-            "IpProtocol": "tcp",
-            "FromPort": 22,
-            "ToPort": 22,
-            "SourceSecurityGroupId": vdc_stack.nested_stack.resolve(
-                vdc_stack.bastion_host_security_group.security_group_id
-            ),
-            "Description": "Allow SSH from Bastion Host",
-            "GroupId": {
-                "Fn::GetAtt": [
-                    util.get_logical_id(
-                        vdc_stack.nested_stack,
-                        [f"{MODULE_ID_VDC_CONTROLLER}-broker-security-group-construct"],
-                    ),
-                    "GroupId",
-                ]
-            },
-        },
-    )
-
-
 def test_external_nlb_creation(
     vdc_stack: VirtualDesktopControllerStack, vdc_template: Template
 ) -> None:
@@ -1601,150 +1485,6 @@ def test_controller_auto_scaling_group_creation(
                 "Ref": util.get_logical_id(
                     vdc_stack.nested_stack,
                     ["controller-asg"],
-                )
-            },
-        },
-    )
-
-
-def test_dcv_broker_auto_scaling_group_creation(
-    vdc_stack: VirtualDesktopControllerStack, vdc_template: Template
-) -> None:
-    util.assert_resource_name_has_correct_type_and_props(
-        vdc_stack.nested_stack,
-        vdc_template,
-        resources=["dcv_broker-asg"],
-        cfn_type="AWS::AutoScaling::AutoScalingGroup",
-        props={
-            "Properties": {
-                "AutoScalingGroupName": {
-                    "Fn::Join": [
-                        "",
-                        [
-                            vdc_stack.nested_stack.resolve(vdc_stack.cluster_name),
-                            f"-{MODULE_ID_VDC_CONTROLLER}-dcv_broker-asg",
-                        ],
-                    ]
-                },
-                "VPCZoneIdentifier": vdc_stack.nested_stack.resolve(
-                    vdc_stack.cluster_settings.infrastructure_host_subnets
-                ),
-                "LaunchTemplate": {
-                    "LaunchTemplateId": {
-                        "Ref": util.get_logical_id(
-                            vdc_stack.nested_stack,
-                            ["dcv_broker-lt"],
-                        )
-                    },
-                    "Version": {
-                        "Fn::GetAtt": [
-                            util.get_logical_id(
-                                vdc_stack.nested_stack,
-                                ["dcv_broker-lt"],
-                            ),
-                            "LatestVersionNumber",
-                        ]
-                    },
-                },
-                "MinSize": "1",
-                "MaxSize": "3",
-                "Cooldown": "300",
-                "DefaultInstanceWarmup": 1500,
-                "HealthCheckGracePeriod": 1500,
-                "HealthCheckType": "ELB",
-                "NewInstancesProtectedFromScaleIn": False,
-                "MetricsCollection": [{"Granularity": "1Minute"}],
-                "TerminationPolicies": ["Default"],
-                "TargetGroupARNs": [
-                    {
-                        "Ref": util.get_logical_id(
-                            vdc_stack.nested_stack,
-                            ["broker-agent-target-group"],
-                        )
-                    },
-                    {
-                        "Ref": util.get_logical_id(
-                            vdc_stack.nested_stack,
-                            ["broker-client-target-group"],
-                        )
-                    },
-                    {
-                        "Ref": util.get_logical_id(
-                            vdc_stack.nested_stack,
-                            ["broker-gateway-target-group"],
-                        )
-                    },
-                ],
-                "Tags": [
-                    {
-                        "Key": "Name",
-                        "PropagateAtLaunch": True,
-                        "Value": {
-                            "Fn::Join": [
-                                "",
-                                [
-                                    vdc_stack.nested_stack.resolve(
-                                        vdc_stack.cluster_name
-                                    ),
-                                    "-vdc-broker",
-                                ],
-                            ]
-                        },
-                    },
-                    {
-                        "Key": "res:EnvironmentName",
-                        "PropagateAtLaunch": True,
-                        "Value": vdc_stack.nested_stack.resolve(vdc_stack.cluster_name),
-                    },
-                    {"Key": "res:ModuleId", "PropagateAtLaunch": True, "Value": "vdc"},
-                    {
-                        "Key": "res:ModuleName",
-                        "PropagateAtLaunch": True,
-                        "Value": "virtual-desktop-controller",
-                    },
-                    {
-                        "Key": "res:NodeType",
-                        "PropagateAtLaunch": True,
-                        "Value": "infra",
-                    },
-                ],
-            },
-            "UpdatePolicy": {
-                "AutoScalingRollingUpdate": {
-                    "MaxBatchSize": 1,
-                    "MinInstancesInService": 1,
-                    "SuspendProcesses": [
-                        "HealthCheck",
-                        "ReplaceUnhealthy",
-                        "AZRebalance",
-                        "AlarmNotification",
-                        "ScheduledActions",
-                        "InstanceRefresh",
-                    ],
-                    "PauseTime": "PT25M",
-                },
-                "AutoScalingScheduledAction": {
-                    "IgnoreUnmodifiedGroupSizeProperties": True
-                },
-            },
-        },
-    )
-
-    vdc_template.has_resource_properties(
-        "AWS::AutoScaling::ScalingPolicy",
-        {
-            "PolicyType": "TargetTrackingScaling",
-            "EstimatedInstanceWarmup": 1500,
-            "TargetTrackingConfiguration": {
-                "TargetValue": 80.0,
-                "PredefinedMetricSpecification": {
-                    "PredefinedMetricType": "ASGAverageCPUUtilization"
-                },
-            },
-            "AutoScalingGroupName": {
-                "Ref": util.get_logical_id(
-                    vdc_stack.nested_stack,
-                    ["dcv_broker-asg"],
                 )
             },
         },
@@ -2185,57 +1925,6 @@ def test_target_groups_creation(
     util.assert_resource_name_has_correct_type_and_props(
         vdc_stack.nested_stack,
         vdc_template,
-        resources=["broker-client-target-group"],
-        cfn_type="AWS::ElasticLoadBalancingV2::TargetGroup",
-        props={
-            "Properties": {
-                "Port": 8444,
-                "Protocol": "HTTPS",
-                "TargetType": "instance",
-                "VpcId": vdc_stack.nested_stack.resolve(vdc_stack.vpc.vpc_id),
-                "HealthCheckEnabled": True,
-                "HealthCheckPath": "/health",
-            }
-        },
-    )
-
-    util.assert_resource_name_has_correct_type_and_props(
-        vdc_stack.nested_stack,
-        vdc_template,
-        resources=["broker-agent-target-group"],
-        cfn_type="AWS::ElasticLoadBalancingV2::TargetGroup",
-        props={
-            "Properties": {
-                "Port": 8445,
-                "Protocol": "HTTPS",
-                "TargetType": "instance",
-                "VpcId": vdc_stack.nested_stack.resolve(vdc_stack.vpc.vpc_id),
-                "HealthCheckEnabled": True,
-                "HealthCheckPath": "/health",
-            }
-        },
-    )
-
-    util.assert_resource_name_has_correct_type_and_props(
-        vdc_stack.nested_stack,
-        vdc_template,
-        resources=["broker-gateway-target-group"],
-        cfn_type="AWS::ElasticLoadBalancingV2::TargetGroup",
-        props={
-            "Properties": {
-                "Port": 8446,
-                "Protocol": "HTTPS",
-                "TargetType": "instance",
-                "VpcId": vdc_stack.nested_stack.resolve(vdc_stack.vpc.vpc_id),
-                "HealthCheckEnabled": True,
-                "HealthCheckPath": "/health",
-            }
-        },
-    )
-
-    util.assert_resource_name_has_correct_type_and_props(
-        vdc_stack.nested_stack,
-        vdc_template,
         resources=["dcv-connection-gateway-target-group-nlb"],
         cfn_type="AWS::ElasticLoadBalancingV2::TargetGroup",
         props={
@@ -2584,49 +2273,6 @@ def test_launch_templates_creation(
                                 util.get_logical_id(
                                     vdc_stack.nested_stack,
                                     ["controller-profile-construct"],
-                                ),
-                                "Arn",
-                            ]
-                        }
-                    },
-                    "KeyName": vdc_stack.nested_stack.resolve(
-                        vdc_stack.parameters.get_str(CommonKey.SSH_KEY_PAIR)
-                    ),
-                },
-                "VersionDescription": vdc_stack.nested_stack.resolve(
-                    vdc_stack.deployment_id
-                ),
-            }
-        },
-    )
-
-    util.assert_resource_name_has_correct_type_and_props(
-        vdc_stack.nested_stack,
-        vdc_template,
-        resources=["dcv_broker-lt"],
-        cfn_type="AWS::EC2::LaunchTemplate",
-        props={
-            "Properties": {
-                "LaunchTemplateData": {
-                    "BlockDeviceMappings": [
-                        {
-                            "DeviceName": "/dev/xvda",
-                            "Ebs": {
-                                "Encrypted": True,
-                                "VolumeSize": 200,
-                                "VolumeType": "gp3",
-                            },
-                        }
-                    ],
-                    "MetadataOptions": {
-                        "HttpTokens": "required",
-                    },
-                    "IamInstanceProfile": {
-                        "Arn": {
-                            "Fn::GetAtt": [
-                                util.get_logical_id(
-                                    vdc_stack.nested_stack,
-                                    ["dcv_broker-profile-construct"],
                                 ),
                                 "Arn",
                             ]

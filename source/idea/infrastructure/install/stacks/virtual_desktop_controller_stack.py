@@ -36,6 +36,9 @@ from idea.infrastructure.install.constructs import ec2, iam, lambda_, secretmana
 from idea.infrastructure.install.constructs import sns as sns_
 from idea.infrastructure.install.constructs import sqs as sqs_
 from idea.infrastructure.install.constructs.base import ResBaseConstruct
+from idea.infrastructure.install.dcv_session_management import (
+    build_dcv_session_management_lambda,
+)
 from idea.infrastructure.install.infra_utils.arn_builder import ArnBuilder
 from idea.infrastructure.install.infra_utils.cluster_settings import ClusterSettings
 from idea.infrastructure.install.infra_utils.utils import InfraUtils
@@ -53,7 +56,6 @@ from idea.infrastructure.install.policies import (
     S3MountBaseBucketReadWritePolicy,
     VdcControllerSqsKmsKeyPolicy,
     VdiHelperPolicy,
-    VirtualDesktopBrokerPolicy,
     VirtualDesktopConnectionGatewayPolicy,
     VirtualDesktopControllerPolicy,
     VirtualDesktopDcvHostScopedDownPolicy,
@@ -80,7 +82,7 @@ class VirtualDesktopControllerStack(ResBaseConstruct):
     Virtual Desktop Controller (eVDI) Stack
 
     Provisions infrastructure for eVDI Module:
-    * ASG for Controller, NICE DCV Broker, NICE DCV Connection Gateway
+    * ASG for Controller, NICE DCV Connection Gateway
     * Network Load Balancer
     * Security Groups
     * AWS Backups for eVDI Hosts
@@ -196,13 +198,11 @@ class VirtualDesktopControllerStack(ResBaseConstruct):
             self.cluster_name, self.cluster_settings, self.parameters
         )
 
-        self.COMPONENT_DCV_BROKER = "broker"
         self.COMPONENT_DCV_CONNECTION_GATEWAY = "gateway"
         self.COMPONENT_CONTROLLER = "controller"
         self.CONFIG_MAPPING = {
             self.COMPONENT_CONTROLLER: "controller",
             self.COMPONENT_DCV_CONNECTION_GATEWAY: "dcv_connection_gateway",
-            self.COMPONENT_DCV_BROKER: "dcv_broker",
         }
         self.COMPONENT_DCV_HOST = "host"
 
@@ -211,16 +211,6 @@ class VirtualDesktopControllerStack(ResBaseConstruct):
             "https_proxy": self.parameters.get_str(InternetProxyKey.HTTPS_PROXY),
             "no_proxy": self.parameters.get_str(InternetProxyKey.NO_PROXY),
         }
-
-        self.BROKER_CLIENT_COMMUNICATION_PORT = (
-            self.cluster_settings.dcv_broker_client_communication_port
-        )
-        self.BROKER_AGENT_COMMUNICATION_PORT = (
-            self.cluster_settings.dcv_broker_agent_communication_port
-        )
-        self.BROKER_GATEWAY_COMMUNICATION_PORT = (
-            self.cluster_settings.dcv_broker_gateway_communication_port
-        )
 
         self.CLUSTER_ENDPOINTS_LAMBDA_ARN = (
             self.cluster_stack.cluster_endpoints_lambda.function_arn  # type: ignore
@@ -250,7 +240,6 @@ class VirtualDesktopControllerStack(ResBaseConstruct):
         self.dcv_host_role_scoped_down: Optional[iam.Role] = None
 
         self.controller_role: Optional[iam.Role] = None
-        self.dcv_broker_role: Optional[iam.Role] = None
         self.scheduled_event_transformer_lambda_role: Optional[iam.Role] = None
 
         self.dcv_host_instance_profile: Optional[iam.InstanceProfile] = None
@@ -265,12 +254,6 @@ class VirtualDesktopControllerStack(ResBaseConstruct):
         self.dcv_connection_gateway_security_group: Optional[
             ec2.VirtualDesktopPublicLoadBalancerAccessSecurityGroup
         ] = None
-        self.dcv_broker_security_group: Optional[
-            ec2.VirtualDesktopBastionAccessSecurityGroup
-        ] = None
-        self.dcv_broker_alb_security_group: Optional[
-            ec2.VirtualDesktopBastionAccessSecurityGroup
-        ] = None
 
         self.dcv_connection_gateway_self_signed_cert: Optional[cdk.CustomResource] = (
             None
@@ -283,11 +266,9 @@ class VirtualDesktopControllerStack(ResBaseConstruct):
         self.ssm_command_pass_role: Optional[iam.Role] = None
 
         self.controller_auto_scaling_group: Optional[asg.AutoScalingGroup] = None
-        self.dcv_broker_autoscaling_group: Optional[asg.AutoScalingGroup] = None
         self.dcv_connection_gateway_autoscaling_group: Optional[
             asg.AutoScalingGroup
         ] = None
-        self.client_target_group: Optional[elbv2.ApplicationTargetGroup] = None
 
         self.user_pool = cognito.UserPool.from_user_pool_id(
             self.nested_stack,
@@ -312,7 +293,7 @@ class VirtualDesktopControllerStack(ResBaseConstruct):
         self.subscribe_to_ec2_notification_events()
 
         self.build_virtual_desktop_controller()
-        self.build_dcv_broker()
+        build_dcv_session_management_lambda(self)
         self.build_dcv_connection_gateway()
         self.build_dcv_host_infra_scoped_down()
         self.build_dcv_host_infra()
@@ -402,7 +383,9 @@ class VirtualDesktopControllerStack(ResBaseConstruct):
             content_based_deduplication=True,
             encryption_master_key=sqs_kms_key_id,
             dead_letter_queue=sqs.DeadLetterQueue(
-                max_receive_count=60,
+                # With default 30s visibility timeout, this allows ~60 minutes of retries
+                # before moving to DLQ. Windows AMI creation can take 30-45 minutes.
+                max_receive_count=120,
                 queue=sqs_.SQSQueue(
                     f"{self.module_id}-events-dlq",
                     self.nested_stack,
@@ -779,6 +762,7 @@ class VirtualDesktopControllerStack(ResBaseConstruct):
             parameters=self.parameters,
             runtime=constants.RES_COMMON_LAMBDA_RUNTIME,
             description=f"{self.module_id} lambda to provide temporary credentials for mounting object storage to virtual desktop infrastructure (VDI) instances.",  # type: ignore
+            memory_size=512,  # type: ignore
             timeout=cdk.Duration.seconds(60),  # type: ignore
             layers=[self.lambda_layer],  # type: ignore
             environment={
@@ -787,6 +771,7 @@ class VirtualDesktopControllerStack(ResBaseConstruct):
                 "DCV_HOST_DB_HASH_KEY": "instance_id",
                 "DCV_HOST_DB_IDEA_SESSION_ID_KEY": "idea_session_id",
                 "DCV_HOST_DB_IDEA_SESSION_OWNER_KEY": "idea_session_owner",
+                "environment_name": f"{self.cluster_name}",
                 "MODULE_ID": f"{self.module_id}",
                 "OBJECT_STORAGE_CUSTOM_PROJECT_NAME_AND_USERNAME_PREFIX": constants.OBJECT_STORAGE_CUSTOM_PROJECT_NAME_AND_USERNAME_PREFIX,
                 "OBJECT_STORAGE_CUSTOM_PROJECT_NAME_PREFIX": constants.OBJECT_STORAGE_CUSTOM_PROJECT_NAME_PREFIX,
@@ -1053,173 +1038,6 @@ class VirtualDesktopControllerStack(ResBaseConstruct):
             component_name="DCV Host",
         )
 
-    def build_dcv_broker(self) -> None:
-        # client target group and registration
-        self.client_target_group = elbv2.ApplicationTargetGroup(
-            self.nested_stack,
-            f"{self.COMPONENT_DCV_BROKER}-client-target-group",
-            port=self.BROKER_CLIENT_COMMUNICATION_PORT,
-            target_type=elbv2.TargetType.INSTANCE,
-            protocol=elbv2.ApplicationProtocol.HTTPS,
-            vpc=self.vpc,
-            target_group_name=InfraUtils.get_target_group_name(
-                self.cluster_name, self.module_id, f"{self.COMPONENT_DCV_BROKER}-c"
-            ),
-        )
-        self.client_target_group.configure_health_check(enabled=True, path="/health")
-
-        cdk.CustomResource(
-            self.nested_stack,
-            "dcv-broker-client-endpoint",
-            service_token=self.CLUSTER_ENDPOINTS_LAMBDA_ARN,
-            properties={
-                "endpoint_name": "broker-client-endpoint",
-                "listener_arn": self.cluster_stack.internal_alb_dcv_broker_client_listener.attr_listener_arn,  # type: ignore
-                "priority": 0,
-                "default_action": True,
-                "actions": [
-                    {
-                        "Type": "forward",
-                        "TargetGroupArn": self.client_target_group.target_group_arn,
-                    }
-                ],
-                OLD_CUSTOM_TAG_KEYS: self.params_transformer.get_att_string(
-                    OLD_CUSTOM_TAG_KEYS
-                ),
-            },
-            resource_type="Custom::DcvBrokerClientEndpointInternal",
-        )
-
-        # agent target group and registration
-        agent_target_group = elbv2.ApplicationTargetGroup(
-            self.nested_stack,
-            f"{self.COMPONENT_DCV_BROKER}-agent-target-group",
-            port=self.BROKER_AGENT_COMMUNICATION_PORT,
-            target_type=elbv2.TargetType.INSTANCE,
-            protocol=elbv2.ApplicationProtocol.HTTPS,
-            vpc=self.vpc,
-            target_group_name=InfraUtils.get_target_group_name(
-                self.cluster_name, self.module_id, f"{self.COMPONENT_DCV_BROKER}-a"
-            ),
-        )
-        agent_target_group.configure_health_check(enabled=True, path="/health")
-
-        cdk.CustomResource(
-            self.nested_stack,
-            "dcv-broker-agent-endpoint",
-            service_token=self.CLUSTER_ENDPOINTS_LAMBDA_ARN,
-            properties={
-                "endpoint_name": "broker-client-endpoint",
-                "listener_arn": self.cluster_stack.internal_alb_dcv_broker_agent_listener.attr_listener_arn,  # type: ignore
-                "priority": 0,
-                "default_action": True,
-                "actions": [
-                    {
-                        "Type": "forward",
-                        "TargetGroupArn": agent_target_group.target_group_arn,
-                    }
-                ],
-                OLD_CUSTOM_TAG_KEYS: self.params_transformer.get_att_string(
-                    OLD_CUSTOM_TAG_KEYS
-                ),
-            },
-            resource_type="Custom::DcvBrokerAgentEndpointInternal",
-        )
-
-        # gateway target group and registration
-        gateway_target_group = elbv2.ApplicationTargetGroup(
-            self.nested_stack,
-            f"{self.COMPONENT_DCV_BROKER}-gateway-target-group",
-            port=self.BROKER_GATEWAY_COMMUNICATION_PORT,
-            target_type=elbv2.TargetType.INSTANCE,
-            protocol=elbv2.ApplicationProtocol.HTTPS,
-            vpc=self.vpc,
-            target_group_name=InfraUtils.get_target_group_name(
-                self.cluster_name, self.module_id, f"{self.COMPONENT_DCV_BROKER}-g"
-            ),
-        )
-        gateway_target_group.configure_health_check(enabled=True, path="/health")
-
-        cdk.CustomResource(
-            self.nested_stack,
-            "dcv-broker-gateway-endpoint",
-            service_token=self.CLUSTER_ENDPOINTS_LAMBDA_ARN,
-            properties={
-                "endpoint_name": "broker-gateway-endpoint",
-                "listener_arn": self.cluster_stack.internal_alb_dcv_broker_gateway_listener.attr_listener_arn,  # type: ignore
-                "priority": 0,
-                "default_action": True,
-                "actions": [
-                    {
-                        "Type": "forward",
-                        "TargetGroupArn": gateway_target_group.target_group_arn,
-                    }
-                ],
-                OLD_CUSTOM_TAG_KEYS: self.params_transformer.get_att_string(
-                    OLD_CUSTOM_TAG_KEYS
-                ),
-            },
-            resource_type="Custom::DcvBrokerGatewayEndpointInternal",
-        )
-
-        # security group
-        self.dcv_broker_security_group = ec2.VirtualDesktopBastionAccessSecurityGroup(
-            name=f"{self.module_id}-{self.COMPONENT_DCV_BROKER}-security-group",
-            scope=self.nested_stack,
-            vpc=self.vpc,
-            parameters=self.parameters,
-            bastion_host_security_group=self.bastion_host_security_group,
-            description="Security Group for Virtual Desktop DCV Broker",
-            directory_service_access=False,
-            component_name="DCV Broker",
-        )
-
-        # autoscaling group
-        broker_userdata = BootstrapUserDataBuilder(
-            aws_region=self.aws_region,
-            bootstrap_package_uri=self.cluster_settings.installation_scripts_uri,
-            install_commands=[
-                f"/bin/bash scripts/infrastructure-host/install.sh -p false -c dcv-broker -m {self.module_id} -e {self.cluster_name}"
-            ],
-            infra_config={
-                "BROKER_CLIENT_TARGET_GROUP_ARN": self.client_target_group.target_group_arn,
-                "CONTROLLER_EVENTS_QUEUE_URL": self.event_sqs_queue.queue_url,  # type: ignore
-            },
-            proxy_config=self.PROXY_CONFIG,
-            base_os=self.cluster_settings.base_os(),
-        ).build()
-
-        self.dcv_broker_role = self._build_iam_role(
-            name=f"{self.module_id}-{self.COMPONENT_DCV_BROKER}-role",
-            description=f"IAM role assigned to virtual-desktop-{self.COMPONENT_DCV_BROKER}",
-            inline_policies=[
-                VirtualDesktopBrokerPolicy(
-                    self.nested_stack,
-                    f"{self.module_id}-{self.COMPONENT_DCV_BROKER}-policy",
-                    arn_builder=self.arn_builder,
-                    parameters=self.parameters,
-                )
-            ],
-        )
-
-        self.dcv_broker_autoscaling_group = self._build_auto_scaling_group(
-            instance_name_suffix=self.COMPONENT_DCV_BROKER,
-            security_group=self.dcv_broker_security_group,
-            iam_role=self.dcv_broker_role,
-            userdata=broker_userdata,
-            node_type=constants.NODE_TYPE_INFRA,
-        )
-        self.dcv_broker_autoscaling_group.node.add_dependency(self.event_sqs_queue)
-
-        # receiving error jsii.errors.JSIIError: Cannot add AutoScalingGroup to 2nd Target Group
-        # if same ASG is added to both internal and external target groups.
-        # workaround below - reference to https://github.com/aws/aws-cdk/issues/5667#issuecomment-827549394
-        self.dcv_broker_autoscaling_group.node.default_child.target_group_arns = [  # type: ignore
-            agent_target_group.target_group_arn,
-            self.client_target_group.target_group_arn,
-            gateway_target_group.target_group_arn,
-        ]
-
     def build_virtual_desktop_controller(self) -> None:
         self.controller_security_group = ec2.VirtualDesktopPublicLoadBalancerAccessSecurityGroup(
             name=f"{self.module_id}-{self.COMPONENT_CONTROLLER}-security-group",
@@ -1377,9 +1195,6 @@ class VirtualDesktopControllerStack(ResBaseConstruct):
             ),
             "dcv_host_role_scoped_down_name": self.dcv_host_role_scoped_down.role_name,  # type: ignore
             "dcv_host_role_scoped_down_id": self.dcv_host_role_scoped_down.role_id,  # type: ignore
-            "dcv_broker_role_arn": self.dcv_broker_role.role_arn,  # type: ignore
-            "dcv_broker_role_name": self.dcv_broker_role.role_name,  # type: ignore
-            "dcv_broker_role_id": self.dcv_broker_role.role_id,  # type: ignore
             "scheduled_event_transformer_lambda_role_arn": self.scheduled_event_transformer_lambda_role.role_arn,  # type: ignore
             "scheduled_event_transformer_lambda_role_name": self.scheduled_event_transformer_lambda_role.role_name,  # type: ignore
             "scheduled_event_transformer_lambda_role_id": self.scheduled_event_transformer_lambda_role.role_id,  # type: ignore
@@ -1418,7 +1233,6 @@ class VirtualDesktopControllerStack(ResBaseConstruct):
             "controller_sqs_queue_arn": self.controller_sqs_queue.queue_arn,  # type: ignore
             "external_nlb.load_balancer_dns_name": self.external_nlb.attr_dns_name,  # type: ignore
             "external_nlb_arn": self.external_nlb.attr_load_balancer_arn,  # type: ignore
-            "dcv_broker.client_target_group_arn": self.client_target_group.target_group_arn,  # type: ignore
             "gateway_security_group_id": self.dcv_connection_gateway_security_group.security_group_id,  # type: ignore
             "vdi-helper-id": self.vdi_helper_lambda_role_role_id,
         }
@@ -1467,16 +1281,12 @@ class VirtualDesktopControllerStack(ResBaseConstruct):
         self.controller_auto_scaling_group.node.add_dependency(  # type: ignore
             self.cluster_settings_custom_resource
         )
-        self.dcv_broker_autoscaling_group.node.add_dependency(  # type: ignore
-            self.cluster_settings_custom_resource
-        )
         self.dcv_connection_gateway_autoscaling_group.node.add_dependency(  # type: ignore
             self.cluster_settings_custom_resource
         )
 
         asg_cluster_settings = {
             "controller.asg_arn": self.controller_auto_scaling_group.auto_scaling_group_arn,  # type: ignore
-            "dcv_broker.asg_arn": self.dcv_broker_autoscaling_group.auto_scaling_group_arn,  # type: ignore
             "dcv_connection_gateway.asg_arn": self.dcv_connection_gateway_autoscaling_group.auto_scaling_group_arn,  # type: ignore
         }
 

@@ -95,7 +95,8 @@ function install_gpu_driver_prerequisites() {
   done
 
   DEBIAN_FRONTEND=noninteractive apt install -y ${EVALUATED_GPU_DRIVER_PREREQUISITES[*]}
-  if [[ $BASE_OS =~ ^(ubuntu2204|ubuntu2404)$ ]]; then
+  if [[ $BASE_OS == "ubuntu2204" ]]; then
+    DEBIAN_FRONTEND=noninteractive apt install -y gcc-12
     update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-12 12
   fi
   unset IFS

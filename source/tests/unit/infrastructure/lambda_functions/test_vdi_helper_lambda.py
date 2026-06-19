@@ -1,7 +1,6 @@
 from unittest.mock import MagicMock, patch
 
 import pytest
-from res.resources import servers
 from res.resources import sessions as user_sessions
 from res.resources import vdi_management
 
@@ -64,18 +63,8 @@ def test_validate_instance_origin_with_invalid_origin(mock_boto_client):
     assert is_valid is False
 
 
-def mock_get_server(instance_id):
+def mock_get_session_by_instance_id(instance_id):
     assert instance_id == INSTANCE_ID
-    return {
-        servers.SERVER_DB_HASH_KEY: INSTANCE_ID,
-        servers.SERVER_DB_SESSION_OWNER_KEY: TEST_OWNER,
-        servers.SERVER_DB_SESSION_ID_KEY: TEST_SESSION_ID,
-    }
-
-
-def mock_get_session(owner, session_id):
-    assert owner == TEST_OWNER
-    assert session_id == TEST_SESSION_ID
     return {
         user_sessions.SESSION_DB_HASH_KEY: TEST_OWNER,
         user_sessions.SESSION_DB_RANGE_KEY: TEST_SESSION_ID,
@@ -97,8 +86,9 @@ def mock_not_called(sessions):
 
 def test_validate_stop_session_called():
     monkeypatch = pytest.MonkeyPatch()
-    monkeypatch.setattr(user_sessions, "get_session", mock_get_session)
-    monkeypatch.setattr(servers, "get_server", mock_get_server)
+    monkeypatch.setattr(
+        user_sessions, "get_session_by_instance_id", mock_get_session_by_instance_id
+    )
     monkeypatch.setattr(vdi_management, "stop_sessions", mock_stop_terminate_session)
     monkeypatch.setattr(vdi_management, "terminate_sessions", mock_not_called)
 
@@ -107,8 +97,9 @@ def test_validate_stop_session_called():
 
 def test_validate_terminate_session_called():
     monkeypatch = pytest.MonkeyPatch()
-    monkeypatch.setattr(user_sessions, "get_session", mock_get_session)
-    monkeypatch.setattr(servers, "get_server", mock_get_server)
+    monkeypatch.setattr(
+        user_sessions, "get_session_by_instance_id", mock_get_session_by_instance_id
+    )
     monkeypatch.setattr(
         vdi_management, "terminate_sessions", mock_stop_terminate_session
     )

@@ -98,10 +98,9 @@ class HostModulePipelineStack(Stack):
             context_public_release = self.node.try_get_context("public_release")
             if context_public_release:
                 self._public_release = context_public_release.lower() == "true"
-            if not self._public_release:
-                context_s3_bucket_name = self.node.try_get_context("s3_bucket_name")
-                if context_s3_bucket_name:
-                    self._s3_bucket_name = context_s3_bucket_name
+            context_s3_bucket_name = self.node.try_get_context("s3_bucket_name")
+            if context_s3_bucket_name:
+                self._s3_bucket_name = context_s3_bucket_name
 
     def _create_synth_step(self) -> pipelines.CodeBuildStep:
         env_vars = {
@@ -112,7 +111,7 @@ class HostModulePipelineStack(Stack):
 
         if self._publish_modules:
             env_vars["PIPELINE_PUBLIC_RELEASE"] = str(self._public_release).lower()
-            if not self._public_release and self._s3_bucket_name:
+            if self._s3_bucket_name:
                 env_vars["PIPELINE_S3_BUCKET_NAME"] = self._s3_bucket_name
 
         return pipelines.CodeBuildStep(
@@ -180,16 +179,8 @@ class HostModulePipelineStack(Stack):
             "ONBOARDED_REGIONS": self.onboarded_regions,
             "PUBLIC_RELEASE": str(self._public_release).lower(),
             "ARTIFACTS_BUCKET_PREFIX_NAME": ARTIFACTS_BUCKET_PREFIX_NAME,
+            "ACCOUNT_ID": self.account,
         }
-
-        # Add S3 permissions
-        s3_resources = (
-            [
-                f"arn:{self.partition}:s3:::{ARTIFACTS_BUCKET_PREFIX_NAME}-*/host_modules/*"
-            ]
-            if self._public_release
-            else [f"arn:{self.partition}:s3:::{self._s3_bucket_name}/host_modules/*"]
-        )
 
         return pipelines.CodeBuildStep(
             "PublishHostModules",
@@ -205,12 +196,7 @@ class HostModulePipelineStack(Stack):
             additional_inputs={
                 "build_arm64": build_steps[1],
             },
-            role_policy_statements=[
-                iam.PolicyStatement(
-                    actions=["s3:PutObject", "s3:DeleteObject", "s3:ListBucket"],
-                    resources=s3_resources,
-                )
-            ],
+            role_policy_statements=self._get_publish_s3_policy(),
         )
 
     def _create_publish_latest_step(
@@ -220,6 +206,8 @@ class HostModulePipelineStack(Stack):
             "VERSION_FILE": VERSION_FILE,
             "ONBOARDED_REGIONS": self.onboarded_regions,
             "ARTIFACTS_BUCKET_PREFIX_NAME": ARTIFACTS_BUCKET_PREFIX_NAME,
+            "S3_BUCKET_NAME": self._s3_bucket_name,
+            "ACCOUNT_ID": self.account,
         }
 
         return pipelines.CodeBuildStep(
@@ -236,12 +224,22 @@ class HostModulePipelineStack(Stack):
             additional_inputs={
                 "build_arm64": build_steps[1],
             },
-            role_policy_statements=[
-                iam.PolicyStatement(
-                    actions=["s3:PutObject", "s3:DeleteObject"],
-                    resources=[
-                        f"arn:{self.partition}:s3:::{ARTIFACTS_BUCKET_PREFIX_NAME}-*/host_modules/*"
-                    ],
-                )
-            ],
+            role_policy_statements=self._get_publish_s3_policy(),
         )
+
+    def _get_publish_s3_policy(self) -> list[iam.PolicyStatement]:
+        if self._s3_bucket_name:
+            s3_resources = [
+                f"arn:{self.partition}:s3:::{self._s3_bucket_name}/host_modules/*"
+            ]
+        else:
+            s3_resources = [
+                f"arn:{self.partition}:s3:::{ARTIFACTS_BUCKET_PREFIX_NAME}-*/host_modules/*",
+                f"arn:{self.partition}:s3:::res-staging-*/host_modules/*",
+            ]
+        return [
+            iam.PolicyStatement(
+                actions=["s3:PutObject", "s3:DeleteObject", "s3:ListBucket"],
+                resources=s3_resources,
+            )
+        ]

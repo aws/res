@@ -55,6 +55,17 @@ class ProjectsTableMerger(MergeTable):
                     context, copy.deepcopy(project_snapshot_record),
                     dedup_id, logger)
                 if not action_type:
+                    # The project already exists with the same data but might have a different ID.
+                    # We still need to track the old ID -> new ID mapping so that software stacks
+                    # and role assignments can find the correct project.
+                    snapshot_project_id = project_snapshot_record.get("project_id")
+                    resolved_project_id = resolved_record.get("project_id")
+                    if snapshot_project_id and resolved_project_id and snapshot_project_id != resolved_project_id:
+                        record_deltas.append(MergedRecordDelta(
+                            snapshot_record=project_snapshot_record,
+                            resolved_record=resolved_record,
+                            action_performed=MergedRecordActionType.UNCHANGED,
+                        ))
                     logger.debug(TABLE_NAME, project_name, ApplyResourceStatus.SKIPPED, "project is unchanged")
                     continue
 
@@ -82,8 +93,8 @@ class ProjectsTableMerger(MergeTable):
             record_delta = record_deltas[0]
             project_name = record_delta.resolved_record.get(PROJECTS_TABLE_PROJECT_NAME_KEY, "")
             if record_delta.action_performed == MergedRecordActionType.CREATE:
-                # Currently we only add new projects instead of updating existing ones when applying a snapshot.
-                # Add this checking here for handling updated records in the future.
+                # Only rollback projects that were created during apply.
+                # UNCHANGED deltas (used for project ID mapping to downstream mergers) are intentionally skipped.
                 try:
                     context.projects.delete_project(DeleteProjectRequest(project_name=project_name))
                 except Exception as e:
@@ -120,6 +131,8 @@ class ProjectsTableMerger(MergeTable):
             converted_snapshot_project = ProjectsDAO.convert_from_db(db_entry)
             # Compares all entries in snapshot_project with existing_project.
             if converted_snapshot_project == existing_project:
+                # Use the existing project's ID so we can tell other tables how to find this project
+                db_entry["project_id"] = existing_project.project_id
                 return db_entry, None
 
             # If the project already exists, rename the project name by appending the dedup ID.

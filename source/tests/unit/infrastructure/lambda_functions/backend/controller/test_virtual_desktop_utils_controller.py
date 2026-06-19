@@ -156,6 +156,36 @@ class TestVirtualDesktopUtilsController:
         assert result.listing[0]["InstanceType"] == "t3.large"
         mock_stack_utils.set_software_stack_architecture.assert_called_once()
 
+    def test_list_allowed_instance_types_for_session_missing_hibernation_enabled(self):
+        """Test that missing hibernation_enabled returns BadRequestException."""
+        body = {
+            "session": {
+                "software_stack": {"allowed_instance_types": ["t3.micro"]}
+            }
+        }
+        with pytest.raises(BadRequestException) as exc_info:
+            virtual_desktop_utils_controller.list_allowed_instance_types_for_session(body=body)
+        assert "hibernation_enabled" in str(exc_info.value.message)
+
+    def test_list_allowed_instance_types_for_session_missing_software_stack(self):
+        """Test that missing software_stack returns BadRequestException."""
+        body = {
+            "session": {
+                "hibernation_enabled": True
+            }
+        }
+        with pytest.raises(BadRequestException) as exc_info:
+            virtual_desktop_utils_controller.list_allowed_instance_types_for_session(body=body)
+        assert "software_stack" in str(exc_info.value.message)
+
+    def test_list_allowed_instance_types_for_session_missing_both(self):
+        """Test that missing both fields returns BadRequestException listing both."""
+        body = {"session": {}}
+        with pytest.raises(BadRequestException) as exc_info:
+            virtual_desktop_utils_controller.list_allowed_instance_types_for_session(body=body)
+        assert "hibernation_enabled" in str(exc_info.value.message)
+        assert "software_stack" in str(exc_info.value.message)
+
     @patch("api.controllers.virtual_desktop_utils_controller.software_stacks")
     def test_list_allowed_instance_types_hibernation_support_propagated(self, mock_software_stacks):
         """Test that hibernation_support is properly propagated to utility functions."""

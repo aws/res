@@ -26,7 +26,6 @@ class DbEntryDeletedEventHandler(BaseDBEventHandler):
             self.software_stack_db.table_name: self._handle_software_stack_deleted,
             self.schedule_db.table_name: self._handle_schedule_deleted,
             self.session_db.table_name: self._handle_user_session_deleted,
-            self.server_db.table_name: self._handle_dcv_host_deleted,
             self.session_permissions_db.table_name: self._handle_session_permission_deleted,
             self.permission_profile_db.table_name: self._handle_permission_profile_deleted
         }

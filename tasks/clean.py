@@ -86,13 +86,6 @@ def dcv_connection_gateway(c):
     CleanTool(c, 'idea-dcv-connection-gateway').clean()
 
 
-@task
-def dcv_broker(c):
-    # type: (Context) -> None
-    """
-    clean virtual desktop app
-    """
-    CleanTool(c, 'idea-dcv-broker').clean()
 
 
 @task
@@ -153,8 +146,6 @@ def clean_all(c):
     virtual_desktop_controller(c)
 
     dcv_connection_gateway(c)
-
-    dcv_broker(c)
 
     library(c)
 

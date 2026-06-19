@@ -1,20 +1,24 @@
 val smithyVersion: String by project
 
 plugins {
-    java
-    id("software.amazon.smithy.gradle.smithy-jar").version("1.3.0")
+    id("software.amazon.smithy.gradle.smithy-jar").version("1.3.0").apply(false)
 }
 
-repositories {
-    mavenLocal()
-    mavenCentral()
-}
+subprojects {
+    apply(plugin = "java")
+    apply(plugin = "software.amazon.smithy.gradle.smithy-jar")
 
-dependencies {
-    implementation("software.amazon.smithy:smithy-aws-traits:$smithyVersion")
-    implementation("software.amazon.smithy:smithy-model:$smithyVersion")
-    implementation("software.amazon.smithy:smithy-linters:$smithyVersion")
-    implementation("software.amazon.smithy:smithy-openapi:$smithyVersion")
-}
+    repositories {
+        mavenLocal()
+        mavenCentral()
+    }
 
-tasks["jar"].enabled = false
+    dependencies {
+        "implementation"("software.amazon.smithy:smithy-aws-traits:$smithyVersion")
+        "implementation"("software.amazon.smithy:smithy-model:$smithyVersion")
+        "implementation"("software.amazon.smithy:smithy-linters:$smithyVersion")
+        "implementation"("software.amazon.smithy:smithy-openapi:$smithyVersion")
+    }
+
+    tasks["jar"].enabled = false
+}

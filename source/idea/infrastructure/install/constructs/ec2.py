@@ -226,6 +226,13 @@ class SecurityGroup(ResBaseConstruct, ec2.SecurityGroup):
             description="Allow all egress for TCP",
         )
 
+    def add_dns_resolution_egress_rule(self) -> None:
+        self.add_egress_rule(
+            ec2.Peer.ipv4("0.0.0.0/0"),
+            ec2.Port.udp(53),
+            description="Allow DNS resolution via UDP",
+        )
+
     def add_api_ingress_rule(self) -> None:
         self.add_ingress_rule(
             ec2.Peer.ipv4(self.vpc.vpc_cidr_block),
@@ -689,6 +696,7 @@ class VirtualDesktopCustomCredentialBrokerSecurityGroup(SecurityGroup):
 
     def setup_egress(self) -> None:
         self.add_outbound_traffic_rule()
+        self.add_dns_resolution_egress_rule()
 
 
 class VpcInterfaceEndpoint(ResBaseConstruct):
@@ -785,3 +793,31 @@ class ClusterManagerSecurityGroup(SecurityGroup):
 
     def setup_egress(self) -> None:
         self.add_outbound_traffic_rule()
+
+
+class DcvSessionManagementLambdaSecurityGroup(SecurityGroup):
+    """
+    Security group for the DCV Session Management Lambda.
+    Only egress rules are needed — ALB invokes Lambda via the
+    Lambda API, not through VPC networking.
+    """
+
+    def __init__(
+        self,
+        name: str,
+        scope: constructs.Construct,
+        vpc: ec2.IVpc,
+        parameters: Union[RESParameters, BIParameters],
+    ):
+        super().__init__(
+            scope,
+            name,
+            vpc,
+            description="DCV Session Management Lambda security group",
+            parameters=parameters,
+        )
+        self.setup_egress()
+
+    def setup_egress(self) -> None:
+        self.add_outbound_traffic_rule()
+        self.add_dns_resolution_egress_rule()

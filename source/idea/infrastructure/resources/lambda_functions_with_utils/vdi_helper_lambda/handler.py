@@ -6,7 +6,7 @@ import logging
 from typing import Any, Dict
 
 from res.exceptions import UserSessionNotFound  # type: ignore
-from res.resources import servers, sessions, vdi_management  # type: ignore
+from res.resources import sessions, vdi_management  # type: ignore
 
 from .actions import VDIHelperActions
 from .auth import get_instance_id_from_request_context, validate
@@ -49,12 +49,8 @@ def handle_vdi_auto_stop(instance_id: str, transition_state: str) -> None:
         f"VDI auto stop for {instance_id} with transition_state {transition_state}"
     )
     # Has been validated that the server is already present
-    server = servers.get_server(instance_id=instance_id)
-    session_id = server.get(servers.SERVER_DB_SESSION_ID_KEY)
-    owner = server.get(servers.SERVER_DB_SESSION_OWNER_KEY)
-
     try:
-        session = sessions.get_session(owner=owner, session_id=session_id)
+        session = sessions.get_session_by_instance_id(instance_id)
         if transition_state == "Stop":
             session["is_idle"] = True
             vdi_management.stop_sessions(sessions=[session])

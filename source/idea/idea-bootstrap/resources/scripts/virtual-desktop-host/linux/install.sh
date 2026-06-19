@@ -22,8 +22,9 @@ INSTALL_FINISHED_LOCK="${SEMAPHORE_DIR}/install_finished.lock"
 PREBAKING_AMI="true"
 MODULE_ID="vdi-app"
 ENABLE_LUSTRE="false"
+STAGING_BUCKET=""
 
-while getopts m:g:p:e:n:o:d:i:h:t:u:a:l: opt
+while getopts m:g:p:e:n:o:d:i:h:t:u:a:l:b: opt
 do
     case "${opt}" in
         m) MODULE_ID=${OPTARG};;
@@ -39,6 +40,7 @@ do
         u) CUSTOM_BROKER_URL=${OPTARG};;
         a) AWS_REGION=${OPTARG};;
         l) ENABLE_LUSTRE=${OPTARG};;
+        b) STAGING_BUCKET=${OPTARG};;
         ?) echo "Invalid option for install.sh script: -${opt}."
            exit 1;;
     esac
@@ -131,7 +133,7 @@ if [[ ! -f ${INSTALL_FINISHED_LOCK} ]]; then
     # End: Install Fsx Lustre client
 
     # Begin : Install Host Modules
-    /bin/bash "${SCRIPT_DIR}/../../common/linux/host_modules.sh" -o $BASE_OS -s "${SCRIPT_DIR}/.."
+    /bin/bash "${SCRIPT_DIR}/../../common/linux/host_modules.sh" -o $BASE_OS -s "${SCRIPT_DIR}/.." -e "${ENVIRONMENT_NAME}" -b "${STAGING_BUCKET}"
     # End: Install Host Modules
 
     if [[ "${PREBAKING_AMI}" == "true" ]] && [ -f ${SCRIPT_DIR}/../../../requirements.txt ]; then

@@ -51,8 +51,7 @@ RESERVED_SSSD_KEYS = [
     "ldap_default_authtok",
 ]
 
-LDAP_CONFIG_TEMPLATE = Template(
-    """TLS_CACERTDIR $tls_ca_cert_dir
+LDAP_CONFIG_TEMPLATE = Template("""TLS_CACERTDIR $tls_ca_cert_dir
 
 # Turning this off breaks GSSAPI used with krb5 when rdns = false
 SASL_NOCANON	on
@@ -61,12 +60,10 @@ URI $ldap_connection_uri
 
 BASE $ldap_base
 
-TLS_CACERT $tls_ca_cert_file_path"""
-)
+TLS_CACERT $tls_ca_cert_file_path""")
 
 
-SSSD_JOIN_AD_CONFIG_TEMPLATE = Template(
-    """[sssd]
+SSSD_JOIN_AD_CONFIG_TEMPLATE = Template("""[sssd]
 domains = $domain_name
 config_file_version = 2
 services = nss, pam
@@ -101,11 +98,9 @@ use_fully_qualified_names = false
 fallback_homedir = /home/%u
 
 sudo_provider = none
-ldap_sasl_authid = $ldap_sasl_authid"""
-)
+ldap_sasl_authid = $ldap_sasl_authid""")
 
-SSSD_CONFIG_TEMPLATE = Template(
-    """[sssd]
+SSSD_CONFIG_TEMPLATE = Template("""[sssd]
 domains = $domain_name
 config_file_version = 2
 services = nss, pam
@@ -154,8 +149,7 @@ ldap_id_mapping = $sssd_ldap_id_mapping
 cache_credentials = true
 
 default_shell = /bin/bash
-fallback_homedir = /home/%u"""
-)
+fallback_homedir = /home/%u""")
 
 OPEN_LDAP_DIR = (
     "/etc/ldap/"
@@ -265,7 +259,7 @@ def _construct_sssd_configs(
     if not disable_ad_join:
         if is_in_active_directory() and os.path.exists(SSSD_FILE_PATH):
             # Keep the special dynamic field ldap_sasl_authid from the old SSSD config if current host is joining AD
-            config_origin = configparser.ConfigParser()
+            config_origin = configparser.ConfigParser(interpolation=None)
             config_origin.read(SSSD_FILE_PATH)
             sssd_settings[sasl_authid_key] = config_origin[domain_section].get(
                 sasl_authid_key
@@ -281,7 +275,7 @@ def _construct_sssd_configs(
     else:
         sssd_conf_content = SSSD_CONFIG_TEMPLATE.substitute(**sssd_settings)
 
-    config_override = configparser.ConfigParser()
+    config_override = configparser.ConfigParser(interpolation=None)
     config_override.read_string(sssd_conf_content)
 
     Path(SSSD_DIR).mkdir(parents=True, exist_ok=True)
@@ -322,7 +316,7 @@ def _add_additional_sssd_configs(sssd_settings: Dict[str, str]) -> None:
 
     logger.info(f"Adding additional SSSD configs")
 
-    sssd_config = configparser.ConfigParser()
+    sssd_config = configparser.ConfigParser(interpolation=None)
     sssd_config.read(SSSD_FILE_PATH)
 
     # Additional SSSD configs will be merged to the AD domain specific section by default

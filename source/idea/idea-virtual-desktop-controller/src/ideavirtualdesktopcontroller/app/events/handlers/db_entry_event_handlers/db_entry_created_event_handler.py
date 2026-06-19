@@ -26,7 +26,6 @@ class DbEntryCreatedEventHandler(BaseDBEventHandler):
             self.software_stack_db.table_name: self._handle_software_stack_created,
             self.schedule_db.table_name: self._handle_schedule_created,
             self.session_db.table_name: self._handle_user_session_created,
-            self.server_db.table_name: self._handle_dcv_host_created,
             self.session_permissions_db.table_name: self._handle_session_permission_created,
             self.permission_profile_db.table_name: self._handle_permission_profile_created
         }

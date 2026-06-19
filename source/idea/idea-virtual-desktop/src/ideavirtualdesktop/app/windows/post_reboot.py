@@ -14,7 +14,7 @@ import os
 import subprocess
 import time
 
-from ideavirtualdesktop.app.utils import send_sqs_host_messages
+from ideabootstrap.bootstrap_common import update_session_host_info, update_session_state
 
 logger = logging_utils.get_logger("bootstrap")
 
@@ -22,10 +22,11 @@ def run():
     if os.path.isfile(WINDOWS_VDI_CONFIG_HOST_READY_LOCK):
         logger.info(f"Config lock file already exists {WINDOWS_VDI_CONFIG_HOST_READY_LOCK}")
 
-        if not dcv.is_dcvserver_ready(timeout_seconds=300, retry_interval=5):
-            logger.warning("DCV server is not ready for creating session")
+        update_session_host_info()
 
-        send_sqs_host_messages("DCV_HOST_REBOOT_COMPLETE_EVENT")
+        if dcv.configure_automatic_console_session():
+            session_state = dcv.poll_dcv_session_ready()
+            update_session_state(session_state)
         return
 
     AWS_REGION = os.environ.get("AWS_REGION", "")
@@ -45,6 +46,10 @@ def run():
         f.write(current_time)
 
     logger.info("Finished running Post Reboot Configuration")
-    send_sqs_host_messages("DCV_HOST_READY_EVENT")
-    logger.info("Host ready event sent")
+    update_session_host_info()
+
+    if dcv.configure_automatic_console_session():
+        session_state = dcv.poll_dcv_session_ready()
+        update_session_state(session_state)
+        logger.info("DCV session placement complete with state: %s", session_state)
 

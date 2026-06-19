@@ -626,6 +626,16 @@ def test_vdc_session_table_creation(
                 "AttributeDefinitions": [
                     {"AttributeName": "owner", "AttributeType": "S"},
                     {"AttributeName": "idea_session_id", "AttributeType": "S"},
+                    {"AttributeName": "server_instance_id", "AttributeType": "S"},
+                ],
+                "GlobalSecondaryIndexes": [
+                    {
+                        "IndexName": "server-instance-id-index",
+                        "KeySchema": [
+                            {"AttributeName": "server_instance_id", "KeyType": "HASH"},
+                        ],
+                        "Projection": {"ProjectionType": "ALL"},
+                    }
                 ],
                 "PointInTimeRecoverySpecification": {
                     "PointInTimeRecoveryEnabled": True
@@ -655,31 +665,6 @@ def test_vdc_session_counter_table_creation(
                 "AttributeDefinitions": [
                     {"AttributeName": "idea_session_id", "AttributeType": "S"},
                     {"AttributeName": "counter_type", "AttributeType": "S"},
-                ],
-                "PointInTimeRecoverySpecification": {
-                    "PointInTimeRecoveryEnabled": True
-                },
-                "Tags": vdc_tags,
-            },
-        },
-    )
-
-
-def test_vdc_server_table_creation(
-    res_base_stack: ResBaseStack,
-    res_base_template: Template,
-    vdc_tags: List[Dict[str, Any]],
-) -> None:
-    util.assert_resource_name_has_correct_type_and_props(
-        res_base_stack.nested_stack,
-        res_base_template,
-        resources=["vdc-controller-servers-table"],
-        cfn_type=DB_CFN_TYPE,
-        props={
-            "Properties": {
-                "KeySchema": [{"AttributeName": "instance_id", "KeyType": "HASH"}],
-                "AttributeDefinitions": [
-                    {"AttributeName": "instance_id", "AttributeType": "S"},
                 ],
                 "PointInTimeRecoverySpecification": {
                     "PointInTimeRecoveryEnabled": True

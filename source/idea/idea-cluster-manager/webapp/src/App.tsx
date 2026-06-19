@@ -25,7 +25,7 @@ import VirtualDesktopSoftwareStacks from "./pages/virtual-desktops/virtual-deskt
 import MyVirtualDesktopSessions from "./pages/virtual-desktops/my-virtual-desktop-sessions";
 import VirtualDesktopSettings from "./pages/virtual-desktops/virtual-desktop-settings";
 import VirtualDesktopSessionDetail from "./pages/virtual-desktops/virtual-desktop-session-detail";
-import VirtualDesktopDebug from "./pages/virtual-desktops/virtual-desktop-debug";
+
 import { DashboardMain } from "./pages/dashboard";
 import CostDashboard from "./pages/cost-dashboard/cost-dashboard";
 import SSHAccess from "./pages/home/ssh-access";
@@ -732,25 +732,7 @@ class IdeaWebPortalApp extends Component<IdeaWebPortalAppProps, IdeaWebPortalApp
                             </IdeaAuthenticatedRoute>
                         }
                     />
-                    <Route
-                        path="/virtual-desktop/debug"
-                        element={
-                            <IdeaAuthenticatedRoute isLoggedIn={this.state.isLoggedIn}>
-                                <VirtualDesktopDebug
-                                    ideaPageId="virtual-desktop-debug"
-                                    toolsOpen={this.state.toolsOpen}
-                                    tools={this.state.tools}
-                                    onToolsChange={this.onToolsChange}
-                                    onPageChange={this.onPageChange}
-                                    sideNavItems={this.state.sideNavItems}
-                                    sideNavHeader={this.state.sideNavHeader}
-                                    onSideNavChange={this.onSideNavChange}
-                                    onFlashbarChange={this.onFlashbarChange}
-                                    flashbarItems={this.state.flashbarItems}
-                                />
-                            </IdeaAuthenticatedRoute>
-                        }
-                    />
+
                     <Route
                         path="/cluster/permissions/sharing-profiles/:profile_id"
                         element={

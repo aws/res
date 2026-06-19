@@ -16,6 +16,7 @@ from ideadatamodel import exceptions, errorcodes
 
 import time
 import os
+import stat
 import shutil
 import pwd
 from cryptography.hazmat.primitives import serialization as crypto_serialization
@@ -71,16 +72,50 @@ class UserHomeDirectory:
             platform = 'linux'
 
         id_rsa_file = os.path.join(self.ssh_dir, 'id_rsa')
-        if not Path(id_rsa_file).exists():
+        try:
+            os.lstat(id_rsa_file)
+        except OSError:
             raise exceptions.general_exception(f'Private key not found in home directory for user: {self.user.username}. '
                                                f'Launch at least one Linux virtual desktop session with a project using '
                                                f'the global home file system to have the key created for you.')
 
         key_format = self.validate_and_sanitize_key_format(key_format)
 
+        def safe_open_no_follow(file: str):
+            try:
+                fd = os.open(file, os.O_RDONLY | os.O_NOFOLLOW)
+            except OSError:
+                raise exceptions.unauthorized_access(
+                    f'Refusing to read private key for user: {self.user.username} '
+                    f'(symlink or inaccessible file)'
+                )
+            try:
+                file_stat = os.fstat(fd)
+                if not stat.S_ISREG(file_stat.st_mode):
+                    raise exceptions.unauthorized_access(
+                        f'Private key file is not a regular file for user: {self.user.username}'
+                    )
+                expected_uid = self.user.uid
+                if expected_uid is None:
+                    try:
+                        expected_uid = pwd.getpwnam(self.user.username).pw_uid
+                    except KeyError:
+                        raise exceptions.unauthorized_access(
+                            f'Cannot resolve UID for user: {self.user.username}'
+                        )
+                if file_stat.st_uid != expected_uid:
+                    raise exceptions.unauthorized_access(
+                        f'Private key file ownership mismatch for user: {self.user.username}'
+                    )
+                with os.fdopen(fd, 'r') as f:
+                    fd = None 
+                    return f.read()
+            finally:
+                if fd is not None:
+                    os.close(fd)
+
         def read_private_key_content(file: str) -> str:
-            with open(file, 'r') as f:
-                private_key_content = f.read()
+            private_key_content = safe_open_no_follow(file)
 
             lines = private_key_content.splitlines()
             if platform in ('linux', 'osx'):

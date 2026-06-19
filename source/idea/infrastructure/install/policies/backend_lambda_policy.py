@@ -36,6 +36,9 @@ class BackendLambdaPolicy(Policy):
             iam.PolicyStatement(
                 actions=[
                     "ec2:TerminateInstances",
+                    "ec2:StopInstances",
+                    "ec2:StartInstances",
+                    "ec2:RebootInstances",
                     "ec2:RunInstances",
                     "ec2:CreateTags",
                     "ec2:MonitorInstances",
@@ -43,6 +46,8 @@ class BackendLambdaPolicy(Policy):
                 resources=[
                     arn_builder.get_arn("ec2", "*/*"),
                     arn_builder.get_arn("ec2", "image/*", account_id=""),
+                    arn_builder.get_arn("license-manager", "license-configuration:*"),
+                    arn_builder.get_arn("resource-groups", "group/*"),
                 ],
             ),
             iam.PolicyStatement(
@@ -83,6 +88,10 @@ class BackendLambdaPolicy(Policy):
                     arn_builder.get_iam_role_arn(
                         f"{arn_builder.cluster_name}-ad-sync-task-role"
                     ),
+                    arn_builder.get_iam_role_arn(
+                        f"{arn_builder.cluster_name}-vdc-host-scoped-down-role"
+                    ),
+                    arn_builder.get_vdi_iam_role_arn("*"),
                 ],
             ),
             iam.PolicyStatement(
@@ -105,6 +114,21 @@ class BackendLambdaPolicy(Policy):
                 resources=["*"],
             ),
             iam.PolicyStatement(
+                actions=[
+                    "ec2:ModifyInstanceAttribute",
+                    "ec2:CreateTags",
+                ],
+                resources=[
+                    arn_builder.get_arn("ec2", "instance/*"),
+                ],
+                conditions={
+                    "StringEquals": {
+                        "aws:ResourceTag/res:EnvironmentName": arn_builder.cluster_name,
+                        "aws:ResourceTag/res:NodeType": "virtual-desktop-dcv-host",
+                    }
+                },
+            ),
+            iam.PolicyStatement(
                 actions=["secretsmanager:GetSecretValue"],
                 resources=["*"],
                 conditions={
@@ -115,14 +139,16 @@ class BackendLambdaPolicy(Policy):
                 },
             ),
             iam.PolicyStatement(
-                actions=["ssm:GetParameter"],
+                actions=["ssm:GetParameter", "ssm:GetParameters"],
                 resources=[
                     arn_builder.get_arn("ssm", "parameter/aws/service/*", account_id="*", region="*"),
                 ],
             ),
             iam.PolicyStatement(
-                actions=["ssm:GetParameter"],
-                resources=["*"],
+                actions=["ssm:GetParameter", "ssm:GetParameters"],
+                resources=[
+                    arn_builder.get_arn("ssm", "parameter/*"),
+                ],
                 conditions={
                     "StringEquals": {
                         "ssm:ResourceTag/res:EnvironmentName": arn_builder.cluster_name,

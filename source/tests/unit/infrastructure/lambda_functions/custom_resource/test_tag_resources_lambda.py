@@ -353,32 +353,6 @@ class TestTagResourcesLambda(TestCase):
             Resources=[DUMMY_ARN_1, DUMMY_ARN_2], Tags=DUMMY_CUSTOM_TAG_LIST
         )
 
-    def test_update_tags_dcv_ddb(self):
-        mock_ddb_client = MagicMock()
-        mock_paginator = MagicMock()
-        mock_paginate = iter(
-            [
-                {
-                    "TableNames": [
-                        f"{TEST_ENV_NAME}.vdc.dcv-broker.{DUMMY_ARN_1}",
-                        "invalid-table-name",
-                    ]
-                }
-            ]
-        )
-        mock_paginator.paginate.return_value = mock_paginate
-        mock_ddb_client.get_paginator.return_value = mock_paginator
-        self.monkeypatch.setattr(
-            boto3, "client", MagicMock(return_value=mock_ddb_client)
-        )
-
-        tag_resources_handler._update_tags_dcv_ddb(
-            DUMMY_CUSTOM_TAG_LIST, [], TEST_ENV_NAME
-        )
-
-        assert mock_ddb_client.untag_resource.call_count == 0
-        assert mock_ddb_client.tag_resource.call_count == 1
-
     def test_update_tags_existing_hosts(self):
         mock_ec2_client = MagicMock()
         mock_iam_client = MagicMock()

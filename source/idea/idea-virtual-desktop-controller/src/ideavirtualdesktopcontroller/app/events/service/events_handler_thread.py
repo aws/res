@@ -20,9 +20,6 @@ from ideavirtualdesktopcontroller.app.events.handlers.base_event_handler import 
 from ideavirtualdesktopcontroller.app.events.handlers.db_entry_event_handlers.db_entry_created_event_handler import DbEntryCreatedEventHandler
 from ideavirtualdesktopcontroller.app.events.handlers.db_entry_event_handlers.db_entry_deleted_event_handler import DbEntryDeletedEventHandler
 from ideavirtualdesktopcontroller.app.events.handlers.db_entry_event_handlers.db_entry_updated_event_handler import DbEntryUpdatedEventHandler
-from ideavirtualdesktopcontroller.app.events.handlers.dcv_broker_userdata_execution_complete_event_handler import DCVBrokerUserdataExecutionCompleteEventHandler
-from ideavirtualdesktopcontroller.app.events.handlers.dcv_host_event_handlers.dcv_host_ready_event_handler import DCVHostReadyEventHandler
-from ideavirtualdesktopcontroller.app.events.handlers.dcv_host_event_handlers.dcv_host_reboot_complete_event_handler import DCVHostRebootCompleteEventHandler
 from ideavirtualdesktopcontroller.app.events.handlers.ec2_state_change_event_handler import EC2StateChangeEventHandler
 from ideavirtualdesktopcontroller.app.events.handlers.idea_session_permissions_event_handlers.idea_session_permissions_enforce_event_handler import IDEASessionPermissionsEnforceEventHandler
 from ideavirtualdesktopcontroller.app.events.handlers.idea_session_permissions_event_handlers.idea_session_permissions_update_event_handler import IDEASessionPermissionsUpdateEventHandler
@@ -34,11 +31,9 @@ from ideavirtualdesktopcontroller.app.events.handlers.scheduled_event_handler im
 from ideavirtualdesktopcontroller.app.events.handlers.ssm_commands_progress_event_handlers.disable_userdata_windows_command_progress_event_handler import DisableUserdataWindowsCommandProgressEventListener
 from ideavirtualdesktopcontroller.app.events.handlers.ssm_commands_progress_event_handlers.delete_lock_files_linux_command_progress_event_handler import DeleteLockFilesLinuxCommandProgressEventListener
 from ideavirtualdesktopcontroller.app.events.handlers.ssm_commands_progress_event_handlers.enable_userdata_windows_command_progress_event_handler import EnableUserdataWindowsCommandProgressEventListener
-from ideavirtualdesktopcontroller.app.events.handlers.ssm_commands_progress_event_handlers.idea_resume_session_command_progress_event_handler import IDEAResumeSessionCommandProgressEventHandler
 from ideavirtualdesktopcontroller.app.events.handlers.ssm_commands_progress_event_handlers.idea_session_cpu_utilization_command_progress_event_handler import IDEASessionCPUUtilizationCommandProgressEventHandler
 from ideavirtualdesktopcontroller.app.events.handlers.user_management_event_handlers.user_created_event_handler import UserCreatedEventHandler
 from ideavirtualdesktopcontroller.app.events.handlers.user_management_event_handlers.user_disabled_event_handler import UserDisabledEventHandler
-from ideavirtualdesktopcontroller.app.events.handlers.validate_dcv_session_event_handlers.validate_dcv_session_ready_event_handler import ValidateDCVSessionReadyEventHandler
 from ideavirtualdesktopcontroller.app.events.handlers.validate_software_stack_event_handler import ValidateSoftwareStackEventHandler
 
 class EventsHandlerThread(IdeaThread):
@@ -50,7 +45,6 @@ class EventsHandlerThread(IdeaThread):
         self.NUM_OF_MESSAGES = num_of_messages_to_retrieve_per_call
         self.EVENT_HANDLER_MAP: Dict[VirtualDesktopEventType, BaseVirtualDesktopControllerEventHandler] = {
             VirtualDesktopEventType.VALIDATE_SOFTWARE_STACK_CREATION_EVENT: ValidateSoftwareStackEventHandler(context=self.context),
-            VirtualDesktopEventType.VALIDATE_DCV_SESSION_READY_EVENT: ValidateDCVSessionReadyEventHandler(context=self.context),
             VirtualDesktopEventType.IDEA_SESSION_SCHEDULED_RESUME_EVENT: IDEASessionScheduledResumeEventHandler(context=self.context),
             VirtualDesktopEventType.IDEA_SESSION_SCHEDULED_STOP_EVENT: IDEASessionScheduledStopEventHandler(context=self.context),
             VirtualDesktopEventType.IDEA_SESSION_TERMINATE_EVENT: IDEASessionTerminateEventHandler(context=self.context),
@@ -61,13 +55,9 @@ class EventsHandlerThread(IdeaThread):
             VirtualDesktopEventType.DB_ENTRY_CREATED_EVENT: DbEntryCreatedEventHandler(context=self.context),
             VirtualDesktopEventType.DB_ENTRY_UPDATED_EVENT: DbEntryUpdatedEventHandler(context=self.context),
             VirtualDesktopEventType.DB_ENTRY_DELETED_EVENT: DbEntryDeletedEventHandler(context=self.context),
-            VirtualDesktopEventType.DCV_HOST_READY_EVENT: DCVHostReadyEventHandler(context=self.context),
-            VirtualDesktopEventType.DCV_HOST_REBOOT_COMPLETE_EVENT: DCVHostRebootCompleteEventHandler(context=self.context),
-            VirtualDesktopEventType.DCV_BROKER_USERDATA_EXECUTION_COMPLETE_EVENT: DCVBrokerUserdataExecutionCompleteEventHandler(context=self.context),
             VirtualDesktopEventType.SCHEDULED_EVENT: ScheduledEventHandler(context=self.context),
             VirtualDesktopEventType.USER_DISABLED_EVENT: UserDisabledEventHandler(context=self.context),
             VirtualDesktopEventType.USER_CREATED_EVENT: UserCreatedEventHandler(context=self.context),
-            VirtualDesktopEventType.IDEA_SESSION_RESUME_SESSION_COMMAND_PROGRESS_EVENT: IDEAResumeSessionCommandProgressEventHandler(context=self.context),
             VirtualDesktopEventType.ENABLE_USERDATA_WINDOWS_COMMAND_PROGRESS_EVENT: EnableUserdataWindowsCommandProgressEventListener(context=self.context),
             VirtualDesktopEventType.DISABLE_USERDATA_WINDOWS_COMMAND_PROGRESS_EVENT: DisableUserdataWindowsCommandProgressEventListener(context=self.context),
             VirtualDesktopEventType.DELETE_LOCK_FILES_LINUX_COMMAND_PROGRESS_EVENT: DeleteLockFilesLinuxCommandProgressEventListener(context=self.context),

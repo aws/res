@@ -1,5 +1,0 @@
--r idea-sdk.in
--r library.in
--r bootstrap.in
-supervisor~=4.0
-click==8.1.8

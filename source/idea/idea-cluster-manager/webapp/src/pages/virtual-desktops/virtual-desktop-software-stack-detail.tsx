@@ -235,7 +235,7 @@ class VirtualDesktopSoftwareStackDetail extends Component<VirtualDesktopSoftware
                                 gpu: gpu,
                                 min_storage: min_storage,
                                 min_ram: min_ram,
-                                projects: projects,
+                                projects: projects as any,
                                 placement: placement,
                                 allowed_instance_types: allowed_instance_types
                             }

@@ -86,14 +86,6 @@ def configure() -> None:
         subprocess.run(
             ["powershell.exe", "-Command", "Start-Service -Name dcvserver"], check=True
         )
-        subprocess.run(
-            [
-                "powershell.exe",
-                "-Command",
-                "Start-Service -Name DcvSessionManagerAgentService",
-            ],
-            check=True,
-        )
         logger.info("Successfully started DCV services")
     except Exception as e:
         logger.error(f"Error when starting DCV services: {e}")

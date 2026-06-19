@@ -146,7 +146,9 @@ serializers inherit from. Contains all common dynamic serialization behavior.
 
 from typing import Dict, Any, Optional
 from datetime import datetime
+import importlib
 import logging
+import re
 from enum import Enum
 
 from res.utils import time_utils  # type: ignore
@@ -238,8 +240,6 @@ class BaseSerializer:
         model_class_name = self.__class__.__name__.replace('Serializer', '')
         
         # Import the specific model module (we know it exists from Smithy generation)
-        import re
-        import importlib
         module_name = re.sub(r'(?<!^)(?=[A-Z])', '_', model_class_name).lower()
         
         try:
@@ -311,15 +311,17 @@ class BaseSerializer:
                 # Let util.deserialize_model() handle object creation
                 try:
                     # Get the serializer for this type and process the dictionary
-                    import re
-                    import importlib
                     module_name = re.sub(r'(?<!^)(?=[A-Z])', '_', expected_type.__name__).lower()
                     serializer_module = importlib.import_module(f'datamodel.serializers.{module_name}_serializer')
-                    serializer_instance = getattr(serializer_module, module_name + '_serializer')
+                    # Singleton instances use lowercased class name without underscores
+                    # e.g. VirtualDesktopSoftwareStackSerializer -> virtualdesktopsoftwarestack_serializer
+                    # This differs from the module file name which uses snake_case
+                    singleton_name = expected_type.__name__.lower() + '_serializer'
+                    serializer_instance = getattr(serializer_module, singleton_name)
                     # Return the processed dictionary, not an object
                     return serializer_instance.from_ddb_dict(value)
-                except (ImportError, AttributeError):
-                    # Fallback - return the dictionary as-is
+                except (ImportError, AttributeError) as e:
+                    logger.debug(f"Could not load serializer for {expected_type.__name__}: {e}")
                     return value
             
             # Check if it's a model type with from_dict fallback

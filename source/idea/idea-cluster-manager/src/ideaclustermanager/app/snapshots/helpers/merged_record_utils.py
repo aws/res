@@ -18,6 +18,7 @@ class MergedRecordActionType(Enum):
     CREATE = "create"
     UPDATE = "update"
     DELETE = "delete"
+    UNCHANGED = "unchanged"
 
 
 class MergedRecordDelta(BaseModel):

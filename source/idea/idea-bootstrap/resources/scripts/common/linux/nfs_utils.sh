@@ -62,7 +62,7 @@ function install_efs_mount_helper() {
     which amazon-efs-mount-watchdog > /dev/null 2>&1
     if [[ "$?" != "0" ]]; then
       log_info "Installing Amazon EFS Mount Helper"
-      install_efs_mount_helper_impl ${BASE_OS}
+      install_efs_mount_helper_impl ${BASE_OS} || exit 1
   else
     log_info "Found existing Amazon EFS Mount Helper on system"
   fi

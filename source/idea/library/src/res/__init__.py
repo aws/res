@@ -3,5 +3,4 @@
 
 import res_meta  # type: ignore
 
-__name__ = res_meta.__name__
 __version__ = res_meta.__version__

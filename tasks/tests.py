@@ -258,6 +258,26 @@ def bootstrap(c, keywords=None, params=None, capture_output=False, cov_report=No
     raise SystemExit(exit_code)
 
 
+@task(iterable=['params'])
+def dcv_session_management(c, keywords=None, params=None, capture_output=False, cov_report=None):
+    # type: (Context, str, List[str], bool, str) -> None
+    """
+    run dcv session management unit tests
+    """
+    exit_code = _run_unit_tests(
+        c=c,
+        component_name='dcv-session-management',
+        component_src=idea.props.dcv_session_management_src,
+        component_tests_src=idea.props.dcv_session_management_tests_src,
+        package_name='dcv_session_management',
+        params=params,
+        capture_output=capture_output,
+        keywords=keywords,
+        cov_report=cov_report
+    )
+    raise SystemExit(exit_code)
+
+
 @task(name='all', iterable=['params'], default=True)
 def run_all(c, keywords=None, params=None, capture_output=False, cov_report=None):
     # type: (Context, str, List[str], bool, str) -> None
@@ -274,6 +294,7 @@ def run_all(c, keywords=None, params=None, capture_output=False, cov_report=None
         library,
         datamodel,
         bootstrap,
+        dcv_session_management,
     ]
 
     exit_code = 0

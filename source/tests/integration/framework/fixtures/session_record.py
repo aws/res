@@ -3,7 +3,7 @@
 
 import logging
 import time
-from typing import Any, Dict
+from typing import Any, Dict, List
 
 import pytest
 from res.resources import sessions  # type: ignore
@@ -74,34 +74,52 @@ def delete_session_record(table_name: str, session_id: str, owner: str) -> None:
 @pytest.fixture
 def session_record(
     request: FixtureRequest,
-) -> Dict[str, Any]:
+) -> List[Dict[str, Any]]:
     """
-    Fixture for creating/deleting a dummy session record in DynamoDB.
+    Fixture for creating/deleting dummy session records in DynamoDB.
 
     Usage:
         @pytest.mark.parametrize("session_record", [
-            {"session_id": "test-123", "owner": "user1", "base_os": "amazonlinux2"}
+            [
+                {"session_id": "test-123", "owner": "user1"},
+                {"session_id": "test-456", "owner": "user2"},
+            ]
         ], indirect=True)
         def test_something(session_record):
-            # session_record contains the created record
+            # session_record is a list of created records
             pass
+
+    If a param dict includes "project_fixture": True, the fixture will resolve
+    the "project" fixture at runtime and set project.project_id on the session record.
+    The test must also parametrize the "project" fixture when using this option.
     """
-    params: Dict[str, Any] = request.param  # type: ignore
-    session_id: str = params["session_id"]
-    owner: str = params["owner"]
-    additional_fields: Dict[str, Any] = {
-        k: v for k, v in params.items() if k not in ["session_id", "owner"]
-    }
-    session_record = create_session_record(
-        table_name=sessions.SESSIONS_TABLE_NAME,
-        session_id=session_id,
-        owner=owner,
-        **additional_fields,
-    )
+    params_list: List[Dict[str, Any]] = request.param
+    records = []
+    for p in params_list:
+        session_id: str = p["session_id"]
+        owner: str = p["owner"]
+        additional_fields: Dict[str, Any] = {
+            k: v
+            for k, v in p.items()
+            if k not in ["session_id", "owner", "project_fixture"]
+        }
+        if p.get("project_fixture"):
+            project = request.getfixturevalue("project")
+            additional_fields["project"] = {"project_id": project.project_id}
+        record = create_session_record(
+            table_name=sessions.SESSIONS_TABLE_NAME,
+            session_id=session_id,
+            owner=owner,
+            **additional_fields,
+        )
+        records.append(record)
 
     def tear_down() -> None:
-        delete_session_record(sessions.SESSIONS_TABLE_NAME, session_id, owner)
+        for p in params_list:
+            delete_session_record(
+                sessions.SESSIONS_TABLE_NAME, p["session_id"], p["owner"]
+            )
 
     request.addfinalizer(tear_down)
 
-    return session_record
+    return records

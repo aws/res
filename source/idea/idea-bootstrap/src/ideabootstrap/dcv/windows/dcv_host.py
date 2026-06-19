@@ -7,7 +7,6 @@ import winreg
 
 from res.resources import cluster_settings
 from ideabootstrap.dcv import constants, dcv_utils
-from ideabootstrap.bootstrap_common import append_to_file
 from res.utils import logging_utils
 
 logger = logging_utils.get_logger("bootstrap")
@@ -45,11 +44,11 @@ def _configure_dcv_connectivity_registry() -> None:
 
 def _configure_dcv_security_registry() -> None:
     logger.info("Configuring DCV security registry ...")
+    idea_session_id = os.environ.get("IDEA_SESSION_ID")
+    if not idea_session_id:
+        raise ValueError("IDEA_SESSION_ID environment variable is required")
     try:
         internal_alb_endpoint = dcv_utils.get_cluster_internal_endpoint()
-        broker_agent_port = cluster_settings.get_setting(
-            constants.AGENT_COMMUNICATION_PORT_KEY
-        )
         key = winreg.CreateKeyEx(
             winreg.HKEY_USERS,
             f"{constants.DCV_REGISTRY_PATH}\\security",
@@ -61,7 +60,7 @@ def _configure_dcv_security_registry() -> None:
             "auth-token-verifier",
             0,
             winreg.REG_SZ,
-            f"{internal_alb_endpoint}:{broker_agent_port}/agent/validate-authentication-token",
+            f"{internal_alb_endpoint}/externalAuth/{idea_session_id}",
         )
         winreg.SetValueEx(key, "no-tls-strict", 0, winreg.REG_DWORD, 1)
         winreg.SetValueEx(key, "os-auto-lock", 0, winreg.REG_DWORD, 0)
@@ -116,6 +115,35 @@ def _remove_dcv_session_management_registry() -> None:
         logger.error(f"Failed to remove session management registry: {e}")
 
 
+def apply_automatic_console_session_config(
+    session_owner: str, storage_root: str, permissions_file_path: str
+) -> None:
+    """Write automatic-console-session registry keys and restart dcvserver."""
+    sm_key = winreg.CreateKeyEx(
+        winreg.HKEY_USERS,
+        f"{constants.DCV_REGISTRY_PATH}\\session-management",
+        0,
+        winreg.KEY_ALL_ACCESS,
+    )
+    winreg.SetValueEx(sm_key, "create-session", 0, winreg.REG_DWORD, 1)
+    winreg.CloseKey(sm_key)
+
+    key = winreg.CreateKeyEx(
+        winreg.HKEY_USERS,
+        f"{constants.DCV_REGISTRY_PATH}\\session-management\\automatic-console-session",
+        0,
+        winreg.KEY_ALL_ACCESS,
+    )
+    winreg.SetValueEx(key, "owner", 0, winreg.REG_SZ, session_owner)
+    winreg.SetValueEx(key, "storage-root", 0, winreg.REG_SZ, storage_root)
+    winreg.SetValueEx(key, "permissions-file", 0, winreg.REG_SZ, permissions_file_path)
+    winreg.CloseKey(key)
+    logger.info("Updated registry with automatic-console-session config")
+
+    subprocess.run(["powershell.exe", "-Command", "Restart-Service dcvserver"], check=True)
+    logger.info("Restarted dcvserver")
+
+
 def configure() -> None:
     logger.info("Configuring dcv host ...")
 
@@ -133,13 +161,6 @@ def configure() -> None:
     # This could happen if the AMI was baked from a previous VDI session
     subprocess.run(
         ["powershell.exe", "-Command", "Stop-Service dcvserver"],
-    )
-    subprocess.run(
-        [
-            "powershell.exe",
-            "-Command",
-            "Stop-Service DcvSessionManagerAgentService",
-        ],
     )
     logger.info("Successfully stopped DCV services")
 

@@ -31,27 +31,31 @@ class ResEnvironment:
         self._custom_web_app_domain_name = custom_web_app_domain_name
 
     @property
+    def environment_name(self) -> str:
+        return self._environment_name
+
+    @property
     def region(self) -> str:
         return self._region
+
+    def _get_alb_dns_name(self, alb_name: str) -> str:
+        session = boto3.session.Session(region_name=self._region)
+        client = session.client("elbv2")
+        response = client.describe_load_balancers(Names=[alb_name])
+        load_balancers = response.get("LoadBalancers", [])
+        if len(load_balancers) != 1:
+            return ""
+        return str(load_balancers[0].get("DNSName", ""))
 
     @cached_property
     def web_app_domain_name(self) -> str:
         if self._custom_web_app_domain_name:
             return self._custom_web_app_domain_name
+        return self._get_alb_dns_name(f"{self._environment_name}-external-alb")
 
-        session = boto3.session.Session(region_name=self._region)
-        client = session.client("elbv2")
-
-        describe_load_balancers_response = client.describe_load_balancers(
-            Names=[f"{self._environment_name}-external-alb"]
-        )
-        dns_name: str = (
-            describe_load_balancers_response["LoadBalancers"][0].get("DNSName", "")
-            if len(describe_load_balancers_response.get("LoadBalancers", [])) == 1
-            else ""
-        )
-
-        return dns_name
+    @cached_property
+    def internal_alb_endpoint(self) -> str:
+        return self._get_alb_dns_name(f"{self._environment_name}-internal-alb")
 
 
 @pytest.fixture

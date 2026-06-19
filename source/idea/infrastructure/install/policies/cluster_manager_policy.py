@@ -405,6 +405,11 @@ class ClusterManagerPolicy(Policy):
                 effect=iam.Effect.ALLOW,
             ),
             iam.PolicyStatement(
+                actions=["tag:GetResources"],
+                resources=["*"],
+                effect=iam.Effect.ALLOW,
+            ),
+            iam.PolicyStatement(
                 actions=[
                     "elasticloadbalancing:DescribeTargetGroups",
                     "elasticloadbalancing:DescribeListeners",

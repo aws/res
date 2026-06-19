@@ -1,0 +1,921 @@
+openapi: 3.0.2
+info:
+  description: DCV Session Management API
+  title: DCVSessionManagement
+  version: 1.0.0
+servers:
+- url: /
+# Comment out the security section for local development
+security:
+- smithy.api.httpBearerAuth: []
+paths:
+  /describeSessions:
+    post:
+      description: Describes DCV sessions
+      x-openapi-router-controller: api.controllers.sessions_controller
+      operationId: describe_sessions
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DescribeSessionsRequestContent"
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DescribeSessionsResponseContent"
+          description: DescribeSessions 200 response
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BadRequestExceptionResponseContent"
+          description: BadRequestException 400 response
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InternalServiceExceptionResponseContent"
+          description: InternalServiceException 500 response
+      tags:
+      - sessions
+  /externalAuth/{resSessionId}:
+    post:
+      description: Validate user credentials and session permissions on DCV session
+        streaming
+      x-openapi-router-controller: api.controllers.sessions_controller
+      operationId: external_auth
+      parameters:
+      - description: RES session ID embedded in the auth-token-verifier URL configured
+          on the DCV host
+        explode: false
+        in: path
+        name: resSessionId
+        required: true
+        schema:
+          description: RES session ID embedded in the auth-token-verifier URL configured
+            on the DCV host
+          maxLength: 64
+          minLength: 1
+          type: string
+        style: simple
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ExternalAuthRequestContent"
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ExternalAuthResponseContent"
+          description: ExternalAuth 200 response
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BadRequestExceptionResponseContent"
+          description: BadRequestException 400 response
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UnauthorizedClientErrorResponseContent"
+          description: UnauthorizedClientError 401 response
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InternalServiceExceptionResponseContent"
+          description: InternalServiceException 500 response
+      security: []
+      tags:
+      - sessions
+  /health:
+    get:
+      description: Health check endpoint
+      x-openapi-router-controller: api.controllers.health_controller
+      operationId: health_check
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthCheckResponseContent"
+          description: HealthCheck 200 response
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InternalServiceExceptionResponseContent"
+          description: InternalServiceException 500 response
+      tags:
+      - health
+  /resolveSession:
+    post:
+      description: Maps RES Session ID to a destination host running the Amazon DCV
+        server
+      x-openapi-router-controller: api.controllers.session_resolver_controller
+      operationId: resolve_session
+      parameters:
+      - description: RES Session ID to resolve
+        explode: true
+        in: query
+        name: sessionId
+        required: true
+        schema:
+          description: RES Session ID to resolve
+          minLength: 1
+          type: string
+        style: form
+      - description: Transport protocol
+        explode: true
+        in: query
+        name: transport
+        required: true
+        schema:
+          description: Transport protocol
+          minLength: 1
+          type: string
+        style: form
+      - description: Client IP address
+        explode: true
+        in: query
+        name: clientIpAddress
+        required: true
+        schema:
+          description: Client IP address
+          minLength: 1
+          type: string
+        style: form
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ResolveSessionResponseContent"
+          description: ResolveSession 200 response
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BadRequestExceptionResponseContent"
+          description: BadRequestException 400 response
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/NotFoundExceptionResponseContent"
+          description: NotFoundException 404 response
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InternalServiceExceptionResponseContent"
+          description: InternalServiceException 500 response
+      security: []
+      tags:
+      - sessionResolver
+  /sessionConnectionData/{sessionId}/{username}:
+    post:
+      description: Gets the information to connect to a session
+      x-openapi-router-controller: api.controllers.sessions_controller
+      operationId: get_session_connection_data
+      parameters:
+      - description: Session id to get connection details for
+        explode: false
+        in: path
+        name: sessionId
+        required: true
+        schema:
+          description: Session id to get connection details for
+          minLength: 1
+          type: string
+        style: simple
+      - description: User to get the connection token for
+        explode: false
+        in: path
+        name: username
+        required: true
+        schema:
+          description: User to get the connection token for
+          minLength: 1
+          type: string
+        style: simple
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GetSessionConnectionDataResponseContent"
+          description: GetSessionConnectionData 200 response
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BadRequestExceptionResponseContent"
+          description: BadRequestException 400 response
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ForbiddenExceptionResponseContent"
+          description: ForbiddenException 403 response
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InternalServiceExceptionResponseContent"
+          description: InternalServiceException 500 response
+      tags:
+      - sessions
+  /sessionPermissions:
+    put:
+      description: Updates DCV session permissions
+      x-openapi-router-controller: api.controllers.sessions_controller
+      operationId: update_session_permissions
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateSessionPermissionsRequestContent"
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UpdateSessionPermissionsResponseContent"
+          description: UpdateSessionPermissions 200 response
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BadRequestExceptionResponseContent"
+          description: BadRequestException 400 response
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InternalServiceExceptionResponseContent"
+          description: InternalServiceException 500 response
+      tags:
+      - sessions
+  /sessionScreenshots:
+    post:
+      description: Gets DCV session screenshots
+      x-openapi-router-controller: api.controllers.sessions_controller
+      operationId: get_session_screenshots
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/GetSessionScreenshotsRequestContent"
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GetSessionScreenshotsResponseContent"
+          description: GetSessionScreenshots 200 response
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BadRequestExceptionResponseContent"
+          description: BadRequestException 400 response
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InternalServiceExceptionResponseContent"
+          description: InternalServiceException 500 response
+      tags:
+      - sessions
+components:
+  schemas:
+    AuthResult:
+      enum:
+      - "yes"
+      - "no"
+      title: AuthResult
+      type: string
+    BadRequestExceptionResponseContent:
+      description: This exception is thrown when a client calls an API with wrong
+        parameters.
+      example:
+        message: message
+      properties:
+        message:
+          title: message
+          type: string
+      title: BadRequestExceptionResponseContent
+      type: object
+    DescribeSessionsRequestContent:
+      example:
+        sessions:
+        - owner: owner
+          session_id: session_id
+        - owner: owner
+          session_id: session_id
+      properties:
+        sessions:
+          description: Sessions to describe
+          items:
+            $ref: "#/components/schemas/DescribeSessionsRequestData"
+          minItems: 1
+          title: sessions
+          type: array
+      required:
+      - sessions
+      title: DescribeSessionsRequestContent
+      type: object
+    DescribeSessionsRequestData:
+      example:
+        owner: owner
+        session_id: session_id
+      properties:
+        session_id:
+          description: The RES session id
+          minLength: 1
+          title: session_id
+          type: string
+        owner:
+          description: The session owner
+          minLength: 1
+          title: owner
+          type: string
+      required:
+      - owner
+      - session_id
+      title: DescribeSessionsRequestData
+      type: object
+    DescribeSessionsResponseContent:
+      example:
+        unsuccessful_list:
+        - session_id: session_id
+          failure_reason: failure_reason
+        - session_id: session_id
+          failure_reason: failure_reason
+        successful_list:
+        - num_of_connections: 0
+          session_id: session_id
+        - num_of_connections: 0
+          session_id: session_id
+      properties:
+        successful_list:
+          description: The array of sessions successfully described
+          items:
+            $ref: "#/components/schemas/DescribeSessionsSuccessfulResponse"
+          title: successful_list
+          type: array
+        unsuccessful_list:
+          description: The array of sessions that failed to describe
+          items:
+            $ref: "#/components/schemas/DescribeSessionsUnsuccessfulResponse"
+          title: unsuccessful_list
+          type: array
+      required:
+      - successful_list
+      - unsuccessful_list
+      title: DescribeSessionsResponseContent
+      type: object
+    DescribeSessionsSuccessfulResponse:
+      example:
+        num_of_connections: 0
+        session_id: session_id
+      properties:
+        session_id:
+          description: The session id
+          title: session_id
+          type: string
+        num_of_connections:
+          description: The number of active connections to the session
+          format: int32
+          title: num_of_connections
+          type: integer
+      required:
+      - num_of_connections
+      - session_id
+      title: DescribeSessionsSuccessfulResponse
+      type: object
+    DescribeSessionsUnsuccessfulResponse:
+      example:
+        session_id: session_id
+        failure_reason: failure_reason
+      properties:
+        session_id:
+          description: The session id
+          title: session_id
+          type: string
+        failure_reason:
+          description: The failure reason
+          title: failure_reason
+          type: string
+      required:
+      - failure_reason
+      - session_id
+      title: DescribeSessionsUnsuccessfulResponse
+      type: object
+    ExternalAuthRequestContent:
+      example:
+        authentication_token: authentication_token
+        session_id: session_id
+        client_address: client_address
+      properties:
+        session_id:
+          description: DCV session ID (always 'console' for auto-created sessions)
+          maxLength: 64
+          minLength: 1
+          title: session_id
+          type: string
+        authentication_token:
+          description: Authentication token
+          format: password
+          maxLength: 2048
+          minLength: 1
+          title: authentication_token
+          type: string
+        client_address:
+          description: Client IP address
+          maxLength: 45
+          minLength: 1
+          title: client_address
+          type: string
+      required:
+      - authentication_token
+      - client_address
+      - session_id
+      title: ExternalAuthRequestContent
+      type: object
+    ExternalAuthResponseContent:
+      example:
+        result: "yes"
+        message: message
+        username: username
+      properties:
+        result:
+          $ref: "#/components/schemas/AuthResult"
+        username:
+          description: "Authenticated username, present when result is 'yes'"
+          title: username
+          type: string
+        message:
+          description: "Failure message, present when result is 'no'"
+          title: message
+          type: string
+      required:
+      - result
+      title: ExternalAuthResponseContent
+      type: object
+    ForbiddenExceptionResponseContent:
+      description: The client does not have access to the requested resource.
+      example:
+        message: message
+      properties:
+        message:
+          title: message
+          type: string
+      title: ForbiddenExceptionResponseContent
+      type: object
+    GetSessionConnectionDataResponseContent:
+      example:
+        session:
+          owner: owner
+          server:
+            webUrlPath: webUrlPath
+          id: id
+        connectionToken: connectionToken
+      properties:
+        session:
+          $ref: "#/components/schemas/Session"
+        connectionToken:
+          description: The token used to connect to the session
+          format: password
+          title: connectionToken
+          type: string
+      required:
+      - connectionToken
+      - session
+      title: GetSessionConnectionDataResponseContent
+      type: object
+    GetSessionScreenshotRequestData:
+      example:
+        session_id: session_id
+      properties:
+        session_id:
+          description: The RES session id
+          minLength: 1
+          title: session_id
+          type: string
+      required:
+      - session_id
+      title: GetSessionScreenshotRequestData
+      type: object
+    GetSessionScreenshotSuccessfulResponse:
+      example:
+        session_screenshot:
+          images:
+          - data: data
+            created_on: created_on
+            format: format
+            primary: true
+          - data: data
+            created_on: created_on
+            format: format
+            primary: true
+          session_id: session_id
+      properties:
+        session_screenshot:
+          $ref: "#/components/schemas/SessionScreenshot"
+      required:
+      - session_screenshot
+      title: GetSessionScreenshotSuccessfulResponse
+      type: object
+    GetSessionScreenshotUnsuccessfulResponse:
+      example:
+        get_session_screenshot_request_data:
+          session_id: session_id
+        failure_reason: failure_reason
+      properties:
+        get_session_screenshot_request_data:
+          $ref: "#/components/schemas/GetSessionScreenshotRequestData"
+        failure_reason:
+          description: The failure reason
+          title: failure_reason
+          type: string
+      required:
+      - failure_reason
+      - get_session_screenshot_request_data
+      title: GetSessionScreenshotUnsuccessfulResponse
+      type: object
+    GetSessionScreenshotsRequestContent:
+      example:
+        requester: requester
+        sessions:
+        - session_id: session_id
+        - session_id: session_id
+      properties:
+        requester:
+          description: The username of the screenshots requester.
+          minLength: 1
+          title: requester
+          type: string
+        sessions:
+          description: Sessions to get screenshots for
+          items:
+            $ref: "#/components/schemas/GetSessionScreenshotRequestData"
+          title: sessions
+          type: array
+      required:
+      - requester
+      - sessions
+      title: GetSessionScreenshotsRequestContent
+      type: object
+    GetSessionScreenshotsResponseContent:
+      example:
+        unsuccessful_list:
+        - get_session_screenshot_request_data:
+            session_id: session_id
+          failure_reason: failure_reason
+        - get_session_screenshot_request_data:
+            session_id: session_id
+          failure_reason: failure_reason
+        successful_list:
+        - session_screenshot:
+            images:
+            - data: data
+              created_on: created_on
+              format: format
+              primary: true
+            - data: data
+              created_on: created_on
+              format: format
+              primary: true
+            session_id: session_id
+        - session_screenshot:
+            images:
+            - data: data
+              created_on: created_on
+              format: format
+              primary: true
+            - data: data
+              created_on: created_on
+              format: format
+              primary: true
+            session_id: session_id
+      properties:
+        successful_list:
+          description: The array of session screenshots successfully retrieved
+          items:
+            $ref: "#/components/schemas/GetSessionScreenshotSuccessfulResponse"
+          title: successful_list
+          type: array
+        unsuccessful_list:
+          description: The array of session screenshots that cannot be retrieved
+          items:
+            $ref: "#/components/schemas/GetSessionScreenshotUnsuccessfulResponse"
+          title: unsuccessful_list
+          type: array
+      required:
+      - successful_list
+      - unsuccessful_list
+      title: GetSessionScreenshotsResponseContent
+      type: object
+    HealthCheckResponseContent:
+      example:
+        status: status
+      properties:
+        status:
+          description: Health status
+          title: status
+          type: string
+      title: HealthCheckResponseContent
+      type: object
+    InternalServiceExceptionResponseContent:
+      description: This exception is thrown on an unhandled service error.
+      example:
+        message: message
+      properties:
+        message:
+          title: message
+          type: string
+      title: InternalServiceExceptionResponseContent
+      type: object
+    NotFoundExceptionResponseContent:
+      description: The requested entity is not found.
+      example:
+        message: message
+      properties:
+        message:
+          title: message
+          type: string
+      title: NotFoundExceptionResponseContent
+      type: object
+    ResolveSessionResponseContent:
+      example:
+        DcvServerEndpoint: DcvServerEndpoint
+        Port: 0
+        WebUrlPath: WebUrlPath
+        TransportProtocol: TransportProtocol
+        SessionId: SessionId
+      properties:
+        SessionId:
+          description: Resolved session ID
+          title: SessionId
+          type: string
+        TransportProtocol:
+          description: Transport protocol for connection
+          title: TransportProtocol
+          type: string
+        DcvServerEndpoint:
+          description: DCV server DNS name
+          title: DcvServerEndpoint
+          type: string
+        Port:
+          description: Port number for connection
+          format: int32
+          title: Port
+          type: integer
+        WebUrlPath:
+          description: Web URL path for the session
+          title: WebUrlPath
+          type: string
+      required:
+      - DcvServerEndpoint
+      - Port
+      - SessionId
+      - TransportProtocol
+      - WebUrlPath
+      title: ResolveSessionResponseContent
+      type: object
+    Server:
+      description: The entity representing a server in DCV Session Manager
+      example:
+        webUrlPath: webUrlPath
+      properties:
+        webUrlPath:
+          description: The server web url path
+          minLength: 1
+          title: webUrlPath
+          type: string
+      required:
+      - webUrlPath
+      title: Server
+      type: object
+    Session:
+      description: The entity that represents a session in DCV session manager
+      example:
+        owner: owner
+        server:
+          webUrlPath: webUrlPath
+        id: id
+      properties:
+        id:
+          description: The id of the session
+          minLength: 1
+          title: id
+          type: string
+        owner:
+          description: The owner of the session
+          minLength: 1
+          title: owner
+          type: string
+        server:
+          $ref: "#/components/schemas/Server"
+      required:
+      - id
+      - owner
+      - server
+      title: Session
+      type: object
+    SessionScreenshot:
+      example:
+        images:
+        - data: data
+          created_on: created_on
+          format: format
+          primary: true
+        - data: data
+          created_on: created_on
+          format: format
+          primary: true
+        session_id: session_id
+      properties:
+        session_id:
+          description: The id of the session
+          minLength: 1
+          title: session_id
+          type: string
+        images:
+          description: The array of session screenshots
+          items:
+            $ref: "#/components/schemas/SessionScreenshotImage"
+          title: images
+          type: array
+      required:
+      - images
+      - session_id
+      title: SessionScreenshot
+      type: object
+    SessionScreenshotImage:
+      example:
+        data: data
+        created_on: created_on
+        format: format
+        primary: true
+      properties:
+        format:
+          description: "The image format. Supported formats: jpeg, png"
+          minLength: 1
+          title: format
+          type: string
+        data:
+          description: The base64 image data
+          format: password
+          minLength: 1
+          title: data
+          type: string
+        created_on:
+          description: Timestamp when the screenshot was created
+          minLength: 1
+          title: created_on
+          type: string
+        primary:
+          description: Tells if the image belongs to the primary screen
+          title: primary
+          type: boolean
+      required:
+      - created_on
+      - data
+      - format
+      - primary
+      title: SessionScreenshotImage
+      type: object
+    UnauthorizedClientErrorResponseContent:
+      description: The client is not authorized to perform an action.
+      example:
+        message: message
+      properties:
+        message:
+          title: message
+          type: string
+      title: UnauthorizedClientErrorResponseContent
+      type: object
+    UpdateSessionPermissionsRequestContent:
+      example:
+        sessions:
+        - owner: owner
+          permissions_file: permissions_file
+          session_id: session_id
+        - owner: owner
+          permissions_file: permissions_file
+          session_id: session_id
+      properties:
+        sessions:
+          description: DCV Sessions to update permissions for
+          items:
+            $ref: "#/components/schemas/UpdateSessionPermissionsRequestData"
+          minItems: 1
+          title: sessions
+          type: array
+      required:
+      - sessions
+      title: UpdateSessionPermissionsRequestContent
+      type: object
+    UpdateSessionPermissionsRequestData:
+      example:
+        owner: owner
+        permissions_file: permissions_file
+        session_id: session_id
+      properties:
+        session_id:
+          description: The session id
+          minLength: 1
+          title: session_id
+          type: string
+        owner:
+          description: The session owner
+          minLength: 1
+          title: owner
+          type: string
+        permissions_file:
+          description: The permissions file base64 encoded
+          minLength: 1
+          title: permissions_file
+          type: string
+      required:
+      - owner
+      - permissions_file
+      - session_id
+      title: UpdateSessionPermissionsRequestData
+      type: object
+    UpdateSessionPermissionsResponseContent:
+      example:
+        unsuccessful_list:
+        - session_id: session_id
+          failure_reason: failure_reason
+        - session_id: session_id
+          failure_reason: failure_reason
+        successful_list:
+        - session_id: session_id
+        - session_id: session_id
+      properties:
+        successful_list:
+          description: The array of sessions with permissions successfully updated
+          items:
+            $ref: "#/components/schemas/UpdateSessionPermissionsSuccessfulResponse"
+          title: successful_list
+          type: array
+        unsuccessful_list:
+          description: The array of sessions with permissions that failed to update
+          items:
+            $ref: "#/components/schemas/UpdateSessionPermissionsUnsuccessfulResponse"
+          title: unsuccessful_list
+          type: array
+      required:
+      - successful_list
+      - unsuccessful_list
+      title: UpdateSessionPermissionsResponseContent
+      type: object
+    UpdateSessionPermissionsSuccessfulResponse:
+      example:
+        session_id: session_id
+      properties:
+        session_id:
+          description: The session id
+          title: session_id
+          type: string
+      required:
+      - session_id
+      title: UpdateSessionPermissionsSuccessfulResponse
+      type: object
+    UpdateSessionPermissionsUnsuccessfulResponse:
+      example:
+        session_id: session_id
+        failure_reason: failure_reason
+      properties:
+        session_id:
+          description: The session id
+          title: session_id
+          type: string
+        failure_reason:
+          description: The failure reason
+          title: failure_reason
+          type: string
+      required:
+      - failure_reason
+      - session_id
+      title: UpdateSessionPermissionsUnsuccessfulResponse
+      type: object
+  securitySchemes:
+    smithy.api.httpBearerAuth:
+      description: HTTP Bearer authentication
+      x-bearerInfoFunc: api.controllers.security_controller.bearer_auth
+      scheme: Bearer
+      type: http

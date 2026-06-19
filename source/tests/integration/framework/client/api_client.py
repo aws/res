@@ -38,9 +38,6 @@ GetPermissionProfileResponseContent = get_backend_model_class(
 ListPermissionProfilesResponseContent = get_backend_model_class(
     "list_permission_profiles_response_content", "ListPermissionProfilesResponseContent"
 )
-ListDCVServersResponseContent = get_backend_model_class(
-    "list_dcv_servers_response_content", "ListDCVServersResponseContent"
-)
 CreateSoftwareStackRequestContent = get_backend_model_class(
     "create_software_stack_request_content", "CreateSoftwareStackRequestContent"
 )
@@ -65,11 +62,29 @@ UpdateSoftwareStackRequestContent = get_backend_model_class(
 UpdateSoftwareStackResponseContent = get_backend_model_class(
     "update_software_stack_response_content", "UpdateSoftwareStackResponseContent"
 )
-BatchGetDCVSessionsRequestContent = get_backend_model_class(
-    "batch_get_dcv_sessions_request_content", "BatchGetDCVSessionsRequestContent"
+BatchStopSessionRequestContent = get_backend_model_class(
+    "batch_stop_session_request_content", "BatchStopSessionRequestContent"
 )
-BatchGetDCVSessionsResponseContent = get_backend_model_class(
-    "batch_get_dcv_sessions_response_content", "BatchGetDCVSessionsResponseContent"
+BatchStopSessionResponseContent = get_backend_model_class(
+    "batch_stop_session_response_content", "BatchStopSessionResponseContent"
+)
+BatchDeleteSessionRequestContent = get_backend_model_class(
+    "batch_delete_session_request_content", "BatchDeleteSessionRequestContent"
+)
+BatchDeleteSessionResponseContent = get_backend_model_class(
+    "batch_delete_session_response_content", "BatchDeleteSessionResponseContent"
+)
+BatchStartSessionRequestContent = get_backend_model_class(
+    "batch_start_session_request_content", "BatchStartSessionRequestContent"
+)
+BatchStartSessionResponseContent = get_backend_model_class(
+    "batch_start_session_response_content", "BatchStartSessionResponseContent"
+)
+BatchRebootSessionRequestContent = get_backend_model_class(
+    "batch_reboot_session_request_content", "BatchRebootSessionRequestContent"
+)
+BatchRebootSessionResponseContent = get_backend_model_class(
+    "batch_reboot_session_response_content", "BatchRebootSessionResponseContent"
 )
 CreatePermissionProfileRequestContent = get_backend_model_class(
     "create_permission_profile_request_content", "CreatePermissionProfileRequestContent"
@@ -91,9 +106,23 @@ DeletePermissionProfileResponseContent = get_backend_model_class(
 UpdatePermissionProfileRequestContent = get_backend_model_class(
     "update_permission_profile_request_content", "UpdatePermissionProfileRequestContent"
 )
+CreateSessionRequestContent = get_backend_model_class(
+    "create_session_request_content", "CreateSessionRequestContent"
+)
+CreateSessionResponseContent = get_backend_model_class(
+    "create_session_response_content", "CreateSessionResponseContent"
+)
 UpdatePermissionProfileResponseContent = get_backend_model_class(
     "update_permission_profile_response_content",
     "UpdatePermissionProfileResponseContent",
+)
+UpdateSessionRequestContent = get_backend_model_class(
+    "update_session_request_content",
+    "UpdateSessionRequestContent",
+)
+UpdateSessionResponseContent = get_backend_model_class(
+    "update_session_response_content",
+    "UpdateSessionResponseContent",
 )
 UpdateSessionPermissionsRequestContent = get_backend_model_class(
     "update_session_permissions_request_content",
@@ -108,6 +137,12 @@ ListSessionsResponseContent = get_backend_model_class(
 )
 GetSessionResponseContent = get_backend_model_class(
     "get_session_response_content", "GetSessionResponseContent"
+)
+GetSessionConnectionRequestContent = get_backend_model_class(
+    "get_session_connection_request_content", "GetSessionConnectionRequestContent"
+)
+GetSessionConnectionResponseContent = get_backend_model_class(
+    "get_session_connection_response_content", "GetSessionConnectionResponseContent"
 )
 
 logger = logging.getLogger(__name__)
@@ -221,6 +256,20 @@ class ApiClient:
                 logger.error(f"Response status: {e.response.status_code}")
                 logger.error(f"Response content: {e.response.text}")
             raise
+
+    def _make_raw_request(self, method: str, path: str, json_data: Any) -> Any:
+        """Send a raw dict as JSON, bypassing model serialization.
+
+        Used for testing server-side input validation with payloads that
+        client-side models would reject (e.g., empty strings).
+        """
+        url = f"{self._endpoint}{path}"
+        logger.info(f"Making raw {method} request to {url}")
+        response = self.session.request(
+            method.upper(), url, verify=False, json=json_data
+        )
+        response.raise_for_status()
+        return response.json()
 
     def list_allowed_instance_types(
         self, request_content: ListAllowedInstanceTypesRequestContent  # type: ignore
@@ -370,24 +419,25 @@ class ApiClient:
             UpdatePermissionProfileResponseContent,
         )
 
-    def list_dcv_servers(self, next_token: Optional[str] = None) -> ListDCVServersResponseContent:  # type: ignore
+    def create_session(
+        self, request_content: CreateSessionRequestContent  # type: ignore
+    ) -> CreateSessionResponseContent:  # type: ignore
         """
-        Get list of DCV servers
+        Create a virtual desktop session
 
         Args:
-            next_token: Optional pagination token for next page
+            request_content: CreateSessionRequestContent object containing:
+                - session: Virtual desktop session to create
 
         Returns:
-            ListDCVServersResponseContent containing DCV servers information
+            CreateSessionResponseContent containing the created session information
         """
-        logger.info(f"Listing DCV servers (next_token: {next_token})...")
-        path = "/res/virtual-desktop-dcv/server"
-        if next_token:
-            path += f"?nextToken={next_token}"
+        logger.info(f"Creating session...")
         return self._make_request(  # type: ignore
-            "GET",
-            path,
-            response_model_class=ListDCVServersResponseContent,
+            "POST",
+            "/res/virtual-desktop/session",
+            request_content,
+            CreateSessionResponseContent,
         )
 
     def create_software_stack(
@@ -544,6 +594,28 @@ class ApiClient:
             response_model_class=UpdateSessionPermissionsResponseContent,
         )
 
+    def update_session(
+        self, session_id: str, request_content: UpdateSessionRequestContent  # type: ignore
+    ) -> UpdateSessionResponseContent:  # type: ignore
+        """
+        Update a virtual desktop session
+
+        Args:
+            session_id: ID of the session to update
+            request_content: UpdateSessionRequestContent object containing:
+                - session: Virtual desktop session to update
+
+        Returns:
+            UpdateSessionResponseContent containing the updated session information
+        """
+        logger.info(f"Updating session: {session_id}...")
+        return self._make_request(  # type: ignore
+            "PUT",
+            f"/res/virtual-desktop/session/{session_id}",
+            request_content,
+            UpdateSessionResponseContent,
+        )
+
     def list_shared_permissions(
         self,
         username: Optional[str] = None,
@@ -600,35 +672,6 @@ class ApiClient:
             f"/res/virtual-desktop/software-stack/{stack_id}",
             request_content,
             UpdateSoftwareStackResponseContent,
-        )
-
-    def batch_get_dcv_sessions(
-        self, sessions: Optional[List[Any]] = None, next_token: Optional[str] = None
-    ) -> BatchGetDCVSessionsResponseContent:  # type: ignore
-        """
-        Batch get DCV sessions
-
-        Args:
-            sessions: Optional list of sessions to query
-            next_token: Optional pagination token for next page
-
-        Returns:
-            BatchGetDCVSessionsResponseContent containing DCV sessions information
-        """
-        logger.info(
-            f"Batch getting DCV sessions (sessions count: {len(sessions) if sessions else 0}, next_token: {next_token})..."
-        )
-
-        # Create request content object
-        request_content = BatchGetDCVSessionsRequestContent(
-            sessions=sessions if sessions is not None else [], next_token=next_token
-        )
-
-        return self._make_request(  # type: ignore
-            "POST",
-            "/res/virtual-desktop-dcv/session",
-            request_content=request_content,
-            response_model_class=BatchGetDCVSessionsResponseContent,
         )
 
     def list_sessions(
@@ -698,6 +741,118 @@ class ApiClient:
 
         return self._make_request(  # type: ignore
             "GET", path, response_model_class=GetSessionResponseContent
+        )
+
+    def get_session_connection(
+        self, request_content: Any, raw: bool = False
+    ) -> GetSessionConnectionResponseContent:  # type: ignore
+        """
+        Get connection information for a virtual desktop session
+
+        Args:
+            request_content: GetSessionConnectionRequestContent object, or a raw dict when raw=True
+            raw: If True, send request_content as a raw dict bypassing client-side
+                 model validation. Use for testing server-side input validation.
+
+        Returns:
+            GetSessionConnectionResponseContent containing connection details
+        """
+        logger.info("Getting session connection...")
+        if raw:
+            return self._make_raw_request(  # type: ignore[no-any-return]
+                "POST",
+                "/res/virtual-desktop/session-connections",
+                request_content,
+            )
+        return self._make_request(  # type: ignore
+            "POST",
+            "/res/virtual-desktop/session-connections",
+            request_content,
+            GetSessionConnectionResponseContent,
+        )
+
+    def batch_stop_session(
+        self, request_content: BatchStopSessionRequestContent  # type: ignore
+    ) -> BatchStopSessionResponseContent:  # type: ignore
+        """
+        Batch stop virtual desktop sessions
+
+        Args:
+            request_content: BatchStopSessionRequestContent object containing:
+                - sessions: List of sessions to stop
+
+        Returns:
+            BatchStopSessionResponseContent containing successful and unsuccessful lists
+        """
+        logger.info("Batch stopping sessions...")
+        return self._make_request(  # type: ignore
+            "POST",
+            "/res/virtual-desktop/sessions/stop",
+            request_content,
+            BatchStopSessionResponseContent,
+        )
+
+    def batch_delete_session(
+        self, request_content: BatchDeleteSessionRequestContent  # type: ignore
+    ) -> BatchDeleteSessionResponseContent:  # type: ignore
+        """
+        Batch delete virtual desktop sessions
+
+        Args:
+            request_content: BatchDeleteSessionRequestContent object containing:
+                - sessions: List of sessions to delete
+
+        Returns:
+            BatchDeleteSessionResponseContent containing successful and unsuccessful lists
+        """
+        logger.info("Batch deleting sessions...")
+        return self._make_request(  # type: ignore
+            "POST",
+            "/res/virtual-desktop/sessions/delete",
+            request_content,
+            BatchDeleteSessionResponseContent,
+        )
+
+    def batch_start_session(
+        self, request_content: BatchStartSessionRequestContent  # type: ignore
+    ) -> BatchStartSessionResponseContent:  # type: ignore
+        """
+        Batch start virtual desktop sessions
+
+        Args:
+            request_content: BatchStartSessionRequestContent object containing:
+                - sessions: List of sessions to start
+
+        Returns:
+            BatchStartSessionResponseContent containing successful and unsuccessful lists
+        """
+        logger.info("Batch starting sessions...")
+        return self._make_request(  # type: ignore
+            "POST",
+            "/res/virtual-desktop/sessions/start",
+            request_content,
+            BatchStartSessionResponseContent,
+        )
+
+    def batch_reboot_session(
+        self, request_content: BatchRebootSessionRequestContent  # type: ignore
+    ) -> BatchRebootSessionResponseContent:  # type: ignore
+        """
+        Batch reboot virtual desktop sessions
+
+        Args:
+            request_content: BatchRebootSessionRequestContent object containing:
+                - sessions: List of sessions to reboot
+
+        Returns:
+            BatchRebootSessionResponseContent containing successful and unsuccessful lists
+        """
+        logger.info("Batch rebooting sessions...")
+        return self._make_request(  # type: ignore
+            "POST",
+            "/res/virtual-desktop/sessions/reboot",
+            request_content,
+            BatchRebootSessionResponseContent,
         )
 
     def close(self) -> None:

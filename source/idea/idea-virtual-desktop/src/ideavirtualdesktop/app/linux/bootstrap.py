@@ -27,6 +27,7 @@ from ideabootstrap.file_system import shared_storage
 from ideabootstrap.directory_service import active_directory
 
 from ideabootstrap.dcv import dcv
+from ideabootstrap.dcv.linux import gnome_utils
 
 import os
 import subprocess
@@ -74,6 +75,7 @@ def run():
         hibernation.resume_logger()
 
         if os.environ.get("IDEA_SESSION_ID", "NONE") != "NONE":
+            gnome_utils.configure()
             dcv.configure()
 
         customization_script = f"{os.environ.get('IDEA_CLUSTER_HOME', '')}/dcv_host/userdata_customizations.sh"

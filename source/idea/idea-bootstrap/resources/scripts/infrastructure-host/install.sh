@@ -23,14 +23,16 @@ PREBAKING_AMI="true"
 COMPONENT="ALL"
 # If no environment name is specified when pre-baking RES ready AMI
 ENVIRONMENT_NAME=""
+STAGING_BUCKET=""
 
-while getopts p:c:m:e: opt
+while getopts p:c:m:e:b: opt
 do
   case "${opt}" in
     p) PREBAKING_AMI=${OPTARG};;
     c) COMPONENT=${OPTARG};;
     m) MODULE_ID=${OPTARG};;
     e) ENVIRONMENT_NAME=${OPTARG};;
+    b) STAGING_BUCKET=${OPTARG};;
     ?) echo "Invalid option for install.sh script: -${opt}."
       exit 1;;
   esac
@@ -64,11 +66,11 @@ if [[ ! -f ${INSTALL_FINISHED_LOCK} ]]; then
     INFRA_HOST_SCRIPTS_ROOT="${SCRIPT_DIR}"
     find ${INFRA_HOST_SCRIPTS_ROOT} -type d -print0 | while IFS= read -r -d $'\0' dir; do
       if [ "${dir}" != "${INFRA_HOST_SCRIPTS_ROOT}" ] && [ -f ${dir}/install.sh ]; then
-        /bin/bash "${dir}/install.sh" -s "${SCRIPT_DIR}"
+        /bin/bash "${dir}/install.sh" -s "${SCRIPT_DIR}" -e "${ENVIRONMENT_NAME}" -b "${STAGING_BUCKET}"
       fi
     done
   elif [ -f ${SCRIPT_DIR}/${COMPONENT}/install.sh ]; then
-    /bin/bash "${SCRIPT_DIR}/${COMPONENT}/install.sh" -s "${SCRIPT_DIR}"
+    /bin/bash "${SCRIPT_DIR}/${COMPONENT}/install.sh" -s "${SCRIPT_DIR}" -e "${ENVIRONMENT_NAME}" -b "${STAGING_BUCKET}"
   fi
 
   if [[ "${PREBAKING_AMI}" == "true" ]] && [ -f ${SCRIPT_DIR}/../../requirements.txt ]; then

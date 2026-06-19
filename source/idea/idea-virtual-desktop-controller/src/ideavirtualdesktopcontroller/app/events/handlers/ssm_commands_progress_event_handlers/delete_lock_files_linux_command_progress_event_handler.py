@@ -16,7 +16,6 @@ from ideadatamodel import VirtualDesktopSession
 from res.exceptions import SoftwareStackNotFound
 from res.resources import software_stacks
 from res.resources import sessions as user_sessions
-from res.resources import servers
 
 class DeleteLockFilesLinuxCommandProgressEventListener(BaseVirtualDesktopControllerEventHandler):
 
@@ -58,6 +57,6 @@ class DeleteLockFilesLinuxCommandProgressEventListener(BaseVirtualDesktopControl
             else:
                 self.log_error(message_id=message_id, message=f'Session: {user_session.get("idea_session_id")}:{user_session.get("name")} moved to Error state')
             if user_sessions.SESSION_DB_SERVER_KEY in user_session:
-                servers.update_server(user_session.get(user_sessions.SESSION_DB_SERVER_KEY))
+                user_sessions.update_session(user_session)
         else:
             self.log_error(message_id=message_id, message=f'Ignoring message because state is {status} for RES Session ID: {idea_session_id}')

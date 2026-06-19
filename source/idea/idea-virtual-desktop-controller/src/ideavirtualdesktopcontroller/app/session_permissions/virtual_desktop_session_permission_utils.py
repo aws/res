@@ -98,7 +98,7 @@ class VirtualDesktopSessionPermissionUtils:
             profile_id = session_permission.permission_profile.profile_id
             if Utils.is_not_empty(profile_cache[profile_id]['allow']):
                 permission += f'{session_permission.actor_name} allow {profile_id}-allow{new_line_char}'
-            if Utils.is_not_empty(profile_cache[admin_profile]['deny']):
+            if Utils.is_not_empty(profile_cache[profile_id]['deny']):
                 permission += f'{session_permission.actor_name} deny {profile_id}-deny{new_line_char}'
 
         # Apply admin permission

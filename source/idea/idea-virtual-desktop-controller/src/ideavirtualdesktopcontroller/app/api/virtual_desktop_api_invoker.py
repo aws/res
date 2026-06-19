@@ -15,7 +15,6 @@ from ideasdk.app import SocaAppAPI
 from ideasdk.auth import TokenService, ApiAuthorizationServiceBase
 from ideasdk.protocols import ApiInvokerProtocol
 from ideavirtualdesktopcontroller.app.api.virtual_desktop_admin_api import VirtualDesktopAdminAPI
-from ideavirtualdesktopcontroller.app.api.virtual_desktop_dcv_api import VirtualDesktopDCVAPI
 from ideavirtualdesktopcontroller.app.api.virtual_desktop_user_api import VirtualDesktopUserAPI
 from ideavirtualdesktopcontroller.app.api.virtual_desktop_utils_api import VirtualDesktopUtilsAPI
 from typing import Optional
@@ -26,7 +25,6 @@ class VirtualDesktopApiInvoker(ApiInvokerProtocol):
         self._context = context
         self.INVOKER_MAP = {
             'VirtualDesktopUtils': VirtualDesktopUtilsAPI(context),
-            'VirtualDesktopDCV': VirtualDesktopDCVAPI(context),
             'VirtualDesktopAdmin': VirtualDesktopAdminAPI(context),
             'VirtualDesktop': VirtualDesktopUserAPI(context),
             'App': SocaAppAPI(context)

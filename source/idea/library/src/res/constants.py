@@ -13,6 +13,14 @@ PARENT_STACK_NAME_KEY = "parent_stack_name"
 OLD_CUSTOM_TAG_KEYS = "old_custom_tag_keys"
 DEFAULT_REGION_KEY = "AWS_DEFAULT_REGION"
 
+# Default VDI creation variables
+DEFAULT_HIBERNATION_RAM_LIMIT_WINDOWS = 16
+
+# https://docs.aws.amazon.com/ebs/latest/userguide/general-purpose.html#gp3-sie
+# For gp3 volumes (recommended):
+# 3000 IOPS is the baseline performance included with gp3 volumes at no additional cost
+DEFAULT_ROOT_VOL_IOPS = 3000
+
 # Define Paths
 LINUX_BOOSTRAP_TOKEN_PATH = "/root/boostrap/token.txt"
 WINDOWS_BOOTSTRAP_TOKEN_PATH = "C:VDIBootstrap\\Secure\\bootstrap-token.dat"
@@ -109,6 +117,13 @@ RES_TAG_MODULE_ID = RES_TAG_PREFIX + "ModuleId"
 RES_TAG_ENVIRONMENT_NAME = RES_TAG_PREFIX + "EnvironmentName"
 RES_TAG_MODULE_NAME = RES_TAG_PREFIX + "ModuleName"
 RES_TAG_BACKUP_PLAN = RES_TAG_PREFIX + "BackupPlan"
+
+RES_TAG_NODE_TYPE = RES_TAG_PREFIX + "NodeType"
+RES_TAG_MODULE_VERSION = RES_TAG_PREFIX + "ModuleVersion"
+RES_TAG_PROJECT = RES_TAG_PREFIX + "Project"
+RES_TAG_DCV_SESSION_ID = RES_TAG_PREFIX + "DCVSessionUUID"
+
+NODE_TYPE_DCV_HOST = "virtual-desktop-dcv-host"
 
 BASTION_HOST_INSTANCE_AMI = "bastion-host.instance_ami"
 BASTION_HOST_INSTANCE_TYPE = "bastion-host.instance_type"
@@ -222,6 +237,32 @@ COGNITO_MIN_ID_INCLUSIVE = 2000200001
 COGNITO_MAX_ID_INCLUSIVE = 4294967294
 COGNITO_DEFAULT_USER_GROUP = "res"
 
+# Allowlist of fields accepted by Cognito's UpdateUserPool API. UpdateUserPool
+# is full-replace: any field omitted from the request is reset to its default.
+# When changing a single setting, read the pool with DescribeUserPool, mutate the target field,
+# then pass the pool back through UpdateUserPool filtered to these keys.
+# Source: https://docs.aws.amazon.com/boto3/latest/reference/services/cognito-idp/client/update_user_pool.html
+COGNITO_UPDATE_USER_POOL_ARGUMENTS = (
+    "Policies",
+    "DeletionProtection",
+    "LambdaConfig",
+    "AutoVerifiedAttributes",
+    "VerificationMessageTemplate",
+    "SmsAuthenticationMessage",
+    "UserAttributeUpdateSettings",
+    "MfaConfiguration",
+    "DeviceConfiguration",
+    "EmailConfiguration",
+    "SmsConfiguration",
+    "UserPoolTags",
+    "AdminCreateUserConfig",
+    "UserPoolAddOns",
+    "AccountRecoverySetting",
+    "UserPoolTier",
+    "KeyConfiguration",
+    "IssuerConfiguration",
+)
+
 # group types
 GROUP_TYPE_USER = "user"
 GROUP_TYPE_PROJECT = "project"
@@ -243,3 +284,35 @@ EVENTBRIDGE_RULE_RESOURCE_TYPE = "AWS::Events::Rule"
 LOAD_BALANCER_RESOURCE_TYPE = "AWS::ElasticLoadBalancingV2::LoadBalancer"
 LAUNCH_TEMPLATE_RESOURCE_TYPE = "AWS::EC2::LaunchTemplate"
 EVENT_SOURCE_MAPPING_RESOURCE_TYPE = "AWS::Lambda::EventSourceMapping"
+
+
+# SSM
+SSM_COMMAND_OUTPUT_BUCKET_KEY = "cluster.ssm_command_output_bucket_name"
+
+# DCV Connection Token
+DCV_CONNECTION_TOKEN_VALIDITY_KEY = "vdc.dcv_broker.session_token_validity"
+DCV_CONNECTION_TOKEN_TABLE_NAME = "vdc.controller.dcv-connection-tokens"
+DCV_CONNECTION_TOKEN_DB_HASH_KEY = "auth_token"
+DCV_CONNECTION_TOKEN_DB_SESSION_ID_KEY = "session_id"
+DCV_CONNECTION_TOKEN_DB_USERNAME_KEY = "username"
+DCV_CONNECTION_TOKEN_DB_TTL_KEY = "expiration_time"
+
+# Sessions
+DEFAULT_VDI_RANDOMIZE_SUBNETS = False
+DEFAULT_VDI_SUBNET_AUTORETRY = True
+
+MODULE_VIRTUAL_DESKTOP_CONTROLLER = "virtual-desktop-controller"
+
+DEFAULT_VOLUME_ENCRYPTION_VDI = True
+DEFAULT_VOLUME_ENCRYPTION_COMPUTE = True
+
+# Volume Type strings
+VOLUME_TYPE_GP2 = "gp2"
+VOLUME_TYPE_GP3 = "gp3"
+VOLUME_TYPE_IO1 = "io1"
+VOLUME_TYPE_IO2 = "io2"
+
+# EBS volume type defaults
+DEFAULT_VOLUME_TYPE_SCRATCH = VOLUME_TYPE_IO1
+DEFAULT_VOLUME_TYPE_COMPUTE = VOLUME_TYPE_GP3
+DEFAULT_VOLUME_TYPE_VDI = VOLUME_TYPE_GP3

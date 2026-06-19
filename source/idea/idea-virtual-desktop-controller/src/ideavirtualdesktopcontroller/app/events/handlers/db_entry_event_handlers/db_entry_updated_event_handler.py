@@ -28,7 +28,6 @@ class DbEntryUpdatedEventHandler(BaseDBEventHandler):
             self.software_stack_db.table_name: self._handle_software_stack_updated,
             self.schedule_db.table_name: self._handle_schedule_updated,
             self.session_db.table_name: self._handle_user_session_updated,
-            self.server_db.table_name: self._handle_dcv_host_updated,
             self.session_permissions_db.table_name: self._handle_session_permission_updated,
             self.permission_profile_db.table_name: self._handle_permission_profile_updated
         }
@@ -136,7 +135,7 @@ class DbEntryUpdatedEventHandler(BaseDBEventHandler):
         return
 
     def handle_event(self, message_id: str, sender_id: str, event: VirtualDesktopEvent):
-        if not self.is_sender_controller_role(sender_id) and not self.is_sender_backend_lambda(sender_id):
+        if not self.is_sender_controller_role(sender_id) and not self.is_sender_backend_lambda(sender_id) and not self.is_sender_dcv_host_role(sender_id):
             raise self.message_source_validation_failed(f'Corrupted sender_id: {sender_id}. Ignoring message')
 
         table_name = Utils.get_value_as_string('table_name', event.detail, None)

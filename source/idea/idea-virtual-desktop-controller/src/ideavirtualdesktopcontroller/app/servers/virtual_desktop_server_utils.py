@@ -8,24 +8,52 @@
 #  or in the 'license' file accompanying this file. This file is distributed on an 'AS IS' BASIS, WITHOUT WARRANTIES
 #  OR CONDITIONS OF ANY KIND, express or implied. See the License for the specific language governing permissions
 #  and limitations under the License.
-from typing import List
+from typing import Dict, List, Optional
 
 from botocore.exceptions import ClientError
 
 import ideavirtualdesktopcontroller
 from ideadatamodel import VirtualDesktopServer, VirtualDesktopSession
 from ideasdk.utils import Utils
-from ideavirtualdesktopcontroller.app.servers.virtual_desktop_server_db import VirtualDesktopServerDB
+from ideavirtualdesktopcontroller.app.servers import constants as servers_constants
 from ideavirtualdesktopcontroller.app.virtual_desktop_controller_utils import VirtualDesktopControllerUtils
+from res.resources import sessions
 
 
 class VirtualDesktopServerUtils:
-    def __init__(self, context: ideavirtualdesktopcontroller.AppContext, db: VirtualDesktopServerDB):
+    def __init__(self, context: ideavirtualdesktopcontroller.AppContext):
         self.context = context
         self._logger = context.logger('virtual-desktop-server-utils')
         self.ec2_client = self.context.aws().ec2()
-        self._server_db = db
         self._controller_utils = VirtualDesktopControllerUtils(self.context)
+
+    @staticmethod
+    def convert_server_object_to_db_dict(server: VirtualDesktopServer) -> Dict:
+        if Utils.is_empty(server):
+            return {}
+        return {
+            servers_constants.DCV_HOST_DB_HASH_KEY: server.instance_id,
+            servers_constants.DCV_HOST_DB_INSTANCE_TYPE_KEY: server.instance_type,
+            servers_constants.DCV_HOST_DB_IDEA_SESSION_ID_KEY: server.idea_sesssion_id,
+            servers_constants.DCV_HOST_DB_IDEA_SESSION_OWNER_KEY: server.idea_session_owner,
+            servers_constants.DCV_HOST_DB_LOCKED_KEY: False if Utils.is_empty(server.locked) else server.locked,
+            servers_constants.DCV_HOST_DB_IS_IDLE_KEY: False if not server.is_idle else server.is_idle,
+            sessions.SESSION_DB_PRIVATE_DNS_NAME_KEY: server.private_dns_name,
+        }
+
+    @staticmethod
+    def convert_db_entry_to_server_object(db_entry: dict) -> Optional[VirtualDesktopServer]:
+        if Utils.is_empty(db_entry):
+            return None
+        return VirtualDesktopServer(
+            instance_id=Utils.get_value_as_string(servers_constants.DCV_HOST_DB_HASH_KEY, db_entry),
+            instance_type=Utils.get_value_as_string(servers_constants.DCV_HOST_DB_INSTANCE_TYPE_KEY, db_entry),
+            idea_sesssion_id=Utils.get_value_as_string(servers_constants.DCV_HOST_DB_IDEA_SESSION_ID_KEY, db_entry),
+            idea_session_owner=Utils.get_value_as_string(servers_constants.DCV_HOST_DB_IDEA_SESSION_OWNER_KEY, db_entry),
+            locked=Utils.get_value_as_bool(servers_constants.DCV_HOST_DB_LOCKED_KEY, db_entry, False),
+            is_idle=db_entry.get(servers_constants.DCV_HOST_DB_IS_IDLE_KEY, False),
+            private_dns_name=Utils.get_value_as_string(sessions.SESSION_DB_PRIVATE_DNS_NAME_KEY, db_entry),
+        )
 
     def provision_host_for_session(self, session: VirtualDesktopSession) -> VirtualDesktopServer:
         self._logger.info(f'initiate_host_provisioning for {session.name}')
@@ -36,11 +64,7 @@ class VirtualDesktopServerUtils:
 
         # We know that there is ONLY 1 instance
         session.server.instance_id = Utils.get_value_as_string('InstanceId', instances[0], None)
-        return self._server_db.create(
-            server=session.server,
-            idea_session_id=session.idea_session_id,
-            idea_session_owner=session.owner
-        )
+        return session.server
 
     def _stop_dcv_hosts(self, servers: List[VirtualDesktopServer], hibernate=False) -> dict:
         if Utils.is_empty(servers):
@@ -68,25 +92,10 @@ class VirtualDesktopServerUtils:
             return {}
 
         if Utils.is_not_empty(servers_to_stop):
-            response = self._stop_dcv_hosts(servers_to_stop)
-            instances = Utils.get_value_as_list('StoppingInstances', response, [])
-            for instance in instances:
-                instance_id = Utils.get_value_as_string('InstanceId', instance, None)
-                server = self._server_db.get(instance_id=instance_id)
-                if server.is_idle:
-                    server.state = 'STOPPED_IDLE'
-                else:
-                    server.state = 'STOPPED'
-                self._server_db.update(server)
+            self._stop_dcv_hosts(servers_to_stop)
 
         if Utils.is_not_empty(servers_to_hibernate):
-            response = self._stop_dcv_hosts(servers_to_hibernate, hibernate=True)
-            instances = Utils.get_value_as_list('StoppingInstances', response, [])
-            for instance in instances:
-                instance_id = Utils.get_value_as_string('InstanceId', instance, None)
-                server = self._server_db.get(instance_id=instance_id)
-                server.state = 'HIBERNATED'
-                self._server_db.update(server)
+            self._stop_dcv_hosts(servers_to_hibernate, hibernate=True)
 
     def start_dcv_hosts(self, servers: List[VirtualDesktopServer]) -> dict:
         instance_ids = []
@@ -130,10 +139,4 @@ class VirtualDesktopServerUtils:
         if Utils.is_empty(servers):
             return {}
 
-        terminate_response = self._terminate_dcv_hosts(servers)
-        instances = Utils.get_value_as_list('TerminatingInstances', terminate_response, [])
-        for instance in instances:
-            self._server_db.delete(VirtualDesktopServer(
-                instance_id=Utils.get_value_as_string('InstanceId', instance, None)
-            ))
-        return terminate_response
+        return self._terminate_dcv_hosts(servers)

@@ -57,9 +57,6 @@ def configure():
         shutil.move(CONFIG_FILE, backup_file)
 
     internal_alb_endpoint = _get_cluster_internal_endpoint()
-    gateway_to_broker_port = cluster_settings.get_setting(
-        "vdc.dcv_broker.gateway_communication_port"
-    )
 
     logger.info("Creating DCV Connection Gateway config file...")
 
@@ -78,7 +75,7 @@ def configure():
     config["dcv"] = {"tls-strict": "false"}
 
     config["resolver"] = {
-        "url": f'"{internal_alb_endpoint}:{gateway_to_broker_port}"',
+        "url": f'"{internal_alb_endpoint}"',
         "tls-strict": "false",
     }
 

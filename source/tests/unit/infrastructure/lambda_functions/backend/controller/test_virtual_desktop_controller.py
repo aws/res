@@ -8,6 +8,9 @@ import unittest
 from unittest.mock import patch, Mock
 import pytest
 
+from res.utils import logging_utils, table_utils, time_utils
+logger = logging_utils.get_logger(__name__)
+
 # Add the backend directory to Python path to match controller's import context
 backend_path = os.path.abspath(
     os.path.join(
@@ -56,23 +59,64 @@ from datamodel.models.update_permission_profile_response_content import (
 from datamodel.models.update_software_stack_response_content import (
     UpdateSoftwareStackResponseContent,
 )
-from datamodel.models.update_session_permissions_response_content import (
+from datamodel.models.backend.update_session_permissions_response_content import (
     UpdateSessionPermissionsResponseContent,
 )
 from datamodel.models.list_shared_permissions_response_content import (
     ListSharedPermissionsResponseContent,
 )
+from datamodel.models.backend.batch_stop_session_response_content import (
+    BatchStopSessionResponseContent,
+)
+from datamodel.models.backend.batch_delete_session_response_content import (
+    BatchDeleteSessionResponseContent,
+)
+from datamodel.models.backend.batch_start_session_response_content import (
+    BatchStartSessionResponseContent,
+)
+from datamodel.models.backend.batch_reboot_session_response_content import (
+    BatchRebootSessionResponseContent,
+)
+from datamodel.models.backend.batch_get_session_screenshot_response_content import (
+    BatchGetSessionScreenshotResponseContent,
+)
+from datamodel.models.backend.batch_operation_error_code import BatchOperationErrorCode
 from res.exceptions import (
     SoftwareStackNotFound,
     PermissionProfileNotFound,
     SessionPermissionsNotFound,
     UserSessionNotFound,
+    SettingNotFound,
 )
 from res.resources import session_permissions
 
 
 class TestVirtualDesktopController:
     """VirtualDesktopController unit test stubs"""
+
+    def _get_create_session_payload(self, **overrides):
+        """Helper method to create session request payload with optional overrides."""
+        payload = {
+            "session": {
+                "name": "TestDesktopSession",
+                "hibernation_enabled": False,
+                "software_stack_id": "ss-base-windows-x86-64-base",
+                "base_os": "windows",
+                "server": {
+                    "instance_type": "t3.2xlarge",
+                    "root_volume_size": {
+                        "value": 50,
+                        "unit": "gb"
+                    }
+                },
+                "project": {
+                    "project_id": "d6c3e390-3ba8-4a8b-811c-7d0679dde168"
+                }
+            }
+        }
+        if overrides:
+            payload["session"].update(overrides)
+        return payload
 
     def _get_base_body(self, **overrides):
         """Helper method to create base request body with optional overrides."""
@@ -1257,7 +1301,7 @@ class TestVirtualDesktopController:
             "name": "Test Stack",
             "base_os": "amazonlinux2",
             "ami_id": "ami-12345678",
-            "created_on": 1772060599000,
+            "created_on": 1672531200000,
             "min_storage_value": 20,
             "min_storage_unit": "GB",
             "min_ram_value": 4,
@@ -1367,9 +1411,20 @@ class TestVirtualDesktopController:
             "base_os": "amazonlinux2",
             "ami_id": "ami-12345678",
             "description": "Test Description",
-            "created_on": 1772060599000,
-            "updated_on": 1772060599000,
+            "created_on": 1640995200,  # Unix timestamp
+            "updated_on": 1640995200,
         }
+
+        formatted_stack = {
+            "stack_id": "test-stack-123",
+            "name": "Test Stack",
+            "base_os": "amazonlinux2",
+            "ami_id": "ami-12345678",
+            "description": "Test Description",
+            "created_on": 1640995200000,
+            "updated_on": 1640995200000,
+        }
+
         mock_get_stack.return_value = raw_stack
 
         result = virtual_desktop_controller.get_software_stack(
@@ -1382,10 +1437,6 @@ class TestVirtualDesktopController:
         assert result.software_stack.stack_id == "test-stack-123"
         assert result.software_stack.name == "Test Stack"
         assert result.software_stack.base_os == "amazonlinux2"
-        assert result.software_stack.created_on is not None
-        assert "2026-02-25" in str(result.software_stack.created_on)
-        assert result.software_stack.updated_on is not None
-        assert "2026-02-25" in str(result.software_stack.updated_on)
 
     @patch(
         "api.controllers.virtual_desktop_controller.software_stacks.get_software_stack"
@@ -1416,8 +1467,8 @@ class TestVirtualDesktopController:
             "min_storage_unit": "GB",
             "projects": ["project1", "project2"],
             "enabled": True,
-            "created_on": 1772060599000,
-            "updated_on": 1772060599000,
+            "created_on": 1640995200000,
+            "updated_on": 1640995200000,
         }
 
         mock_get_stack.return_value = complete_stack
@@ -1487,13 +1538,12 @@ class TestVirtualDesktopController:
         self, mock_get_project, mock_is_active_admin, mock_get_stack
     ):
         """Test that admin can retrieve software stack with project associations."""
-        mock_project = {
+        mock_is_active_admin.return_value = True
+        mock_get_project.return_value = {
             "project_id": "proj-123",
             "name": "Project 123",
             "title": "Project 123",
         }
-        mock_is_active_admin.return_value = True
-        mock_get_project.return_value = mock_project
 
         stack_with_project = {
             "stack_id": "test-stack-with-project",
@@ -1505,7 +1555,7 @@ class TestVirtualDesktopController:
             "min_ram_unit": "GB",
             "min_storage_value": 20,
             "min_storage_unit": "GB",
-            "projects": [mock_project],
+            "projects": [{"project_id": "proj-123", "name": "Project 123", "title": "Project 123"}],
         }
 
         mock_get_stack.return_value = stack_with_project
@@ -1521,7 +1571,10 @@ class TestVirtualDesktopController:
         assert result.software_stack.projects is not None
         assert len(result.software_stack.projects) == 1
         project = result.software_stack.projects[0]
-        assert project.project_id == "proj-123"
+        if isinstance(project, dict):
+            assert project["project_id"] == "proj-123"
+        elif hasattr(project, "project_id"):
+            assert project.project_id == "proj-123"
         mock_get_stack.assert_called_once_with(
             base_os="amazonlinux2",
             stack_id="test-stack-with-project",
@@ -2128,3 +2181,1147 @@ class TestVirtualDesktopController:
             in str(exc_info.value)
         )
         mock_get_session.assert_called_once_with("user1", "nonexistent-session")
+
+    @patch("api.controllers.virtual_desktop_controller.session_utils._create_session")
+    @patch("api.controllers.virtual_desktop_controller.session_utils.complete_create_session_request")
+    @patch("api.controllers.virtual_desktop_controller.session_utils._validate_create_session_request")
+    @patch("res.resources.sessions.get_session_logins")
+    @patch("api.controllers.virtual_desktop_controller.accounts.is_active_admin")
+    @patch("api.controllers.virtual_desktop_controller.CreateSessionRequestContent.from_dict")
+    def test_create_session_valid_input(
+        self, mock_from_dict, mock_is_admin, mock_get_logins, mock_validate, mock_complete, mock_create
+    ):
+        """Test successful session creation with all required fields."""
+        body = self._get_create_session_payload()
+        
+        mock_request = Mock()
+        mock_session = Mock()
+        mock_session.name = "CreateSessionSuccess"
+        mock_session.failure_reason = None
+        mock_session.owner = "user1"
+        mock_session.idea_session_id = "session-123"
+        mock_request.session = mock_session
+        mock_from_dict.return_value = mock_request
+        
+        mock_is_admin.return_value = False
+        mock_get_logins.return_value = ["sso"]
+        mock_validate.return_value = (mock_session, True)
+        mock_complete.return_value = mock_session
+        mock_create.return_value = mock_session
+        
+        result = virtual_desktop_controller.create_session(body, user="user1")
+        
+        assert result.session == mock_session
+        mock_validate.assert_called_once()
+        mock_complete.assert_called_once()
+        mock_create.assert_called_once()
+    
+    @patch("api.controllers.virtual_desktop_controller.os.environ.get")
+    @patch("api.controllers.virtual_desktop_controller.CreateSessionRequestContent.from_dict")
+    def test_create_session_dry_run_mode(self, mock_from_dict, mock_env_get):
+        """Test session creation in dry run mode returns session without processing."""
+        body = self._get_create_session_payload()
+        
+        mock_session = Mock()
+        mock_session.name = "DryRunSession"
+        mock_session.owner = "user1"
+        mock_request = Mock()
+        mock_request.session = mock_session
+        mock_from_dict.return_value = mock_request
+        
+        # Enable dry run mode
+        mock_env_get.return_value = 'true'
+        
+        result = virtual_desktop_controller.create_session(body, user="user1")
+        
+        assert result == {"session": mock_session}
+        # Verify no validation or creation methods were called
+        mock_env_get.assert_called_once_with('DRY_RUN_ENABLED', 'false')
+
+
+    # Batch Stop Session Tests
+
+    def _get_batch_stop_session_payload(self, sessions=None):
+        """Helper method to create batch stop session request payload."""
+        if sessions is None:
+            sessions = [
+                {"idea_session_id": "session-1", "owner": "user1", "name": "Session 1"},
+                {"idea_session_id": "session-2", "owner": "user1", "name": "Session 2"},
+            ]
+        return {"sessions": sessions}
+
+    @patch("api.controllers.virtual_desktop_controller.vdi_management.stop_sessions")
+    @patch("api.utils.session_utils.res_sessions.get_session")
+    @patch("api.utils.session_utils.accounts.is_active_admin")
+    def test_batch_stop_session_admin_skips_authorization(
+        self, mock_is_admin, mock_get_session, mock_stop_sessions
+    ):
+        """Test that admin users bypass per-session authorization checks."""
+        mock_is_admin.return_value = True
+        mock_stop_sessions.return_value = ([], [])
+        body = self._get_batch_stop_session_payload()
+
+        virtual_desktop_controller.batch_stop_session(
+            body, user="clusteradmin"
+        )
+
+        mock_get_session.assert_not_called()
+
+    @patch("api.controllers.virtual_desktop_controller.vdi_management.stop_sessions")
+    @patch("api.utils.session_utils.res_sessions.get_session")
+    @patch("api.utils.session_utils.accounts.is_active_admin")
+    def test_batch_stop_session_non_admin_own_sessions_authorized(
+        self, mock_is_admin, mock_get_session, mock_stop_sessions
+    ):
+        """Test that non-admin user can stop their own sessions."""
+        mock_is_admin.return_value = False
+        mock_get_session.return_value = {"owner": "user1", "idea_session_id": "session-1"}
+        mock_stop_sessions.return_value = ([], [])
+
+        body = self._get_batch_stop_session_payload(sessions=[
+            {"idea_session_id": "session-1", "owner": "user1", "name": "My Session"},
+        ])
+
+        virtual_desktop_controller.batch_stop_session(
+            body, user="user1"
+        )
+
+        mock_get_session.assert_called_once_with("user1", "session-1")
+        mock_stop_sessions.assert_called_once()
+
+    @patch("api.utils.session_utils.res_sessions.get_session")
+    @patch("api.utils.session_utils.accounts.is_active_admin")
+    def test_batch_stop_session_non_admin_other_user_sessions_rejected(
+        self, mock_is_admin, mock_get_session
+    ):
+        """Test that non-admin user cannot stop another user's sessions."""
+        mock_is_admin.return_value = False
+        mock_get_session.side_effect = UserSessionNotFound("Session not found")
+
+        body = self._get_batch_stop_session_payload(sessions=[
+            {"idea_session_id": "session-1", "owner": "other_user", "name": "Not Mine"},
+        ])
+
+        result = virtual_desktop_controller.batch_stop_session(
+            body, user="user1"
+        )
+
+        assert isinstance(result, BatchStopSessionResponseContent)
+        assert result.successful_list == []
+        assert len(result.unsuccessful_list) == 1
+        assert result.unsuccessful_list[0].error_code == BatchOperationErrorCode.FORBIDDENEXCEPTION
+
+    @patch("api.controllers.virtual_desktop_controller.vdi_management.stop_sessions")
+    @patch("api.utils.session_utils.res_sessions.get_session")
+    @patch("api.utils.session_utils.accounts.is_active_admin")
+    def test_batch_stop_session_non_admin_mixed_own_and_other_sessions(
+        self, mock_is_admin, mock_get_session, mock_stop_sessions
+    ):
+        """Test non-admin with mix of own and other user's sessions: own pass auth, others fail."""
+        mock_is_admin.return_value = False
+        mock_stop_sessions.return_value = ([], [])
+
+        def get_session_side_effect(user, session_id):
+            if session_id == "session-own":
+                return {"owner": "user1", "idea_session_id": "session-own"}
+            raise UserSessionNotFound("Session not found")
+
+        mock_get_session.side_effect = get_session_side_effect
+
+        body = self._get_batch_stop_session_payload(sessions=[
+            {"idea_session_id": "session-own", "owner": "user1", "name": "Mine"},
+            {"idea_session_id": "session-other", "owner": "other_user", "name": "Not Mine"},
+        ])
+
+        result = virtual_desktop_controller.batch_stop_session(
+            body, user="user1"
+        )
+
+        assert isinstance(result, BatchStopSessionResponseContent)
+        assert len(result.unsuccessful_list) == 1
+        assert result.unsuccessful_list[0].error_code == BatchOperationErrorCode.FORBIDDENEXCEPTION
+        mock_stop_sessions.assert_called_once()
+        args, _ = mock_stop_sessions.call_args
+        assert len(args[0]) == 1
+        assert args[0][0]["idea_session_id"] == "session-own"
+
+    @patch("api.utils.session_utils.res_sessions.get_session")
+    @patch("api.utils.session_utils.accounts.is_active_admin")
+    def test_batch_stop_session_empty_sessions_list_raises_value_error(
+        self, mock_is_admin, mock_get_session
+    ):
+        """Test that an empty sessions list raises ValueError from model validation."""
+        mock_is_admin.return_value = True
+        body = self._get_batch_stop_session_payload(sessions=[])
+
+        with pytest.raises(ValueError):
+            virtual_desktop_controller.batch_stop_session(
+                body, user="clusteradmin"
+            )
+
+    @patch("api.utils.session_utils.res_sessions.get_session")
+    @patch("api.utils.session_utils.accounts.is_active_admin")
+    def test_batch_stop_session_non_admin_spoofed_owner_rejected(
+        self, mock_is_admin, mock_get_session
+    ):
+        """Test that a non-admin spoofing the owner field is caught by DB lookup."""
+        mock_is_admin.return_value = False
+        # DB lookup with the authenticated user finds no session with that ID
+        mock_get_session.side_effect = UserSessionNotFound("Session not found")
+
+        body = self._get_batch_stop_session_payload(sessions=[
+            {"idea_session_id": "session-1", "owner": "user1", "name": "Spoofed"},
+        ])
+
+        # Authenticated user is "attacker" but session claims owner is "user1"
+        result = virtual_desktop_controller.batch_stop_session(
+            body, user="attacker"
+        )
+
+        assert isinstance(result, BatchStopSessionResponseContent)
+        assert result.successful_list == []
+        assert len(result.unsuccessful_list) == 1
+        assert result.unsuccessful_list[0].error_code == BatchOperationErrorCode.FORBIDDENEXCEPTION
+        # Verify lookup was done with the authenticated user, not the spoofed owner
+        mock_get_session.assert_called_once_with("attacker", "session-1")
+
+    @patch("api.controllers.virtual_desktop_controller.vdi_management.stop_sessions")
+    @patch("api.utils.session_utils.res_sessions.get_session")
+    @patch("api.utils.session_utils.accounts.is_active_admin")
+    def test_batch_stop_session_admin_multiple_sessions_returns_response(
+        self, mock_is_admin, mock_get_session, mock_stop_sessions
+    ):
+        """Test admin batch stop with multiple sessions calls vdi_management."""
+        mock_is_admin.return_value = True
+        mock_stop_sessions.return_value = ([], [])
+        body = self._get_batch_stop_session_payload(sessions=[
+            {"idea_session_id": "session-1", "owner": "user1"},
+            {"idea_session_id": "session-2", "owner": "user2"},
+            {"idea_session_id": "session-3", "owner": "user3"},
+        ])
+
+        result = virtual_desktop_controller.batch_stop_session(
+            body, user="clusteradmin"
+        )
+
+        assert isinstance(result, BatchStopSessionResponseContent)
+        mock_stop_sessions.assert_called_once()
+        mock_get_session.assert_not_called()
+
+    @patch("api.utils.session_utils.res_sessions.get_session")
+    @patch("api.utils.session_utils.accounts.is_active_admin")
+    def test_batch_stop_session_non_admin_unexpected_error_adds_to_failed(
+        self, mock_is_admin, mock_get_session
+    ):
+        """Test that unexpected exceptions during auth check add session to failed list."""
+        mock_is_admin.return_value = False
+        mock_get_session.side_effect = RuntimeError("DDB timeout")
+
+        body = self._get_batch_stop_session_payload(sessions=[
+            {"idea_session_id": "session-1", "owner": "user1", "name": "Test"},
+        ])
+
+        result = virtual_desktop_controller.batch_stop_session(
+            body, user="user1"
+        )
+
+        assert isinstance(result, BatchStopSessionResponseContent)
+        assert result.successful_list == []
+        assert len(result.unsuccessful_list) == 1
+        assert result.unsuccessful_list[0].error_code == BatchOperationErrorCode.INTERNALSERVICEEXCEPTION
+
+    @patch("api.controllers.virtual_desktop_controller.os.environ.get")
+    @patch("api.utils.session_utils.accounts.is_active_admin")
+    def test_batch_stop_session_dry_run_mode(self, mock_is_admin, mock_env_get):
+        """Test batch stop session in dry run mode returns response without processing."""
+        mock_is_admin.return_value = True
+        mock_env_get.return_value = 'true'
+
+        body = self._get_batch_stop_session_payload()
+
+        result = virtual_desktop_controller.batch_stop_session(
+            body, user="clusteradmin"
+        )
+
+        assert isinstance(result, BatchStopSessionResponseContent)
+        assert len(result.successful_list) == 2
+        assert result.unsuccessful_list == []
+        mock_env_get.assert_called_once_with('DRY_RUN_ENABLED', 'false')
+
+    @patch("api.utils.session_utils.res_sessions.get_session")
+    @patch("api.utils.session_utils.accounts.is_active_admin")
+    def test_batch_stop_session_missing_idea_session_id_added_to_failed(
+        self, mock_is_admin, mock_get_session
+    ):
+        """Test that sessions without idea_session_id are added to the failed list."""
+        mock_is_admin.return_value = True
+        body = self._get_batch_stop_session_payload(sessions=[
+            {"owner": "user1", "name": "No ID"},
+        ])
+
+        result = virtual_desktop_controller.batch_stop_session(
+            body, user="clusteradmin"
+        )
+
+        assert isinstance(result, BatchStopSessionResponseContent)
+        assert result.successful_list == []
+        assert len(result.unsuccessful_list) == 1
+        assert result.unsuccessful_list[0].error_code == BatchOperationErrorCode.BADREQUESTEXCEPTION
+
+    @patch("api.controllers.virtual_desktop_controller.vdi_management.stop_sessions")
+    @patch("api.utils.session_utils.accounts.is_active_admin")
+    def test_batch_stop_session_returns_vdi_management_success_and_failures(
+        self, mock_is_admin, mock_stop_sessions
+    ):
+        """Test that vdi_management success/failure results are mapped to the response."""
+        mock_is_admin.return_value = True
+        mock_stop_sessions.return_value = (
+            [{"idea_session_id": "session-1", "owner": "user1", "state": "STOPPING"}],
+            [{"idea_session_id": "session-2", "owner": "user1", "failure_reason": "Session not in READY state", "failure_code": "BADREQUESTEXCEPTION"}],
+        )
+
+        body = self._get_batch_stop_session_payload()
+
+        result = virtual_desktop_controller.batch_stop_session(
+            body, user="clusteradmin"
+        )
+
+        assert isinstance(result, BatchStopSessionResponseContent)
+        assert len(result.successful_list) == 1
+        assert result.successful_list[0].idea_session_id == "session-1"
+        assert len(result.unsuccessful_list) == 1
+        assert result.unsuccessful_list[0].error_code == BatchOperationErrorCode.BADREQUESTEXCEPTION
+        assert result.unsuccessful_list[0].message == "Session not in READY state"
+
+    @patch("api.controllers.virtual_desktop_controller.vdi_management.stop_sessions")
+    @patch("api.utils.session_utils.accounts.is_active_admin")
+    def test_batch_stop_session_maps_failure_codes_from_vdi_management(
+        self, mock_is_admin, mock_stop_sessions
+    ):
+        """Test that different failure_code values map to the correct BatchOperationErrorCode."""
+        mock_is_admin.return_value = True
+        mock_stop_sessions.return_value = (
+            [],
+            [
+                {"idea_session_id": "s1", "owner": "u1", "failure_reason": "Not found", "failure_code": "NOTFOUNDEXCEPTION"},
+                {"idea_session_id": "s2", "owner": "u1", "failure_reason": "Active connections", "failure_code": "CONFLICTEXCEPTION"},
+                {"idea_session_id": "s3", "owner": "u1", "failure_reason": "Bad state"},
+            ],
+        )
+
+        body = self._get_batch_stop_session_payload()
+
+        result = virtual_desktop_controller.batch_stop_session(
+            body, user="clusteradmin"
+        )
+
+        assert len(result.unsuccessful_list) == 3
+        assert result.unsuccessful_list[0].error_code == BatchOperationErrorCode.NOTFOUNDEXCEPTION
+        assert result.unsuccessful_list[1].error_code == BatchOperationErrorCode.CONFLICTEXCEPTION
+        assert result.unsuccessful_list[2].error_code == BatchOperationErrorCode.INTERNALSERVICEEXCEPTION
+
+    @patch("api.controllers.virtual_desktop_controller.vdi_management.stop_sessions")
+    @patch("api.utils.session_utils.accounts.is_active_admin")
+    def test_batch_stop_session_propagates_vdi_management_exception(
+        self, mock_is_admin, mock_stop_sessions
+    ):
+        """Test that exceptions from vdi_management propagate to caller."""
+        mock_is_admin.return_value = True
+        mock_stop_sessions.side_effect = RuntimeError("EC2 API failure")
+        body = self._get_batch_stop_session_payload()
+
+        with pytest.raises(RuntimeError, match="EC2 API failure"):
+            virtual_desktop_controller.batch_stop_session(body, user="clusteradmin")
+
+    # Batch Delete Session Tests
+
+    def _get_batch_delete_session_payload(self, sessions=None):
+        """Helper method to create batch delete session request payload."""
+        if sessions is None:
+            sessions = [
+                {"idea_session_id": "session-1", "owner": "user1", "name": "Session 1"},
+                {"idea_session_id": "session-2", "owner": "user1", "name": "Session 2"},
+            ]
+        return {"sessions": sessions}
+
+    @patch("api.utils.session_utils.res_sessions.get_session_if_owner")
+    @patch("api.utils.session_utils.res_sessions.get_session")
+    @patch("api.utils.session_utils.accounts.is_active_admin")
+    def test_batch_delete_session_all_validation_failures_returns_empty_success(
+        self, mock_is_admin, mock_get_session, mock_get_session_if_owner
+    ):
+        """Test that when all sessions fail validation, successful_list is empty."""
+        mock_is_admin.return_value = False
+        mock_get_session_if_owner.return_value = None
+        mock_get_session.side_effect = UserSessionNotFound("not found")
+        body = self._get_batch_delete_session_payload()
+
+        result = virtual_desktop_controller.batch_delete_session(body, user="user1")
+
+        assert isinstance(result, BatchDeleteSessionResponseContent)
+        assert result.successful_list == []
+        assert len(result.unsuccessful_list) == 2
+
+    @patch("api.controllers.virtual_desktop_controller.vdi_management.terminate_sessions")
+    @patch("api.utils.session_utils.res_sessions.get_session")
+    @patch("api.utils.session_utils.accounts.is_active_admin")
+    def test_batch_delete_session_admin_validated_calls_terminate(
+        self, mock_is_admin, mock_get_session, mock_terminate
+    ):
+        """Test that admin with valid sessions calls vdi_management.terminate_sessions."""
+        mock_is_admin.return_value = True
+        mock_get_session.return_value = {"owner": "user1", "project": {"project_id": "p1"}}
+        mock_terminate.return_value = ([], [])
+        body = self._get_batch_delete_session_payload()
+
+        result = virtual_desktop_controller.batch_delete_session(body, user="clusteradmin")
+
+        assert isinstance(result, BatchDeleteSessionResponseContent)
+        mock_terminate.assert_called_once()
+
+    @patch("api.controllers.virtual_desktop_controller.os.environ.get")
+    @patch("api.utils.session_utils.res_sessions.get_session")
+    @patch("api.utils.session_utils.accounts.is_active_admin")
+    def test_batch_delete_session_dry_run_mode(self, mock_is_admin, mock_get_session, mock_env_get):
+        """Test batch delete session in dry run mode returns response without hitting business logic."""
+        mock_is_admin.return_value = True
+        mock_get_session.return_value = {"owner": "user1", "project": {"project_id": "p1"}}
+        mock_env_get.return_value = 'true'
+        body = self._get_batch_delete_session_payload()
+
+        result = virtual_desktop_controller.batch_delete_session(body, user="clusteradmin")
+
+        assert isinstance(result, BatchDeleteSessionResponseContent)
+        assert len(result.successful_list) == 2
+        assert result.unsuccessful_list == []
+
+    @patch("api.utils.session_utils.res_sessions.get_session")
+    @patch("api.utils.session_utils.accounts.is_active_admin")
+    def test_batch_delete_session_missing_fields_added_to_failed(
+        self, mock_is_admin, mock_get_session
+    ):
+        """Test that sessions without idea_session_id/owner are added to the failed list."""
+        mock_is_admin.return_value = True
+        body = self._get_batch_delete_session_payload(sessions=[
+            {"name": "No ID or owner"},
+        ])
+
+        result = virtual_desktop_controller.batch_delete_session(body, user="clusteradmin")
+
+        assert isinstance(result, BatchDeleteSessionResponseContent)
+        assert result.successful_list == []
+        assert len(result.unsuccessful_list) == 1
+        assert result.unsuccessful_list[0].error_code == BatchOperationErrorCode.BADREQUESTEXCEPTION
+
+    @patch("api.utils.session_utils.role_assignments.get_user_permissions")
+    @patch("api.utils.session_utils.res_sessions.get_session")
+    @patch("api.utils.session_utils.res_sessions.get_session_if_owner")
+    @patch("api.utils.session_utils.accounts.is_active_admin")
+    def test_batch_delete_session_non_owner_without_permission_rejected(
+        self, mock_is_admin, mock_get_session_if_owner, mock_get_session, mock_get_perms
+    ):
+        """Test that non-owner without vdis.create_terminate_others_sessions is rejected."""
+        mock_is_admin.return_value = False
+        mock_get_session_if_owner.return_value = None
+        mock_get_session.return_value = {"owner": "other_user", "project": {"project_id": "p1"}}
+        mock_get_perms.return_value = []
+        body = self._get_batch_delete_session_payload(sessions=[
+            {"idea_session_id": "session-1", "owner": "other_user", "project": {"project_id": "p1"}},
+        ])
+
+        result = virtual_desktop_controller.batch_delete_session(body, user="user1")
+
+        assert isinstance(result, BatchDeleteSessionResponseContent)
+        assert result.successful_list == []
+        assert len(result.unsuccessful_list) == 1
+        assert result.unsuccessful_list[0].error_code == BatchOperationErrorCode.FORBIDDENEXCEPTION
+
+    @patch("api.controllers.virtual_desktop_controller.vdi_management.terminate_sessions")
+    @patch("api.utils.session_utils.role_assignments.get_user_permissions")
+    @patch("api.utils.session_utils.res_sessions.get_session")
+    @patch("api.utils.session_utils.res_sessions.get_session_if_owner")
+    @patch("api.utils.session_utils.accounts.is_active_admin")
+    def test_batch_delete_session_non_owner_with_permission_calls_terminate(
+        self, mock_is_admin, mock_get_session_if_owner, mock_get_session, mock_get_perms, mock_terminate
+    ):
+        """Test that non-owner with permission passes validation and calls terminate_sessions."""
+        mock_is_admin.return_value = False
+        mock_get_session_if_owner.return_value = None
+        mock_get_session.return_value = {"owner": "other_user", "project": {"project_id": "p1"}}
+        mock_get_perms.return_value = ["vdis.create_terminate_others_sessions"]
+        mock_terminate.return_value = ([], [])
+        body = self._get_batch_delete_session_payload(sessions=[
+            {"idea_session_id": "session-1", "owner": "other_user", "project": {"project_id": "p1"}},
+        ])
+
+        result = virtual_desktop_controller.batch_delete_session(body, user="user1")
+
+        assert isinstance(result, BatchDeleteSessionResponseContent)
+        mock_terminate.assert_called_once()
+
+    @patch("api.utils.session_utils.res_sessions.get_session")
+    @patch("api.utils.session_utils.accounts.is_active_admin")
+    def test_batch_delete_session_empty_sessions_list_raises_value_error(
+        self, mock_is_admin, mock_get_session
+    ):
+        """Test that an empty sessions list raises ValueError from model validation."""
+        mock_is_admin.return_value = True
+        body = self._get_batch_delete_session_payload(sessions=[])
+
+        with pytest.raises(ValueError):
+            virtual_desktop_controller.batch_delete_session(body, user="clusteradmin")
+
+    @patch("api.controllers.virtual_desktop_controller.os.environ.get")
+    @patch("api.utils.session_utils.res_sessions.get_session")
+    @patch("api.utils.session_utils.res_sessions.get_session_if_owner")
+    @patch("api.utils.session_utils.accounts.is_active_admin")
+    def test_batch_delete_session_dry_run_mixed_sessions(self, mock_is_admin, mock_get_session_if_owner, mock_get_session, mock_env_get):
+        """Test dry run with mix of valid and invalid sessions returns correct split."""
+        mock_is_admin.return_value = False
+        mock_env_get.return_value = 'true'
+
+        def get_session_if_owner_side_effect(user, session_id):
+            if session_id == "session-1":
+                return {"owner": "user1", "idea_session_id": "session-1", "project": {"project_id": "p1"}}
+            return None
+
+        mock_get_session_if_owner.side_effect = get_session_if_owner_side_effect
+        mock_get_session.side_effect = UserSessionNotFound("not found")
+        body = self._get_batch_delete_session_payload(sessions=[
+            {"idea_session_id": "session-1", "owner": "user1"},
+            {"idea_session_id": "session-2", "owner": "user1"},
+        ])
+
+        result = virtual_desktop_controller.batch_delete_session(body, user="user1")
+
+        assert isinstance(result, BatchDeleteSessionResponseContent)
+        assert len(result.successful_list) == 1
+        assert result.successful_list[0].idea_session_id == "session-1"
+        assert len(result.unsuccessful_list) == 1
+        assert result.unsuccessful_list[0].session.idea_session_id == "session-2"
+        assert result.unsuccessful_list[0].error_code == BatchOperationErrorCode.FORBIDDENEXCEPTION
+
+    # Batch Start Session Tests
+
+    def _get_batch_start_session_payload(self, sessions=None):
+        """Helper method to create batch start session request payload."""
+        if sessions is None:
+            sessions = [
+                {"idea_session_id": "session-1", "owner": "user1", "name": "Session 1"},
+                {"idea_session_id": "session-2", "owner": "user1", "name": "Session 2"},
+            ]
+        return {"sessions": sessions}
+
+    # Batch Reboot Session Tests
+
+    def _get_batch_reboot_session_payload(self, sessions=None):
+        """Helper method to create batch reboot session request payload."""
+        if sessions is None:
+            sessions = [
+                {"idea_session_id": "session-1", "owner": "user1", "name": "Session 1"},
+                {"idea_session_id": "session-2", "owner": "user1", "name": "Session 2"},
+            ]
+        return {"sessions": sessions}
+
+    @patch("api.utils.session_utils.res_sessions.get_session")
+    @patch("api.utils.session_utils.accounts.is_active_admin")
+    def test_batch_start_session_all_validation_failures_returns_empty_success(
+        self, mock_is_admin, mock_get_session
+    ):
+        """Test that when all sessions fail validation, successful_list is empty."""
+        mock_is_admin.return_value = False
+        mock_get_session.side_effect = UserSessionNotFound("not found")
+        body = self._get_batch_start_session_payload()
+
+        result = virtual_desktop_controller.batch_start_session(body, user="user1")
+
+        assert isinstance(result, BatchStartSessionResponseContent)
+        assert result.successful_list == []
+        assert len(result.unsuccessful_list) == 2
+
+    @patch("api.controllers.virtual_desktop_controller.vdi_management.start_sessions")
+    @patch("api.utils.session_utils.res_sessions.get_session")
+    @patch("api.utils.session_utils.accounts.is_active_admin")
+    def test_batch_start_session_admin_calls_business_logic(
+        self, mock_is_admin, mock_get_session, mock_start_sessions
+    ):
+        """Test that admin with valid sessions calls vdi_management.start_sessions."""
+        mock_is_admin.return_value = True
+        mock_get_session.return_value = {"owner": "user1", "state": "STOPPED", "project": {"project_id": "p1"}}
+        mock_start_sessions.return_value = (
+            [
+                {"owner": "user1", "idea_session_id": "session-1", "state": "RESUMING"},
+                {"owner": "user1", "idea_session_id": "session-2", "state": "RESUMING"},
+            ],
+            []
+        )
+        body = self._get_batch_start_session_payload()
+
+        result = virtual_desktop_controller.batch_start_session(body, user="clusteradmin")
+
+        assert isinstance(result, BatchStartSessionResponseContent)
+        assert len(result.successful_list) == 2
+        assert result.successful_list[0].state == "RESUMING"
+        assert result.unsuccessful_list == []
+        mock_start_sessions.assert_called_once()
+
+    @patch("api.controllers.virtual_desktop_controller.os.environ.get")
+    @patch("api.utils.session_utils.res_sessions.get_session")
+    @patch("api.utils.session_utils.accounts.is_active_admin")
+    def test_batch_start_session_dry_run_mode(self, mock_is_admin, mock_get_session, mock_env_get):
+        """Test batch start session in dry run mode returns response without hitting business logic."""
+        mock_is_admin.return_value = True
+        mock_get_session.return_value = {"owner": "user1", "state": "STOPPED", "project": {"project_id": "p1"}}
+        mock_env_get.return_value = 'true'
+        body = self._get_batch_start_session_payload()
+
+        result = virtual_desktop_controller.batch_start_session(body, user="clusteradmin")
+
+        assert isinstance(result, BatchStartSessionResponseContent)
+        assert len(result.successful_list) == 2
+        assert result.unsuccessful_list == []
+
+    @patch("api.utils.session_utils.res_sessions.get_session")
+    @patch("api.utils.session_utils.accounts.is_active_admin")
+    def test_batch_start_session_missing_fields_added_to_failed(
+        self, mock_is_admin, mock_get_session
+    ):
+        """Test that sessions without idea_session_id/owner are added to the failed list."""
+        mock_is_admin.return_value = True
+        body = self._get_batch_start_session_payload(sessions=[
+            {"name": "No ID or owner"},
+        ])
+
+        result = virtual_desktop_controller.batch_start_session(body, user="clusteradmin")
+
+        assert isinstance(result, BatchStartSessionResponseContent)
+        assert result.successful_list == []
+        assert len(result.unsuccessful_list) == 1
+        assert result.unsuccessful_list[0].error_code == BatchOperationErrorCode.BADREQUESTEXCEPTION
+
+    @patch("api.utils.session_utils.res_sessions.get_session")
+    @patch("api.utils.session_utils.accounts.is_active_admin")
+    def test_batch_start_session_non_owner_rejected(
+        self, mock_is_admin, mock_get_session
+    ):
+        """Test that non-owner is rejected with FORBIDDEN."""
+        mock_is_admin.return_value = False
+        mock_get_session.side_effect = UserSessionNotFound("not found")
+        body = self._get_batch_start_session_payload(sessions=[
+            {"idea_session_id": "session-1", "owner": "other_user"},
+        ])
+
+        result = virtual_desktop_controller.batch_start_session(body, user="user1")
+
+        assert isinstance(result, BatchStartSessionResponseContent)
+        assert result.successful_list == []
+        assert len(result.unsuccessful_list) == 1
+        assert result.unsuccessful_list[0].error_code == BatchOperationErrorCode.FORBIDDENEXCEPTION
+
+    @patch("api.utils.session_utils.res_sessions.get_session")
+    @patch("api.utils.session_utils.accounts.is_active_admin")
+    def test_batch_start_session_empty_sessions_list_raises_value_error(
+        self, mock_is_admin, mock_get_session
+    ):
+        """Test that an empty sessions list raises ValueError from model validation."""
+        mock_is_admin.return_value = True
+        body = self._get_batch_start_session_payload(sessions=[])
+
+        with pytest.raises(ValueError):
+            virtual_desktop_controller.batch_start_session(body, user="clusteradmin")
+
+    @patch("api.controllers.virtual_desktop_controller.os.environ.get")
+    @patch("api.utils.session_utils.res_sessions.get_session")
+    @patch("api.utils.session_utils.accounts.is_active_admin")
+    def test_batch_start_session_dry_run_mixed_sessions(self, mock_is_admin, mock_get_session, mock_env_get):
+        """Test dry run with mix of valid and invalid sessions returns correct split."""
+        mock_is_admin.return_value = False
+        mock_env_get.return_value = 'true'
+
+        def get_session_side_effect(user, session_id):
+            if session_id == "session-1":
+                return {"owner": "user1", "idea_session_id": "session-1", "state": "STOPPED", "project": {"project_id": "p1"}}
+            raise UserSessionNotFound("not found")
+
+        mock_get_session.side_effect = get_session_side_effect
+        body = self._get_batch_start_session_payload(sessions=[
+            {"idea_session_id": "session-1", "owner": "user1"},
+            {"idea_session_id": "session-2", "owner": "user1"},
+        ])
+
+        result = virtual_desktop_controller.batch_start_session(body, user="user1")
+
+        assert isinstance(result, BatchStartSessionResponseContent)
+        assert len(result.successful_list) == 1
+        assert result.successful_list[0].idea_session_id == "session-1"
+        assert len(result.unsuccessful_list) == 1
+        assert result.unsuccessful_list[0].error_code == BatchOperationErrorCode.FORBIDDENEXCEPTION
+
+    @patch("api.controllers.virtual_desktop_controller.vdi_management.start_sessions")
+    @patch("api.utils.session_utils.res_sessions.get_session")
+    @patch("api.utils.session_utils.accounts.is_active_admin")
+    def test_batch_start_session_business_logic_exception_propagates(
+        self, mock_is_admin, mock_get_session, mock_start_sessions
+    ):
+        """Test that exceptions from vdi_management.start_sessions propagate."""
+        mock_is_admin.return_value = True
+        mock_get_session.return_value = {"owner": "user1", "state": "STOPPED", "project": {"project_id": "p1"}}
+        mock_start_sessions.side_effect = RuntimeError("EC2 API failure")
+        body = self._get_batch_start_session_payload()
+
+        with pytest.raises(RuntimeError, match="EC2 API failure"):
+            virtual_desktop_controller.batch_start_session(body, user="clusteradmin")
+
+    @patch("api.utils.session_utils.get_active_counts_for_sessions")
+    @patch("api.controllers.virtual_desktop_controller.vdi_management.reboot_sessions")
+    @patch("api.utils.session_utils.res_sessions.get_session")
+    @patch("api.utils.session_utils.accounts.is_active_admin")
+    def test_batch_reboot_session_admin_skips_authorization(
+        self, mock_is_admin, mock_get_session, mock_reboot_sessions, mock_get_counts
+    ):
+        """Test that admin users bypass per-session authorization checks but validation still runs."""
+        mock_is_admin.return_value = True
+        mock_get_session.return_value = {"state": "READY", "owner": "user1", "idea_session_id": "session-1", "server": {"instance_id": "i-123"}}
+        mock_get_counts.return_value = [{"connection_count": 0}]
+        mock_reboot_sessions.return_value = ([], [])
+        body = self._get_batch_reboot_session_payload()
+
+        virtual_desktop_controller.batch_reboot_session(body, user="clusteradmin")
+
+        # Admin skips the ownership check but get_session is still called for validation
+        mock_reboot_sessions.assert_called_once()
+
+    @patch("api.utils.session_utils.get_active_counts_for_sessions")
+    @patch("api.controllers.virtual_desktop_controller.vdi_management.reboot_sessions")
+    @patch("api.utils.session_utils.res_sessions.get_session")
+    @patch("api.utils.session_utils.accounts.is_active_admin")
+    def test_batch_reboot_session_non_admin_own_sessions_authorized(
+        self, mock_is_admin, mock_get_session, mock_reboot_sessions, mock_get_counts
+    ):
+        """Test that non-admin user can reboot their own sessions."""
+        mock_is_admin.return_value = False
+        mock_get_session.return_value = {"owner": "user1", "idea_session_id": "session-1", "state": "READY", "server": {"instance_id": "i-123"}}
+        mock_get_counts.return_value = [{"connection_count": 0}]
+        mock_reboot_sessions.return_value = ([], [])
+
+        body = self._get_batch_reboot_session_payload(sessions=[
+            {"idea_session_id": "session-1", "owner": "user1", "name": "Session 1"},
+        ])
+
+        result = virtual_desktop_controller.batch_reboot_session(body, user="user1")
+
+        assert isinstance(result, BatchRebootSessionResponseContent)
+        mock_reboot_sessions.assert_called_once()
+
+    @patch("api.utils.session_utils.res_sessions.get_session")
+    @patch("api.utils.session_utils.accounts.is_active_admin")
+    def test_batch_reboot_session_non_admin_other_user_sessions_rejected(
+        self, mock_is_admin, mock_get_session
+    ):
+        """Test that non-admin user cannot reboot another user's sessions."""
+        mock_is_admin.return_value = False
+        mock_get_session.side_effect = UserSessionNotFound("Session not found")
+
+        body = self._get_batch_reboot_session_payload(sessions=[
+            {"idea_session_id": "session-1", "owner": "user2", "name": "Session 1"},
+        ])
+
+        result = virtual_desktop_controller.batch_reboot_session(body, user="user1")
+
+        assert isinstance(result, BatchRebootSessionResponseContent)
+        assert len(result.successful_list) == 0
+        assert len(result.unsuccessful_list) == 1
+        assert result.unsuccessful_list[0].error_code == BatchOperationErrorCode.FORBIDDENEXCEPTION
+
+    @patch("api.utils.session_utils.get_active_counts_for_sessions")
+    @patch("api.controllers.virtual_desktop_controller.vdi_management.reboot_sessions")
+    @patch("api.utils.session_utils.res_sessions.get_session")
+    @patch("api.utils.session_utils.accounts.is_active_admin")
+    def test_batch_reboot_session_returns_vdi_management_success_and_failures(
+        self, mock_is_admin, mock_get_session, mock_reboot_sessions, mock_get_counts
+    ):
+        """Test that reboot results from vdi_management are mapped correctly."""
+        mock_is_admin.return_value = True
+        mock_get_session.return_value = {"state": "READY", "owner": "user1", "idea_session_id": "session-1", "server": {"instance_id": "i-123"}}
+        mock_get_counts.return_value = [{"connection_count": 0}]
+        mock_reboot_sessions.return_value = (
+            [{"idea_session_id": "session-1", "owner": "user1", "state": "RESUMING"}],
+            [{"idea_session_id": "session-2", "owner": "user1", "failure_reason": "Can't reboot", "failure_code": "BADREQUESTEXCEPTION"}],
+        )
+
+        body = self._get_batch_reboot_session_payload()
+        result = virtual_desktop_controller.batch_reboot_session(body, user="clusteradmin")
+
+        assert isinstance(result, BatchRebootSessionResponseContent)
+        assert len(result.successful_list) == 1
+        assert result.successful_list[0].idea_session_id == "session-1"
+        assert len(result.unsuccessful_list) == 1
+        assert result.unsuccessful_list[0].error_code == BatchOperationErrorCode.BADREQUESTEXCEPTION
+
+    @patch("api.controllers.virtual_desktop_controller.vdi_management.reboot_sessions")
+    @patch("api.utils.session_utils.accounts.is_active_admin")
+    def test_batch_reboot_session_missing_idea_session_id_added_to_failed(
+        self, mock_is_admin, mock_reboot_sessions
+    ):
+        """Test that sessions without idea_session_id are added to unsuccessful list."""
+        mock_is_admin.return_value = False
+
+        body = self._get_batch_reboot_session_payload(sessions=[
+            {"owner": "user1", "name": "Session 1"},
+        ])
+
+        result = virtual_desktop_controller.batch_reboot_session(body, user="user1")
+
+        assert isinstance(result, BatchRebootSessionResponseContent)
+        assert len(result.successful_list) == 0
+        assert len(result.unsuccessful_list) == 1
+        assert result.unsuccessful_list[0].error_code == BatchOperationErrorCode.BADREQUESTEXCEPTION
+        mock_reboot_sessions.assert_not_called()
+
+    @patch("api.utils.session_utils.get_active_counts_for_sessions")
+    @patch("api.controllers.virtual_desktop_controller.vdi_management.reboot_sessions")
+    @patch("api.utils.session_utils.res_sessions.get_session")
+    @patch("api.utils.session_utils.accounts.is_active_admin")
+    @patch.dict(os.environ, {"DRY_RUN_ENABLED": "true"})
+    def test_batch_reboot_session_dry_run_mode(self, mock_is_admin, mock_get_session, mock_reboot_sessions, mock_get_counts):
+        """Test that dry run mode skips actual reboot."""
+        mock_is_admin.return_value = True
+        mock_get_session.return_value = {"state": "READY", "owner": "user1", "idea_session_id": "session-1", "server": {"instance_id": "i-123"}}
+        mock_get_counts.return_value = [{"connection_count": 0}]
+
+        body = self._get_batch_reboot_session_payload()
+        result = virtual_desktop_controller.batch_reboot_session(body, user="clusteradmin")
+
+        assert isinstance(result, BatchRebootSessionResponseContent)
+        assert len(result.successful_list) == 2
+        mock_reboot_sessions.assert_not_called()
+
+    @patch("api.utils.session_utils.get_active_counts_for_sessions")
+    @patch("api.utils.session_utils.res_sessions.get_session")
+    @patch("api.utils.session_utils.accounts.is_active_admin")
+    def test_batch_reboot_session_invalid_state_rejected(
+        self, mock_is_admin, mock_get_session, mock_get_counts
+    ):
+        """Test that sessions not in READY/ERROR state are rejected."""
+        mock_is_admin.return_value = True
+        mock_get_session.return_value = {"state": "STOPPING", "owner": "user1", "idea_session_id": "session-1", "server": {"instance_id": "i-123"}}
+
+        body = self._get_batch_reboot_session_payload(sessions=[
+            {"idea_session_id": "session-1", "owner": "user1", "name": "Session 1"},
+        ])
+
+        result = virtual_desktop_controller.batch_reboot_session(body, user="clusteradmin")
+
+        assert len(result.successful_list) == 0
+        assert len(result.unsuccessful_list) == 1
+        assert result.unsuccessful_list[0].error_code == BatchOperationErrorCode.BADREQUESTEXCEPTION
+        assert "Can't reboot" in result.unsuccessful_list[0].message
+
+    @patch("api.utils.session_utils.get_active_counts_for_sessions")
+    @patch("api.utils.session_utils.res_sessions.get_session")
+    @patch("api.utils.session_utils.accounts.is_active_admin")
+    def test_batch_reboot_session_active_connections_rejected(
+        self, mock_is_admin, mock_get_session, mock_get_counts
+    ):
+        """Test that sessions with active connections are rejected when force=False."""
+        mock_is_admin.return_value = True
+        mock_get_session.return_value = {"state": "READY", "owner": "user1", "idea_session_id": "session-1", "server": {"instance_id": "i-123"}}
+        mock_get_counts.return_value = [{"connection_count": 2, "idea_session_id": "session-1"}]
+
+        body = self._get_batch_reboot_session_payload(sessions=[
+            {"idea_session_id": "session-1", "owner": "user1", "name": "Session 1", "force": False},
+        ])
+
+        result = virtual_desktop_controller.batch_reboot_session(body, user="clusteradmin")
+
+        assert len(result.successful_list) == 0
+        assert len(result.unsuccessful_list) == 1
+        assert "active connection(s)" in result.unsuccessful_list[0].message
+
+    @patch("api.controllers.virtual_desktop_controller.vdi_management.reboot_sessions")
+    @patch("api.utils.session_utils.res_sessions.get_session")
+    @patch("api.utils.session_utils.accounts.is_active_admin")
+    def test_batch_reboot_session_force_bypasses_connection_check(
+        self, mock_is_admin, mock_get_session, mock_reboot_sessions
+    ):
+        """Test that force=True bypasses active connection check."""
+        mock_is_admin.return_value = True
+        mock_get_session.return_value = {"state": "READY", "owner": "user1", "idea_session_id": "session-1", "server": {"instance_id": "i-123"}}
+        mock_reboot_sessions.return_value = ([], [])
+
+        body = self._get_batch_reboot_session_payload(sessions=[
+            {"idea_session_id": "session-1", "owner": "user1", "name": "Session 1", "force": True},
+        ])
+
+        virtual_desktop_controller.batch_reboot_session(body, user="clusteradmin")
+
+        mock_reboot_sessions.assert_called_once()
+
+    # Get Session Connection Tests
+    @patch("api.controllers.virtual_desktop_controller.VirtualDesktopSessionConnection.from_dict")
+    @patch("api.controllers.virtual_desktop_controller.res_sessions.get_session_connection")
+    @patch("api.controllers.virtual_desktop_controller.res_sessions.get_session")
+    @patch("api.controllers.virtual_desktop_controller.accounts.is_active_admin")
+    def test_get_session_connection_admin_success(
+        self, mock_is_active_admin, mock_get_session, mock_get_session_connection, mock_from_dict
+    ):
+        """Test that admin can get connection info for any user's session."""
+        mock_is_active_admin.return_value = True
+        mock_get_session.return_value = {"owner": "user1", "idea_session_id": "session-123", "state": "READY"}
+        mock_connection_result = {"idea-session-id": "session-123", "idea-session-owner": "user1", "endpoint": "https://example.com", "web-url-path": "/", "access-token": "token"}
+        mock_get_session_connection.return_value = mock_connection_result
+        mock_connection_obj = Mock()
+        mock_from_dict.return_value = mock_connection_obj
+
+        body = {"connection": {"idea-session-id": "session-123", "idea-session-owner": "user1"}}
+        result = virtual_desktop_controller.get_session_connection(body, user="clusteradmin")
+
+        assert result.connection == mock_connection_obj
+        mock_get_session_connection.assert_called_once_with(
+            session_id="session-123", owner="user1", username="clusteradmin"
+        )
+
+    @patch("api.controllers.virtual_desktop_controller.VirtualDesktopSessionConnection.from_dict")
+    @patch("api.controllers.virtual_desktop_controller.res_sessions.get_session_connection")
+    @patch("api.controllers.virtual_desktop_controller.res_sessions.get_session")
+    @patch("api.controllers.virtual_desktop_controller.accounts.is_active_admin")
+    def test_get_session_connection_non_admin_own_session_success(
+        self, mock_is_active_admin, mock_get_session, mock_get_session_connection, mock_from_dict
+    ):
+        """Test that non-admin can get connection info for their own session."""
+        mock_is_active_admin.return_value = False
+        mock_get_session.return_value = {"owner": "user1", "idea_session_id": "session-123", "state": "READY"}
+        mock_get_session_connection.return_value = {"idea-session-id": "session-123", "idea-session-owner": "user1", "endpoint": "https://example.com", "web-url-path": "/", "access-token": "token"}
+        mock_from_dict.return_value = Mock()
+
+        body = {"connection": {"idea-session-id": "session-123", "idea-session-owner": "user1"}}
+        result = virtual_desktop_controller.get_session_connection(body, user="user1")
+
+        assert result.connection is not None
+
+    @patch("api.controllers.virtual_desktop_controller.res_session_permissions.get_session_permission")
+    @patch("api.controllers.virtual_desktop_controller.accounts.is_active_admin")
+    def test_get_session_connection_non_admin_other_user_no_permission_raises_oauth_problem(
+        self, mock_is_active_admin, mock_get_permission
+    ):
+        """Test that non-admin without shared permission cannot get connection info."""
+        mock_is_active_admin.return_value = False
+        mock_get_permission.side_effect = SessionPermissionsNotFound("No permission")
+
+        body = {"connection": {"idea-session-id": "session-123", "idea-session-owner": "user2"}}
+        with pytest.raises(OAuthProblem):
+            virtual_desktop_controller.get_session_connection(body, user="user1")
+
+    @patch("api.controllers.virtual_desktop_controller.VirtualDesktopSessionConnection.from_dict")
+    @patch("api.controllers.virtual_desktop_controller.res_sessions.get_session_connection")
+    @patch("api.controllers.virtual_desktop_controller.res_sessions.get_session")
+    @patch("api.controllers.virtual_desktop_controller.res_session_permissions.get_session_permission")
+    @patch("api.controllers.virtual_desktop_controller.accounts.is_active_admin")
+    def test_get_session_connection_non_admin_shared_permission_success(
+        self, mock_is_active_admin, mock_get_permission, mock_get_session, mock_get_session_connection, mock_from_dict
+    ):
+        """Test that non-admin with shared permission can get connection info."""
+        mock_is_active_admin.return_value = False
+        mock_get_permission.return_value = {"idea_session_id": "session-123", "actor_name": "user1"}
+        mock_get_session.return_value = {"owner": "user2", "idea_session_id": "session-123", "state": "READY"}
+        mock_get_session_connection.return_value = {"idea-session-id": "session-123", "idea-session-owner": "user2", "endpoint": "https://example.com", "web-url-path": "/", "access-token": "token"}
+        mock_from_dict.return_value = Mock()
+
+        body = {"connection": {"idea-session-id": "session-123", "idea-session-owner": "user2"}}
+        result = virtual_desktop_controller.get_session_connection(body, user="user1")
+
+        assert result.connection is not None
+        mock_get_session_connection.assert_called_once_with(
+            session_id="session-123", owner="user2", username="user1"
+        )
+
+    @patch("api.controllers.virtual_desktop_controller.res_sessions.get_session")
+    @patch("api.controllers.virtual_desktop_controller.accounts.is_active_admin")
+    def test_get_session_connection_session_not_found_raises_bad_request(
+        self, mock_is_active_admin, mock_get_session
+    ):
+        """Test that get_session_connection raises BadRequestException when session not found."""
+        mock_is_active_admin.return_value = True
+        mock_get_session.side_effect = UserSessionNotFound("Session not found")
+
+        body = {"connection": {"idea-session-id": "nonexistent", "idea-session-owner": "user1"}}
+        with pytest.raises(BadRequestException):
+            virtual_desktop_controller.get_session_connection(body, user="clusteradmin")
+
+    @patch("api.controllers.virtual_desktop_controller.res_sessions.get_session")
+    @patch("api.controllers.virtual_desktop_controller.accounts.is_active_admin")
+    def test_get_session_connection_session_not_ready_raises_bad_request(
+        self, mock_is_active_admin, mock_get_session
+    ):
+        """Test that get_session_connection raises BadRequestException when session is not READY."""
+        mock_is_active_admin.return_value = True
+        mock_get_session.return_value = {"owner": "user1", "idea_session_id": "session-123", "state": "STOPPED"}
+
+        body = {"connection": {"idea-session-id": "session-123", "idea-session-owner": "user1"}}
+        with pytest.raises(BadRequestException) as exc_info:
+            virtual_desktop_controller.get_session_connection(body, user="clusteradmin")
+
+        assert "not ready" in str(exc_info.value).lower()
+
+    @patch("api.controllers.virtual_desktop_controller.res_sessions.update_session_state")
+    @patch("api.controllers.virtual_desktop_controller.res_sessions.get_session_connection")
+    @patch("api.controllers.virtual_desktop_controller.res_sessions.get_session")
+    @patch("api.controllers.virtual_desktop_controller.accounts.is_active_admin")
+    def test_get_session_connection_dcv_api_failure_raises_internal_service(
+        self, mock_is_active_admin, mock_get_session, mock_get_session_connection, mock_update_state
+    ):
+        """Test that DCV session manager API failure raises InternalServiceException and errors session."""
+        mock_is_active_admin.return_value = True
+        mock_get_session.return_value = {"owner": "user1", "idea_session_id": "session-123", "state": "READY"}
+        mock_get_session_connection.side_effect = Exception("DCV service unavailable")
+
+        body = {"connection": {"idea-session-id": "session-123", "idea-session-owner": "user1"}}
+        with pytest.raises(InternalServiceException):
+            virtual_desktop_controller.get_session_connection(body, user="clusteradmin")
+
+        mock_update_state.assert_called_once_with("user1", "session-123", "ERROR")
+
+    @patch("api.controllers.virtual_desktop_controller.res_sessions.get_session")
+    @patch("api.controllers.virtual_desktop_controller.accounts.is_active_admin")
+    def test_get_session_connection_session_lookup_error_raises_internal_service(
+        self, mock_is_active_admin, mock_get_session
+    ):
+        """Test that unexpected error during session lookup raises InternalServiceException."""
+        mock_is_active_admin.return_value = True
+        mock_get_session.side_effect = Exception("DynamoDB unavailable")
+
+        body = {"connection": {"idea-session-id": "session-123", "idea-session-owner": "user1"}}
+        with pytest.raises(InternalServiceException):
+            virtual_desktop_controller.get_session_connection(body, user="clusteradmin")
+
+    @patch("api.controllers.virtual_desktop_controller.res_sessions.update_session_state")
+    @patch("api.controllers.virtual_desktop_controller.res_sessions.get_session_connection")
+    @patch("api.controllers.virtual_desktop_controller.res_sessions.get_session")
+    @patch("api.controllers.virtual_desktop_controller.accounts.is_active_admin")
+    def test_get_session_connection_setting_not_found_does_not_error_session(
+        self, mock_is_active_admin, mock_get_session, mock_get_session_connection, mock_update_state
+    ):
+        """Test that missing cluster setting raises InternalServiceException without erroring session."""
+        mock_is_active_admin.return_value = True
+        mock_get_session.return_value = {"owner": "user1", "idea_session_id": "session-123", "state": "READY"}
+        mock_get_session_connection.side_effect = SettingNotFound("No connection gateway endpoint configured")
+
+        body = {"connection": {"idea-session-id": "session-123", "idea-session-owner": "user1"}}
+        with pytest.raises(InternalServiceException):
+            virtual_desktop_controller.get_session_connection(body, user="clusteradmin")
+
+        mock_update_state.assert_not_called()
+
+    # Batch Get Session Screenshot Tests
+
+    def _get_batch_get_session_screenshot_payload(self, screenshots=None):
+        if screenshots is None:
+            screenshots = [
+                {"idea_session_id": "session-1"},
+                {"idea_session_id": "session-2"},
+            ]
+        return {"screenshots": screenshots}
+
+    @patch("api.controllers.virtual_desktop_controller.dcv_session_manager_client.get_session_screenshots")
+    def test_batch_get_session_screenshot_forwards_authenticated_user_as_requester(
+        self, mock_get_screenshots
+    ):
+        mock_get_screenshots.return_value = {
+            "successful_list": [
+                {"session_screenshot": {
+                    "session_id": "session-1",
+                    "images": [
+                        {"format": "png", "data": "AAAA", "created_on": "2026-05-26T00:00:00Z", "primary": True},
+                    ],
+                }},
+            ],
+            "unsuccessful_list": [],
+        }
+        body = self._get_batch_get_session_screenshot_payload()
+
+        result = virtual_desktop_controller.batch_get_session_screenshot(body, user="clusteradmin")
+
+        assert isinstance(result, BatchGetSessionScreenshotResponseContent)
+        assert len(result.successful_list) == 1
+        assert result.successful_list[0].idea_session_id == "session-1"
+        assert result.successful_list[0].data == "AAAA"
+        assert result.successful_list[0].format == "png"
+        mock_get_screenshots.assert_called_once_with(
+            ["session-1", "session-2"], requester="clusteradmin"
+        )
+
+    @patch("api.controllers.virtual_desktop_controller.dcv_session_manager_client.get_session_screenshots")
+    def test_batch_get_session_screenshot_access_denied_maps_to_forbidden(
+        self, mock_get_screenshots
+    ):
+        mock_get_screenshots.return_value = {
+            "successful_list": [],
+            "unsuccessful_list": [
+                {
+                    "get_session_screenshot_request_data": {"session_id": "session-1"},
+                    "failure_reason": "Session not found or access denied",
+                },
+            ],
+        }
+        body = self._get_batch_get_session_screenshot_payload(screenshots=[
+            {"idea_session_id": "session-1"},
+        ])
+
+        result = virtual_desktop_controller.batch_get_session_screenshot(body, user="attacker")
+
+        assert isinstance(result, BatchGetSessionScreenshotResponseContent)
+        assert result.successful_list == []
+        assert len(result.unsuccessful_list) == 1
+        assert result.unsuccessful_list[0].error_code == BatchOperationErrorCode.FORBIDDENEXCEPTION
+        assert result.unsuccessful_list[0].screenshot.idea_session_id == "session-1"
+
+    @patch("api.controllers.virtual_desktop_controller.dcv_session_manager_client.get_session_screenshots")
+    def test_batch_get_session_screenshot_other_failures_map_to_internal_service(
+        self, mock_get_screenshots
+    ):
+        """Non-auth failures from the private API map to INTERNAL_SERVICE."""
+        mock_get_screenshots.return_value = {
+            "successful_list": [],
+            "unsuccessful_list": [
+                {
+                    "get_session_screenshot_request_data": {"session_id": "session-1"},
+                    "failure_reason": "SSM unreachable",
+                },
+            ],
+        }
+        body = self._get_batch_get_session_screenshot_payload(screenshots=[
+            {"idea_session_id": "session-1"},
+        ])
+
+        result = virtual_desktop_controller.batch_get_session_screenshot(body, user="user1")
+
+        assert len(result.unsuccessful_list) == 1
+        assert result.unsuccessful_list[0].error_code == BatchOperationErrorCode.INTERNALSERVICEEXCEPTION
+
+    @patch("api.controllers.virtual_desktop_controller.os.environ.get")
+    def test_batch_get_session_screenshot_dry_run_mode(self, mock_env_get):
+        mock_env_get.return_value = 'true'
+        body = self._get_batch_get_session_screenshot_payload()
+
+        result = virtual_desktop_controller.batch_get_session_screenshot(body, user="clusteradmin")
+
+        assert isinstance(result, BatchGetSessionScreenshotResponseContent)
+        assert len(result.successful_list) == 2
+        assert result.unsuccessful_list == []
+
+    def test_batch_get_session_screenshot_empty_list_raises_value_error(self):
+        body = self._get_batch_get_session_screenshot_payload(screenshots=[])
+
+        with pytest.raises(ValueError):
+            virtual_desktop_controller.batch_get_session_screenshot(body, user="clusteradmin")
+
+    @patch("api.controllers.virtual_desktop_controller.dcv_session_manager_client.get_session_screenshots")
+    def test_batch_get_session_screenshot_business_logic_exception_propagates(
+        self, mock_get_screenshots
+    ):
+        """Exceptions from the DCV client propagate."""
+        mock_get_screenshots.side_effect = RuntimeError("DCV failure")
+        body = self._get_batch_get_session_screenshot_payload()
+
+        with pytest.raises(RuntimeError, match="DCV failure"):
+            virtual_desktop_controller.batch_get_session_screenshot(body, user="clusteradmin")

@@ -40,27 +40,11 @@ DYNAMODB_TABLES_TO_EXPORT = [
     'snapshots',
     'vdc.controller.permission-profiles',
     'vdc.controller.schedules',
-    'vdc.controller.servers',
     'vdc.controller.session-permissions',
     'vdc.controller.software-stacks',
     'vdc.controller.ssm-commands',
     'vdc.controller.user-sessions',
     'vdc.controller.user-sessions-counter',
-    'vdc.dcv-broker.AgentKeyPair',
-    'vdc.dcv-broker.AgentOAuth2Clients',
-    'vdc.dcv-broker.AuthServerPubKeys',
-    'vdc.dcv-broker.BrokerAuthServerPrivateKey',
-    'vdc.dcv-broker.ConnectSessionKeyPair',
-    'vdc.dcv-broker.createSessionCustomerRequest',
-    'vdc.dcv-broker.dcvServer',
-    'vdc.dcv-broker.deleteSessionCustomerRequest',
-    'vdc.dcv-broker.DescribeNextTokenKeyPair',
-    'vdc.dcv-broker.HealthTest',
-    'vdc.dcv-broker.JwksUrls',
-    'vdc.dcv-broker.PortalOAuth2Clients',
-    'vdc.dcv-broker.ServerDnsMapping',
-    'vdc.dcv-broker.SoftwareStatement',
-    'vdc.dcv-broker.UpdateSessionPermissionsSessionCustomerRequest'
 ]
 
 

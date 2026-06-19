@@ -31,10 +31,5 @@ function install_efs_mount_helper_impl() {
   local EFS_MOUNT_HELPER_BUILD_DEPENDENCIES=$(get_list 'package_config.efs_mount_helper.build_dependencies.debian.ubuntu')
   DEBIAN_FRONTEND=noninteractive apt install -y ${EFS_MOUNT_HELPER_BUILD_DEPENDENCIES[*]}
 
-  local EFS_MOUNT_HELPER_REPO=$(get_string 'package_config.efs_mount_helper.repo')
-  git clone ${EFS_MOUNT_HELPER_REPO}
-  cd efs-utils
-  ./build-deb.sh
-  DEBIAN_FRONTEND=noninteractive apt install -y ./build/amazon-efs-utils*deb
-  cd ..
+  install_efs_with_rustup "./build-deb.sh" "DEBIAN_FRONTEND=noninteractive apt install -y ./build/amazon-efs-utils*deb"
 }

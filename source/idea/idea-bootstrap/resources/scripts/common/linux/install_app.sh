@@ -41,7 +41,17 @@ INSTANCE_REGION=$(get_aws_region)
 
 if [[ "${COMPONENT}" == "virtual-desktop-app" ]]; then
   echo "Exporting Credentials" > /root/bootstrap/install_post_reboot.sh
-  request_and_export_aws_credentials $INSTANCE_REGION $CUSTOM_BROKER_URL
+
+  # Copy the credential broker scripts to a location accessible by all users.
+  # The PAM module runs as the authenticating user (not root) during sudo/su,
+  # so it needs to execute the credential_process script without traversing /root/.
+  BROKER_SRC_DIR="/root/bootstrap/latest/scripts/vdi-helper"
+  BROKER_DEST_DIR="/opt/idea/scripts"
+  mkdir -p "${BROKER_DEST_DIR}"
+  cp "${BROKER_SRC_DIR}/custom_credential_broker.py" "${BROKER_SRC_DIR}/iam_auth.py" "${BROKER_DEST_DIR}/"
+  chmod 755 "${BROKER_DEST_DIR}/custom_credential_broker.py" "${BROKER_DEST_DIR}/iam_auth.py"
+
+  request_and_export_aws_credentials "$INSTANCE_REGION" "$CUSTOM_BROKER_URL"
   export AWS_DEFAULT_PROFILE="bootstrap_profile"
 fi
 
@@ -62,8 +72,6 @@ if [[ "${COMPONENT}" == "virtual-desktop-controller" ]]; then
   APP_PACKAGE_URI_KEY="${MODULE_ID}.controller.app_package_uri"
 elif [[ "${COMPONENT}" == "dcv-connection-gateway" ]]; then
   APP_PACKAGE_URI_KEY="${MODULE_ID}.dcv_connection_gateway.app_package_uri"
-elif [[ "${COMPONENT}" == "dcv-broker" ]]; then
-  APP_PACKAGE_URI_KEY="${MODULE_ID}.dcv_broker.app_package_uri"
 elif [[ "${COMPONENT}" == "virtual-desktop-app" ]]; then
   APP_PACKAGE_URI_KEY="vdi-app.app_package_uri"
 fi
@@ -79,7 +87,7 @@ if [ $? -ne 0 ]; then
   exit 0
 fi
 
-$AWS --region ${INSTANCE_REGION} s3 cp "${APP_PACKAGE_DOWNLOAD_URI}" "${BOOTSTRAP_DIR}/"
+$AWS --region "${INSTANCE_REGION}" s3 cp "${APP_PACKAGE_DOWNLOAD_URI}" "${BOOTSTRAP_DIR}/"
 
 APP_DEPLOY_DIR="/opt/idea/app"
 PACKAGE_ARCHIVE=$(basename "${APP_PACKAGE_DOWNLOAD_URI}")
@@ -151,7 +159,7 @@ stdout_logfile = /opt/idea/app/logs/stdout.log
 stdout_logfile_maxbytes=50MB
 stdout_logfile_backups=10
 startsecs=30
-startretries=3
+startretries=10
 " >> /etc/supervisord.d/${COMPONENT}.ini
 
 systemctl restart supervisord

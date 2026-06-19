@@ -4,13 +4,11 @@
 import random
 from typing import Any, Dict, List, Tuple
 
-import boto3
 import res.exceptions as exceptions
-from res.clients.dcv_broker import dcv_broker_client
+from res.clients.aws.aws_provider import AwsClientProvider
+from res.clients.dcv_session_manager import dcv_session_manager_client
 from res.clients.events import events_client
-from res.resources import ad_automation, schedules
-from res.resources import servers as server_db
-from res.resources import session_permissions
+from res.resources import ad_automation, schedules, session_permissions
 from res.resources import sessions as user_sessions
 from res.utils import logging_utils
 
@@ -52,6 +50,39 @@ def stop_sessions(sessions: List[Dict[str, Any]]) -> Tuple[List, List]:
     return success_response_list, fail_response_list
 
 
+def reboot_sessions(sessions: List[Dict[str, Any]]) -> Tuple[List, List]:
+    """
+    Reboot EC2 instances for validated sessions and update state to RESUMING.
+    Assumes sessions have already been validated (exists, correct state, connections checked).
+    :param sessions: list of validated session dicts (from DDB)
+    :returns (successful_list, unsuccessful_list)
+    """
+    instance_ids = [
+        session.get("server", {}).get("instance_id") for session in sessions
+    ]
+
+    ec2_client = AwsClientProvider().ec2()
+    ec2_client.reboot_instances(InstanceIds=instance_ids)
+
+    success_response_list = []
+    fail_response_list = []
+    for session in sessions:
+        try:
+            updated = user_sessions.update_session_state(
+                session["owner"], session[SESSION_ID_KEY], "RESUMING"
+            )
+            success_response_list.append(updated)
+        except Exception as e:
+            logger.error(
+                f"Failed to update session state for {session[SESSION_ID_KEY]}: {e}"
+            )
+            session["failure_reason"] = f"State update failed: {e}"
+            session["failure_code"] = exceptions.FAILURE_CODE_INTERNAL_SERVICE
+            fail_response_list.append(session)
+
+    return success_response_list, fail_response_list
+
+
 def validate_sessions_to_delete(
     sessions: List[Dict[str, Any]],
     check_ready_state: bool = False,
@@ -74,12 +105,14 @@ def validate_sessions_to_delete(
             session["failure_reason"] = (
                 f"Invalid RES Session ID: {session[SESSION_ID_KEY]}:{session['name']} for user: {session['owner']}.  Nothing to delete"
             )
+            session["failure_code"] = exceptions.FAILURE_CODE_NOT_FOUND
             continue
 
         if check_ready_state and session.get("state", "") != "READY":
             session["failure_reason"] = (
                 f"RES Session ID: {session[SESSION_ID_KEY]}:{session['name']} for user: {session['owner']} is in {session['state']} state. Can't stop. Wait for it to be READY."
             )
+            session["failure_code"] = exceptions.FAILURE_CODE_BAD_REQUEST
             continue
         if session.get("state", "") in {"STOPPED", "STOPPED_IDLE"}:
             continue
@@ -93,9 +126,7 @@ def validate_sessions_to_delete(
         if not session.get("force"):
             sessions_to_check.append(session)
 
-    sessions_with_count = dcv_broker_client.get_active_counts_for_sessions(
-        sessions_to_check
-    )
+    sessions_with_count = get_active_counts_for_sessions(sessions_to_check)
 
     for session in sessions_with_count:
         if session.get("connection_count", 0) > 0:
@@ -105,33 +136,55 @@ def validate_sessions_to_delete(
             session["failure_reason"] = (
                 f"There exists {session.get('connection_count')} active connection(s)for session_id: {session.get('idea_session_id')}:{session.get('name')}. Please terminate."
             )
+            session["failure_code"] = exceptions.FAILURE_CODE_CONFLICT
+
+
+def get_active_counts_for_sessions(
+    sessions: List[Dict[str, Any]],
+) -> List[Dict[str, Any]]:
+    """Populate ``connection_count`` on each session via the DCV Session Management Lambda.
+
+    Sessions that fail to describe (e.g. host unreachable) keep ``connection_count = 0``.
+    """
+    if not sessions:
+        return []
+
+    response = dcv_session_manager_client.describe_sessions(
+        [{"session_id": s[SESSION_ID_KEY], "owner": s["owner"]} for s in sessions]
+    )
+    counts = {
+        entry["session_id"]: entry.get("num_of_connections", 0)
+        for entry in response.get("successful_list", [])
+    }
+    for entry in response.get("unsuccessful_list", []):
+        logger.warning(
+            "Failed to describe session %s: %s. Treating as 0 connections.",
+            entry.get("session_id"),
+            entry.get("failure_reason"),
+        )
+
+    for session in sessions:
+        session["connection_count"] = counts.get(session[SESSION_ID_KEY], 0)
+
+    return sessions
 
 
 def stop_servers(servers: List[Dict] = None) -> None:
     if not servers:
         logger.info("No servers provided to stop")
-        return {}
+        return
     _stop_or_hibernate_servers(servers)
 
 
 def hibernate_servers(servers: List[Dict] = None) -> None:
     if not servers:
         logger.info("No servers provided to hibernate...")
-        return {}
+        return
     _stop_or_hibernate_servers(servers, True)
 
 
 def _stop_or_hibernate_servers(servers, hibernate=False) -> None:
-    response = _stop_hosts(servers=servers, hibernate=hibernate)
-    instances = response.get("StoppingInstances", [])
-    for instance in instances:
-        instance_id = instance.get("InstanceId")
-        server = server_db.get_server(instance_id=instance_id)
-        if server.get("is_idle"):
-            server["state"] = "STOPPED_IDLE"
-        else:
-            server["state"] = "HIBERNATED" if hibernate else "STOPPED"
-        server_db.update_server(server)
+    _stop_hosts(servers=servers, hibernate=hibernate)
 
 
 def _stop_hosts(servers: List[Dict], hibernate=False) -> dict:
@@ -146,7 +199,7 @@ def _stop_hosts(servers: List[Dict], hibernate=False) -> dict:
     else:
         logger.info(f"Stopping {instance_ids}")
 
-    ec2_client = boto3.client("ec2")
+    ec2_client = AwsClientProvider().ec2()
     response = ec2_client.stop_instances(InstanceIds=instance_ids, Hibernate=hibernate)
     return response
 
@@ -194,20 +247,13 @@ def terminate_sessions(sessions: List[Dict[str, Any]]):
 def terminate_servers(servers: List[Dict[str, Any]]) -> None:
     if not servers:
         logger.info("No servers provided to terminate")
-        return {}
+        return
 
-    response = _terminate_hosts(servers)
-
-    instances = response.get("TerminatingInstances", [])
-    for instance in instances:
-        instance_id = instance.get("InstanceId")
-        server_db.delete_server(instance_id=instance_id)
-
-    return response
+    _terminate_hosts(servers)
 
 
 def _terminate_hosts(servers: List[Dict[str, Any]]) -> dict:
-    ec2_client = boto3.client("ec2")
+    ec2_client = AwsClientProvider().ec2()
 
     instance_ids = [server["instance_id"] for server in servers]
     logger.info(f"Terminating {instance_ids}")
@@ -226,3 +272,51 @@ def delete_schedule_for_session(session: Dict[str, Any]) -> None:
         schedule = curr_session.get(key)
         if schedule and schedule.get("schedule_id"):
             schedules.delete_schedule(schedule=schedule)
+
+
+# Start VDI logic
+def start_sessions(sessions: List[Dict[str, Any]]) -> Tuple[List, List]:
+    """
+    Start sessions by calling EC2 start_instances and updating session state.
+    Only updates state for instances that actually transitioned from stopped.
+    :param sessions: list of validated sessions to be started (DDB dicts)
+    :returns (successful list, unsuccessful list)
+    """
+    servers_to_start = [session.get("server") for session in sessions]
+    response = _start_hosts(servers_to_start)
+
+    started_ids = set()
+    for instance in response.get("StartingInstances", []):
+        if instance.get("CurrentState", {}).get("Name") in ("pending", "running"):
+            started_ids.add(instance["InstanceId"])
+
+    success_response_list = []
+    fail_response_list = []
+    for session in sessions:
+        instance_id = session.get("server", {}).get("instance_id")
+        if instance_id in started_ids:
+            updated = user_sessions.update_session_state(
+                owner=session["owner"],
+                session_id=session[SESSION_ID_KEY],
+                state="RESUMING",
+            )
+            success_response_list.append(updated)
+        else:
+            session["failure_reason"] = f"EC2 instance {instance_id} failed to start"
+            session["failure_code"] = exceptions.FAILURE_CODE_INTERNAL_SERVICE
+            fail_response_list.append(session)
+
+    return success_response_list, fail_response_list
+
+
+def _start_hosts(servers: List[Dict]) -> dict:
+    if not servers:
+        logger.info("No servers provided to start")
+        return {}
+
+    instance_ids = [server["instance_id"] for server in servers]
+    logger.info(f"Starting {instance_ids}")
+
+    ec2_client = AwsClientProvider().ec2()
+    response = ec2_client.start_instances(InstanceIds=instance_ids)
+    return response

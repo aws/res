@@ -9,7 +9,7 @@ from botocore.exceptions import ClientError
 from res.clients.aws.aws_provider import AwsClientProvider
 from res.constants import ENVIRONMENT_NAME_KEY
 from res.resources import cluster_settings
-from res.utils import logging_utils
+from res.utils import arn_utils, logging_utils
 
 logger = logging_utils.get_logger("iam")
 
@@ -97,3 +97,35 @@ def delete_iam_instance_profile(instance_profile_name: str) -> bool:
             return True
         raise e
     return True
+
+
+def _get_vdi_role_path(cluster_name: str, region: str, path: str = "") -> str:
+    return f"{path}{cluster_name}-{region}/vdi"
+
+
+def _get_vdi_role_name(cluster_name: str, project_name: str, prefix: str = "") -> str:
+    return f"{prefix}{cluster_name}-vdi-{project_name}"
+
+
+def build_vdi_instance_profile_arn(project_name: str) -> str:
+    cluster_name = cluster_settings.get_setting("cluster.cluster_name")
+    region = cluster_settings.get_setting("cluster.aws.region")
+    try:
+        iam_path = cluster_settings.get_setting("cluster.iam.iam_resource_path") or "/"
+    except Exception:
+        logger.warning("cluster.iam.iam_resource_path not found, defaulting to '/'")
+        iam_path = "/"
+    try:
+        iam_prefix = (
+            cluster_settings.get_setting("cluster.iam.iam_resource_prefix") or ""
+        )
+    except Exception:
+        logger.warning("cluster.iam.iam_resource_prefix not found, defaulting to ''")
+        iam_prefix = ""
+    instance_profile_path = _get_vdi_role_path(cluster_name, region, iam_path)
+    instance_profile_name = _get_vdi_role_name(cluster_name, project_name, iam_prefix)
+    return arn_utils.get_arn(
+        service="iam",
+        aws_region="",
+        resource=f"instance-profile{instance_profile_path}/{instance_profile_name}",
+    )

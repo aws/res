@@ -117,13 +117,56 @@ function request_and_export_aws_credentials() {
     echo "Error: Custom credential broker script not found at ${CUSTOM_BROKER_PATH}"
   fi
 
+  local BROKER_DEST="/opt/idea/scripts/custom_credential_broker.py"
+
   PROFILE_NAME="bootstrap_profile"
 
   JWT_TOKEN=$(cat /root/bootstrap/broker_token | tr -d '\n')
 
   aws configure set output json
   aws configure set region $AWS_REGION
-  aws configure set credential_process "/opt/idea/python/latest/bin/idea_python ${CUSTOM_BROKER_PATH} --bootstrap-token ${JWT_TOKEN} --api-url ${CUSTOM_BROKER_URL}" --profile "${PROFILE_NAME}"
+  aws configure set credential_process "/opt/idea/python/latest/bin/idea_python ${BROKER_DEST} --bootstrap-token ${JWT_TOKEN} --api-url ${CUSTOM_BROKER_URL} --region ${AWS_REGION}" --profile "${PROFILE_NAME}"
   aws configure set --profile $PROFILE_NAME output json
   aws configure set --profile $PROFILE_NAME region $AWS_REGION
+
+  # Grant nscd and dbus-daemon traverse access to /root/.aws/config for credential_process.
+  setfacl -m u:nscd:x /root 2>/dev/null
+  setfacl -m u:nscd:x /root/.aws 2>/dev/null
+  setfacl -m u:nscd:r /root/.aws/config 2>/dev/null
+  # dbus user is 'dbus' on RHEL/AL and 'messagebus' on Ubuntu.
+  local BASE_OS=$(get_base_os)
+  if [[ "$BASE_OS" =~ ^(ubuntu) ]]; then
+    DBUS_USER="messagebus"
+  else
+    DBUS_USER="dbus"
+  fi
+  setfacl -m u:${DBUS_USER}:x /root 2>/dev/null
+  setfacl -m u:${DBUS_USER}:x /root/.aws 2>/dev/null
+  setfacl -m u:${DBUS_USER}:r /root/.aws/config 2>/dev/null
+}
+
+function install_efs_with_rustup() {
+  local build_cmd="$1"
+  local install_cmd="$2"
+
+  export HOME="${HOME:-$(getent passwd "$(whoami)" | cut -d: -f6)}"
+  curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain stable \
+    || { log_error "Failed to install Rust via rustup"; return 1; }
+  local _old_path="$PATH"
+  source "$HOME/.cargo/env"
+  trap 'rustup self uninstall -y 2>/dev/null || true; PATH="$_old_path"' RETURN
+  command -v rustc >/dev/null 2>&1 \
+    || { log_error "rustc not found after rustup installation"; return 1; }
+  log_info "Using Rust $(rustc --version)"
+
+  local EFS_MOUNT_HELPER_REPO=$(get_string 'package_config.efs_mount_helper.repo')
+  git clone --depth 1 ${EFS_MOUNT_HELPER_REPO} \
+    || { log_error "Failed to clone efs-utils repo"; return 1; }
+  cd efs-utils
+  eval "$build_cmd" \
+    || { log_error "Failed to build efs-utils package"; cd ..; return 1; }
+  eval "$install_cmd"
+  local build_rc=$?
+  cd ..
+  return $build_rc
 }

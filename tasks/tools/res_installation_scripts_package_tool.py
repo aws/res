@@ -53,7 +53,6 @@ class ResInstallationScriptsPackageTool:
             "idea-virtual-desktop-controller",
             "idea-virtual-desktop",
             "idea-dcv-connection-gateway",
-            "idea-dcv-broker",
             "idea-sdk",
             "library",
         ]
@@ -77,7 +76,7 @@ class ResInstallationScriptsPackageTool:
             with open(requirement_file, 'r') as f:
                 for line in f:
                     package = line.strip()
-                    if re.match('^\w', package):
+                    if re.match(r'^\w', package):
                         package_name, package_version = package.split('==')
                         if package_name not in packages:
                             packages[package_name] = package_version

@@ -345,6 +345,7 @@ class VirtualDesktopSoftwareStacks extends Component<VirtualDesktopSoftwareStack
                             host_id: (values.target_host_by === "host_id") ? values.host_id : undefined,
                             host_resource_group_arn: (values.target_host_by === "host_resource_group") ? values.host_resource_group_arn : undefined,
                         },
+                        enabled: true,
                     } as VirtualDesktopSoftwareStack;
 
                     this.getVirtualDesktopAdminClient()
@@ -647,7 +648,7 @@ class VirtualDesktopSoftwareStacks extends Component<VirtualDesktopSoftwareStack
                                 gpu: gpu,
                                 min_storage: min_storage,
                                 min_ram: min_ram,
-                                projects: projects,
+                                projects: projects as any,
                                 placement: placement,
                                 allowed_instance_types: allowed_instance_types
                             },

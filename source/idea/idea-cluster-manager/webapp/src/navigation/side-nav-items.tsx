@@ -84,11 +84,7 @@ export const IdeaSideNavItems = (context: AppContext): SideNavigationProps.Item[
                     text: "Software stacks",
                     href: "#/virtual-desktop/software-stacks",
                 },
-                {
-                    type: "link",
-                    text: "Debugging",
-                    href: "#/virtual-desktop/debug",
-                },
+
                 {
                     type: "link",
                     text: "Desktop settings",
@@ -156,26 +152,7 @@ export const IdeaSideNavItems = (context: AppContext): SideNavigationProps.Item[
                 {
                     type: "link",
                     text: "Dashboards",
-                    href: "#/home/cost-dashboard",
-                    info: (
-                        <Box color="text-status-info" display="inline">
-                            <Popover
-                                header="Introducing the cost dashboard"
-                                size="medium"
-                                triggerType="text"
-                                content={
-                                    <>
-                                        We've added the cost dashboard to make it easier to know the costs incurred at the project level.
-                                    </>
-                                }
-                                renderWithPortal={true}
-                            >
-                                <Box color="text-status-info" fontSize="body-s" fontWeight="bold">
-                                    New
-                                </Box>
-                            </Popover>
-                        </Box>
-                    )
+                    href: "#/home/cost-dashboard"
                 }
             );
         }

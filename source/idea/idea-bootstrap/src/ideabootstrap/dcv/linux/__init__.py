@@ -4,5 +4,6 @@
 from .disable_wayland_protocol import *
 from .dcv_host import *
 from .gl import *
+from .gnome_utils import *
 from .x_server import *
 from .start_dcv_service import *

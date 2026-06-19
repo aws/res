@@ -7,6 +7,7 @@ This function is triggered every time a state change event is triggered by an EC
 with IDEA_CLUSTER. It repackages the event, appends tag information and then publishes an 'Ec2.StateChangeEvent'
 intended for the different modules that have subscribed to this event within the cluster
 """
+
 import json
 import logging
 import os

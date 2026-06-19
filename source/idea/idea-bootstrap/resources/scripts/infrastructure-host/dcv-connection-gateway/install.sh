@@ -13,10 +13,12 @@
 
 set -x
 
-while getopts s: opt
+while getopts s:e:b: opt
 do
   case "${opt}" in
     s) SCRIPT_DIR=${OPTARG};;
+    e) ENVIRONMENT_NAME=${OPTARG};;
+    b) STAGING_BUCKET=${OPTARG};;
     ?) echo "Invalid option for dcv-connection-gateway install.sh script: -${opt}."
       exit 1;;
   esac

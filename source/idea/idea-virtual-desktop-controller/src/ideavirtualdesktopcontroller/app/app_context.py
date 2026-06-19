@@ -31,7 +31,6 @@ class VirtualDesktopControllerAppContext(SocaContext):
 
         self.token_service: Optional[TokenService] = None
         self.api_authorization_service: Optional[ApiAuthorizationServiceBase] = None
-        self.dcv_broker_client: Optional[DCVClientProtocol] = None
         self.event_queue_monitor_service: Optional[SocaService] = None
         self.controller_queue_monitor_service: Optional[SocaService] = None
         self.projects_client: Optional[ProjectsClient] = None

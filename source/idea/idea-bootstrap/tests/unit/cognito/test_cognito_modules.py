@@ -71,6 +71,7 @@ def test_cognito_modules_configure(monkeypatch, base_os, setup_function, tmp_pat
 
     monkeypatch.setattr('os.chmod', Mock())
     monkeypatch.setattr(os, 'mkdir', Mock())
+    monkeypatch.setattr('shutil.chown', Mock())
 
     mock_setup_ubuntu = Mock()
     mock_setup_redhat = Mock()
@@ -244,6 +245,34 @@ def test_setup_cognito_config_file_basic(monkeypatch) -> None:
     assert 'nss_cache_timeout_s = 60' in written_content
     assert 'nss_cache_path = /opt/cognito_auth/cache.json' in written_content
     assert 'https_proxy' not in written_content
+    assert 'aws_profile' not in written_content
+
+def test_setup_cognito_config_file_vdi_includes_aws_profile(monkeypatch) -> None:
+    for env_var in os.environ:
+        monkeypatch.delenv(env_var, raising=False)
+
+    for key, value in REQUIRED_ENV_VARS.items():
+        monkeypatch.setenv(key, value)
+    monkeypatch.setenv('IDEA_SESSION_OWNER', 'testuser')
+
+    mock_file = mock_open()
+    monkeypatch.setattr('builtins.open', mock_file)
+    monkeypatch.setattr('os.chmod', Mock())
+
+    def mock_get_setting(setting: str) -> str:
+        if setting == "identity-provider.cognito.user_pool_id":
+            return os.environ.get("USER_POOL_ID")
+        elif setting == "identity-provider.cognito.vdi_client_id":
+            return os.environ.get("VDI_CLIENT_ID")
+        else:
+            return ""
+    monkeypatch.setattr(cluster_settings, "get_setting", mock_get_setting)
+
+    _setup_cognito_config_file()
+
+    handle = mock_file()
+    written_content = ''.join([call.args[0] for call in handle.write.call_args_list])
+    assert 'aws_profile = bootstrap_profile' in written_content
 
 def test_start_nscd(monkeypatch):
     mock_run = Mock()

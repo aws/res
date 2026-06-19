@@ -3,7 +3,7 @@
 
 import logging
 import time
-from typing import Any
+from typing import Any, Optional
 
 import boto3
 from botocore.exceptions import ClientError
@@ -11,64 +11,52 @@ from botocore.exceptions import ClientError
 logger = logging.getLogger(__name__)
 
 
-def set_backend_lambda_test_mode(
-    region: str, environment_name: str, enable: bool
+def set_backend_lambda_env_var(
+    region: str, environment_name: str, key: str, value: Optional[str]
 ) -> None:
     """
-    Set RES_TEST_MODE environment variable on the backend Lambda function.
+    Set or remove an environment variable on the backend Lambda function.
 
     Args:
         region: AWS region where the Lambda function is deployed
         environment_name: RES environment name to construct the Lambda function name
-        enable: True to enable test mode, False to disable
+        key: Environment variable key
+        value: Environment variable value, or None to remove the key
     """
     lambda_client = boto3.client("lambda", region_name=region)
-
-    # Construct the Lambda function name based on RES naming convention
     function_name = f"{environment_name}-backend-lambda"
 
     try:
-        # Get current Lambda configuration
         logger.info(
             f"Getting current configuration for Lambda function: {function_name}"
         )
         response = lambda_client.get_function_configuration(FunctionName=function_name)
-
-        # Get current environment variables
         current_env_vars = response.get("Environment", {}).get("Variables", {})
 
-        # Update RES_TEST_MODE environment variable
-        if enable:
-            current_env_vars["RES_TEST_MODE"] = "true"
-            logger.info(
-                f"Setting RES_TEST_MODE=true for Lambda function: {function_name}"
-            )
+        if value is not None:
+            current_env_vars[key] = value
+            logger.info(f"Setting {key}={value} for Lambda function: {function_name}")
         else:
-            # Remove RES_TEST_MODE if it exists
-            if "RES_TEST_MODE" in current_env_vars:
-                del current_env_vars["RES_TEST_MODE"]
-                logger.info(
-                    f"Removing RES_TEST_MODE from Lambda function: {function_name}"
-                )
+            if key in current_env_vars:
+                del current_env_vars[key]
+                logger.info(f"Removing {key} from Lambda function: {function_name}")
             else:
                 logger.info(
-                    f"RES_TEST_MODE not set on Lambda function: {function_name}, nothing to remove"
+                    f"{key} not set on Lambda function: {function_name}, nothing to remove"
                 )
                 return
 
-        # Update Lambda function configuration
-        update_response = lambda_client.update_function_configuration(
+        lambda_client.update_function_configuration(
             FunctionName=function_name, Environment={"Variables": current_env_vars}
         )
 
-        # Wait for the configuration update to take effect
         logger.info(
             f"Waiting for Lambda configuration update to take effect for {function_name}..."
         )
         _wait_for_lambda_config_update(lambda_client, function_name)
 
         logger.info(
-            f"Successfully updated Lambda function {function_name} with RES_TEST_MODE={'true' if enable else 'removed'}"
+            f"Successfully updated Lambda function {function_name} with {key}={value if value else 'removed'}"
         )
 
     except ClientError as e:
@@ -83,6 +71,38 @@ def set_backend_lambda_test_mode(
     except Exception as e:
         logger.error(f"Unexpected error updating Lambda function {function_name}: {e}")
         raise
+
+
+def set_backend_lambda_test_mode(
+    region: str, environment_name: str, enable: bool
+) -> None:
+    """
+    Set RES_TEST_MODE environment variable on the backend Lambda function.
+
+    Args:
+        region: AWS region where the Lambda function is deployed
+        environment_name: RES environment name to construct the Lambda function name
+        enable: True to enable test mode, False to disable
+    """
+    set_backend_lambda_env_var(
+        region, environment_name, "RES_TEST_MODE", "true" if enable else None
+    )
+
+
+def set_backend_lambda_dry_mode(
+    region: str, environment_name: str, enable: bool
+) -> None:
+    """
+    Set DRY_RUN_ENABLED environment variable on the backend Lambda function.
+
+    Args:
+        region: AWS region where the Lambda function is deployed
+        environment_name: RES environment name to construct the Lambda function name
+        enable: True to enable dry run mode, False to disable
+    """
+    set_backend_lambda_env_var(
+        region, environment_name, "DRY_RUN_ENABLED", "true" if enable else None
+    )
 
 
 def _wait_for_lambda_config_update(

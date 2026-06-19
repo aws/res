@@ -13,14 +13,13 @@ def resume_logger():
     )
 
     service_content = f"""[Unit]
-Description=Log Resume from Hibernate
+Description=Restart virtual-desktop-app after hibernate resume
 After=hibernate.target
 
 [Service]
 Type=oneshot
-ExecStart=/bin/sh -c 'echo "System resumed from hibernation" | systemd-cat -t resume-logger'
-StandardOutput=journal
-SyslogIdentifier=resume-logger
+ExecStartPre=/bin/sh -c 'echo "System resumed from hibernation" | systemd-cat -t resume-logger'
+ExecStart=/bin/systemctl restart supervisord
 RemainAfterExit=false
 
 [Install]

@@ -74,10 +74,6 @@ if [[ ! -f ${INSTALL_POST_REBOOT_FINISHED_LOCK} ]]; then
       # Begin: Install Nice DCV Server
       /bin/bash "${SCRIPT_DIR}/../../dcv/linux/dcv_server.sh" -o $BASE_OS -g $GPU_FAMILY -s "${SCRIPT_DIR}/.."
       # End: Install Nice DCV Server
-
-      # Begin: Install Nice DCV Session Manager Agent
-      /bin/bash "${SCRIPT_DIR}/../../dcv/linux/dcv_session_manager_agent.sh" -o $BASE_OS -s "${SCRIPT_DIR}/.."
-      # End: Install Nice DCV Session Manager Agent
     fi
 
     # Begin: Install AWS Systems Manager Agent

@@ -65,7 +65,6 @@ class ValidateSoftwareStackEventHandler(BaseVirtualDesktopControllerEventHandler
                 session.server.locked = False
                 session.locked = False
                 _ = self.session_db.update(session)
-                _ = self.server_db.update(session.server)
             return
         else:
             # AMI is not ready to use.

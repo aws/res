@@ -106,7 +106,7 @@ class TestSoftwareStacks(unittest.TestCase):
             stacks.SOFTWARE_STACK_DB_RANGE_KEY: TEST_STACK_ID,
             stacks.SOFTWARE_STACK_DB_NAME_KEY: TEST_NAME,
             stacks.SOFTWARE_STACK_DB_AMI_ID_KEY: TEST_AMI_ID,
-            stacks.SOFTWARE_STACK_DB_PROJECTS_KEY: [TEST_PROJECT],
+            stacks.SOFTWARE_STACK_DB_PROJECTS_KEY: [TEST_PROJECT_ID],
         }
         table_utils.create_item(
             stacks.SOFTWARE_STACK_TABLE_NAME, item=self.context.software_stack
@@ -139,19 +139,21 @@ class TestSoftwareStacks(unittest.TestCase):
         assert result.get(stacks.SOFTWARE_STACK_DB_RANGE_KEY) == TEST_STACK_ID
         assert result.get(stacks.SOFTWARE_STACK_DB_NAME_KEY) == TEST_NAME
         assert result.get(stacks.SOFTWARE_STACK_DB_AMI_ID_KEY) == TEST_AMI_ID
-        assert result.get(stacks.SOFTWARE_STACK_DB_PROJECTS_KEY) == [TEST_PROJECT]
+        assert result.get(stacks.SOFTWARE_STACK_DB_PROJECTS_KEY) == [TEST_PROJECT_ID]
 
-    def test_software_stacks_create_stack_should_pass(self):
+    @patch("res.resources.software_stacks.projects.get_project")
+    def test_software_stacks_create_stack_should_pass(self, mock_get_project):
         """
         create software stack success
         """
+        mock_get_project.return_value = TEST_PROJECT
         created_software_stack = stacks.create_software_stack(
             software_stack={
                 stacks.SOFTWARE_STACK_DB_HASH_KEY: RANDOM_TEST_BASE_OS,
                 stacks.SOFTWARE_STACK_DB_RANGE_KEY: RANDOM_STACK_ID,
                 stacks.SOFTWARE_STACK_DB_NAME_KEY: TEST_NAME,
                 stacks.SOFTWARE_STACK_DB_AMI_ID_KEY: TEST_AMI_ID,
-                stacks.SOFTWARE_STACK_DB_PROJECTS_KEY: [TEST_PROJECT],
+                stacks.SOFTWARE_STACK_DB_PROJECTS_KEY: [TEST_PROJECT_ID],
             }
         )
 
@@ -162,7 +164,9 @@ class TestSoftwareStacks(unittest.TestCase):
         assert created_software_stack[stacks.SOFTWARE_STACK_DB_PROJECTS_KEY] is not None
 
         software_stack = stacks.get_software_stack(
-            base_os=RANDOM_TEST_BASE_OS, stack_id=RANDOM_STACK_ID
+            base_os=RANDOM_TEST_BASE_OS,
+            stack_id=RANDOM_STACK_ID,
+            get_project_details=True,
         )
         assert software_stack is not None
         assert software_stack.get(

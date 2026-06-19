@@ -83,6 +83,28 @@ def get_role(role_id: str) -> Optional[Dict[str, Any]]:
     return role
 
 
+def get_roles_batch(role_ids: List[str]) -> Dict[str, Dict[str, Any]]:
+    """
+    Get multiple roles from DDB
+    :param role_ids: list of role IDs
+    :return: dict mapping role_id to role data
+    """
+    if not role_ids:
+        return {}
+
+    roles_dict = {}
+    for role_id in role_ids:
+        try:
+            role = get_role(role_id)
+            if role:
+                roles_dict[role_id] = role
+        except exceptions.RoleNotFound:
+            logger.debug(f"Role {role_id} not found, skipping")
+            continue
+
+    return roles_dict
+
+
 def filter_roles_with_manage_sessions_permission(role_ids: set) -> set:
     """
     Filter roles that have permission to manage other user sessions

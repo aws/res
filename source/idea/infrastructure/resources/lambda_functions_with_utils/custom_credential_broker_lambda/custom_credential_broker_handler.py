@@ -10,45 +10,63 @@ to provide temporary credentials for mounting object storage.
 import json
 import logging
 import os
+import time
 from typing import Any, Dict
+
+from res.exceptions import UserSessionNotFound  # type: ignore
+from res.resources import sessions  # type: ignore
 
 from .shared_storage_db import SharedStorageDB
 from .utils import Utils
-from .virtual_desktop_controller_server_db import VirtualDesktopControllerServerDB
-from .virtual_desktop_controller_user_sessions_db import (
-    VirtualDesktopControllerUserSessionsDB,
-)
 
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
 
+CLUSTER_NAME = os.environ.get("CLUSTER_NAME", "")
+MODULE_ID = os.environ.get("MODULE_ID", "")
+AWS_REGION = os.environ.get("AWS_REGION", "")
+READ_ONLY_ROLE_NAME_ARN = os.environ.get("READ_ONLY_ROLE_NAME_ARN", "")
+READ_AND_WRITE_ROLE_NAME_ARN = os.environ.get("READ_AND_WRITE_ROLE_NAME_ARN", "")
+OBJECT_STORAGE_CUSTOM_PROJECT_NAME_PREFIX = os.environ.get(
+    "OBJECT_STORAGE_CUSTOM_PROJECT_NAME_PREFIX", ""
+)
+OBJECT_STORAGE_CUSTOM_PROJECT_NAME_AND_USERNAME_PREFIX = os.environ.get(
+    "OBJECT_STORAGE_CUSTOM_PROJECT_NAME_AND_USERNAME_PREFIX", ""
+)
+OBJECT_STORAGE_NO_CUSTOM_PREFIX = os.environ.get("OBJECT_STORAGE_NO_CUSTOM_PREFIX", "")
+
+# Lazy-initialized singletons for Lambda container reuse.
+_shared_storage_db = None
+_cached_broker_secret = None
+_broker_secret_fetch_time = 0.0
+_BROKER_SECRET_TTL_SECONDS = 300  # 5 minutes
+
+
+def _get_shared_storage_db() -> SharedStorageDB:
+    global _shared_storage_db
+    if _shared_storage_db is None:
+        _shared_storage_db = SharedStorageDB(logger)
+    return _shared_storage_db
+
+
+def _get_broker_secret() -> Any:
+    global _cached_broker_secret, _broker_secret_fetch_time
+    now = time.monotonic()
+    if (
+        _cached_broker_secret is None
+        or (now - _broker_secret_fetch_time) > _BROKER_SECRET_TTL_SECONDS
+    ):
+        secret_name = _get_shared_storage_db().get_shared_storage_db_item(
+            "vdc.custom_credential_broker_secret_name"
+        )
+        _cached_broker_secret = Utils.get_custom_broker_secret(secret_name)
+        _broker_secret_fetch_time = now
+    return _cached_broker_secret
+
 
 def handler(event: Dict[str, Any], context: Dict[str, Any]) -> Dict[str, Any]:
 
-    CLUSTER_NAME = os.environ.get("CLUSTER_NAME", "")
-    MODULE_ID = os.environ.get("MODULE_ID", "")
-    AWS_REGION = os.environ.get("AWS_REGION", "")
-    READ_ONLY_ROLE_NAME_ARN = os.environ.get("READ_ONLY_ROLE_NAME_ARN", "")
-    READ_AND_WRITE_ROLE_NAME_ARN = os.environ.get("READ_AND_WRITE_ROLE_NAME_ARN", "")
-    OBJECT_STORAGE_CUSTOM_PROJECT_NAME_PREFIX = os.environ.get(
-        "OBJECT_STORAGE_CUSTOM_PROJECT_NAME_PREFIX", ""
-    )
-    OBJECT_STORAGE_CUSTOM_PROJECT_NAME_AND_USERNAME_PREFIX = os.environ.get(
-        "OBJECT_STORAGE_CUSTOM_PROJECT_NAME_AND_USERNAME_PREFIX", ""
-    )
-    OBJECT_STORAGE_NO_CUSTOM_PREFIX = os.environ.get(
-        "OBJECT_STORAGE_NO_CUSTOM_PREFIX", ""
-    )
-
-    vdc_server_db = VirtualDesktopControllerServerDB(CLUSTER_NAME, MODULE_ID, logger)
-    vdc_user_session_db = VirtualDesktopControllerUserSessionsDB(
-        CLUSTER_NAME, MODULE_ID, logger
-    )
-    shared_storage_db = SharedStorageDB(logger)
-    secret_name = shared_storage_db.get_shared_storage_db_item(
-        "vdc.custom_credential_broker_secret_name"
-    )
-    CUSTOM_BROKER_SECRET = Utils.get_custom_broker_secret(secret_name, AWS_REGION)
+    CUSTOM_BROKER_SECRET = _get_broker_secret()
 
     try:
         request_context = event["requestContext"]
@@ -75,22 +93,23 @@ def handler(event: Dict[str, Any], context: Dict[str, Any]) -> Dict[str, Any]:
         if not all([filesystem_name, instance_id, source_ip]):
             raise ValueError("Invalid input parameters in the request context")
 
-        server_response = vdc_server_db.get_owner_id_and_session_id(instance_id)
-        if not server_response:
+        try:
+            session = sessions.get_session_by_instance_id(instance_id)
+        except UserSessionNotFound:
             raise ValueError(
                 f"Invalid instance, instance_id {instance_id} is not a VDI"
             )
 
-        owner_id, session_id = server_response.get("owner_id"), server_response.get(
-            "session_id"
-        )
+        owner_id = session.get("owner")
+        session_id = session.get("idea_session_id")
         if not all([owner_id, session_id]):
             raise ValueError(
                 f"Invalid instance, instance_id {instance_id} is not a VDI"
             )
 
-        project_id = vdc_user_session_db.get_project_id(owner_id, session_id)  # type: ignore
-        if not project_id:
+        project = session.get("project")
+        project_name = project.get("name") if project else None
+        if not project_name:
             raise ValueError(
                 "Instance is not associated with a project or lost project tag"
             )
@@ -100,21 +119,25 @@ def handler(event: Dict[str, Any], context: Dict[str, Any]) -> Dict[str, Any]:
                 f"Invalid instance, instance_id {instance_id} credentials is not from the origin"
             )
 
-        object_storage_model = shared_storage_db.get_object_storage_model(
+        object_storage_model = _get_shared_storage_db().get_object_storage_model(
             filesystem_name
         )
         if not object_storage_model:
             raise ValueError(f"Filesystem {filesystem_name} does not exist")
 
-        if project_id not in object_storage_model.get_projects():
-            raise ValueError(f"Filesystem is not associated with project {project_id}")
+        if project_name not in object_storage_model.get_projects():
+            raise ValueError(
+                f"Filesystem is not associated with project {project_name}"
+            )
 
-        if not shared_storage_db.is_provider_s3(filesystem_name):
+        if not _get_shared_storage_db().is_provider_s3(filesystem_name):
             raise ValueError(
                 f"Filesystem {filesystem_name} is not associated with an S3 Bucket"
             )
 
-        read_only = shared_storage_db.get_object_storage_read_only(filesystem_name)
+        read_only = _get_shared_storage_db().get_object_storage_read_only(
+            filesystem_name
+        )
         bucket_arn = object_storage_model.get_bucket_arn()
         bucket_arn_without_prefix = Utils.extract_bucket_arn_without_prefix(bucket_arn)
 
@@ -124,13 +147,13 @@ def handler(event: Dict[str, Any], context: Dict[str, Any]) -> Dict[str, Any]:
         prefix = Utils.extract_prefix_from_bucket_arn(bucket_arn)
         if not read_only:
             custom_bucket_prefix = (
-                shared_storage_db.get_object_storage_custom_bucket_prefix(
+                _get_shared_storage_db().get_object_storage_custom_bucket_prefix(
                     filesystem_name
                 )
             )
             append_prefix = {
-                OBJECT_STORAGE_CUSTOM_PROJECT_NAME_PREFIX: project_id,
-                OBJECT_STORAGE_CUSTOM_PROJECT_NAME_AND_USERNAME_PREFIX: f"{project_id}/{owner_id}",
+                OBJECT_STORAGE_CUSTOM_PROJECT_NAME_PREFIX: project_name,
+                OBJECT_STORAGE_CUSTOM_PROJECT_NAME_AND_USERNAME_PREFIX: f"{project_name}/{owner_id}",
                 OBJECT_STORAGE_NO_CUSTOM_PREFIX: "",
             }.get(custom_bucket_prefix, None)
 
@@ -141,7 +164,7 @@ def handler(event: Dict[str, Any], context: Dict[str, Any]) -> Dict[str, Any]:
                 f'{prefix.rstrip("/")}/{append_prefix}' if prefix else append_prefix
             )
 
-        role_arn = shared_storage_db.get_object_storage_iam_role_arn(
+        role_arn = _get_shared_storage_db().get_object_storage_iam_role_arn(
             filesystem_name
         ) or (READ_ONLY_ROLE_NAME_ARN if read_only else READ_AND_WRITE_ROLE_NAME_ARN)
 

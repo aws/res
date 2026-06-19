@@ -7,9 +7,9 @@ import logging
 import re
 from typing import Any, Dict, Optional
 
-import boto3
 import jwt
 from botocore.exceptions import BotoCoreError, ClientError
+from res.clients.aws import get_aws_provider  # type: ignore
 
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
@@ -48,7 +48,7 @@ class Utils:
 
     @staticmethod
     def validate_instance_origin(instance_id: str, source_ip: str) -> bool:
-        ec2 = boto3.client("ec2")
+        ec2 = get_aws_provider().ec2()
         try:
             response = ec2.describe_instances(InstanceIds=[instance_id])
         except Exception as e:
@@ -80,7 +80,7 @@ class Utils:
     def get_bootstrap_temporary_credentials(
         role_arn: str, role_session_name: str
     ) -> Optional[Dict[str, Any]]:
-        sts = boto3.client("sts")
+        sts = get_aws_provider().sts()
         try:
             response = sts.assume_role(
                 RoleArn=role_arn,
@@ -101,10 +101,8 @@ class Utils:
         }
 
     @staticmethod
-    def get_custom_broker_secret(secret_name: str, region_name: str) -> Optional[Any]:
-        session = boto3.session.Session()
-
-        client = session.client(service_name="secretsmanager", region_name=region_name)
+    def get_custom_broker_secret(secret_name: str) -> Optional[Any]:
+        client = get_aws_provider().secretsmanager()
 
         try:
             get_secret_value_response = client.get_secret_value(SecretId=secret_name)
@@ -178,7 +176,7 @@ class Utils:
         bucket_arn: str,
         prefix: Optional[str] = None,
     ) -> Optional[Dict[str, Any]]:
-        sts = boto3.client("sts")
+        sts = get_aws_provider().sts()
         try:
             response = sts.assume_role(
                 RoleArn=role_arn,
