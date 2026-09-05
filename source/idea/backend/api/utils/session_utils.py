@@ -334,7 +334,7 @@ def complete_create_session_request(session: VirtualDesktopSession, user: str) -
     else:
         session.server.instance_profile_arn = iam_utils.build_vdi_instance_profile_arn(session.project.name)
 
-    if session.server.key_pair_name:
+    if not session.server.key_pair_name:
         session.server.key_pair_name = cluster_settings.get_setting('cluster.network.ssh_key_pair')
 
     if not session.server.security_groups:

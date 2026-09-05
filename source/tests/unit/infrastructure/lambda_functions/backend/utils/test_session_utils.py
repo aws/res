@@ -591,6 +591,47 @@ class TestValidateBatchStartSessions:
         assert len(unsuccessful) == 0
 
 
+class TestCompleteCreateSessionRequest:
+    @patch("api.utils.session_utils.cluster_settings.get_setting")
+    @patch("api.utils.session_utils.get_gpu_manufacturer")
+    def test_sets_default_ssh_key_pair_when_missing(
+        self, mock_get_gpu, mock_get_setting
+    ):
+        mock_get_gpu.return_value = None
+
+        def get_setting(key):
+            settings = {
+                "cluster.network.ssh_key_pair": "test-key-pair",
+                "vdc.dcv_host_instance_profile_arn": (
+                    "arn:aws:iam::123456789012:instance-profile/test"
+                ),
+                "vdc.dcv_host_security_group_id": "sg-123456",
+                "vdc.dcv_session.additional_security_groups": [],
+            }
+            return settings[key]
+
+        mock_get_setting.side_effect = get_setting
+
+        mock_session = Mock()
+        mock_session.name = "test-session"
+        mock_session.type = "CONSOLE"
+        mock_session.server = Mock()
+        mock_session.server.instance_type = "m6a.xlarge"
+        mock_session.server.root_volume_iops = 3000
+        mock_session.server.instance_profile_arn = None
+        mock_session.server.key_pair_name = None
+        mock_session.server.security_groups = []
+        mock_session.project.policy_arns = None
+        mock_session.project.security_groups = None
+
+        result = session_utils.complete_create_session_request(
+            mock_session, "testuser"
+        )
+
+        assert result.server.key_pair_name == "test-key-pair"
+
+
+
 class TestValidateCreateSessionHibernation:
     """Tests for hibernation root volume size validation."""
 
