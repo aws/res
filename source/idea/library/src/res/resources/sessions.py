@@ -11,7 +11,7 @@ import boto3
 import res.exceptions as exceptions
 from boto3.dynamodb.conditions import And, Attr, Or
 from res import constants
-from res.clients.events import events_client
+from res.clients.aws.aws_provider import get_aws_provider
 from res.constants import ENVIRONMENT_NAME_KEY
 from res.resources import accounts, cluster_settings, projects, schedules
 from res.utils import ec2_utils, logging_utils, table_utils, time_utils
@@ -36,12 +36,13 @@ SESSION_DB_PROJECT_ID_KEY = "project_id"
 SESSION_DB_BASE_OS_KEY = "base_os"
 SESSION_DB_DESCRIPTION_KEY = "description"
 SESSION_DB_HIBERNATION_KEY = "hibernation_enabled"
-SESSION_DB_STACK_KEY = "software_stack"
+SESSION_DB_SOFTWARE_STACK_ID_KEY = "software_stack_id"
 SESSION_DB_NAME_KEY = "name"
 SESSION_DB_INSTANCE_TYPE_KEY = "instance_type"
 SESSION_DB_LOCKED_KEY = "locked"
 SESSION_DB_IS_IDLE_KEY = "is_idle"
 SESSION_DB_PRIVATE_DNS_NAME_KEY = "private_dns_name"
+SESSION_DB_PRIVATE_IP_KEY = "private_ip"
 CUSTOM_DNS_NAME_KEY = "vdc.dcv_connection_gateway.certificate.custom_dns_name"
 EXTERNAL_NLB_DNS_NAME_KEY = "vdc.external_nlb.load_balancer_dns_name"
 
@@ -112,8 +113,6 @@ def get_session_by_instance_id(instance_id: str) -> Optional[Dict[str, Any]]:
 
 def _update_session_record(
     session: Dict[str, Any],
-    publish_event: bool = False,
-    old_session: Optional[Dict[str, Any]] = None,
 ) -> Optional[Dict[str, Any]]:
     """
     Update an existing session from DDB
@@ -142,38 +141,17 @@ def _update_session_record(
         item=session,
     )
 
-    if publish_event and old_session:
-        logger.info("publishing event")
-        events_client.publish_update_event(
-            hash_key=session[SESSION_DB_HASH_KEY],
-            range_key=session[SESSION_DB_RANGE_KEY],
-            old_entry=old_session,
-            new_entry=updated_session,
-            table_name=SESSIONS_TABLE_NAME,
-        )
-
     return updated_session
 
 
-def update_session_state(
-    owner: str, session_id: str, state: str, publish_event: bool = False
-) -> Dict[str, Any]:
+def update_session_state(owner: str, session_id: str, state: str) -> Dict[str, Any]:
     """
     Update only the state of a session.
     :param owner: session owner
     :param session_id: session ID
     :param state: new state value
-    :param publish_event: if True, fetch the existing session and publish a DDB
-        update event so downstream consumers (e.g. session-permissions table) stay in sync.
     :return: updated session dict from DDB
     """
-    if publish_event:
-        old_session = get_session(owner=owner, session_id=session_id)
-        new_session = {**old_session, SESSION_DB_STATE_KEY: state}
-        return _update_session_record(
-            new_session, publish_event=True, old_session=old_session
-        )
-
     return table_utils.update_item(
         SESSIONS_TABLE_NAME,
         key={
@@ -185,6 +163,41 @@ def update_session_state(
             SESSION_DB_UPDATED_ON_KEY: time_utils.current_time_ms(),
         },
     )
+
+
+def transition_session_state_if(
+    owner: str,
+    session_id: str,
+    new_state: str,
+    expected_current_state: str,
+    session: Optional[Dict[str, Any]] = None,
+) -> Optional[Dict[str, Any]]:
+    """
+    Atomically set the session state to ``new_state`` only if the current state
+    is ``expected_current_state`` (compare-and-swap).
+
+    :return: the updated session dict, or None if the condition was not met.
+    """
+    item: Dict[str, Any] = dict(session) if session else {}
+    item[SESSION_DB_STATE_KEY] = new_state
+    item[SESSION_DB_UPDATED_ON_KEY] = time_utils.current_time_ms()
+    try:
+        return table_utils.update_item(
+            SESSIONS_TABLE_NAME,
+            key={
+                SESSION_DB_HASH_KEY: owner,
+                SESSION_DB_RANGE_KEY: session_id,
+            },
+            item=item,
+            condition_expression=Attr(SESSION_DB_STATE_KEY).eq(expected_current_state),
+        )
+    except exceptions.ConditionalCheckFailed:
+        logger.info(
+            f"Skipped state transition for {session_id}: "
+            f"expected {expected_current_state} but current state differs "
+            f"(concurrent update); not setting {new_state}."
+        )
+        return None
 
 
 def update_session(
@@ -241,7 +254,7 @@ def update_session(
     )
 
     if session_to_update != old_session:
-        _ = _update_session_record(session_to_update, True, old_session)
+        _ = _update_session_record(session_to_update)
 
         tag_instance_id = session_to_update.get(SESSION_DB_SERVER_KEY, {}).get(
             SESSION_DB_SERVER_NESTED_INSTANCE_ID_KEY
@@ -275,13 +288,6 @@ def create_session(session: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         session[SESSION_DB_SERVER_INSTANCE_ID_KEY] = instance_id
 
     table_utils.create_item(SESSIONS_TABLE_NAME, item=session)
-
-    events_client.publish_create_event(
-        hash_key=session.get(SESSION_DB_HASH_KEY, session.get("owner")),
-        range_key=session.get(SESSION_DB_RANGE_KEY, ""),
-        new_entry=session,
-        table_name=SESSIONS_TABLE_NAME,
-    )
 
     return session
 
@@ -370,6 +376,7 @@ def list_sessions(
     before: Optional[str] = None,
     next_token: Optional[str] = None,
     owner: Optional[str] = None,
+    is_app_client: bool = False,
 ) -> Tuple[List[Dict[str, Any]], Optional[str]]:
     """
     List sessions with filtering based on user permissions
@@ -393,14 +400,14 @@ def list_sessions(
                 (FilterOperator.NE, "windows") if base_os == "linux" else base_os
             ),
             SESSION_DB_NAME_KEY: (FilterOperator.CONTAINS, session_name),
-            "software_stack.stack_id": stack_id,
+            SESSION_DB_SOFTWARE_STACK_ID_KEY: stack_id,
         },
         date_range_key,
         after,
         before,
     )
 
-    if not accounts.is_active_admin(user):
+    if not is_app_client and not accounts.is_active_admin(user):
         projects_to_manage_sessions = projects.list_user_manage_sessions_projects(user)
         return list_sessions_for_user(
             user,
@@ -491,6 +498,57 @@ def get_sessions_by_ids(
     return {item[SESSION_DB_RANGE_KEY]: item for item in items}
 
 
+def get_sessions_by_owner_and_ids(
+    owner_session_pairs: List[Tuple[str, str]],
+) -> Dict[str, Dict[str, Any]]:
+    """Batch-get sessions using composite key (owner, idea_session_id).
+
+    Uses DynamoDB BatchGetItem for efficient retrieval when both key
+    components are known.
+
+    Args:
+        owner_session_pairs: List of (owner, idea_session_id) tuples.
+
+    Returns:
+        Dict mapping idea_session_id -> session record.
+    """
+    if not owner_session_pairs:
+        return {}
+
+    dynamodb = get_aws_provider().dynamodb_table()
+    resolved_table_name = table_utils.resolve_table_name(SESSIONS_TABLE_NAME)
+    result: Dict[str, Dict[str, Any]] = {}
+
+    # DynamoDB BatchGetItem supports max 100 items per request
+    for i in range(0, len(owner_session_pairs), 100):
+        batch = owner_session_pairs[i : i + 100]
+        keys = [
+            {SESSION_DB_HASH_KEY: owner, SESSION_DB_RANGE_KEY: session_id}
+            for owner, session_id in batch
+        ]
+
+        response = dynamodb.meta.client.batch_get_item(
+            RequestItems={resolved_table_name: {"Keys": keys}}
+        )
+
+        items = response.get("Responses", {}).get(resolved_table_name, [])
+        for item in items:
+            result[item[SESSION_DB_RANGE_KEY]] = item
+
+        # Handle unprocessed keys (throttling)
+        unprocessed = response.get("UnprocessedKeys", {}).get(resolved_table_name)
+        while unprocessed:
+            response = dynamodb.meta.client.batch_get_item(
+                RequestItems={resolved_table_name: unprocessed}
+            )
+            items = response.get("Responses", {}).get(resolved_table_name, [])
+            for item in items:
+                result[item[SESSION_DB_RANGE_KEY]] = item
+            unprocessed = response.get("UnprocessedKeys", {}).get(resolved_table_name)
+
+    return result
+
+
 def group_sessions_by_os(
     session_map: Dict[str, Optional[Dict[str, Any]]],
 ) -> Tuple[Dict[str, List[Dict[str, str]]], List[Dict[str, Any]]]:
@@ -538,20 +596,6 @@ def group_sessions_by_os(
     return os_groups, unsuccessful_list
 
 
-def get_session_logins() -> List[str]:
-    logins = []
-    sso_enabled = cluster_settings.get_setting("identity-provider.cognito.sso_enabled")
-    enable_native_user_login = cluster_settings.get_setting(
-        "identity-provider.cognito.enable_native_user_login"
-    )
-
-    if sso_enabled:
-        logins.append(constants.SSO_USER_IDP_TYPE)
-    if enable_native_user_login:
-        logins.append(constants.COGNITO_USER_IDP_TYPE)
-    return logins
-
-
 def get_session_connection(
     session_id: str, owner: str, username: str
 ) -> Dict[str, Any]:
@@ -586,10 +630,11 @@ def get_session_connection(
             )
         endpoint = f"https://{nlb_dns}"
 
+    # Keys must match VirtualDesktopSessionConnection.attribute_map (auto-generated from Smithy)
     return {
-        "idea-session-id": session_id,
-        "idea-session-owner": owner,
+        "idea_session_id": session_id,
+        "idea_session_owner": owner,
         "endpoint": endpoint,
-        "web-url-path": connection_data["web_url_path"],
-        "access-token": connection_data["access_token"],
+        "web_url_path": connection_data["web_url_path"],
+        "access_token": connection_data["access_token"],
     }

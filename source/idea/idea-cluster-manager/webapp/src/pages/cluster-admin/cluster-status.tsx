@@ -410,6 +410,10 @@ class ClusterStatus extends Component<ClusterStatusProps, ClusterStatusState> {
                             header: "API Health Check",
                             cell: (item: any) => {
                                 if (item.type === Constants.MODULE_TYPE_APP) {
+                                    /* VDC controller has been removed - no API health check endpoint exists */
+                                    if (item.name === Constants.MODULE_VIRTUAL_DESKTOP_CONTROLLER) {
+                                        return <StatusIndicator type={"stopped"}>Not Applicable</StatusIndicator>;
+                                    }
                                     /* If the module is not deployed by admin-choice - don't alarm the admin with red status */
                                     if (item.status === "not-deployed") {
                                         return <StatusIndicator type={"stopped"}>Not Applicable</StatusIndicator>;

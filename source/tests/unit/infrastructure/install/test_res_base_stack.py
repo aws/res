@@ -1096,6 +1096,32 @@ def test_cluster_settings_table_event_handler_role_policy_creation(
                             "Effect": "Allow",
                             "Resource": "*",
                         },
+                        {
+                            "Action": [
+                                "dynamodb:Scan",
+                                "dynamodb:UpdateItem",
+                            ],
+                            "Effect": "Allow",
+                            "Resource": {
+                                "Fn::Join": [
+                                    "",
+                                    [
+                                        "arn:",
+                                        {"Ref": "AWS::Partition"},
+                                        ":dynamodb:",
+                                        {"Ref": "AWS::Region"},
+                                        ":",
+                                        {"Ref": "AWS::AccountId"},
+                                        ":table/",
+                                        res_base_stack.nested_stack.resolve(
+                                            res_base_stack.cluster_name
+                                        ),
+                                        ".vdc.controller.software-stacks",
+                                    ],
+                                ]
+                            },
+                            "Sid": "SoftwareStackTablePermissions",
+                        },
                     ]
                 },
                 "PolicyName": {

@@ -9,7 +9,7 @@ This class inherits from BaseSerializer which provides all the core dynamic
 serialization logic. Override _customize_to_ddb() and _customize_from_ddb()
 to add model-specific transformation logic.
 
-Available fields: dcv_session_id, idea_session_id, base_os, name, owner, type, server, created_on, updated_on, state, description, software_stack, project, schedule, connection_count, force, hibernation_enabled, is_launched_by_admin, locked, tags, logins, is_idle, failure_reason
+Available fields: dcv_session_id, idea_session_id, base_os, name, owner, type, server, created_on, updated_on, state, description, software_stack_id, project, schedule, connection_count, force, hibernation_enabled, is_launched_by_admin, locked, tags, logins, is_idle, failure_reason
 """
 
 from typing import Dict, Any, Optional

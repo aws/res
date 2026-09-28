@@ -27,6 +27,10 @@ import requests
 import xmltodict
 from jwt import PyJWKClient
 from requests import Response
+from res.utils.auth_utils import (  # type: ignore
+    extract_idp_email,
+    validate_native_cognito_username,
+)
 
 DEFAULT_JWK_CACHE_KEYS = True
 DEFAULT_JWK_MAX_CACHED_KEYS = 16
@@ -123,22 +127,24 @@ def get_idp_name() -> typing.Optional[str]:
 
 def get_ddb_user_name(username: str, idp_name: typing.Union[str, None]) -> str:
     """
+    Resolve Cognito token username to RES DDB username.
+
     For a user with
     1. email = a@example.org
     2. SSO enabled with identity-provider-name = idp
     Cognito creates a user as idp_a@example.org and that name is passed as username in access token.
     This method gets the identity-provider-name prefix from database and removes that from the username
     to get the user name back.
-    """
-    if not idp_name:
-        # IdP is not set up, treat the user as Cognito native user
-        return username.split("@")[0]
 
-    identity_provider_prefix = (idp_name + "_").lower()
-    email = username
-    if username.startswith(identity_provider_prefix):
-        email = username.replace(identity_provider_prefix, "", 1)
-    return email.split("@")[0]
+    NOTE: The non-IdP validation is shared with res.utils.auth_utils.get_ddb_user_name()
+    via validate_native_cognito_username(). The IdP path differs: this version does a
+    simple split("@")[0] while the library version does a DDB email-index query.
+    """
+    email = extract_idp_email(username, idp_name)
+    if email is None:
+        return validate_native_cognito_username(username)  # type: ignore[no-any-return]
+
+    return email.split("@")[0]  # type: ignore[no-any-return]
 
 
 def verify_user_authorization(decoded_token: Dict[str, Any]) -> None:

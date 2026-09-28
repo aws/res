@@ -50,3 +50,30 @@ exclude = [
     "source/res/api/",
     "bootstrap_userdata_builder"
 ]
+
+[tool.pytest.ini_options]
+# Integration test suite/capability markers. Suites (dev/nightly/release) are
+# selected by the invoke integ-tests.<suite> tasks via `-m`; capability markers
+# layer on top as filters. See tasks/integ_tests.py SUITE_MARKER_EXPR.
+markers = [
+    # --- suite markers ---
+    "dev: fast per-commit checks (API + dry-run), minutes",
+    "nightly: scheduled full smoke + VDI lifecycle across the OS matrix (~1-2h)",
+    "release: comprehensive pre-release (scale, snapshot, multi-env install, all OS)",
+    # --- capability markers (orthogonal; gate by environment/resources) ---
+    "requires_vdi: launches a real VDI (provisioning, slow)",
+    "linux_only: only valid on Linux software stacks",
+    "windows: requires a Windows VDI",
+    "gpu: requires a GPU instance / driver validation",
+    "ui: Selenium/browser-driven (Chrome/Firefox) UI flow",
+    "scale: large-scale (e.g. ~500 VDIs) batch/concurrency test",
+    "govcloud: GovCloud-partition-specific or GovCloud-gated",
+    "in_vdi: runs in-VDI checks over SSM (ssm_utils)",
+    "infra_validation: boto3 describe-only post-install infra assertions",
+    "smoke_subset: minimal single-OS (AL2023) smoke subset for the per-commit pipeline",
+    "smart_retry: smart retry VDI launch test (mutates global state, must run in isolation)",
+]
+# Default collection root for bare `pytest -m <suite>` suite runs. Explicit path
+# arguments (used by all unit-test and existing integ-test invocations) override
+# this, so it only affects marker-driven suite runs.
+testpaths = ["source/tests/integration/tests"]

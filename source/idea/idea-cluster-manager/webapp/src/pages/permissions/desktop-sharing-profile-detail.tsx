@@ -17,7 +17,6 @@ import { IdeaSideNavigationProps } from "../../components/side-navigation";
 import { Box, Button, ColumnLayout, Container, ExpandableSection, FormField, Header, SpaceBetween, StatusIndicator, StatusIndicatorProps } from "@cloudscape-design/components";
 import IdeaAppLayout from "../../components/app-layout/app-layout";
 import { AppContext } from "../../common";
-import { VirtualDesktopPermission } from "../../client/data-model";
 import { CopyToClipBoard } from "../../components/common";
 import ConfigureDesktopSharingProfile from "./configure-desktop-sharing-profile";
 import { VirtualDesktopAdminClient } from "../../client";
@@ -25,7 +24,7 @@ import { withRouter } from "../../navigation/navigation-utils";
 import VirtualDesktopUtilsClient from "../../client/virtual-desktop-utils-client";
 import Utils from "../../common/utils";
 import { Constants } from "../../common/constants";
-import { VirtualDesktopPermissionProfile } from "../../client/generated/api";
+import { VirtualDesktopPermission, VirtualDesktopPermissionProfile } from "../../client/generated/api";
 
 export interface VirtualDesktopPermissionProfileDetailProps extends IdeaAppLayoutProps, IdeaSideNavigationProps {}
 

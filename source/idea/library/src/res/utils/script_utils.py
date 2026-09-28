@@ -1,9 +1,14 @@
 #  Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 #  SPDX-License-Identifier: Apache-2.0
 
+import shlex
 from typing import List
 
 from res.resources.sessions import ScriptEventType, ScriptOSType
+
+
+def _escape_powershell_single_quoted(value: str) -> str:
+    return value.replace("'", "''")
 
 
 def _store_commands_as_linux_script(commands: List[str], script_name: str) -> List[str]:
@@ -69,14 +74,15 @@ def _retrieve_scripts_as_commands(
     if os_type == ScriptOSType.LINUX:
         scripts_as_commands.extend(
             [
-                f"{command_prefix} {script.get('script_location')} {' '.join(script.get('arguments', []))}"
+                f"{command_prefix} {shlex.quote(script.get('script_location', ''))} {' '.join(shlex.quote(arg) for arg in script.get('arguments', []))}"
                 for script in event_scripts
             ]
         )
     elif os_type == ScriptOSType.WINDOWS:
         scripts_as_commands.extend(
             [
-                f"{command_prefix} {script.get('script_location')} -arguments '{' '.join(script.get('arguments', []))}'"
+                f"{command_prefix} '{_escape_powershell_single_quoted(script.get('script_location', ''))}'"
+                f" -arguments '{' '.join(_escape_powershell_single_quoted(arg) for arg in script.get('arguments', []))}'"
                 for script in event_scripts
             ]
         )

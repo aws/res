@@ -15,8 +15,6 @@
  * and limitations under the License.
  */
 
-import { VirtualDesktopBaseOs, VirtualDesktopSessionPermission } from "./generated/api";
-
 export type SocaUserInputParamType =
     | "text"
     | "password"
@@ -46,22 +44,13 @@ export type SocaUserInputParamType =
     | "container"
     | "expandable"
     | "attribute_editor";
-export type VirtualDesktopBaseOS = "amazonlinux2" | "amzn2023" | "rhel8" | "rhel9" | "windows" | "rocky9";
 export type SocaMemoryUnit = "bytes" | "kib" | "mib" | "gib" | "tib" | "kb" | "mb" | "gb" | "tb";
-export type VirtualDesktopArchitecture = "x86_64" | "arm64";
-export type VirtualDesktopGPU = "NO_GPU" | "NVIDIA" | "AMD";
-export type VirtualDesktopAffinity = "default" | "host";
-export type VirtualDesktopTenancy = "default" | "dedicated" | "host";
 export type SocaSortOrder = "asc" | "desc";
 export type SocaQueueMode = "fifo" | "fairshare" | "license-optimized";
 export type SocaScalingMode = "single-job" | "batch";
 export type SocaSpotAllocationStrategy = "capacity-optimized" | "lowest-price" | "diversified";
 export type SocaJobState = "transition" | "queued" | "held" | "waiting" | "running" | "exit" | "subjob_expired" | "subjob_begun" | "moved" | "finished" | "suspended";
 export type SocaCapacityType = "on-demand" | "spot" | "mixed";
-export type VirtualDesktopSessionType = "CONSOLE" | "VIRTUAL" | undefined;
-export type VirtualDesktopSessionState = "PROVISIONING" | "CREATING" | "INITIALIZING" | "READY" | "RESUMING" | "STOPPING" | "STOPPED" | "STOPPED_IDLE" | "ERROR" | "DELETING" | "DELETED";
-export type DayOfWeek = "monday" | "tuesday" | "wednesday" | "thursday" | "friday" | "saturday" | "sunday";
-export type VirtualDesktopScheduleType = "WORKING_HOURS" | "STOP_ALL_DAY" | "START_ALL_DAY" | "CUSTOM_SCHEDULE" | "NO_SCHEDULE";
 export type DryRunOption = "true" | "json:job" | "json:bom" | "json:budget" | "json:quota" | "json:queue" | "notification:email" | "debug";
 export type SocaComputeNodeState = "busy" | "down" | "free" | "offline" | "job-busy" | "job-exclusive" | "provisioning" | "resv-exclusive" | "stale" | "stale-unknown" | "unresolvable" | "wait-provisioning" | "initializing";
 export type SocaComputeNodeSharing = "default-excl" | "default-exlchost" | "default-shared" | "force-excl" | "force-exclhost" | "ignore-excl";
@@ -486,46 +475,6 @@ export interface SocaKeyValue {
 }
 export interface DeleteUserRequest {
     username?: string;
-}
-export interface GetSessionConnectionInfoRequest {
-    connection_info?: VirtualDesktopSessionConnectionInfo;
-}
-export interface VirtualDesktopSessionConnectionInfo {
-    dcv_session_id?: string;
-    idea_session_id?: string;
-    idea_session_owner?: string;
-    endpoint?: string;
-    username?: string;
-    web_url_path?: string;
-    access_token?: string;
-    failure_reason?: string;
-}
-export interface CreateSoftwareStackResponse {
-    software_stack?: VirtualDesktopSoftwareStack;
-}
-export interface VirtualDesktopSoftwareStack {
-    stack_id?: string;
-    base_os?: VirtualDesktopBaseOS;
-    name?: string;
-    description?: string;
-    created_on?: string;
-    updated_on?: string;
-    ami_id?: string;
-    failure_reason?: string;
-    enabled?: boolean;
-    min_storage?: SocaMemory;
-    min_ram?: SocaMemory;
-    architecture?: VirtualDesktopArchitecture;
-    gpu?: VirtualDesktopGPU;
-    placement?: VirtualDesktopPlacement;
-    projects?: Project[];
-    allowed_instance_types?: string[];
-}
-export interface VirtualDesktopPlacement {
-    affinity?: VirtualDesktopAffinity;
-    tenancy?: VirtualDesktopTenancy;
-    host_id?: string;
-    host_resource_group_arn?: string;
 }
 export interface SocaMemory {
     value: number;
@@ -1006,12 +955,6 @@ export interface AuthResult {
     expires_in?: number;
     token_type?: string;
 }
-export interface GetBasePermissionsRequest {}
-export interface DescribeSessionsResponse {
-    response?: {
-        [k: string]: unknown;
-    };
-}
 export interface UpdateEmailTemplateResult {
     template?: EmailTemplate;
 }
@@ -1023,15 +966,6 @@ export interface EmailTemplate {
     body?: string;
     created_on?: string;
     updated_on?: string;
-}
-export interface GetBasePermissionsResponse {
-    permissions?: VirtualDesktopPermission[];
-}
-export interface VirtualDesktopPermission {
-    key?: string;
-    name?: string;
-    description?: string;
-    enabled?: boolean;
 }
 export interface ListJobsRequest {
     paginator?: SocaPaginator;
@@ -1245,75 +1179,6 @@ export interface ListFilesResult {
     filters?: SocaFilter[];
     cwd?: string;
 }
-export interface DeleteSessionRequest {
-    sessions?: VirtualDesktopSession[];
-}
-export interface VirtualDesktopSession {
-    dcv_session_id?: string;
-    idea_session_id?: string;
-    base_os?: VirtualDesktopBaseOS | VirtualDesktopBaseOs;
-    name?: string;
-    owner?: string;
-    type?: VirtualDesktopSessionType;
-    server?: VirtualDesktopServer;
-    created_on?: string;
-    updated_on?: string;
-    state?: VirtualDesktopSessionState;
-    description?: string;
-    software_stack?: VirtualDesktopSoftwareStack;
-    project?: Project;
-    schedule?: VirtualDesktopWeekSchedule;
-    connection_count?: number;
-    force?: boolean;
-    hibernation_enabled?: boolean;
-    is_launched_by_admin?: boolean;
-    locked?: boolean;
-    failure_reason?: string;
-    tags?: Record<string,string>[]
-}
-export interface VirtualDesktopServer {
-    server_id?: string;
-    idea_sesssion_id?: string;
-    idea_session_owner?: string;
-    instance_id?: string;
-    instance_type?: string;
-    private_ip?: string;
-    private_dns_name?: string;
-    public_ip?: string;
-    public_dns_name?: string;
-    availability?: string;
-    unavailability_reason?: string;
-    console_session_count?: number;
-    virtual_session_count?: number;
-    max_concurrent_sessions_per_user?: number;
-    max_virtual_sessions?: number;
-    state?: string;
-    locked?: boolean;
-    root_volume_size?: SocaMemory;
-    root_volume_iops?: number;
-    instance_profile_arn?: string;
-    security_groups?: string[];
-    subnet_id?: string;
-    key_pair_name?: string;
-}
-export interface VirtualDesktopWeekSchedule {
-    monday?: VirtualDesktopSchedule;
-    tuesday?: VirtualDesktopSchedule;
-    wednesday?: VirtualDesktopSchedule;
-    thursday?: VirtualDesktopSchedule;
-    friday?: VirtualDesktopSchedule;
-    saturday?: VirtualDesktopSchedule;
-    sunday?: VirtualDesktopSchedule;
-}
-export interface VirtualDesktopSchedule {
-    schedule_id?: string;
-    idea_session_id?: string;
-    idea_session_owner?: string;
-    day_of_week?: DayOfWeek;
-    start_up_time?: string;
-    shut_down_time?: string;
-    schedule_type?: VirtualDesktopScheduleType;
-}
 export interface UpdateHpcApplicationRequest {
     application?: HpcApplication;
 }
@@ -1330,36 +1195,11 @@ export interface ConfirmForgotPasswordRequest {
     confirmation_code?: string;
     password?: string;
 }
-export interface GetSessionConnectionInfoResponse {
-    connection_info?: VirtualDesktopSessionConnectionInfo;
-}
-export interface UpdateSoftwareStackRequest {
-    software_stack?: VirtualDesktopSoftwareStack;
-}
-export interface DeleteSoftwareStackRequest {
-    software_stack?: VirtualDesktopSoftwareStack;
-}
 export interface DeleteEmailTemplateRequest {
     name?: string;
 }
 export interface GetModuleInfoRequest {}
 export interface DecodedToken {}
-export interface UpdateSessionPermissionRequest {
-    create?: VirtualDesktopSessionPermission[];
-    delete?: VirtualDesktopSessionPermission[];
-    update?: VirtualDesktopSessionPermission[];
-}
-export interface VirtualDesktopPermissionProfile {
-    profile_id?: string;
-    title?: string;
-    description?: string;
-    permissions?: VirtualDesktopPermission[];
-    created_on?: string;
-    updated_on?: string;
-}
-export interface UpdateSessionResponse {
-    session?: VirtualDesktopSession;
-}
 export interface ProvisioningQueueMetrics {
     total?: JobMetrics;
     groups?: {
@@ -1443,13 +1283,6 @@ export interface UpdateHpcApplicationResult {
     application?: HpcApplication;
 }
 export interface ConfirmForgotPasswordResult {}
-export interface ListSessionsResponse {
-    paginator?: SocaPaginator;
-    sort_by?: SocaSortBy;
-    date_range?: SocaDateRange;
-    listing?: VirtualDesktopSession[];
-    filters?: SocaFilter[];
-}
 export interface ModifyGroupRequest {
     group?: Group;
 }
@@ -1472,22 +1305,6 @@ export interface JobValidationResultEntry {
     error_code?: string;
     message?: string;
 }
-export interface GetSessionScreenshotRequest {
-    screenshots?: VirtualDesktopSessionScreenshot[];
-}
-export interface VirtualDesktopSessionScreenshot {
-    image_type?: string;
-    image_data?: string;
-    dcv_session_id?: string;
-    idea_session_id?: string;
-    idea_session_owner?: string;
-    create_time?: string;
-    failure_reason?: string;
-}
-export interface UpdateSoftwareStackResponse {
-    software_stack?: VirtualDesktopSoftwareStack;
-}
-export interface DeleteSoftwareStackResponse {}
 export interface GetProjectRequest {
     project_name?: string;
     project_id?: string;
@@ -1505,9 +1322,6 @@ export interface ListJobsResult {
     date_range?: SocaDateRange;
     listing?: SocaJob[];
     filters?: SocaFilter[];
-}
-export interface UpdateSessionPermissionResponse {
-    permissions?: VirtualDesktopSessionPermission[];
 }
 export interface SocaUserInputCondition {
     eq?: unknown;
@@ -1694,6 +1508,7 @@ export enum UpdateModuleSettingsValuesDCVSession {
     DEFAULT_DCV_SESSION_TYPE = "default_dcv_session_type",
     WORKING_HOURS = "working_hours",
     SCHEDULE = "schedule",
+    SMART_RETRY_ENABLED = "smart_retry.enabled",
 }
 
 export enum UpdateModuleSettingsDCVBroker {
@@ -1808,15 +1623,6 @@ export interface SocaUserInputHandlers {
     autocomplete?: string;
     filter?: string;
 }
-export interface ListPermissionsRequest {
-    paginator?: SocaPaginator;
-    sort_by?: SocaSortBy;
-    date_range?: SocaDateRange;
-    listing?: (SocaBaseModel | unknown)[];
-    filters?: SocaFilter[];
-    idea_session_id?: string;
-    username?: string;
-}
 export interface RespondToAuthChallengeResult {
     challenge_name?: string;
     session?: string;
@@ -1824,9 +1630,6 @@ export interface RespondToAuthChallengeResult {
         [k: string]: unknown;
     };
     auth?: AuthResult;
-}
-export interface GetSessionInfoRequest {
-    session?: VirtualDesktopSession;
 }
 export interface ListEmailTemplatesRequest {
     paginator?: SocaPaginator;
@@ -1883,10 +1686,6 @@ export interface DeleteGroupRequest {
 export interface CheckHpcLicenseResourceAvailabilityRequest {
     name?: string;
 }
-export interface ResumeSessionsResponse {
-    failed?: VirtualDesktopSession[];
-    success?: VirtualDesktopSession[];
-}
 export interface DownloadFilesRequest {
     files?: string[];
 }
@@ -1932,16 +1731,6 @@ export interface ForgotPasswordRequest {
     client_id?: string;
     username?: string;
 }
-export interface GetSessionInfoResponse {
-    session?: VirtualDesktopSession;
-}
-export interface ListPermissionsResponse {
-    paginator?: SocaPaginator;
-    sort_by?: SocaSortBy;
-    date_range?: SocaDateRange;
-    listing?: VirtualDesktopSessionPermission[];
-    filters?: SocaFilter[];
-}
 export interface GetHpcLicenseResourceRequest {
     name?: string;
 }
@@ -1971,9 +1760,6 @@ export interface OpenPBSInfo {
     mom_private_dns?: string;
     mom_port?: number;
 }
-export interface CreateSessionRequest {
-    session?: VirtualDesktopSession;
-}
 export interface DownloadFilesResult {
     download_url?: string;
 }
@@ -1988,13 +1774,6 @@ export interface CreateQueueProfileResult {
 }
 export interface CheckHpcLicenseResourceAvailabilityResult {
     available_count?: number;
-}
-export interface ListSessionsRequest {
-    paginator?: SocaPaginator;
-    sort_by?: SocaSortBy;
-    date_range?: SocaDateRange;
-    listing?: (SocaBaseModel | unknown)[];
-    filters?: SocaFilter[];
 }
 export interface UpdateProjectResult {
     project?: Project;
@@ -2039,9 +1818,6 @@ export interface ProvisioningCapacityInfo {
 export interface GetParamsRequest {
     module?: string;
     format?: string;
-}
-export interface UpdateSessionRequest {
-    session?: VirtualDesktopSession;
 }
 export interface GetUserProjectsRequest {
     username?: string;
@@ -2107,16 +1883,6 @@ export interface ListClusterHostsResult {
 }
 export interface GetHpcLicenseResourceResult {
     license_resource?: HpcLicenseResource;
-}
-export interface CreateSoftwareStackFromSessionRequest {
-    session?: VirtualDesktopSession;
-    new_software_stack?: VirtualDesktopSoftwareStack;
-}
-export interface CreateSessionResponse {
-    session?: VirtualDesktopSession;
-}
-export interface StopSessionRequest {
-    sessions?: VirtualDesktopSession[];
 }
 export interface GlobalSignOutResult {}
 export interface CreateHpcApplicationRequest {
@@ -2210,35 +1976,16 @@ export interface JobValidationDebugEntry {
     default_value?: unknown;
 }
 export interface DescribeInstanceTypesRequest {}
-export interface DescribeServersRequest {}
 export interface GetUserProjectsResult {
     projects?: Project[];
-}
-export interface VirtualDesktopSessionBatchResponsePayload {
-    failed?: VirtualDesktopSession[];
-    success?: VirtualDesktopSession[];
 }
 export interface DisableQueueProfileRequest {
     queue_profile_id?: string;
     queue_profile_name?: string;
 }
-export interface BatchCreateSessionRequest {
-    sessions?: VirtualDesktopSession[];
-}
-export interface DeleteSessionResponse {
-    failed?: VirtualDesktopSession[];
-    success?: VirtualDesktopSession[];
-}
 export interface UpdateHpcLicenseResourceRequest {
     license_resource?: HpcLicenseResource;
     dry_run?: boolean;
-}
-export interface CreateSoftwareStackFromSessionResponse {
-    software_stack?: VirtualDesktopSoftwareStack;
-}
-export interface StopSessionResponse {
-    failed?: VirtualDesktopSession[];
-    success?: VirtualDesktopSession[];
 }
 export interface DeleteFilesResult {}
 export interface CreateHpcApplicationResult {
@@ -2259,10 +2006,6 @@ export interface SocaListingPayload {
     date_range?: SocaDateRange;
     listing?: (SocaBaseModel | unknown)[];
     filters?: SocaFilter[];
-}
-export interface RebootSessionResponse {
-    failed?: VirtualDesktopSession[];
-    success?: VirtualDesktopSession[];
 }
 export interface ListUsersInGroupRequest {
     paginator?: SocaPaginator;
@@ -2320,9 +2063,6 @@ export interface UpdateCopyrightTextRequest {
     copyright_text?: string;
 }
 export interface UpdateCopyrightTextResult {}
-export interface CreatePermissionProfileRequest {
-    profile?: VirtualDesktopPermissionProfile;
-}
 export interface ChangePasswordResult {}
 export interface JobParameterInfo {
     name?: string;
@@ -2384,12 +2124,6 @@ export interface SocaComputeNode {
     jobs?: string[];
 }
 export interface DisableQueueProfileResult {}
-export interface DescribeServersResponse {
-    response?: {
-        [k: string]: unknown;
-    };
-}
-export interface VirtualDesktopApplicationProfile {}
 export interface GetEmailTemplateResult {
     template?: EmailTemplate;
 }
@@ -2408,9 +2142,6 @@ export interface GetJobRequest {
 }
 export interface GetModuleMetadataRequest {
     module?: string;
-}
-export interface ResumeSessionsRequest {
-    sessions?: VirtualDesktopSession[];
 }
 export interface CreateFileRequest {
     cwd?: string;
@@ -2431,16 +2162,6 @@ export interface TailFileRequest {
     line_count?: number;
     next_token?: string;
 }
-export interface BatchCreateSessionResponse {
-    failed?: VirtualDesktopSession[];
-    success?: VirtualDesktopSession[];
-}
-export interface CreateSoftwareStackRequest {
-    software_stack?: VirtualDesktopSoftwareStack;
-}
-export interface RebootSessionRequest {
-    sessions?: VirtualDesktopSession[];
-}
 export interface ModifyUserResult {
     user?: User;
 }
@@ -2449,10 +2170,6 @@ export interface GetInstanceTypeOptionsRequest {
     instance_types?: string[];
     queue_name?: string;
     queue_profile_name?: string;
-}
-export interface GetSessionScreenshotResponse {
-    failed?: VirtualDesktopSessionScreenshot[];
-    success?: VirtualDesktopSessionScreenshot[];
 }
 export interface RemoveUserFromGroupRequest {
     usernames?: string[];
@@ -2488,12 +2205,6 @@ export interface ListFileSystemsInVPCResult {
     fsx_lustre: FSxLUSTREFileSystem[];
 }
 
-export interface DescribeSessionsRequest {
-    sessions?: VirtualDesktopSession[];
-}
-export interface CreatePermissionProfileResponse {
-    profile?: VirtualDesktopPermissionProfile;
-}
 export interface ProvisionAlwaysOnNodesRequest {
     project_name?: string;
     queue_profile_name?: string;

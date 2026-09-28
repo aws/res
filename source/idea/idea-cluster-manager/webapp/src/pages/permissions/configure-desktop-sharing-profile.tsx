@@ -13,7 +13,7 @@
 
 import React, { Component, RefObject } from "react";
 import IdeaForm from "../../components/form";
-import { SocaUserInputParamMetadata, VirtualDesktopPermission } from "../../client/data-model";
+import { SocaUserInputParamMetadata } from "../../client/data-model";
 import { AppContext } from "../../common";
 import VirtualDesktopUtilsClient from "../../client/virtual-desktop-utils-client";
 import { Constants } from "../../common/constants";
@@ -22,7 +22,7 @@ import { IdeaSideNavigationProps } from "../../components/side-navigation";
 import { Alert, Box, Button, ColumnLayout, Container, ExpandableSection, FormField, Header, Modal, SpaceBetween, StatusIndicator, StatusIndicatorProps, TextContent, Toggle } from "@cloudscape-design/components";
 import { VirtualDesktopAdminClient } from "../../client";
 import { withRouter } from "../../navigation/navigation-utils";
-import { VirtualDesktopPermissionProfile } from "../../client/generated/api";
+import { VirtualDesktopPermission, VirtualDesktopPermissionProfile } from "../../client/generated/api";
 
 export interface ConfigureDesktopSharingProfileProps extends IdeaAppLayoutProps, IdeaSideNavigationProps { }
 

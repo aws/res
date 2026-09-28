@@ -39,7 +39,7 @@ class BatchStopSessionFailure(Model):
 
         self.attribute_map = {
             'session': 'session',
-            'error_code': 'errorCode',
+            'error_code': 'error_code',
             'message': 'message'
         }
 

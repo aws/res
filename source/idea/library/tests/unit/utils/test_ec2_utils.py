@@ -18,29 +18,31 @@ class TestEC2Utils:
         ec2_utils.instance_types_cache.clear()
 
     @patch.object(ec2_utils, "get_instance_type_info")
-    def test_get_instance_ram_success(self, mock_get_instance_type_info):
-        """Test get_instance_ram returns correct tuple."""
+    def test_get_instance_ram_in_mib_success(self, mock_get_instance_type_info):
+        """Test get_instance_ram_in_mib returns MiB as float."""
         # Setup mock
         mock_get_instance_type_info.return_value = {"MemoryInfo": {"SizeInMiB": 4096}}
 
         # Test
-        result = ec2_utils.get_instance_ram("t3.large")
+        result = ec2_utils.get_instance_ram_in_mib("t3.large")
 
         # Assertions
-        assert result == (4096.0, "MiB")
+        assert result == 4096.0
         mock_get_instance_type_info.assert_called_once_with("t3.large")
 
     @patch.object(ec2_utils, "get_instance_type_info")
-    def test_get_instance_ram_missing_memory_info(self, mock_get_instance_type_info):
-        """Test get_instance_ram with missing memory info."""
+    def test_get_instance_ram_in_mib_missing_memory_info(
+        self, mock_get_instance_type_info
+    ):
+        """Test get_instance_ram_in_mib with missing memory info."""
         # Setup mock
         mock_get_instance_type_info.return_value = {}
 
         # Test
-        result = ec2_utils.get_instance_ram("t3.nano")
+        result = ec2_utils.get_instance_ram_in_mib("t3.nano")
 
         # Assertions
-        assert result == (0.0, "MiB")
+        assert result == 0.0
 
     @patch.object(ec2_utils, "get_instance_type_info")
     def test_get_architecture_x86_64(self, mock_get_instance_type_info):
@@ -515,3 +517,48 @@ class TestEC2Utils:
         mock_ec2_client.create_tags.assert_called_once_with(
             Resources=["i-123456"], Tags=[{"Key": "Name", "Value": "test-instance"}]
         )
+
+    @patch.object(ec2_utils._aws_client_provider, "ec2")
+    def test_create_image_success(self, mock_ec2):
+        """Test create_image calls EC2 create_image with correct parameters."""
+        mock_ec2_client = MagicMock()
+        mock_ec2.return_value = mock_ec2_client
+        mock_ec2_client.create_image.return_value = {"ImageId": "ami-new123"}
+
+        result = ec2_utils.create_image(
+            instance_id="i-123456", name="my-ami", description="Test AMI"
+        )
+
+        assert result == {"ImageId": "ami-new123"}
+        mock_ec2_client.create_image.assert_called_once_with(
+            Name="my-ami", Description="Test AMI", InstanceId="i-123456"
+        )
+
+    @patch.object(ec2_utils._aws_client_provider, "ec2")
+    def test_create_image_uses_default_name_when_empty(self, mock_ec2):
+        """Test create_image uses fallback name when name is empty."""
+        mock_ec2_client = MagicMock()
+        mock_ec2.return_value = mock_ec2_client
+        mock_ec2_client.create_image.return_value = {"ImageId": "ami-default"}
+
+        result = ec2_utils.create_image(instance_id="i-abc", name="", description="")
+
+        assert result == {"ImageId": "ami-default"}
+        call_kwargs = mock_ec2_client.create_image.call_args[1]
+        assert call_kwargs["Name"] == "RES-IMAGE-NAME-i-abc"
+        assert call_kwargs["Description"] == "RES-IMAGE-DESCRIPTION-i-abc"
+
+    @patch.object(ec2_utils._aws_client_provider, "ec2")
+    def test_create_image_propagates_client_error(self, mock_ec2):
+        """Test create_image propagates ClientError (e.g. InvalidAMIName.Duplicate)."""
+        mock_ec2_client = MagicMock()
+        mock_ec2.return_value = mock_ec2_client
+        mock_ec2_client.create_image.side_effect = ClientError(
+            {"Error": {"Code": "InvalidAMIName.Duplicate"}}, "CreateImage"
+        )
+
+        with pytest.raises(ClientError) as exc_info:
+            ec2_utils.create_image(
+                instance_id="i-123", name="duplicate-name", description="desc"
+            )
+        assert "InvalidAMIName.Duplicate" in str(exc_info.value)

@@ -9,6 +9,10 @@ from typing import Any, Dict
 
 from res.utils import sssd_utils
 
+# Ceiling for PAM-stack configuration tools; a hung call leaves the session in
+# PROVISIONING forever with no watchdog, so fail loudly instead.
+PAM_TOOL_TIMEOUT_SEC = 120
+
 
 def join_active_directory(auth_entry: Dict[str, Any], logger: logging.Logger) -> None:
     # Rename the existing SSSD config before joining AD.
@@ -49,14 +53,16 @@ def join_active_directory(auth_entry: Dict[str, Any], logger: logging.Logger) ->
 def is_in_active_directory(_logger: logging.Logger) -> bool:
     return sssd_utils.is_in_active_directory()
 
+
 def connect_to_active_directory(logger: logging.Logger):
     configure_sssd(logger)
 
+    # The bootstrap app runs as root; avoid sudo, which re-enters the PAM stack
+    # this code is actively reconfiguring and can hang on a blocked PAM module.
     base_os = os.getenv("RES_BASE_OS")
     if base_os in ["amzn2", "rhel8", "rhel9", "rocky9"]:
         subprocess.check_call(
             [
-                "sudo",
                 "authconfig",
                 "--enablemkhomedir",
                 "--enablesssdauth",
@@ -64,23 +70,30 @@ def connect_to_active_directory(logger: logging.Logger):
                 "--updateall",
             ],
             stdout=subprocess.PIPE,
+            timeout=PAM_TOOL_TIMEOUT_SEC,
         )
     elif base_os == "amzn2023":
         subprocess.check_call(
-            ["sudo", "authselect", "select", "sssd", "with-mkhomedir", "--force"],
+            ["authselect", "select", "sssd", "with-mkhomedir", "--force"],
             stdout=subprocess.PIPE,
+            timeout=PAM_TOOL_TIMEOUT_SEC,
         )
     elif base_os.startswith("ubuntu"):
         subprocess.check_call(
-            ["sudo", "pam-auth-update", "--enable", "sss", "--force"],
+            ["pam-auth-update", "--enable", "sss", "--force"],
             stdout=subprocess.PIPE,
+            timeout=PAM_TOOL_TIMEOUT_SEC,
         )
+
 
 def back_up_sssd(logger: logging.Logger) -> None:
     if os.path.exists(sssd_utils.SSSD_FILE_PATH):
         logger.info(f"Back up existing SSSD config file: {sssd_utils.SSSD_FILE_PATH}")
 
-        os.rename(sssd_utils.SSSD_FILE_PATH, f"{sssd_utils.SSSD_FILE_PATH}.{time.time()}")
+        os.rename(
+            sssd_utils.SSSD_FILE_PATH, f"{sssd_utils.SSSD_FILE_PATH}.{time.time()}"
+        )
+
 
 def configure_sssd(logger: logging.Logger):
     try:

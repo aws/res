@@ -81,3 +81,88 @@ def test_retrieve_scripts_as_commands_windows():
     assert len(result) == 2  # Import + script execution
     assert "Import-Module" in result[0]
     assert "s3://bucket/script.ps1" in result[1]
+
+
+def test_escape_powershell_single_quoted_no_special_chars():
+    """Test _escape_powershell_single_quoted with no special characters."""
+    assert script_utils._escape_powershell_single_quoted("hello") == "hello"
+
+
+def test_escape_powershell_single_quoted_with_single_quotes():
+    """Test _escape_powershell_single_quoted doubles single quotes."""
+    assert script_utils._escape_powershell_single_quoted("it's") == "it''s"
+    assert script_utils._escape_powershell_single_quoted("a'b'c") == "a''b''c"
+
+
+def test_escape_powershell_single_quoted_empty_string():
+    """Test _escape_powershell_single_quoted with empty string."""
+    assert script_utils._escape_powershell_single_quoted("") == ""
+
+
+def test_retrieve_scripts_as_commands_windows_escapes_single_quotes_in_location():
+    """Test that script_location with single quotes is escaped for Windows."""
+    project = {
+        "scripts": {
+            "windows": {
+                "on_vdi_start": [
+                    {
+                        "script_location": "s3://bucket/it's a script.ps1",
+                        "arguments": [],
+                    }
+                ]
+            }
+        }
+    }
+    result = script_utils._retrieve_scripts_as_commands(
+        project, ScriptOSType.WINDOWS, ScriptEventType.ON_VDI_START
+    )
+
+    # The single quote in the location should be doubled
+    assert "it''s a script.ps1" in result[1]
+    # Should NOT contain the unescaped single quote that could break out
+    assert "it's a script.ps1" not in result[1]
+
+
+def test_retrieve_scripts_as_commands_windows_escapes_single_quotes_in_arguments():
+    """Test that arguments with single quotes are escaped for Windows."""
+    project = {
+        "scripts": {
+            "windows": {
+                "on_vdi_start": [
+                    {
+                        "script_location": "s3://bucket/script.ps1",
+                        "arguments": ["--name=it's", "val'ue"],
+                    }
+                ]
+            }
+        }
+    }
+    result = script_utils._retrieve_scripts_as_commands(
+        project, ScriptOSType.WINDOWS, ScriptEventType.ON_VDI_START
+    )
+
+    # Arguments with single quotes should be doubled
+    assert "--name=it''s" in result[1]
+    assert "val''ue" in result[1]
+
+
+def test_retrieve_scripts_as_commands_windows_injection_prevention():
+    """Test that a malicious argument cannot break out of single quotes."""
+    project = {
+        "scripts": {
+            "windows": {
+                "on_vdi_start": [
+                    {
+                        "script_location": "s3://bucket/script.ps1",
+                        "arguments": ["'; Invoke-Evil; '"],
+                    }
+                ]
+            }
+        }
+    }
+    result = script_utils._retrieve_scripts_as_commands(
+        project, ScriptOSType.WINDOWS, ScriptEventType.ON_VDI_START
+    )
+
+    # The injected single quotes should be escaped (doubled)
+    assert "''; Invoke-Evil; ''" in result[1]

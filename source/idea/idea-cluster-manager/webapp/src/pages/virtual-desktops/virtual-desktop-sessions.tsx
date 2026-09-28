@@ -14,7 +14,7 @@
 import React, { Component, RefObject } from "react";
 import { TableProps } from "@cloudscape-design/components/table/interfaces";
 import { Link } from "@cloudscape-design/components";
-import { Project, SocaUserInputChoice, VirtualDesktopSession, VirtualDesktopSessionBatchResponsePayload } from "../../client/data-model";
+import { Project, SocaUserInputChoice } from "../../client/data-model";
 import IdeaListView from "../../components/list-view";
 import { AppContext } from "../../common";
 import { ProjectsClient, VirtualDesktopAdminClient, VirtualDesktopClient } from "../../client";
@@ -27,19 +27,18 @@ import IdeaForm from "../../components/form";
 import IdeaAppLayout from "../../components/app-layout/app-layout";
 import VirtualDesktopSessionStatusIndicator from "./components/virtual-desktop-session-status-indicator";
 import Utils from "../../common/utils";
-import { FlashbarProps } from "@cloudscape-design/components/flashbar/interfaces";
 import VirtualDesktopCreateSessionForm from "./forms/virtual-desktop-create-session-form";
 import VirtualDesktopScheduleModal from "./components/virtual-desktop-schedule-modal";
 import { withRouter } from "../../navigation/navigation-utils";
 import { fetchAllSessions } from "../../common/sessions-fetcher";
-// TODO: MigratedVirtualDesktopSession name is temporary until all APIs are migrated
-import { VirtualDesktopSession as MigratedVirtualDesktopSession } from "../../client/generated/api";
+import { VirtualDesktopSession, VirtualDesktopSoftwareStack } from "../../client/generated/api";
 
 export interface VirtualDesktopSessionsProps extends IdeaAppLayoutProps, IdeaSideNavigationProps { }
 
 export interface VirtualDesktopSessionsState {
     showCreateSoftwareStackFromSessionForm: boolean;
     sessionForSoftwareStack: VirtualDesktopSession | undefined;
+    softwareStackForSession: VirtualDesktopSoftwareStack | undefined;
     projectChoices: SocaUserInputChoice[];
     sessionSelected: boolean;
     forceStop: boolean;
@@ -65,8 +64,8 @@ const VIRTUAL_DESKTOP_SESSIONS_TABLE_COLUMN_DEFINITIONS: TableProps.ColumnDefini
     {
         id: "os",
         header: "Base OS",
-        cell: (e) => Utils.getOsTitle(e.software_stack?.base_os),
-        sortingComparator: (a, b) => (a.software_stack?.base_os || '').localeCompare(b.software_stack?.base_os || '')
+        cell: (e) => Utils.getOsTitle(e.base_os),
+        sortingComparator: (a, b) => (a.base_os || '').localeCompare(b.base_os || '')
     },
     {
         id: "instance_type",
@@ -132,6 +131,7 @@ class VirtualDesktopSessions extends Component<VirtualDesktopSessionsProps, Virt
         this.state = {
             showCreateSoftwareStackFromSessionForm: false,
             sessionForSoftwareStack: undefined,
+            softwareStackForSession: undefined,
             sessionSelected: false,
             forceStop: false,
             projectChoices: [],
@@ -178,7 +178,8 @@ class VirtualDesktopSessions extends Component<VirtualDesktopSessionsProps, Virt
     }
 
     canCreateSoftwareStack(): boolean {
-        return this.getSelectedSessions().length === 1;
+        const sessions = this.getSelectedSessions();
+        return sessions.length === 1 && sessions[0].state === "READY";
     }
 
     isSelected(): boolean {
@@ -231,6 +232,7 @@ class VirtualDesktopSessions extends Component<VirtualDesktopSessionsProps, Virt
     hideCreateSoftwareStackForm() {
         this.setState({
             sessionForSoftwareStack: undefined,
+            softwareStackForSession: undefined,
             showCreateSoftwareStackFromSessionForm: false,
         });
     }
@@ -242,14 +244,30 @@ class VirtualDesktopSessions extends Component<VirtualDesktopSessionsProps, Virt
                 showCreateSoftwareStackFromSessionForm: true,
             },
             () => {
-                this.getCreateSoftwareStackForm().showModal();
+                if (session.software_stack_id && session.base_os) {
+                    this.getVirtualDesktopAdminClient()
+                        .getSoftwareStack({
+                            stackId: session.software_stack_id,
+                            baseOs: session.base_os as any,
+                        })
+                        .then((result) => {
+                            this.setState({ softwareStackForSession: result.softwareStack as VirtualDesktopSoftwareStack }, () => {
+                                this.getCreateSoftwareStackForm().showModal();
+                            });
+                        })
+                        .catch((error) => {
+                            this.setFlashMessage(`Failed to load software stack: ${error.message}`, "error");
+                        });
+                } else {
+                    this.getCreateSoftwareStackForm().showModal();
+                }
             }
         );
     };
 
     buildCreateSoftwareStackFromSessionForm() {
-        function get_min_storage(session?: VirtualDesktopSession): number {
-            return session?.software_stack?.min_storage?.value ?? 50
+        const get_min_storage = (): number => {
+            return this.state.softwareStackForSession?.min_storage?.value ?? 50
         }
         return (
             <IdeaForm
@@ -275,10 +293,13 @@ class VirtualDesktopSessions extends Component<VirtualDesktopSessionsProps, Virt
                         projectValues.push({ project_id: project });
                     });
 
+                    const sessionPayload = {...this.state.sessionForSoftwareStack!};
+
                     this.getVirtualDesktopAdminClient()
                         .createSoftwareStackFromSession({
-                            session: this.state.sessionForSoftwareStack,
-                            new_software_stack: {
+                            session: sessionPayload as any,
+                            software_stack: {
+                                ...this.state.softwareStackForSession,
                                 name: values.name,
                                 description: values.description,
                                 min_storage: {
@@ -286,7 +307,7 @@ class VirtualDesktopSessions extends Component<VirtualDesktopSessionsProps, Virt
                                     unit: "gb",
                                 },
                                 projects: projectValues,
-                            },
+                            } as any,
                         })
                         .then(() => {
                             this.setFlashMessage("New software stack is provisioning and that it may take several minutes before it can be used", "success");
@@ -325,10 +346,10 @@ class VirtualDesktopSessions extends Component<VirtualDesktopSessionsProps, Virt
                         description: "Enter the storage size for your virtual desktop in GBs",
                         data_type: "int",
                         param_type: "text",
-                        default: get_min_storage(this.state.sessionForSoftwareStack),
+                        default: get_min_storage(),
                         validate: {
                             required: true,
-                            min: get_min_storage(this.state.sessionForSoftwareStack),
+                            min: get_min_storage(),
                         },
                     },
                     {
@@ -361,58 +382,13 @@ class VirtualDesktopSessions extends Component<VirtualDesktopSessionsProps, Virt
         });
     };
 
-    displayFlashResponseBanner(result: VirtualDesktopSessionBatchResponsePayload, success_message: string, error_message: string) {
-        let items: FlashbarProps.MessageDefinition[] = [];
-        if (result.failed && result.failed.length > 0) {
-            items.push({
-                content: this.buildResponseBanner(result?.failed, error_message),
-                type: "error",
-                dismissible: true,
-            });
-        }
-
-        if (result.success && result.success.length > 0) {
-            items.push({
-                content: this.buildResponseBanner(result?.success, success_message),
-                type: "success",
-                dismissible: true,
-            });
-        }
-
-        this.props.onFlashbarChange({
-            items: items,
-        });
-    }
-
-    buildResponseBanner(sessions: VirtualDesktopSession[], message_string: string) {
-        return (
-            <div>
-                {sessions.map((session, index) => {
-                    if (session.failure_reason) {
-                        return (
-                            <p key={index}>
-                                RES Session Id: {session?.idea_session_id}, Owner: {session.owner} - {message_string}: {session.failure_reason}
-                            </p>
-                        );
-                    } else {
-                        return (
-                            <p key={index}>
-                                RES Session Id: {session?.idea_session_id}, Owner: {session.owner} - {message_string}
-                            </p>
-                        );
-                    }
-                })}
-            </div>
-        );
-    }
-
     buildResumeSessionsConfirmModal() {
         return (
             <IdeaConfirm
                 ref={this.resumeSessionsConfirmModal}
                 title={"Resume Session(s)"}
                 onConfirm={() => {
-                    const toResume: MigratedVirtualDesktopSession[] = [];
+                    const toResume: VirtualDesktopSession[] = [];
                     this.getSelectedSessions().forEach((session) =>
                         toResume.push({
                             idea_session_id: session.idea_session_id,
@@ -430,11 +406,11 @@ class VirtualDesktopSessions extends Component<VirtualDesktopSessionsProps, Virt
                                         sessionSelected: false,
                                     },
                                     () => {
-                                        const failedNames = result['unsuccessful-list']?.map((entry) => entry.session?.name ?? entry.session?.idea_session_id).join(', ');
+                                        const failedNames = result['unsuccessful_list']?.map((entry) => entry.session?.name ?? entry.session?.idea_session_id).join(', ');
                                         this.setFlashMessage(
-                                            `Successfully submitted start request for ${result['successful-list']?.length ?? 0} session(s).` +
-                                            (result['unsuccessful-list']?.length ? ` Failed to start: ${failedNames}.` : ''),
-                                            result['unsuccessful-list']?.length ? "error" : "success"
+                                            `Successfully submitted start request for ${result['successful_list']?.length ?? 0} session(s).` +
+                                            (result['unsuccessful_list']?.length ? ` Failed to start: ${failedNames}.` : ''),
+                                            result['unsuccessful_list']?.length ? "error" : "success"
                                         );
                                         this.getListing().fetchRecords();
                                     }
@@ -464,7 +440,7 @@ class VirtualDesktopSessions extends Component<VirtualDesktopSessionsProps, Virt
                 ref={this.deleteSessionsConfirmModal}
                 title={this.state.forceTerminate ? "Force Delete Sessions" : "Delete Sessions"}
                 onConfirm={() => {
-                    const toDelete: MigratedVirtualDesktopSession[] = [];
+                    const toDelete: VirtualDesktopSession[] = [];
                     this.getSelectedSessions().forEach((session) =>
                         toDelete.push({
                             idea_session_id: session.idea_session_id,
@@ -484,9 +460,9 @@ class VirtualDesktopSessions extends Component<VirtualDesktopSessionsProps, Virt
                                     },
                                     () => {
                                         this.setFlashMessage(
-                                            `Successfully submitted delete request for ${result['successful-list']?.length ?? 0} session(s).` +
-                                            (result['unsuccessful-list']?.length ? ` ${result['unsuccessful-list'].length} session(s) failed.` : ''),
-                                            result['unsuccessful-list']?.length ? "error" : "success"
+                                            `Successfully submitted delete request for ${result['successful_list']?.length ?? 0} session(s).` +
+                                            (result['unsuccessful_list']?.length ? ` ${result['unsuccessful_list'].length} session(s) failed.` : ''),
+                                            result['unsuccessful_list']?.length ? "error" : "success"
                                         );
                                         this.getListing().fetchRecords();
                                     }
@@ -537,7 +513,7 @@ class VirtualDesktopSessions extends Component<VirtualDesktopSessionsProps, Virt
                 ref={this.stopSessionsConfirmModal}
                 title={this.state.forceStop ? "Force Stop/Hibernate Sessions" : "Stop/Hibernate Sessions"}
                 onConfirm={() => {
-                    const toStop: MigratedVirtualDesktopSession[] = [];
+                    const toStop: VirtualDesktopSession[] = [];
                     this.getSelectedSessions().forEach((session) =>
                         toStop.push({
                             idea_session_id: session.idea_session_id,
@@ -559,9 +535,9 @@ class VirtualDesktopSessions extends Component<VirtualDesktopSessionsProps, Virt
                                     },
                                     () => {
                                         this.setFlashMessage(
-                                            `Successfully submitted stop request for ${result.successfulList?.length ?? 0} session(s).` +
-                                            (result.unsuccessfulList?.length ? ` ${result.unsuccessfulList.length} session(s) failed.` : ''),
-                                            result.unsuccessfulList?.length ? "error" : "success"
+                                            `Successfully submitted stop request for ${result['successful_list']?.length ?? 0} session(s).` +
+                                            (result['unsuccessful_list']?.length ? ` ${result['unsuccessful_list'].length} session(s) failed.` : ''),
+                                            result['unsuccessful_list']?.length ? "error" : "success"
                                         );
                                         this.getListing().fetchRecords();
                                     }
@@ -594,7 +570,7 @@ class VirtualDesktopSessions extends Component<VirtualDesktopSessionsProps, Virt
                 ref={this.rebootSessionsConfirmModal}
                 title={"Reboot Session(s)"}
                 onConfirm={() => {
-                    const toReboot: MigratedVirtualDesktopSession[] = [];
+                    const toReboot: VirtualDesktopSession[] = [];
                     errorStateSessions.forEach((session) =>
                         toReboot.push({
                             idea_session_id: session.idea_session_id,
@@ -612,16 +588,16 @@ class VirtualDesktopSessions extends Component<VirtualDesktopSessionsProps, Virt
                                         sessionSelected: false,
                                     },
                                     () => {
-                                        const successCount = result['successful-list']?.length ?? 0;
-                                        const failedNames = result['unsuccessful-list']?.map((entry) => entry.session?.name ?? entry.session?.idea_session_id).join(', ');
+                                        const successCount = result['successful_list']?.length ?? 0;
+                                        const failedNames = result['unsuccessful_list']?.map((entry) => entry.session?.name ?? entry.session?.idea_session_id).join(', ');
                                         let message = '';
                                         if (successCount > 0) {
                                             message += `Successfully submitted reboot request for ${successCount} session(s).`;
                                         }
-                                        if (result['unsuccessful-list']?.length) {
+                                        if (result['unsuccessful_list']?.length) {
                                             message += (message ? ' ' : '') + `Failed to reboot: ${failedNames}.`;
                                         }
-                                        this.setFlashMessage(message, result['unsuccessful-list']?.length ? "error" : "success");
+                                        this.setFlashMessage(message, result['unsuccessful_list']?.length ? "error" : "success");
                                         this.getListing().fetchRecords();
                                     }
                                 );
@@ -686,8 +662,8 @@ class VirtualDesktopSessions extends Component<VirtualDesktopSessionsProps, Virt
                 userProjects={this.state.projects}
                 onSubmit={(session_name, username, project_id, base_os, software_stack_id, session_type, instance_type, storage_size, hibernation_enabled, vpc_subnet_id, tags) => {
                     return this.getVirtualDesktopClient()
-                        .createSession({
-                            session: {
+                        .batchCreateSession({
+                            sessions: [{
                                 name: session_name,
                                 owner: username,
                                 hibernation_enabled: hibernation_enabled,
@@ -706,15 +682,25 @@ class VirtualDesktopSessions extends Component<VirtualDesktopSessionsProps, Virt
                                 },
                                 type: session_type,
                                 tags: tags
-                            },
+                            }],
                         })
-                        .then((_) => {
-                            this.getCreateSessionForm().hideForm();
-                            this.getListing().fetchRecords();
-                            return Promise.resolve(true);
+                        .then((result) => {
+                            if (result.unsuccessful_list?.length > 0) {
+                                const failure = result.unsuccessful_list[0];
+                                this.getCreateSessionForm().setError(failure.error_code, failure.message);
+                                return Promise.resolve(false);
+                            }
+                            if (result.successful_list?.length > 0) {
+                                this.getCreateSessionForm().hideForm();
+                                this.getListing().fetchRecords();
+                                return Promise.resolve(true);
+                            }
+                            this.getCreateSessionForm().setError('UNKNOWN', 'No session was created');
+                            return Promise.resolve(false);
                         })
                         .catch((error) => {
-                            this.getCreateSessionForm()?.setError(error.errorCode, error.message);
+                            const errorMessage = error?.response?.data?.message || error?.message || 'Failed to create session';
+                            this.getCreateSessionForm().setError(error.errorCode || '400', errorMessage);
                             return Promise.resolve(false);
                         });
                 }}
@@ -840,7 +826,7 @@ class VirtualDesktopSessions extends Component<VirtualDesktopSessionsProps, Virt
                         id: "create-software-stack",
                         text: "Create Software Stack From Session",
                         disabled: !this.canCreateSoftwareStack() || !this.isAdmin(),
-                        disabledReason: "Select exactly 1 session to enable this Action",
+                        disabledReason: "Select exactly 1 session in READY state to enable this Action",
                         onClick: () => {
                             // we know that there is exactly 1 session
                             this.getSelectedSessions().forEach((session) => {
@@ -1036,14 +1022,11 @@ class VirtualDesktopSessions extends Component<VirtualDesktopSessionsProps, Virt
                             ref={this.scheduleModal}
                             modalType="session"
                             onScheduleChange={(session) => {
-                                const { projects, ...stackWithoutProjects } = session.software_stack || {};
-                                const updatedSession = { ...session, software_stack: stackWithoutProjects };
-
                                 return this.getVirtualDesktopClient()
                                     .updateSession(
                                         session.idea_session_id!,
                                         {
-                                            session: updatedSession as MigratedVirtualDesktopSession,
+                                            session: session as VirtualDesktopSession,
                                         })
                                     .then(() => {
                                         this.setFlashMessage("Session schedule updated successfully.", "success");

@@ -20,7 +20,7 @@ class TestVirtualDesktopSessionPermissionSerializer:
         self.serializer = VirtualDesktopSessionPermissionSerializer()
 
     def test_customize_to_ddb_with_permission_profile(self):
-        """Test _customize_to_ddb extracts permission_profile_id correctly."""
+        """Test _customize_to_ddb extracts permission_profile_id and converts ISO timestamps to millis."""
         input_data = {
             "idea_session_id": "session-123",
             "actor_name": "user1",
@@ -29,8 +29,8 @@ class TestVirtualDesktopSessionPermissionSerializer:
                 "profile_id": "profile-456",
                 "title": "Test Profile"
             },
-            "expiry_date": "1769212800000",
-            "idea_session_created_on": "1769146771000"
+            "expiry_date": "2026-01-23T12:00:00+00:00",
+            "idea_session_created_on": "2026-01-22T17:39:31+00:00"
         }
 
         result = self.serializer._customize_to_ddb(input_data)
@@ -40,10 +40,22 @@ class TestVirtualDesktopSessionPermissionSerializer:
         assert result["actor_type"] == "USER"
         assert result["permission_profile_id"] == "profile-456"
         assert "permission_profile" not in result
-        assert result["expiry_date"] == 1769212800000
-        assert result["idea_session_created_on"] == 1769146771000
+        assert result["expiry_date"] == 1769169600000
+        assert result["idea_session_created_on"] == 1769103571000
         assert isinstance(result["expiry_date"], int)
         assert isinstance(result["idea_session_created_on"], int)
+
+    def test_customize_to_ddb_defaults_missing_timestamps_to_zero(self):
+        """When a timestamp is missing, _customize_to_ddb stores 0."""
+        input_data = {
+            "idea_session_id": "session-123",
+            "actor_name": "user1",
+        }
+
+        result = self.serializer._customize_to_ddb(input_data)
+
+        assert result["expiry_date"] == 0
+        assert result["idea_session_created_on"] == 0
 
     def test_customize_to_ddb_with_empty_permission_profile(self):
         """Test _customize_to_ddb handles empty permission_profile."""

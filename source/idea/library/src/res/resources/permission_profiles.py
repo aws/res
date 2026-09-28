@@ -4,8 +4,9 @@
 from typing import Any, Dict, List, Optional, Tuple
 
 import res.exceptions as exceptions  # type: ignore
-from res.clients.events import events_client  # type: ignore
-from res.resources import cluster_settings, sessions  # type: ignore
+from res.resources import cluster_settings  # type: ignore
+from res.resources import sessions  # type: ignore
+from res.resources import session_permissions as res_session_permissions  # type: ignore
 from res.utils import logging_utils, table_utils, time_utils  # type: ignore
 
 PERMISSION_PROFILE_DB_HASH_KEY = "profile_id"
@@ -79,18 +80,63 @@ def update_permission_profile(permission_profile: Dict[str, Any]) -> Dict[str, A
         item=permission_profile,
     )
 
-    events_client.publish_update_event(
-        updated_permission_profile[PERMISSION_PROFILE_DB_HASH_KEY],
-        "",
-        old_entry=existing_permission_profile,
-        new_entry=updated_permission_profile,
-        table_name=PERMISSION_PROFILE_TABLE_NAME,
+    _enforce_permissions_for_affected_sessions(
+        existing_permission_profile, updated_permission_profile
     )
     _propagate_globally_disabled_desktop_permissions(updated_permission_profile)
 
     logger.info(f"Updated permission profile {profile_id} successfully")
 
     return updated_permission_profile
+
+
+def _enforce_permissions_for_affected_sessions(
+    old_profile: Dict[str, Any],
+    new_profile: Dict[str, Any],
+) -> None:
+    """Enforce permissions for all sessions using this profile if any permission flag changed."""
+    is_permission_updated = False
+    for key, new_value in new_profile.items():
+        if isinstance(new_value, bool) and old_profile.get(key) != new_value:
+            is_permission_updated = True
+            break
+
+    if not is_permission_updated:
+        return
+
+    profile_id = new_profile[PERMISSION_PROFILE_DB_HASH_KEY]
+    filter_expression = table_utils.construct_filter_expression(
+        {"permission_profile_id": profile_id}
+    )
+    all_permissions: list = []
+    next_token = None
+    while True:
+        page, next_token = res_session_permissions.list_session_permissions_paginated(
+            filter_expression=filter_expression,
+            next_token=next_token,
+        )
+        all_permissions.extend(page)
+        if not next_token:
+            break
+
+    sessions_info = {
+        (
+            p[res_session_permissions.SESSION_PERMISSION_DB_HASH_KEY],
+            p[res_session_permissions.SESSION_PERMISSION_DB_SESSION_OWNER_KEY],
+        )
+        for p in all_permissions
+    }
+
+    for idea_session_id, idea_session_owner in sessions_info:
+        try:
+            res_session_permissions.enforce_permissions_for_session(
+                idea_session_id=idea_session_id,
+                idea_session_owner=idea_session_owner,
+            )
+        except Exception:
+            logger.exception(
+                "Failed to enforce permissions for session %s.", idea_session_id
+            )
 
 
 def _propagate_globally_disabled_desktop_permissions(
@@ -132,9 +178,9 @@ def _propagate_globally_disabled_desktop_permissions(
                 next_token=sessions_cursor
             )
             for session_dict in all_sessions:
-                events_client.publish_enforce_session_permissions_event(
-                    session_dict["idea_session_id"],
-                    session_dict["owner"],
+                res_session_permissions.enforce_permissions_for_session(
+                    idea_session_id=session_dict["idea_session_id"],
+                    idea_session_owner=session_dict["owner"],
                 )
 
             if not sessions_cursor:

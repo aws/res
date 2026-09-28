@@ -177,18 +177,20 @@ def test_crud_delete_role_assignment(context, monkeypatch):
     assert len(retrieved_assignments) == 0
 
 
+@patch("res.resources.role_assignments.accounts.get_group")
 @patch("res.resources.role_assignments.list_role_assignments")
 @patch("res.resources.role_assignments.accounts.get_user")
 def test_list_role_assignments_for_user_and_groups(
-    mock_get_user, mock_list_assignments
+    mock_get_user, mock_list_assignments, mock_get_group
 ):
     """
-    Test list_role_assignments_for_user_and_groups returns combined assignments
+    Test list_role_assignments_for_user_and_groups returns combined assignments for enabled groups
     """
     mock_get_user.return_value = {
         "username": "testuser",
         "additional_groups": ["group1", "group2"],
     }
+    mock_get_group.side_effect = lambda name: {"group_name": name, "enabled": True}
     mock_list_assignments.side_effect = [
         [{"role_id": "role1"}],
         [{"role_id": "role2"}],
@@ -200,6 +202,60 @@ def test_list_role_assignments_for_user_and_groups(
     assert len(result) == 3
     mock_get_user.assert_called_once_with("testuser")
     assert mock_list_assignments.call_count == 3
+
+
+@patch("res.resources.role_assignments.accounts.get_group")
+@patch("res.resources.role_assignments.list_role_assignments")
+@patch("res.resources.role_assignments.accounts.get_user")
+def test_list_role_assignments_for_user_and_groups_disabled_group_excluded(
+    mock_get_user, mock_list_assignments, mock_get_group
+):
+    """
+    Test that disabled group assignments are excluded
+    """
+    mock_get_user.return_value = {
+        "username": "testuser",
+        "additional_groups": ["enabled_group", "disabled_group"],
+    }
+    mock_get_group.side_effect = lambda name: {
+        "enabled_group": {"group_name": "enabled_group", "enabled": True},
+        "disabled_group": {"group_name": "disabled_group", "enabled": False},
+    }[name]
+    mock_list_assignments.side_effect = [
+        [{"role_id": "user_role"}],  # user direct
+        [{"role_id": "enabled_group_role"}],  # enabled_group
+    ]
+
+    result = role_assignments.list_role_assignments_for_user_and_groups("testuser")
+
+    assert len(result) == 2
+    assert result[0]["role_id"] == "user_role"
+    assert result[1]["role_id"] == "enabled_group_role"
+    # list_role_assignments called for user + enabled_group only (not disabled_group)
+    assert mock_list_assignments.call_count == 2
+
+
+@patch("res.resources.role_assignments.accounts.get_group")
+@patch("res.resources.role_assignments.list_role_assignments")
+@patch("res.resources.role_assignments.accounts.get_user")
+def test_list_role_assignments_for_user_and_groups_all_groups_disabled(
+    mock_get_user, mock_list_assignments, mock_get_group
+):
+    """
+    Test that user only gets direct assignments when all groups are disabled
+    """
+    mock_get_user.return_value = {
+        "username": "testuser",
+        "additional_groups": ["group1"],
+    }
+    mock_get_group.return_value = {"group_name": "group1", "enabled": False}
+    mock_list_assignments.return_value = [{"role_id": "user_role"}]
+
+    result = role_assignments.list_role_assignments_for_user_and_groups("testuser")
+
+    assert len(result) == 1
+    assert result[0]["role_id"] == "user_role"
+    mock_list_assignments.assert_called_once_with(actor_key="testuser:user")
 
 
 @patch("res.resources.role_assignments.list_role_assignments")

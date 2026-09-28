@@ -6,6 +6,7 @@ import os
 import pwd
 import subprocess
 
+import ideabootstrap.dcv.constants as constants
 from res.utils import logging_utils
 
 logger = logging_utils.get_logger("bootstrap")
@@ -45,25 +46,35 @@ def configure() -> None:
     """
     base_os = os.environ.get("RES_BASE_OS")
     if base_os != "amzn2023":
-        logger.info(f"OS is {base_os}, skipping GNOME Shell startup animation fix (AL2023 only)")
+        logger.info(
+            f"OS is {base_os}, skipping GNOME Shell startup animation fix (AL2023 only)"
+        )
         return
 
     session_owner = os.environ.get("IDEA_SESSION_OWNER")
     if not session_owner:
-        logger.warning("IDEA_SESSION_OWNER not set, skipping GNOME Shell startup animation fix")
+        logger.warning(
+            "IDEA_SESSION_OWNER not set, skipping GNOME Shell startup animation fix"
+        )
         return
 
     try:
         pw = pwd.getpwnam(session_owner)
     except KeyError:
-        logger.warning(f"User {session_owner} not found, skipping GNOME Shell startup animation fix")
+        logger.warning(
+            f"User {session_owner} not found, skipping GNOME Shell startup animation fix"
+        )
         return
 
-    ext_dir = os.path.join(pw.pw_dir, ".local", "share", "gnome-shell", "extensions", _EXTENSION_UUID)
+    ext_dir = os.path.join(
+        pw.pw_dir, ".local", "share", "gnome-shell", "extensions", _EXTENSION_UUID
+    )
 
     try:
         result = subprocess.run(
-            ["gnome-shell", "--version"], capture_output=True, text=True,
+            ["gnome-shell", "--version"],
+            capture_output=True,
+            text=True,
         )
         if result.returncode == 0:
             # Output format: "GNOME Shell 47.3"
@@ -87,7 +98,9 @@ def configure() -> None:
             with open(metadata_path) as f:
                 existing_meta = f.read()
             if existing_js == _EXTENSION_JS and existing_meta == metadata_content:
-                logger.info("GNOME Shell no-startup-anim extension already up to date, skipping")
+                logger.info(
+                    "GNOME Shell no-startup-anim extension already up to date, skipping"
+                )
                 return
 
         os.makedirs(ext_dir, exist_ok=True)
@@ -112,9 +125,20 @@ def configure() -> None:
         env["HOME"] = pw.pw_dir
 
         result = subprocess.run(
-            ["sudo", "-u", session_owner, "dbus-run-session",
-             "gsettings", "get", "org.gnome.shell", "enabled-extensions"],
-            capture_output=True, text=True, env=env,
+            [
+                "sudo",
+                "-u",
+                session_owner,
+                "dbus-run-session",
+                "gsettings",
+                "get",
+                "org.gnome.shell",
+                "enabled-extensions",
+            ],
+            capture_output=True,
+            text=True,
+            env=env,
+            timeout=constants.SUBPROCESS_TIMEOUT_SEC,
         )
 
         current = result.stdout.strip() if result.returncode == 0 else "@as []"
@@ -125,12 +149,26 @@ def configure() -> None:
                 new_value = current.rstrip("]") + f", '{_EXTENSION_UUID}']"
 
             subprocess.run(
-                ["sudo", "-u", session_owner, "dbus-run-session",
-                 "gsettings", "set", "org.gnome.shell", "enabled-extensions",
-                 new_value],
-                check=True, capture_output=True, text=True, env=env,
+                [
+                    "sudo",
+                    "-u",
+                    session_owner,
+                    "dbus-run-session",
+                    "gsettings",
+                    "set",
+                    "org.gnome.shell",
+                    "enabled-extensions",
+                    new_value,
+                ],
+                check=True,
+                capture_output=True,
+                text=True,
+                env=env,
+                timeout=constants.SUBPROCESS_TIMEOUT_SEC,
             )
 
-        logger.info(f"Installed GNOME Shell no-startup-anim extension for {session_owner}")
+        logger.info(
+            f"Installed GNOME Shell no-startup-anim extension for {session_owner}"
+        )
     except Exception as e:
         logger.error(f"Failed to install GNOME Shell no-startup-anim extension: {e}")

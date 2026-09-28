@@ -186,7 +186,9 @@ def test_clean_up_resources_role_policy_creation(
                     "Statement": [
                         {
                             "Action": [
+                                "ec2:DescribeFleets",
                                 "ec2:DescribeInstances",
+                                "ec2:DescribeLaunchTemplates",
                                 "lambda:ListFunctions",
                                 "lambda:ListTags",
                             ],
@@ -211,6 +213,44 @@ def test_clean_up_resources_role_policy_creation(
                                         ":",
                                         {"Ref": "AWS::AccountId"},
                                         ":instance/*",
+                                    ],
+                                ]
+                            },
+                            "Condition": tag_condition,
+                        },
+                        {
+                            "Action": "ec2:DeleteFleets",
+                            "Effect": "Allow",
+                            "Resource": {
+                                "Fn::Join": [
+                                    "",
+                                    [
+                                        "arn:",
+                                        {"Ref": "AWS::Partition"},
+                                        ":ec2:",
+                                        {"Ref": "AWS::Region"},
+                                        ":",
+                                        {"Ref": "AWS::AccountId"},
+                                        ":fleet/*",
+                                    ],
+                                ]
+                            },
+                            "Condition": tag_condition,
+                        },
+                        {
+                            "Action": "ec2:DeleteLaunchTemplate",
+                            "Effect": "Allow",
+                            "Resource": {
+                                "Fn::Join": [
+                                    "",
+                                    [
+                                        "arn:",
+                                        {"Ref": "AWS::Partition"},
+                                        ":ec2:",
+                                        {"Ref": "AWS::Region"},
+                                        ":",
+                                        {"Ref": "AWS::AccountId"},
+                                        ":launch-template/*",
                                     ],
                                 ]
                             },

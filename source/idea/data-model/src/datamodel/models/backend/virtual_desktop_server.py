@@ -19,7 +19,7 @@ class VirtualDesktopServer(Model):
     Do not edit the class manually.
     """
 
-    def __init__(self, server_id=None, idea_session_id=None, idea_session_owner=None, instance_id=None, instance_type=None, private_ip=None, private_dns_name=None, public_ip=None, public_dns_name=None, availability=None, unavailability_reason=None, console_session_count=None, virtual_session_count=None, max_concurrent_sessions_per_user=None, max_virtual_sessions=None, state=None, locked=None, root_volume_size=None, root_volume_iops=None, instance_profile_arn=None, security_groups=None, subnet_id=None, key_pair_name=None, is_idle=None):  # noqa: E501
+    def __init__(self, server_id=None, idea_session_id=None, idea_session_owner=None, instance_id=None, fleet_id=None, instance_type=None, ami_id=None, private_ip=None, private_dns_name=None, public_ip=None, public_dns_name=None, availability=None, unavailability_reason=None, console_session_count=None, virtual_session_count=None, max_concurrent_sessions_per_user=None, max_virtual_sessions=None, state=None, locked=None, root_volume_size=None, root_volume_iops=None, instance_profile_arn=None, security_groups=None, subnet_id=None, key_pair_name=None, is_idle=None):  # noqa: E501
         """VirtualDesktopServer - a model defined in OpenAPI
 
         :param server_id: The server_id of this VirtualDesktopServer.  # noqa: E501
@@ -30,8 +30,12 @@ class VirtualDesktopServer(Model):
         :type idea_session_owner: str
         :param instance_id: The instance_id of this VirtualDesktopServer.  # noqa: E501
         :type instance_id: str
+        :param fleet_id: The fleet_id of this VirtualDesktopServer.  # noqa: E501
+        :type fleet_id: str
         :param instance_type: The instance_type of this VirtualDesktopServer.  # noqa: E501
         :type instance_type: str
+        :param ami_id: The ami_id of this VirtualDesktopServer.  # noqa: E501
+        :type ami_id: str
         :param private_ip: The private_ip of this VirtualDesktopServer.  # noqa: E501
         :type private_ip: str
         :param private_dns_name: The private_dns_name of this VirtualDesktopServer.  # noqa: E501
@@ -76,7 +80,9 @@ class VirtualDesktopServer(Model):
             'idea_session_id': str,
             'idea_session_owner': str,
             'instance_id': str,
+            'fleet_id': str,
             'instance_type': str,
+            'ami_id': str,
             'private_ip': str,
             'private_dns_name': str,
             'public_ip': str,
@@ -103,7 +109,9 @@ class VirtualDesktopServer(Model):
             'idea_session_id': 'idea_session_id',
             'idea_session_owner': 'idea_session_owner',
             'instance_id': 'instance_id',
+            'fleet_id': 'fleet_id',
             'instance_type': 'instance_type',
+            'ami_id': 'ami_id',
             'private_ip': 'private_ip',
             'private_dns_name': 'private_dns_name',
             'public_ip': 'public_ip',
@@ -129,7 +137,9 @@ class VirtualDesktopServer(Model):
         self._idea_session_id = idea_session_id
         self._idea_session_owner = idea_session_owner
         self._instance_id = instance_id
+        self._fleet_id = fleet_id
         self._instance_type = instance_type
+        self._ami_id = ami_id
         self._private_ip = private_ip
         self._private_dns_name = private_dns_name
         self._public_ip = public_ip
@@ -283,6 +293,29 @@ class VirtualDesktopServer(Model):
         self._instance_id = instance_id
 
     @property
+    def fleet_id(self) -> str:
+        """Gets the fleet_id of this VirtualDesktopServer.
+
+        EC2 Fleet ID that launched VDI host  # noqa: E501
+
+        :return: The fleet_id of this VirtualDesktopServer.
+        :rtype: str
+        """
+        return self._fleet_id
+
+    @fleet_id.setter
+    def fleet_id(self, fleet_id: str):
+        """Sets the fleet_id of this VirtualDesktopServer.
+
+        EC2 Fleet ID that launched VDI host  # noqa: E501
+
+        :param fleet_id: The fleet_id of this VirtualDesktopServer.
+        :type fleet_id: str
+        """
+
+        self._fleet_id = fleet_id
+
+    @property
     def instance_type(self) -> str:
         """Gets the instance_type of this VirtualDesktopServer.
 
@@ -304,6 +337,29 @@ class VirtualDesktopServer(Model):
         """
 
         self._instance_type = instance_type
+
+    @property
+    def ami_id(self) -> str:
+        """Gets the ami_id of this VirtualDesktopServer.
+
+        AMI ID the instance was launched from  # noqa: E501
+
+        :return: The ami_id of this VirtualDesktopServer.
+        :rtype: str
+        """
+        return self._ami_id
+
+    @ami_id.setter
+    def ami_id(self, ami_id: str):
+        """Sets the ami_id of this VirtualDesktopServer.
+
+        AMI ID the instance was launched from  # noqa: E501
+
+        :param ami_id: The ami_id of this VirtualDesktopServer.
+        :type ami_id: str
+        """
+
+        self._ami_id = ami_id
 
     @property
     def private_ip(self) -> str:

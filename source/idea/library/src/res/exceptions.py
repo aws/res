@@ -38,6 +38,10 @@ class InvalidParams(Exception):
     pass
 
 
+class ConditionalCheckFailed(Exception):
+    pass
+
+
 class EmailTemplateNotFound(Exception):
     pass
 
@@ -82,3 +86,15 @@ FAILURE_CODE_NOT_FOUND = "NOTFOUNDEXCEPTION"
 FAILURE_CODE_BAD_REQUEST = "BADREQUESTEXCEPTION"
 FAILURE_CODE_CONFLICT = "CONFLICTEXCEPTION"
 FAILURE_CODE_INTERNAL_SERVICE = "INTERNALSERVICEEXCEPTION"
+
+EC2_NON_RETRYABLE_CLIENT_ERROR_CODES = {
+    "InvalidParameterValue",
+    "InvalidInstanceType",
+    "InvalidAMIID.NotFound",
+    "InvalidAMIID.Malformed",
+    "InvalidBlockDeviceMapping",
+    "InvalidKeyPair.NotFound",
+    "InvalidGroup.NotFound",
+    "InvalidSubnetID.NotFound",
+    "UnsupportedHibernationConfiguration",
+}

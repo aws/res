@@ -15,7 +15,11 @@ def _start_and_configure_dcv_service():
     """Helper function to start and configure DCV server service"""
     logger.info("Start dcv server ...")
     try:
-        subprocess.run(["sudo", "systemctl", "enable", "dcvserver"], check=True)
+        subprocess.run(
+            ["systemctl", "enable", "dcvserver"],
+            check=True,
+            timeout=constants.SUBPROCESS_TIMEOUT_SEC,
+        )
 
         dcv_service_content = """#  This file is part of systemd.
 #  AGENT
@@ -47,8 +51,16 @@ WantedBy=multi-user.target"""
         # Because we have modified the .service file we need to tell systemctl to reload and recreate the dependency tree again.
         # This is necessary because we are introducing a dependency on network.targets.
         # Refer - https://serverfault.com/questions/700862/do-systemd-unit-files-have-to-be-reloaded-when-modified
-        subprocess.run(["sudo", "systemctl", "daemon-reload"], check=True)
-        subprocess.run(["sudo", "systemctl", "restart", "dcvserver"], check=True)
+        subprocess.run(
+            ["systemctl", "daemon-reload"],
+            check=True,
+            timeout=constants.SUBPROCESS_TIMEOUT_SEC,
+        )
+        subprocess.run(
+            ["systemctl", "restart", "dcvserver"],
+            check=True,
+            timeout=constants.SUBPROCESS_TIMEOUT_SEC,
+        )
         logger.info("Successfully configured and started dcv server")
     except Exception as e:
         logger.error(f"Error in starting and configuring dcv service: {e}")
@@ -78,10 +90,11 @@ def is_dcvserver_ready(timeout_seconds: int, retry_interval: int) -> bool:
             # Check 1: Verify systemd service is active
             logger.debug("Checking if dcvserver systemd service is active...")
             result = subprocess.run(
-                ["sudo", "systemctl", "is-active", "dcvserver"],
+                ["systemctl", "is-active", "dcvserver"],
                 capture_output=True,
                 text=True,
-                check=False
+                check=False,
+                timeout=constants.SUBPROCESS_TIMEOUT_SEC,
             )
 
             if result.returncode != 0 or result.stdout.strip() != "active":
@@ -96,7 +109,7 @@ def is_dcvserver_ready(timeout_seconds: int, retry_interval: int) -> bool:
                 capture_output=True,
                 text=True,
                 check=False,
-                timeout=10
+                timeout=10,
             )
 
             if result.returncode == 0:
@@ -110,10 +123,14 @@ def is_dcvserver_ready(timeout_seconds: int, retry_interval: int) -> bool:
         except Exception as e:
             logger.debug(f"Error during DCV server readiness check: {e}")
 
-        logger.debug(f"DCV server not ready yet, retrying in {retry_interval} seconds...")
+        logger.debug(
+            f"DCV server not ready yet, retrying in {retry_interval} seconds..."
+        )
         time.sleep(retry_interval)
 
-    logger.warning(f"DCV server readiness check timed out after {timeout_seconds} seconds")
+    logger.warning(
+        f"DCV server readiness check timed out after {timeout_seconds} seconds"
+    )
     return False
 
 

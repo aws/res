@@ -27,6 +27,7 @@ class VdcControllerSqsKmsKeyPolicy(Policy):
                     "kms:Encrypt",
                 ],
                 principals=[
+                    iam.ServicePrincipal("events.amazonaws.com"),
                     iam.ServicePrincipal("sns.amazonaws.com"),
                     iam.ServicePrincipal("sqs.amazonaws.com"),
                 ],

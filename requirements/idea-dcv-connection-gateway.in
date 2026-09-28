@@ -2,4 +2,4 @@
 -r library.in
 -r bootstrap.in
 supervisor~=4.0
-click==8.1.8
+click==8.3.3

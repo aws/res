@@ -13,11 +13,9 @@ import logging
 import time
 from typing import Any, Optional, Type
 
-import selenium
-from selenium import webdriver
-from selenium.webdriver.chrome.webdriver import WebDriver
-
 from ideadatamodel import (  # type: ignore
+    AddFileSystemToProjectRequest,
+    AddFileSystemToProjectResult,
     BatchDeleteRoleAssignmentRequest,
     BatchDeleteRoleAssignmentResponse,
     BatchPutRoleAssignmentRequest,
@@ -26,46 +24,44 @@ from ideadatamodel import (  # type: ignore
     CreateFileResult,
     CreateProjectRequest,
     CreateProjectResult,
-    CreateSessionRequest,
-    CreateSessionResponse,
-    CreateSoftwareStackFromSessionRequest,
-    CreateSoftwareStackFromSessionResponse,
-    CreateSoftwareStackRequest,
-    CreateSoftwareStackResponse,
     DeleteFilesRequest,
     DeleteFilesResult,
     DeleteProjectRequest,
     DeleteProjectResult,
-    DeleteSessionRequest,
-    DeleteSessionResponse,
-    DeleteSoftwareStackRequest,
-    DeleteSoftwareStackResponse,
+    DisableGroupRequest,
+    DisableProjectRequest,
+    DisableUserRequest,
     DownloadFilesRequest,
     DownloadFilesResult,
+    EnableGroupRequest,
+    EnableProjectRequest,
+    EnableUserRequest,
+    GetGroupRequest,
+    GetGroupResult,
     GetModuleSettingsRequest,
     GetModuleSettingsResult,
-    GetSessionConnectionInfoRequest,
-    GetSessionConnectionInfoResponse,
-    GetSessionInfoRequest,
-    GetSessionInfoResponse,
-    GetSoftwareStackInfoRequest,
-    GetSoftwareStackInfoResponse,
+    GetProjectRequest,
+    GetProjectResult,
     GetUserRequest,
     GetUserResult,
     ListEmailTemplatesRequest,
     ListEmailTemplatesResult,
     ListFilesRequest,
     ListFilesResult,
+    ListOnboardedFileSystemsRequest,
+    ListOnboardedFileSystemsResult,
     ListRoleAssignmentsRequest,
     ListRoleAssignmentsResponse,
-    ListSessionsRequest,
-    ListSessionsResponse,
-    ListSoftwareStackRequest,
-    ListSoftwareStackResponse,
     ModifyUserRequest,
     ModifyUserResult,
+    OnboardS3BucketRequest,
+    OnboardS3BucketResult,
     ReadFileRequest,
     ReadFileResult,
+    RemoveFileSystemFromProjectRequest,
+    RemoveFileSystemFromProjectResult,
+    RemoveFileSystemRequest,
+    RemoveFileSystemResult,
     RoleAssignment,
     SaveFileRequest,
     SaveFileResult,
@@ -77,10 +73,6 @@ from ideadatamodel import (  # type: ignore
     TailFileResult,
     UpdateModuleSettingsRequest,
     UpdateModuleSettingsResult,
-    UpdateSessionRequest,
-    UpdateSessionResponse,
-    VirtualDesktopSession,
-    VirtualDesktopSessionConnectionInfo,
 )
 from tests.integration.framework.api_invoker.api_invoker_base import ResApiInvokerBase
 from tests.integration.framework.api_invoker.http_api_invoker import HttpApiInvoker
@@ -91,7 +83,6 @@ from tests.integration.framework.model.api_invocation_context import (
 from tests.integration.framework.model.client_auth import ClientAuth
 
 logger = logging.getLogger(__name__)
-MAX_WAITING_TIME_FOR_SESSION_JOIN_IN_SEC = 60
 
 
 class ResClient:
@@ -105,6 +96,7 @@ class ResClient:
         client_auth: ClientAuth,
         api_invoker_type: str,
     ):
+        self._res_environment = res_environment
         self._client_auth = client_auth
         self._api_invoker = self._get_api_invoker(api_invoker_type)
 
@@ -138,7 +130,10 @@ class ResClient:
         )
 
     def get_user(
-        self, request: GetUserRequest, should_succeed: bool = True
+        self,
+        request: GetUserRequest,
+        should_succeed: bool = True,
+        expected_error_code: Optional[str] = None,
     ) -> GetUserResult:
         logger.info(f"getting user {request.username}...")
 
@@ -148,6 +143,7 @@ class ResClient:
             request,
             GetUserResult,
             should_succeed,
+            expected_error_code,
         )
 
     def modify_user(
@@ -163,56 +159,90 @@ class ResClient:
             should_succeed,
         )
 
-    def create_software_stack(
-        self, request: CreateSoftwareStackRequest, should_succeed: bool = True
-    ) -> CreateSoftwareStackResponse:
-        logger.info(f"creating software stack {request.software_stack.name}...")
-
-        return self._invoke(
-            "VirtualDesktopAdmin.CreateSoftwareStack",
-            "vdc",
-            request,
-            CreateSoftwareStackResponse,
+    def enable_user(self, username: str, should_succeed: bool = True) -> None:
+        logger.info(f"enabling user {username}...")
+        self._invoke(
+            "Accounts.EnableUser",
+            "cluster-manager",
+            EnableUserRequest(username=username),
+            type(None),
             should_succeed,
         )
 
-    def delete_software_stack(
-        self, request: DeleteSoftwareStackRequest, should_succeed: bool = True
-    ) -> DeleteSoftwareStackResponse:
-        logger.info(f"deleting software stack {request.software_stack.name}...")
-
-        return self._invoke(
-            "VirtualDesktopAdmin.DeleteSoftwareStack",
-            "vdc",
-            request,
-            DeleteSoftwareStackResponse,
+    def disable_user(self, username: str, should_succeed: bool = True) -> None:
+        logger.info(f"disabling user {username}...")
+        self._invoke(
+            "Accounts.DisableUser",
+            "cluster-manager",
+            DisableUserRequest(username=username),
+            type(None),
             should_succeed,
         )
 
-    def list_software_stacks(
-        self, request: ListSoftwareStackRequest, should_succeed: bool = True
-    ) -> ListSoftwareStackResponse:
-        logger.info(f"listing software stacks...")
-
-        return self._invoke(
-            "VirtualDesktopAdmin.ListSoftwareStacks",
-            "vdc",
-            request,
-            ListSoftwareStackResponse,
+    def enable_group(self, group_name: str, should_succeed: bool = True) -> None:
+        logger.info(f"enabling group {group_name}...")
+        self._invoke(
+            "Accounts.EnableGroup",
+            "cluster-manager",
+            EnableGroupRequest(group_name=group_name),
+            type(None),
             should_succeed,
         )
 
-    def create_session(
-        self, request: CreateSessionRequest, should_succeed: bool = True
-    ) -> CreateSessionResponse:
-        logger.info(f"creating session {request.session.name}...")
-
-        return self._invoke(
-            "VirtualDesktop.CreateSession",
-            "vdc",
-            request,
-            CreateSessionResponse,
+    def disable_group(self, group_name: str, should_succeed: bool = True) -> None:
+        logger.info(f"disabling group {group_name}...")
+        self._invoke(
+            "Accounts.DisableGroup",
+            "cluster-manager",
+            DisableGroupRequest(group_name=group_name),
+            type(None),
             should_succeed,
+        )
+
+    def get_group(self, group_name: str, should_succeed: bool = True) -> GetGroupResult:
+        logger.info(f"getting group {group_name}...")
+        return self._invoke(
+            "Accounts.GetGroup",
+            "cluster-manager",
+            GetGroupRequest(group_name=group_name),
+            GetGroupResult,
+            should_succeed,
+        )
+
+    def enable_project(self, project_name: str, should_succeed: bool = True) -> None:
+        logger.info(f"enabling project {project_name}...")
+        self._invoke(
+            "Projects.EnableProject",
+            "cluster-manager",
+            EnableProjectRequest(project_name=project_name),
+            type(None),
+            should_succeed,
+        )
+
+    def disable_project(self, project_name: str, should_succeed: bool = True) -> None:
+        logger.info(f"disabling project {project_name}...")
+        self._invoke(
+            "Projects.DisableProject",
+            "cluster-manager",
+            DisableProjectRequest(project_name=project_name),
+            type(None),
+            should_succeed,
+        )
+
+    def get_project(
+        self,
+        project_name: str,
+        should_succeed: bool = True,
+        expected_error_code: Optional[str] = None,
+    ) -> GetProjectResult:
+        logger.info(f"getting project {project_name}...")
+        return self._invoke(
+            "Projects.GetProject",
+            "cluster-manager",
+            GetProjectRequest(project_name=project_name),
+            GetProjectResult,
+            should_succeed,
+            expected_error_code,
         )
 
     def batch_put_role_assignment(
@@ -244,130 +274,13 @@ class ResClient:
     def list_role_assignments(
         self, request: ListRoleAssignmentsRequest, should_succeed: bool = True
     ) -> ListRoleAssignmentsResponse:
-        logger.info(f"listing role assignments {request.items}...")
+        logger.info("listing role assignments...")
 
         return self._invoke(
             "Authz.ListRoleAssignments",
             "cluster-manager",
             request,
             ListRoleAssignmentsResponse,
-            should_succeed,
-        )
-
-    def get_session_connection_info(
-        self, request: GetSessionConnectionInfoRequest, should_succeed: bool = True
-    ) -> GetSessionConnectionInfoResponse:
-        logger.info(
-            f"getting connection info for session {request.connection_info.idea_session_id}..."
-        )
-
-        return self._invoke(
-            "VirtualDesktop.GetSessionConnectionInfo",
-            "vdc",
-            request,
-            GetSessionConnectionInfoResponse,
-            should_succeed,
-        )
-
-    def update_session(
-        self, request: UpdateSessionRequest, should_succeed: bool = True
-    ) -> UpdateSessionResponse:
-        logger.info(f"updating session {request.session.dcv_session_id}...")
-
-        return self._invoke(
-            "VirtualDesktop.UpdateSession",
-            "vdc",
-            request,
-            UpdateSessionResponse,
-            should_succeed,
-        )
-
-    def join_session(self, session: VirtualDesktopSession) -> Any:
-        start_time = time.time()
-        get_session_connection_info_request = GetSessionConnectionInfoRequest(
-            connection_info=VirtualDesktopSessionConnectionInfo(
-                idea_session_id=session.idea_session_id,
-                idea_session_owner=session.owner,
-            )
-        )
-        while True:
-            try:
-                get_session_connection_info_response = self.get_session_connection_info(
-                    get_session_connection_info_request
-                )
-                break
-            except Exception as e:
-                if time.time() - start_time > MAX_WAITING_TIME_FOR_SESSION_JOIN_IN_SEC:
-                    raise e
-                else:
-                    time.sleep(10)
-        return ResClient.connect_to_session(
-            get_session_connection_info_response.connection_info
-        )
-
-    @staticmethod
-    def connect_to_session(
-        connection_info: VirtualDesktopSessionConnectionInfo,
-    ) -> WebDriver:
-        """
-        Open a headless Chrome connection to a DCV session using connection info.
-        Returns the WebDriver instance with an active connection.
-        """
-        logger.info(f"joining session {connection_info.idea_session_id}...")
-
-        # Open the session connection URL from a Chrome browser and keep the connection active.
-        options = webdriver.ChromeOptions()
-        options.binary_location = "/usr/local/bin/chromium-browser"
-        options.add_argument("--headless=new")
-        options.add_argument("--ignore-certificate-errors")
-        options.add_argument("--no-sandbox")
-        options.add_argument("--disable-dev-shm-usage")
-        options.add_argument("--disable-gpu")
-        options.add_argument("--window-size=1920,1080")
-        options.add_argument("--disable-software-rasterizer")
-        options.add_argument("--disable-extensions")
-        options.add_argument("--disable-infobars")
-        options.add_argument("--memory-pressure-off")
-        options.add_argument("--disable-background-networking")
-        options.add_argument("--disk-cache-size=1")
-        options.set_capability("goog:loggingPrefs", {"browser": "SEVERE"})
-
-        # Retry mechanism for driver creation and page loading to handle tab crashes
-        max_retries = 3
-        connection_url = f"{connection_info.endpoint}{connection_info.web_url_path}?authToken={connection_info.access_token}#{connection_info.idea_session_id}"
-
-        for attempt in range(max_retries):
-            driver: WebDriver = None  # type: ignore[assignment]
-            try:
-                driver = webdriver.Chrome(options=options)
-                driver.get(connection_url)
-                return driver
-            except Exception as e:
-                logger.warning(f"Chrome WebDriver attempt {attempt + 1} failed: {e}")
-                # Cleanup driver on failure
-                if driver:
-                    try:
-                        driver.quit()
-                    except:
-                        pass
-
-                if attempt < max_retries - 1:
-                    # Sleep before retry
-                    time.sleep(2)
-
-        assert False, f"Failed to join session within {max_retries} attempts"
-
-    def delete_sessions(
-        self, request: DeleteSessionRequest, should_succeed: bool = True
-    ) -> DeleteSessionResponse:
-        session_names = [session.name for session in request.sessions]
-        logger.info(f"deleting sessions {session_names}...")
-
-        return self._invoke(
-            "VirtualDesktop.DeleteSessions",
-            "vdc",
-            request,
-            DeleteSessionResponse,
             should_succeed,
         )
 
@@ -480,21 +393,6 @@ class ResClient:
             expected_error_code,
         )
 
-    def create_software_stack_from_session(
-        self,
-        request: CreateSoftwareStackFromSessionRequest,
-        should_succeed: bool = True,
-    ) -> CreateSoftwareStackFromSessionResponse:
-        logger.info(f"creating software stack from session...")
-
-        return self._invoke(
-            "VirtualDesktopAdmin.CreateSoftwareStackFromSession",
-            "vdc",
-            request,
-            CreateSoftwareStackFromSessionResponse,
-            should_succeed,
-        )
-
     def create_file(
         self,
         request: CreateFileRequest,
@@ -539,6 +437,86 @@ class ResClient:
             "cluster-manager",
             request,
             ListEmailTemplatesResult,
+            should_succeed,
+        )
+
+    def onboard_s3_bucket(
+        self, request: OnboardS3BucketRequest, should_succeed: bool = True
+    ) -> OnboardS3BucketResult:
+        logger.info(
+            f"onboarding S3 bucket {request.bucket_arn} "
+            f"at {request.mount_directory}..."
+        )
+
+        return self._invoke(
+            "FileSystem.OnboardS3Bucket",
+            "cluster-manager",
+            request,
+            OnboardS3BucketResult,
+            should_succeed,
+        )
+
+    def add_filesystem_to_project(
+        self,
+        request: AddFileSystemToProjectRequest,
+        should_succeed: bool = True,
+    ) -> AddFileSystemToProjectResult:
+        logger.info(
+            f"adding filesystem {request.filesystem_name} "
+            f"to project {request.project_name}..."
+        )
+
+        return self._invoke(
+            "FileSystem.AddFileSystemToProject",
+            "cluster-manager",
+            request,
+            AddFileSystemToProjectResult,
+            should_succeed,
+        )
+
+    def remove_filesystem(
+        self, request: RemoveFileSystemRequest, should_succeed: bool = True
+    ) -> RemoveFileSystemResult:
+        logger.info(f"removing filesystem {request.filesystem_name}...")
+
+        return self._invoke(
+            "FileSystem.RemoveFileSystem",
+            "cluster-manager",
+            request,
+            RemoveFileSystemResult,
+            should_succeed,
+        )
+
+    def remove_filesystem_from_project(
+        self,
+        request: RemoveFileSystemFromProjectRequest,
+        should_succeed: bool = True,
+    ) -> RemoveFileSystemFromProjectResult:
+        logger.info(
+            f"removing filesystem {request.filesystem_name} "
+            f"from project {request.project_name}..."
+        )
+
+        return self._invoke(
+            "FileSystem.RemoveFileSystemFromProject",
+            "cluster-manager",
+            request,
+            RemoveFileSystemFromProjectResult,
+            should_succeed,
+        )
+
+    def list_onboarded_file_systems(
+        self,
+        request: ListOnboardedFileSystemsRequest,
+        should_succeed: bool = True,
+    ) -> ListOnboardedFileSystemsResult:
+        logger.info("listing onboarded file systems...")
+
+        return self._invoke(
+            "FileSystem.ListOnboardedFileSystems",
+            "cluster-manager",
+            request,
+            ListOnboardedFileSystemsResult,
             should_succeed,
         )
 

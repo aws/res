@@ -80,3 +80,14 @@ def test_get_private_dns_name_success_status_code_return_dns_name(monkeypatch):
     monkeypatch.setattr(instance_metadata_utils, "get_imds_auth_header", lambda: None)
 
     assert instance_metadata_utils.get_private_dns_name() == "ip-10-0-1-5.ec2.internal"
+
+
+def test_get_private_ip_success_status_code_return_private_ip(monkeypatch):
+    success_response = requests.Response()
+    success_response.status_code = 200
+    success_response._content = b"10.0.1.5"
+
+    monkeypatch.setattr(requests, "get", lambda _, headers, timeout: success_response)
+    monkeypatch.setattr(instance_metadata_utils, "get_imds_auth_header", lambda: None)
+
+    assert instance_metadata_utils.get_private_ip() == "10.0.1.5"

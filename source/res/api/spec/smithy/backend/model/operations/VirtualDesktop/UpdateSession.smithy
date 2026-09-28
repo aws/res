@@ -4,7 +4,7 @@ $version: "2.0"
 
 namespace res
 
-@http(method: "PUT", uri: "/res/virtual-desktop/session/{resSessionId}")
+@http(method: "PUT", uri: "/res/virtual-desktop/sessions/{res_session_id}")
 @tags(["virtual-desktop"])
 @documentation("Update Session")
 operation UpdateSession {
@@ -23,7 +23,8 @@ structure UpdateSessionRequest {
     @httpLabel
     @required
     @length(min: 1)
-    resSessionId: String
+    @suppress(["CamelCase"])
+    res_session_id: String
 
     @documentation("Update virtual desktop session request")
     @required

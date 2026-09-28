@@ -91,7 +91,6 @@ def update(c, name=None, upgrade=False, package_name=None):
                  'idea-dcv-connection-gateway',
                  'idea-sdk',
                  'idea-virtual-desktop',
-                 'idea-virtual-desktop-controller',
                  'datamodel',
                  'library'):
         _update_requirement(c, name, upgrade, package_name)

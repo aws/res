@@ -5,7 +5,7 @@ $version: "2.0"
 namespace res
 
 @suppress(["MissingPaginatedTrait"])
-@http(method: "POST", uri: "/res/virtual-desktop-utils/allowed-instance-type-for-session")
+@http(method: "POST", uri: "/res/virtual-desktop-utils/allowed-instance-types-for-session")
 @tags(["virtual-desktop-utils"])
 @documentation("List allowed instance types for a virtual desktop session")
 operation ListAllowedInstanceTypesForSession {

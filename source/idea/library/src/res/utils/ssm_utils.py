@@ -43,6 +43,10 @@ def send_command(
     base_os: str,
     timeout_seconds: int = COMMAND_TIMEOUT_SECONDS,
     output_to_s3: bool = True,
+    notification_config: Optional[Dict[str, Any]] = None,
+    service_role_arn: Optional[str] = None,
+    cloud_watch_log_group: Optional[str] = None,
+    output_s3_key_prefix: Optional[str] = None,
 ) -> Dict[str, Any]:
     """Send a shell command to EC2 instances (up to 50) via SSM.
 
@@ -50,6 +54,10 @@ def send_command(
     ``{cluster_name}-ssm-command-output-{region}-{account_id}``. Set to False
     for short-output commands where the inline ``StandardOutputContent``
     on ``get_command_invocation`` is sufficient.
+
+    When ``notification_config`` is provided, SSM will send notifications to
+    the specified SNS topic on command completion. Requires ``service_role_arn``
+    to be set.
     """
     document_name = (
         WINDOWS_DOCUMENT_NAME if base_os == "windows" else LINUX_DOCUMENT_NAME
@@ -63,6 +71,17 @@ def send_command(
     }
     if output_to_s3:
         kwargs["OutputS3BucketName"] = _get_ssm_output_bucket_name()
+    if output_s3_key_prefix:
+        kwargs["OutputS3KeyPrefix"] = output_s3_key_prefix
+    if notification_config:
+        kwargs["NotificationConfig"] = notification_config
+    if service_role_arn:
+        kwargs["ServiceRoleArn"] = service_role_arn
+    if cloud_watch_log_group:
+        kwargs["CloudWatchOutputConfig"] = {
+            "CloudWatchOutputEnabled": True,
+            "CloudWatchLogGroupName": cloud_watch_log_group,
+        }
     response = _get_ssm_client().send_command(**kwargs)
     return response["Command"]
 
@@ -238,3 +257,11 @@ def read_command_output_from_s3(s3_url: str) -> str:
 
     obj = _get_s3_client().get_object(Bucket=bucket, Key=key)
     return obj["Body"].read().decode("utf-8")
+
+
+def get_command_invocation(command_id: str, instance_id: str) -> Dict[str, Any]:
+    """Get the output of an SSM command invocation."""
+    ssm_client = _get_ssm_client()
+    return ssm_client.get_command_invocation(
+        CommandId=command_id, InstanceId=instance_id
+    )

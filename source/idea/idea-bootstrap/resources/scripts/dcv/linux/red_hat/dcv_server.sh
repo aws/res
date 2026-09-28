@@ -175,7 +175,8 @@ function install_microphone_redirect() {
 function install_usb_support() {
   if [[ -z "$(lsmod | grep eveusb)" ]]; then
     echo "Installing usb support..."
-    yum install -y dkms
+    # exclude kernel* so dkms doesn't pull a newer kernel-core via kernel-devel-matched
+    yum install -y --exclude='kernel*' dkms
     DCV_USB_DRIVER_INSTALLER=$(which dcvusbdriverinstaller)
     $DCV_USB_DRIVER_INSTALLER --quiet
   else

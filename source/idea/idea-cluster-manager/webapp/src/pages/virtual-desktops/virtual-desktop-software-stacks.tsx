@@ -659,7 +659,8 @@ class VirtualDesktopSoftwareStacks extends Component<VirtualDesktopSoftwareStack
                             return Promise.resolve(true);
                         })
                         .catch((error) => {
-                            this.getEditSoftwareStackForm().setError(error.errorCode, error.message);
+                            const errorMessage = error?.response?.data?.message || error?.message || "Failed to update software stack";
+                            this.getEditSoftwareStackForm().setError(error.errorCode || "400", errorMessage);
                             return Promise.resolve(false);
                         });
                 }}

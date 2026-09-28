@@ -69,15 +69,6 @@ def cluster_manager(c):
 
 
 @task
-def virtual_desktop_controller(c):
-    # type: (Context) -> None
-    """
-    clean virtual desktop controller
-    """
-    CleanTool(c, 'idea-virtual-desktop-controller').clean()
-
-
-@task
 def dcv_connection_gateway(c):
     # type: (Context) -> None
     """
@@ -142,8 +133,6 @@ def clean_all(c):
     ad_sync(c)
 
     cluster_manager(c)
-
-    virtual_desktop_controller(c)
 
     dcv_connection_gateway(c)
 

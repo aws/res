@@ -9,18 +9,23 @@
 #  OR CONDITIONS OF ANY KIND, express or implied. See the License for the specific language governing permissions
 #  and limitations under the License.
 
-from ideadatamodel import (  # type: ignore
-    SocaMemory,
-    SocaMemoryUnit,
-    VirtualDesktopArchitecture,
-    VirtualDesktopBaseOS,
-    VirtualDesktopGPU,
-    VirtualDesktopSoftwareStack,
+from tests.integration.framework.utils.model_utils import get_backend_model_class
+
+ResMemory = get_backend_model_class("res_memory", "ResMemory")
+VirtualDesktopArchitecture = get_backend_model_class(
+    "virtual_desktop_architecture", "VirtualDesktopArchitecture"
+)
+VirtualDesktopBaseOS = get_backend_model_class(
+    "virtual_desktop_base_os", "VirtualDesktopBaseOs"
+)
+VirtualDesktopGPU = get_backend_model_class("virtual_desktop_gpu", "VirtualDesktopGpu")
+VirtualDesktopSoftwareStack = get_backend_model_class(
+    "virtual_desktop_software_stack", "VirtualDesktopSoftwareStack"
 )
 
-MIN_LINUX_STORAGE = SocaMemory(value=50, unit=SocaMemoryUnit.GB)
-MIN_WINDOWS_STORAGE = SocaMemory(value=50, unit=SocaMemoryUnit.GB)
-MIN_RAM = SocaMemory(value=4, unit=SocaMemoryUnit.GB)
+MIN_LINUX_STORAGE = ResMemory(value=50, unit="gb")
+MIN_WINDOWS_STORAGE = ResMemory(value=50, unit="gb")
+MIN_RAM = ResMemory(value=4, unit="gb")
 
 BASE_OS = [
     "amazonlinux2",
@@ -34,9 +39,9 @@ BASE_OS = [
 ]
 
 AL2023_SOFTWARE_STACK = VirtualDesktopSoftwareStack(
-    name=f"res-integ-test-stack-{VirtualDesktopBaseOS.AMAZON_LINUX2023.value}-{VirtualDesktopArchitecture.X86_64.value}",
+    name=f"res-integ-test-stack-{VirtualDesktopBaseOS.AMZN2023.value}-{VirtualDesktopArchitecture.X86_64.value}",
     description="RES integ test software stack",
-    base_os=VirtualDesktopBaseOS.AMAZON_LINUX2023,
+    base_os=VirtualDesktopBaseOS.AMZN2023,
     architecture=VirtualDesktopArchitecture.X86_64,
     min_storage=MIN_LINUX_STORAGE,
     min_ram=MIN_RAM,
@@ -82,9 +87,9 @@ LINUX_SOFTWARE_STACKS = [
     AL2023_SOFTWARE_STACK,
     # Stack 4
     VirtualDesktopSoftwareStack(
-        name=f"res-integ-test-stack-{VirtualDesktopBaseOS.AMAZON_LINUX2023.value}-{VirtualDesktopArchitecture.ARM64.value}",
+        name=f"res-integ-test-stack-{VirtualDesktopBaseOS.AMZN2023.value}-{VirtualDesktopArchitecture.ARM64.value}",
         description="RES integ test software stack",
-        base_os=VirtualDesktopBaseOS.AMAZON_LINUX2023,
+        base_os=VirtualDesktopBaseOS.AMZN2023,
         architecture=VirtualDesktopArchitecture.ARM64,
         min_storage=MIN_LINUX_STORAGE,
         min_ram=MIN_RAM,
@@ -93,9 +98,9 @@ LINUX_SOFTWARE_STACKS = [
     ),
     # Stack 5
     VirtualDesktopSoftwareStack(
-        name=f"res-integ-test-stack-{VirtualDesktopBaseOS.ROCKY_LINUX9.value}-{VirtualDesktopArchitecture.X86_64.value}",
+        name=f"res-integ-test-stack-{VirtualDesktopBaseOS.ROCKY9.value}-{VirtualDesktopArchitecture.X86_64.value}",
         description="RES integ test software stack",
-        base_os=VirtualDesktopBaseOS.ROCKY_LINUX9,
+        base_os=VirtualDesktopBaseOS.ROCKY9,
         architecture=VirtualDesktopArchitecture.X86_64,
         min_storage=MIN_LINUX_STORAGE,
         min_ram=MIN_RAM,
@@ -141,7 +146,7 @@ TEST_SOFTWARE_STACKS = LINUX_SOFTWARE_STACKS + [
 ]
 
 TEST_SOFTWARE_STACKS_GOVCLOUD = [
-    f"res-integ-test-stack-{VirtualDesktopBaseOS.AMAZON_LINUX2023.value}-{VirtualDesktopArchitecture.X86_64.value}",
-    f"res-integ-test-stack-{VirtualDesktopBaseOS.AMAZON_LINUX2023.value}-{VirtualDesktopArchitecture.ARM64.value}",
+    f"res-integ-test-stack-{VirtualDesktopBaseOS.AMZN2023.value}-{VirtualDesktopArchitecture.X86_64.value}",
+    f"res-integ-test-stack-{VirtualDesktopBaseOS.AMZN2023.value}-{VirtualDesktopArchitecture.ARM64.value}",
     f"res-integ-test-stack-{VirtualDesktopBaseOS.RHEL9.value}-{VirtualDesktopArchitecture.X86_64.value}",
 ]

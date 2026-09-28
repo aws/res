@@ -24,11 +24,9 @@ from tests.integration.framework.utils.alb_utils import (
     update_alb_invalid_header_drop_flag,
 )
 from tests.integration.framework.utils.cognito_sync import cognito_sync
-from tests.integration.framework.utils.ec2_utils import (
-    cluster_manager_instances,
-    vdc_instances,
-)
+from tests.integration.framework.utils.ec2_utils import cluster_manager_instances
 from tests.integration.framework.utils.lambda_utils import set_backend_lambda_test_mode
+from tests.integration.framework.utils.retry_utils import retry_with_backoff
 from tests.integration.framework.utils.test_mode import set_test_mode_for_all_servers
 
 logger = logging.getLogger(__name__)
@@ -92,20 +90,19 @@ def pytest_sessionstart(session: pytest.Session) -> None:
 
     region: str = session.config.getoption("--aws-region")
     cluster_managers = cluster_manager_instances(session)
-    vdcs = vdc_instances(session)
 
     # Set test mode for backend Lambda functions
     environment_name = session.config.getoption("--environment-name")
+    os.environ["environment_name"] = environment_name
+    os.environ["AWS_DEFAULT_REGION"] = region
     logger.info("enable test mode for backend Lambda functions")
     set_backend_lambda_test_mode(region, environment_name, True)
 
     logger.info("relaunch servers in test mode")
-    set_test_mode_for_all_servers(region, cluster_managers + vdcs, True)
+    set_test_mode_for_all_servers(cluster_managers, True)
 
     # Sync users and groups from AD so that integ tests can run with these users and groups
     logger.info("sync users and groups from AD")
-    environment_name = session.config.getoption("--environment-name")
-    os.environ["environment_name"] = environment_name
     ad_sync()
     cognito_sync()
 
@@ -116,10 +113,29 @@ def pytest_sessionstart(session: pytest.Session) -> None:
     update_alb_invalid_header_drop_flag(session, value="false")
 
     logger.info("update additional sssd configs")
+
+    def _update_sssd_settings() -> None:
+        res_client(session).update_module_settings(
+            UpdateModuleSettingsRequest(
+                module_id="directoryservice",
+                settings={"sssd": {"additional_sssd_configs": json.dumps({})}},
+            )
+        )
+
+    retry_with_backoff(
+        func=_update_sssd_settings,
+        max_retries=5,
+        initial_delay=5,
+        backoff_factor=2,
+        max_delay=30,
+        exceptions=(AssertionError,),
+    )
+
+    logger.info("disable smart retry for the test session")
     res_client(session).update_module_settings(
         UpdateModuleSettingsRequest(
-            module_id="directoryservice",
-            settings={"sssd": {"additional_sssd_configs": json.dumps({})}},
+            module_id="vdc",
+            settings={"dcv_session": {"smart_retry": {"enabled": False}}},
         )
     )
 
@@ -139,6 +155,14 @@ def pytest_sessionfinish(session: pytest.Session, exitstatus: int) -> None:
         )
     )
 
+    logger.info("disable smart retry after the test session")
+    res_client(session).update_module_settings(
+        UpdateModuleSettingsRequest(
+            module_id="vdc",
+            settings={"dcv_session": {"smart_retry": {"enabled": False}}},
+        )
+    )
+
     # Enable ALB attribute for dropping invalid headers
     logger.info(
         "enable ALB attribute for dropping invalid headers; integration test finished"
@@ -146,9 +170,7 @@ def pytest_sessionfinish(session: pytest.Session, exitstatus: int) -> None:
     update_alb_invalid_header_drop_flag(session, value="true")
 
     logger.info("disable server test mode")
-    set_test_mode_for_all_servers(
-        region, cluster_manager_instances(session) + vdc_instances(session), False
-    )
+    set_test_mode_for_all_servers(cluster_manager_instances(session), False)
 
     # Disable test mode for backend Lambda functions
     environment_name = session.config.getoption("--environment-name")

@@ -524,39 +524,6 @@ class VirtualDesktopSettings extends Component<VirtualDesktopSettingsProps, Virt
         });
     }
 
-    buildNotificationSettings() {
-        let notifications = dot.pick("dcv_session.notifications", this.state.vdcSettings);
-        let items: any[] = [];
-        if (notifications) {
-            Object.keys(notifications).forEach((settingName) => {
-                items.push({
-                    name: settingName,
-                    enabled: Utils.asBoolean(dot.pick(`dcv_session.notifications.${settingName}.enabled`, this.state.vdcSettings)),
-                    email_template: dot.pick(`dcv_session.notifications.${settingName}.email_template`, this.state.vdcSettings),
-                });
-            });
-        }
-        return (
-            <Table
-                items={items}
-                columnDefinitions={[
-                    {
-                        header: "Session State",
-                        cell: (e) => e.name,
-                    },
-                    {
-                        header: "Status",
-                        cell: (e) => <EnabledDisabledStatusIndicator enabled={e.enabled} />,
-                    },
-                    {
-                        header: "Email Template Name",
-                        cell: (e) => e.email_template,
-                    },
-                ]}
-            />
-        );
-    }
-
     render() {
         const getInternalALBUrl = () => {
             return ConfigUtils.getInternalAlbUrl(this.state.clusterSettings);
@@ -638,6 +605,45 @@ class VirtualDesktopSettings extends Component<VirtualDesktopSettingsProps, Virt
                             ],
                         });
                     }
+                });
+        };
+
+        const handleSmartRetryToggleChange = (newToggleStatus: boolean) => {
+            AppContext.get()
+                .client()
+                .clusterSettings()
+                .updateModuleSettings({
+                    module_id: VDC_MODULE_ID,
+                    settings: {
+                        dcv_session: {
+                            [UpdateModuleSettingsValuesDCVSession.SMART_RETRY_ENABLED]: newToggleStatus,
+                        },
+                    },
+                })
+                .then(() => {
+                    this.props.onFlashbarChange({
+                        items: [
+                            {
+                                type: "success",
+                                content: "Successfully updated Smart Retry configuration.",
+                                dismissible: true,
+                            },
+                        ],
+                    });
+                    const vdcSettings = { ...this.state.vdcSettings };
+                    dot.set("dcv_session.smart_retry.enabled", newToggleStatus, vdcSettings);
+                    this.setState({ vdcSettings: vdcSettings });
+                })
+                .catch((error) => {
+                    this.props.onFlashbarChange({
+                        items: [
+                            {
+                                type: "error",
+                                content: error.message,
+                                dismissible: true,
+                            },
+                        ],
+                    });
                 });
         };
 
@@ -843,21 +849,6 @@ class VirtualDesktopSettings extends Component<VirtualDesktopSettingsProps, Virt
                                                 </Container>
                                             </SpaceBetween>
                                         </>
-                                    ),
-                                },
-                                {
-                                    label: "Notifications",
-                                    id: "notifications",
-                                    content: (
-                                        <Container
-                                            header={
-                                                <Header variant={"h2"} description={"Notifications will be sent only if notifications are enabled in Cluster Settings"}>
-                                                    Notifications
-                                                </Header>
-                                            }
-                                        >
-                                            {this.buildNotificationSettings()}
-                                        </Container>
                                     ),
                                 },
                                 {
@@ -1069,6 +1060,28 @@ class VirtualDesktopSettings extends Component<VirtualDesktopSettingsProps, Virt
                                                     <KeyValue title="Allowed Instance Families and Types" value={dot.pick("dcv_session.instance_types.allow", this.state.vdcSettings)} />
                                                     <KeyValue title="Denied Instance Types" value={dot.pick("dcv_session.instance_types.deny", this.state.vdcSettings)} />
                                                 </ColumnLayout>
+                                            </Container>
+                                            <Container header={<Header variant={"h2"}>Smart Retry</Header>}>
+                                                <KeyValue title="Smart Retry">
+                                                    <div>
+                                                        <TextContent>
+                                                            <p>
+                                                                <small>
+                                                                    Smart Retry automatically retries VDI launches across the software stack's allowed instance types and configured subnets on Insufficient Capacity Errors, starting from the cheapest instance type.
+                                                                    <br />
+                                                                    Toggle on to enable Smart Retry for all new virtual desktop launches.
+                                                                </small>
+                                                            </p>
+                                                        </TextContent>
+                                                        <div style={{ display: "flex", flexDirection: "row", gap: "4px" }}>
+                                                            <EnabledDisabledStatusIndicator enabled={Utils.asBoolean(dot.pick("dcv_session.smart_retry.enabled", this.state.vdcSettings))} />
+                                                            <Toggle
+                                                                checked={Utils.asBoolean(dot.pick("dcv_session.smart_retry.enabled", this.state.vdcSettings))}
+                                                                onChange={({ detail }) => handleSmartRetryToggleChange(detail.checked)}
+                                                            />
+                                                        </div>
+                                                    </div>
+                                                </KeyValue>
                                             </Container>
                                         </SpaceBetween>
                                     ),

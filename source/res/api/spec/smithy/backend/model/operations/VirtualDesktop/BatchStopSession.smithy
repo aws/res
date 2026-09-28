@@ -31,10 +31,12 @@ structure BatchStopSessionRequest {
 structure BatchStopSessionResponse {
     @required
     @documentation("List of sessions that were successfully stopped")
+    @jsonName("successful_list")
     successfulList: res.virtualdesktop#VirtualDesktopSessionList
 
     @required
     @documentation("List of sessions that failed to stop")
+    @jsonName("unsuccessful_list")
     unsuccessfulList: BatchStopSessionFailureList
 }
 
@@ -45,6 +47,7 @@ structure BatchStopSessionFailure {
 
     @required
     @documentation("Error code for the failure")
+    @jsonName("error_code")
     errorCode: BatchOperationErrorCode
 
     @required

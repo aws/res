@@ -31,12 +31,12 @@ structure BatchStartSessionRequest {
 structure BatchStartSessionResponse {
     @required
     @documentation("List of sessions that were successfully started")
-    @jsonName("successful-list")
+    @jsonName("successful_list")
     successfulList: res.virtualdesktop#VirtualDesktopSessionList
 
     @required
     @documentation("List of sessions that failed to start")
-    @jsonName("unsuccessful-list")
+    @jsonName("unsuccessful_list")
     unsuccessfulList: BatchStartSessionFailureList
 }
 
@@ -47,7 +47,7 @@ structure BatchStartSessionFailure {
 
     @required
     @documentation("Error code for the failure")
-    @jsonName("error-code")
+    @jsonName("error_code")
     errorCode: BatchOperationErrorCode
 
     @required

@@ -4,7 +4,7 @@ $version: "2.0"
 
 namespace res
 
-@http(method: "DELETE", uri: "/res/virtual-desktop/software-stack/{stackId}")
+@http(method: "DELETE", uri: "/res/virtual-desktop/software-stacks/{stack_id}")
 @suppress(["HttpMethodSemantics.UnexpectedPayload"])
 @idempotent
 @tags(["virtual-desktop"])
@@ -24,8 +24,8 @@ structure DeleteSoftwareStackRequest {
     @required
     @length(min: 1)
     @httpLabel
-    @jsonName("stack_id")
-    stackId: String
+    @suppress(["CamelCase"])
+    stack_id: String
 
     @required
     @length(min: 1)

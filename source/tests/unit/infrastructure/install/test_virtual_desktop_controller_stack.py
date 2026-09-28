@@ -1,7 +1,7 @@
 #  Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 #  SPDX-License-Identifier: Apache-2.0
 
-from aws_cdk.assertions import Template
+from aws_cdk.assertions import Match, Template
 
 from idea.infrastructure.install.constants import (
     MODULE_ID_VDC_CONTROLLER,
@@ -210,7 +210,11 @@ def test_sqs_kms_key_creation(
                             ],
                             "Effect": "Allow",
                             "Principal": {
-                                "Service": ["sns.amazonaws.com", "sqs.amazonaws.com"]
+                                "Service": [
+                                    "events.amazonaws.com",
+                                    "sns.amazonaws.com",
+                                    "sqs.amazonaws.com",
+                                ]
                             },
                             "Resource": "*",
                         },
@@ -247,204 +251,6 @@ def test_sqs_kms_key_creation(
                         "Arn",
                     ],
                 },
-            }
-        },
-    )
-
-
-def test_event_sqs_queue_creation(
-    vdc_stack: VirtualDesktopControllerStack, vdc_template: Template
-) -> None:
-    util.assert_resource_name_has_correct_type_and_props(
-        vdc_stack.nested_stack,
-        vdc_template,
-        resources=[f"{MODULE_ID_VDC_CONTROLLER}-events-construct"],
-        cfn_type="AWS::SQS::Queue",
-        props={
-            "Properties": {
-                "ContentBasedDeduplication": True,
-                "DeduplicationScope": "messageGroup",
-                "FifoQueue": True,
-                "FifoThroughputLimit": "perMessageGroupId",
-                "KmsMasterKeyId": "alias/aws/sqs",
-                "QueueName": {
-                    "Fn::Join": [
-                        "",
-                        [
-                            vdc_stack.nested_stack.resolve(vdc_stack.cluster_name),
-                            f"-{MODULE_ID_VDC_CONTROLLER}-events.fifo",
-                        ],
-                    ]
-                },
-                "RedrivePolicy": {
-                    "deadLetterTargetArn": {
-                        "Fn::GetAtt": [
-                            util.get_logical_id(
-                                vdc_stack.nested_stack,
-                                [f"{MODULE_ID_VDC_CONTROLLER}-events-dlq-construct"],
-                            ),
-                            "Arn",
-                        ]
-                    },
-                    "maxReceiveCount": 120,
-                },
-            }
-        },
-    )
-
-    util.assert_resource_name_has_correct_type_and_props(
-        vdc_stack.nested_stack,
-        vdc_template,
-        resources=[f"{MODULE_ID_VDC_CONTROLLER}-events-dlq-construct"],
-        cfn_type="AWS::SQS::Queue",
-        props={
-            "Properties": {
-                "ContentBasedDeduplication": True,
-                "DeduplicationScope": "messageGroup",
-                "FifoQueue": True,
-                "FifoThroughputLimit": "perMessageGroupId",
-                "KmsMasterKeyId": "alias/aws/sqs",
-                "QueueName": {
-                    "Fn::Join": [
-                        "",
-                        [
-                            vdc_stack.nested_stack.resolve(vdc_stack.cluster_name),
-                            f"-{MODULE_ID_VDC_CONTROLLER}-events-dlq.fifo",
-                        ],
-                    ]
-                },
-            }
-        },
-    )
-
-
-def test_controller_sqs_queue_creation(
-    vdc_stack: VirtualDesktopControllerStack, vdc_template: Template
-) -> None:
-    util.assert_resource_name_has_correct_type_and_props(
-        vdc_stack.nested_stack,
-        vdc_template,
-        resources=[f"{MODULE_ID_VDC_CONTROLLER}-controller-construct"],
-        cfn_type="AWS::SQS::Queue",
-        props={
-            "Properties": {
-                "KmsMasterKeyId": {
-                    "Fn::Join": [
-                        "",
-                        [
-                            "arn:",
-                            {"Ref": "AWS::Partition"},
-                            ":kms:",
-                            {"Ref": "AWS::Region"},
-                            ":",
-                            {"Ref": "AWS::AccountId"},
-                            ":key/",
-                            {
-                                "Ref": util.get_logical_id(
-                                    vdc_stack.nested_stack,
-                                    ["res-sqs-kms"],
-                                ),
-                            },
-                        ],
-                    ]
-                },
-                "QueueName": {
-                    "Fn::Join": [
-                        "",
-                        [
-                            vdc_stack.nested_stack.resolve(vdc_stack.cluster_name),
-                            f"-{MODULE_ID_VDC_CONTROLLER}-controller",
-                        ],
-                    ]
-                },
-                "RedrivePolicy": {
-                    "deadLetterTargetArn": {
-                        "Fn::GetAtt": [
-                            util.get_logical_id(
-                                vdc_stack.nested_stack,
-                                [
-                                    f"{MODULE_ID_VDC_CONTROLLER}-controller-dlq-construct"
-                                ],
-                            ),
-                            "Arn",
-                        ]
-                    },
-                    "maxReceiveCount": 30,
-                },
-            }
-        },
-    )
-
-    util.assert_resource_name_has_correct_type_and_props(
-        vdc_stack.nested_stack,
-        vdc_template,
-        resources=[f"{MODULE_ID_VDC_CONTROLLER}-controller-dlq-construct"],
-        cfn_type="AWS::SQS::Queue",
-        props={
-            "Properties": {
-                "KmsMasterKeyId": {
-                    "Fn::Join": [
-                        "",
-                        [
-                            "arn:",
-                            {"Ref": "AWS::Partition"},
-                            ":kms:",
-                            {"Ref": "AWS::Region"},
-                            ":",
-                            {"Ref": "AWS::AccountId"},
-                            ":key/",
-                            {
-                                "Ref": util.get_logical_id(
-                                    vdc_stack.nested_stack,
-                                    ["res-sqs-kms"],
-                                ),
-                            },
-                        ],
-                    ]
-                },
-                "QueueName": {
-                    "Fn::Join": [
-                        "",
-                        [
-                            vdc_stack.nested_stack.resolve(vdc_stack.cluster_name),
-                            f"-{MODULE_ID_VDC_CONTROLLER}-controller-dlq",
-                        ],
-                    ]
-                },
-            }
-        },
-    )
-
-
-def test_scheduled_event_transformer_lambda_creation(
-    vdc_stack: VirtualDesktopControllerStack, vdc_template: Template
-) -> None:
-    util.assert_resource_name_has_correct_type_and_props(
-        vdc_stack.nested_stack,
-        vdc_template,
-        resources=["vdc-scheduled-event-transformer-construct"],
-        cfn_type="AWS::Lambda::Function",
-        props={
-            "Properties": {
-                "Handler": "scheduled_event_transformer_handler.handler",
-                "Runtime": RES_COMMON_LAMBDA_RUNTIME.to_string(),
-                "Timeout": 180,
-                "Description": f"{MODULE_ID_VDC_CONTROLLER} lambda to intercept all scheduled events and transform to the required event object.",
-                "Layers": [
-                    vdc_stack.nested_stack.resolve(
-                        vdc_stack.lambda_layer.layer_version_arn
-                    )
-                ],
-                "Environment": {
-                    "Variables": {
-                        "IDEA_CONTROLLER_EVENTS_QUEUE_URL": vdc_stack.nested_stack.resolve(
-                            vdc_stack.event_sqs_queue.queue_url  # type: ignore
-                        )
-                    }
-                },
-                "Role": vdc_stack.nested_stack.resolve(
-                    vdc_stack.scheduled_event_transformer_lambda_role.role_arn  # type: ignore
-                ),
             }
         },
     )
@@ -541,6 +347,7 @@ def test_vdi_helper_lambda_creation(
                 "Handler": "vdi_helper_lambda.handler.handler",
                 "Runtime": RES_COMMON_LAMBDA_RUNTIME.to_string(),
                 "Timeout": 60,
+                "MemorySize": 512,
                 "Description": f"{MODULE_ID_VDC_CONTROLLER} general purpose lambda for VDI operations.",
                 "Layers": [
                     vdc_stack.nested_stack.resolve(
@@ -803,75 +610,6 @@ def test_dcv_host_scoped_down_role_creation(
     )
 
 
-def test_controller_role_creation(
-    vdc_stack: VirtualDesktopControllerStack, vdc_template: Template
-) -> None:
-    util.assert_resource_name_has_correct_type_and_props(
-        vdc_stack.nested_stack,
-        vdc_template,
-        resources=[f"{MODULE_ID_VDC_CONTROLLER}-controller-role-construct"],
-        cfn_type="AWS::IAM::Role",
-        props={
-            "Properties": {
-                "AssumeRolePolicyDocument": {
-                    "Statement": [
-                        {
-                            "Action": "sts:AssumeRole",
-                            "Effect": "Allow",
-                            "Principal": {
-                                "Service": {
-                                    "Fn::Join": [
-                                        "",
-                                        ["ssm.", {"Ref": "AWS::URLSuffix"}],
-                                    ]
-                                }
-                            },
-                        },
-                        {
-                            "Action": "sts:AssumeRole",
-                            "Effect": "Allow",
-                            "Principal": {
-                                "Service": {
-                                    "Fn::Join": [
-                                        "",
-                                        ["ec2.", {"Ref": "AWS::URLSuffix"}],
-                                    ]
-                                }
-                            },
-                        },
-                    ],
-                },
-                "PermissionsBoundary": {
-                    "Fn::If": [
-                        "PermissionBoundaryProvided",
-                        vdc_stack.nested_stack.resolve(
-                            vdc_stack.parameters.get_str(
-                                CommonKey.IAM_PERMISSION_BOUNDARY
-                            )
-                        ),
-                        {"Ref": "AWS::NoValue"},
-                    ]
-                },
-                "Path": vdc_stack.nested_stack.resolve(
-                    vdc_stack.parameters.iam_resource_path_string
-                ),
-                "RoleName": {
-                    "Fn::Join": [
-                        "",
-                        [
-                            vdc_stack.nested_stack.resolve(
-                                vdc_stack.parameters.iam_resource_prefix_string
-                            ),
-                            vdc_stack.nested_stack.resolve(vdc_stack.cluster_name),
-                            f"-{MODULE_ID_VDC_CONTROLLER}-controller-role",
-                        ],
-                    ]
-                },
-            }
-        },
-    )
-
-
 def test_dcv_host_security_group(
     vdc_stack: VirtualDesktopControllerStack, vdc_template: Template
 ) -> None:
@@ -980,137 +718,6 @@ def test_dcv_host_security_group(
                         vdc_stack.nested_stack,
                         [
                             f"{MODULE_ID_VDC_CONTROLLER}-dcv-host-security-group-construct"
-                        ],
-                    ),
-                    "GroupId",
-                ]
-            },
-        },
-    )
-
-
-def test_controller_security_group(
-    vdc_stack: VirtualDesktopControllerStack, vdc_template: Template
-) -> None:
-    util.assert_resource_name_has_correct_type_and_props(
-        vdc_stack.nested_stack,
-        vdc_template,
-        resources=[f"{MODULE_ID_VDC_CONTROLLER}-controller-security-group-construct"],
-        cfn_type="AWS::EC2::SecurityGroup",
-        props={
-            "Properties": {
-                "GroupDescription": "Security Group for Virtual Desktop Controller",
-                "SecurityGroupEgress": [
-                    {
-                        "CidrIp": "0.0.0.0/0",
-                        "Description": "Allow all egress for TCP",
-                        "FromPort": 0,
-                        "IpProtocol": "tcp",
-                        "ToPort": 65535,
-                    },
-                    {
-                        "CidrIp": "0.0.0.0/0",
-                        "Description": "Allow UDP Traffic. Required for Directory Service",
-                        "FromPort": 0,
-                        "IpProtocol": "udp",
-                        "ToPort": 1024,
-                    },
-                ],
-                "SecurityGroupIngress": [
-                    {
-                        "CidrIp": {
-                            "Fn::GetAtt": [
-                                util.get_logical_id(
-                                    vdc_stack.nested_stack,
-                                    [
-                                        f"{MODULE_ID_VDC_CONTROLLER}-existing-vpc-vpc-lookup-custom-resource"
-                                    ],
-                                ),
-                                "cidr_block",
-                            ]
-                        },
-                        "Description": "Allow HTTP traffic from all VPC nodes for API access",
-                        "FromPort": 8443,
-                        "IpProtocol": "tcp",
-                        "ToPort": 8443,
-                    },
-                    {
-                        "CidrIp": {
-                            "Fn::GetAtt": [
-                                util.get_logical_id(
-                                    vdc_stack.nested_stack,
-                                    [
-                                        f"{MODULE_ID_VDC_CONTROLLER}-existing-vpc-vpc-lookup-custom-resource"
-                                    ],
-                                ),
-                                "cidr_block",
-                            ]
-                        },
-                        "Description": "Allow all Internal traffic TO Virtual Desktop Controller",
-                        "IpProtocol": "-1",
-                    },
-                    {
-                        "CidrIp": {
-                            "Fn::GetAtt": [
-                                util.get_logical_id(
-                                    vdc_stack.nested_stack,
-                                    [
-                                        f"{MODULE_ID_VDC_CONTROLLER}-existing-vpc-vpc-lookup-custom-resource"
-                                    ],
-                                ),
-                                "cidr_block",
-                            ]
-                        },
-                        "Description": "Allow UDP Traffic from VPC. Required for Directory Service",
-                        "FromPort": 0,
-                        "IpProtocol": "udp",
-                        "ToPort": 1024,
-                    },
-                ],
-            }
-        },
-    )
-
-    vdc_template.has_resource_properties(
-        "AWS::EC2::SecurityGroupIngress",
-        {
-            "IpProtocol": "tcp",
-            "FromPort": 22,
-            "ToPort": 22,
-            "SourceSecurityGroupId": vdc_stack.nested_stack.resolve(
-                vdc_stack.bastion_host_security_group.security_group_id
-            ),
-            "Description": "Allow SSH from Bastion Host",
-            "GroupId": {
-                "Fn::GetAtt": [
-                    util.get_logical_id(
-                        vdc_stack.nested_stack,
-                        [
-                            f"{MODULE_ID_VDC_CONTROLLER}-controller-security-group-construct"
-                        ],
-                    ),
-                    "GroupId",
-                ]
-            },
-        },
-    )
-
-    vdc_template.has_resource_properties(
-        "AWS::EC2::SecurityGroupIngress",
-        {
-            "IpProtocol": "tcp",
-            "FromPort": 8443,
-            "ToPort": 8443,
-            "SourceSecurityGroupId": vdc_stack.nested_stack.resolve(
-                vdc_stack.external_loadbalancer_security_group.security_group_id
-            ),
-            "Description": "Allow HTTPs traffic from Load Balancer",
-            "GroupId": {
-                "Fn::GetAtt": [
-                    util.get_logical_id(
-                        vdc_stack.nested_stack,
-                        [
-                            f"{MODULE_ID_VDC_CONTROLLER}-controller-security-group-construct"
                         ],
                     ),
                     "GroupId",
@@ -1358,139 +965,6 @@ def test_external_nlb_creation(
     )
 
 
-def test_controller_auto_scaling_group_creation(
-    vdc_stack: VirtualDesktopControllerStack, vdc_template: Template
-) -> None:
-    util.assert_resource_name_has_correct_type_and_props(
-        vdc_stack.nested_stack,
-        vdc_template,
-        resources=["controller-asg"],
-        cfn_type="AWS::AutoScaling::AutoScalingGroup",
-        props={
-            "Properties": {
-                "AutoScalingGroupName": {
-                    "Fn::Join": [
-                        "",
-                        [
-                            vdc_stack.nested_stack.resolve(vdc_stack.cluster_name),
-                            f"-{MODULE_ID_VDC_CONTROLLER}-controller-asg",
-                        ],
-                    ]
-                },
-                "VPCZoneIdentifier": vdc_stack.nested_stack.resolve(
-                    vdc_stack.cluster_settings.infrastructure_host_subnets
-                ),
-                "LaunchTemplate": {
-                    "LaunchTemplateId": {
-                        "Ref": util.get_logical_id(
-                            vdc_stack.nested_stack,
-                            ["controller-lt"],
-                        )
-                    },
-                    "Version": {
-                        "Fn::GetAtt": [
-                            util.get_logical_id(
-                                vdc_stack.nested_stack,
-                                ["controller-lt"],
-                            ),
-                            "LatestVersionNumber",
-                        ]
-                    },
-                },
-                "MinSize": "1",
-                "MaxSize": "3",
-                "Cooldown": "300",
-                "DefaultInstanceWarmup": 1500,
-                "HealthCheckGracePeriod": 1500,
-                "HealthCheckType": "ELB",
-                "NewInstancesProtectedFromScaleIn": False,
-                "MetricsCollection": [{"Granularity": "1Minute"}],
-                "TerminationPolicies": ["Default"],
-                "TargetGroupARNs": [
-                    {
-                        "Ref": util.get_logical_id(
-                            vdc_stack.nested_stack,
-                            ["controller-target-group-int"],
-                        )
-                    },
-                    {
-                        "Ref": util.get_logical_id(
-                            vdc_stack.nested_stack,
-                            ["controller-target-group-ext"],
-                        )
-                    },
-                ],
-                "Tags": [
-                    {
-                        "Key": "Name",
-                        "PropagateAtLaunch": True,
-                        "Value": {
-                            "Fn::Join": [
-                                "",
-                                [
-                                    vdc_stack.nested_stack.resolve(
-                                        vdc_stack.cluster_name
-                                    ),
-                                    "-vdc-controller",
-                                ],
-                            ]
-                        },
-                    },
-                    {
-                        "Key": "res:EnvironmentName",
-                        "PropagateAtLaunch": True,
-                        "Value": vdc_stack.nested_stack.resolve(vdc_stack.cluster_name),
-                    },
-                    {"Key": "res:ModuleId", "PropagateAtLaunch": True, "Value": "vdc"},
-                    {
-                        "Key": "res:ModuleName",
-                        "PropagateAtLaunch": True,
-                        "Value": "virtual-desktop-controller",
-                    },
-                    {"Key": "res:NodeType", "PropagateAtLaunch": True, "Value": "app"},
-                ],
-            },
-            "UpdatePolicy": {
-                "AutoScalingRollingUpdate": {
-                    "MaxBatchSize": 1,
-                    "MinInstancesInService": 1,
-                    "SuspendProcesses": [
-                        "HealthCheck",
-                        "ReplaceUnhealthy",
-                        "AZRebalance",
-                        "AlarmNotification",
-                        "ScheduledActions",
-                        "InstanceRefresh",
-                    ],
-                    "PauseTime": "PT25M",
-                },
-                "AutoScalingScheduledAction": {
-                    "IgnoreUnmodifiedGroupSizeProperties": True
-                },
-            },
-        },
-    )
-
-    vdc_template.has_resource_properties(
-        "AWS::AutoScaling::ScalingPolicy",
-        {
-            "PolicyType": "TargetTrackingScaling",
-            "TargetTrackingConfiguration": {
-                "TargetValue": 80.0,
-                "PredefinedMetricSpecification": {
-                    "PredefinedMetricType": "ASGAverageCPUUtilization"
-                },
-            },
-            "AutoScalingGroupName": {
-                "Ref": util.get_logical_id(
-                    vdc_stack.nested_stack,
-                    ["controller-asg"],
-                )
-            },
-        },
-    )
-
-
 def test_dcv_connection_gateway_auto_scaling_group_creation(
     vdc_stack: VirtualDesktopControllerStack, vdc_template: Template
 ) -> None:
@@ -1669,7 +1143,7 @@ def test_ssm_commands_sns_topic_creation(
                 "Fn::GetAtt": [
                     util.get_logical_id(
                         vdc_stack.nested_stack,
-                        [f"{MODULE_ID_VDC_CONTROLLER}-controller-construct"],
+                        [f"{MODULE_ID_VDC_CONTROLLER}-events-v2-construct"],
                     ),
                     "Arn",
                 ]
@@ -1706,7 +1180,7 @@ def test_schedule_trigger_rule_creation(
                             "Fn::GetAtt": [
                                 util.get_logical_id(
                                     vdc_stack.nested_stack,
-                                    ["vdc-scheduled-event-transformer-construct"],
+                                    ["vdc-scheduled-event-handler-construct"],
                                 ),
                                 "Arn",
                             ]
@@ -1919,77 +1393,6 @@ def test_instance_profiles_creation(
     )
 
 
-def test_target_groups_creation(
-    vdc_stack: VirtualDesktopControllerStack, vdc_template: Template
-) -> None:
-    util.assert_resource_name_has_correct_type_and_props(
-        vdc_stack.nested_stack,
-        vdc_template,
-        resources=["dcv-connection-gateway-target-group-nlb"],
-        cfn_type="AWS::ElasticLoadBalancingV2::TargetGroup",
-        props={
-            "Properties": {
-                "Port": 8443,
-                "Protocol": "TCP",
-                "TargetType": "instance",
-                "VpcId": vdc_stack.nested_stack.resolve(vdc_stack.vpc.vpc_id),
-                "HealthCheckPort": "8989",
-                "HealthCheckProtocol": "TCP",
-                "TargetGroupAttributes": [
-                    {
-                        "Key": "deregistration_delay.connection_termination.enabled",
-                        "Value": "true",
-                    },
-                    {
-                        "Key": "stickiness.enabled",
-                        "Value": "true",
-                    },
-                    {
-                        "Key": "stickiness.type",
-                        "Value": "source_ip",
-                    },
-                ],
-            }
-        },
-    )
-
-    util.assert_resource_name_has_correct_type_and_props(
-        vdc_stack.nested_stack,
-        vdc_template,
-        resources=["controller-target-group-ext"],
-        cfn_type="AWS::ElasticLoadBalancingV2::TargetGroup",
-        props={
-            "Properties": {
-                "Port": 8443,
-                "Protocol": "HTTPS",
-                "ProtocolVersion": "HTTP1",
-                "TargetType": "instance",
-                "VpcId": vdc_stack.nested_stack.resolve(vdc_stack.vpc.vpc_id),
-                "HealthCheckEnabled": True,
-                "HealthCheckPath": "/healthcheck",
-            }
-        },
-    )
-
-    util.assert_resource_name_has_correct_type_and_props(
-        vdc_stack.nested_stack,
-        vdc_template,
-        resources=["controller-target-group-int"],
-        cfn_type="AWS::ElasticLoadBalancingV2::TargetGroup",
-        props={
-            "Properties": {
-                "Port": 8443,
-                "Protocol": "HTTPS",
-                "ProtocolVersion": "HTTP1",
-                "TargetType": "instance",
-                "VpcId": vdc_stack.nested_stack.resolve(vdc_stack.vpc.vpc_id),
-                "HealthCheckEnabled": True,
-                "HealthCheckPath": "/healthcheck",
-            }
-        },
-    )
-
-
 def test_managed_policies_creation(
     vdc_stack: VirtualDesktopControllerStack, vdc_template: Template
 ) -> None:
@@ -2041,26 +1444,6 @@ def test_lambda_roles_creation(
                 ],
             },
             "Description": f"{MODULE_ID_VDC_CONTROLLER}-custom-credential-broker-lambda-role",
-        },
-    )
-
-    vdc_template.has_resource_properties(
-        "AWS::IAM::Role",
-        {
-            "AssumeRolePolicyDocument": {
-                "Statement": [
-                    {
-                        "Action": "sts:AssumeRole",
-                        "Effect": "Allow",
-                        "Principal": {
-                            "Service": {
-                                "Fn::Join": ["", ["lambda.", {"Ref": "AWS::URLSuffix"}]]
-                            }
-                        },
-                    }
-                ],
-            },
-            "Description": f"{MODULE_ID_VDC_CONTROLLER}-scheduled-event-transformer-role",
         },
     )
 
@@ -2243,52 +1626,44 @@ def test_nlb_listener_creation(
     )
 
 
-def test_launch_templates_creation(
+def test_target_groups_creation(
     vdc_stack: VirtualDesktopControllerStack, vdc_template: Template
 ) -> None:
     util.assert_resource_name_has_correct_type_and_props(
         vdc_stack.nested_stack,
         vdc_template,
-        resources=["controller-lt"],
-        cfn_type="AWS::EC2::LaunchTemplate",
+        resources=["dcv-connection-gateway-target-group-nlb"],
+        cfn_type="AWS::ElasticLoadBalancingV2::TargetGroup",
         props={
             "Properties": {
-                "LaunchTemplateData": {
-                    "BlockDeviceMappings": [
-                        {
-                            "DeviceName": "/dev/xvda",
-                            "Ebs": {
-                                "Encrypted": True,
-                                "VolumeSize": 200,
-                                "VolumeType": "gp3",
-                            },
-                        }
-                    ],
-                    "MetadataOptions": {
-                        "HttpTokens": "required",
+                "Port": 8443,
+                "Protocol": "TCP",
+                "TargetType": "instance",
+                "VpcId": vdc_stack.nested_stack.resolve(vdc_stack.vpc.vpc_id),
+                "HealthCheckPort": "8989",
+                "HealthCheckProtocol": "TCP",
+                "TargetGroupAttributes": [
+                    {
+                        "Key": "deregistration_delay.connection_termination.enabled",
+                        "Value": "true",
                     },
-                    "IamInstanceProfile": {
-                        "Arn": {
-                            "Fn::GetAtt": [
-                                util.get_logical_id(
-                                    vdc_stack.nested_stack,
-                                    ["controller-profile-construct"],
-                                ),
-                                "Arn",
-                            ]
-                        }
+                    {
+                        "Key": "stickiness.enabled",
+                        "Value": "true",
                     },
-                    "KeyName": vdc_stack.nested_stack.resolve(
-                        vdc_stack.parameters.get_str(CommonKey.SSH_KEY_PAIR)
-                    ),
-                },
-                "VersionDescription": vdc_stack.nested_stack.resolve(
-                    vdc_stack.deployment_id
-                ),
+                    {
+                        "Key": "stickiness.type",
+                        "Value": "source_ip",
+                    },
+                ],
             }
         },
     )
 
+
+def test_launch_templates_creation(
+    vdc_stack: VirtualDesktopControllerStack, vdc_template: Template
+) -> None:
     util.assert_resource_name_has_correct_type_and_props(
         vdc_stack.nested_stack,
         vdc_template,
@@ -2604,3 +1979,300 @@ def test_nested_stack_tags(
     nested_stack_template = Template.from_stack(vdc_stack.nested_stack)
 
     assert len(vdc_stack.nested_stack.tags.tag_values()) > 0
+
+
+def test_ec2_state_change_events_sqs_target(
+    vdc_stack: VirtualDesktopControllerStack, vdc_template: Template
+) -> None:
+    """Verify EventBridge ec2-state-monitoring rule targets the Events SQS queue with input transform."""
+    from aws_cdk.assertions import Match
+
+    vdc_template.has_resource_properties(
+        "AWS::Events::Rule",
+        Match.object_like(
+            {
+                "Description": "Event Rule to monitor state changes on EC2 Instances",
+                "Targets": Match.array_with(
+                    [
+                        Match.object_like(
+                            {
+                                "InputTransformer": Match.object_like(
+                                    {
+                                        "InputTemplate": Match.string_like_regexp(
+                                            "EC2_INSTANCE_STATE_CHANGED_EVENT"
+                                        ),
+                                    }
+                                ),
+                            }
+                        )
+                    ]
+                ),
+            }
+        ),
+    )
+
+
+def test_vdc_events_v2_queue_creation(
+    vdc_stack: VirtualDesktopControllerStack, vdc_template: Template
+) -> None:
+    """Verify the standard events-v2 queue is created with correct settings."""
+    from aws_cdk.assertions import Match
+
+    vdc_template.has_resource_properties(
+        "AWS::SQS::Queue",
+        Match.object_like(
+            {
+                "QueueName": {
+                    "Fn::Join": [
+                        "",
+                        [
+                            vdc_stack.nested_stack.resolve(vdc_stack.cluster_name),
+                            "-vdc-events-v2",
+                        ],
+                    ]
+                },
+                "VisibilityTimeout": 360,
+            }
+        ),
+    )
+
+
+def test_vdc_events_queue_lambda_creation(
+    vdc_stack: VirtualDesktopControllerStack, vdc_template: Template
+) -> None:
+    """Verify the events queue handler Lambda is created."""
+    from aws_cdk.assertions import Match
+
+    vdc_template.has_resource_properties(
+        "AWS::Lambda::Function",
+        Match.object_like(
+            {
+                "Handler": "vdc_events_queue_lambda.handler.handler",
+                "Timeout": 60,
+            }
+        ),
+    )
+
+
+def test_vdc_events_queue_lambda_has_vpc_config(
+    vdc_stack: VirtualDesktopControllerStack, vdc_template: Template
+) -> None:
+    """Verify the events queue handler Lambda has VPC configuration for internal ALB access."""
+    vdc_template.has_resource_properties(
+        "AWS::Lambda::Function",
+        Match.object_like(
+            {
+                "Handler": "vdc_events_queue_lambda.handler.handler",
+                "VpcConfig": Match.object_like(
+                    {
+                        "SecurityGroupIds": Match.any_value(),
+                        "SubnetIds": Match.any_value(),
+                    }
+                ),
+            }
+        ),
+    )
+
+
+def test_vdc_events_queue_lambda_role_has_vpc_access_policy(
+    vdc_stack: VirtualDesktopControllerStack, vdc_template: Template
+) -> None:
+    """Verify the events queue Lambda role has AWSLambdaVPCAccessExecutionRole managed policy."""
+    vdc_template.has_resource_properties(
+        "AWS::IAM::Role",
+        Match.object_like(
+            {
+                "ManagedPolicyArns": Match.array_with(
+                    [
+                        {
+                            "Fn::Join": [
+                                "",
+                                [
+                                    "arn:",
+                                    {"Ref": "AWS::Partition"},
+                                    ":iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole",
+                                ],
+                            ]
+                        }
+                    ]
+                ),
+            }
+        ),
+    )
+
+
+def test_vdc_events_queue_lambda_has_ec2_stop_permission(
+    vdc_stack: VirtualDesktopControllerStack, vdc_template: Template
+) -> None:
+    """Verify the events queue handler Lambda role has ec2:StopInstances permission."""
+    vdc_template.has_resource_properties(
+        "AWS::IAM::ManagedPolicy",
+        Match.object_like(
+            {
+                "PolicyDocument": Match.object_like(
+                    {
+                        "Statement": Match.array_with(
+                            [
+                                Match.object_like(
+                                    {
+                                        "Action": [
+                                            "ec2:StopInstances",
+                                            "ec2:StartInstances",
+                                        ],
+                                        "Effect": "Allow",
+                                    }
+                                )
+                            ]
+                        )
+                    }
+                )
+            }
+        ),
+    )
+
+
+def test_vdc_events_queue_lambda_event_source_mapping(
+    vdc_stack: VirtualDesktopControllerStack, vdc_template: Template
+) -> None:
+    """Verify the Lambda has an SQS event source mapping with batch size 10 and partial failures."""
+    from aws_cdk.assertions import Match
+
+    vdc_template.has_resource_properties(
+        "AWS::Lambda::EventSourceMapping",
+        Match.object_like(
+            {
+                "BatchSize": 10,
+                "FunctionResponseTypes": ["ReportBatchItemFailures"],
+            }
+        ),
+    )
+
+
+def test_vdc_scheduled_event_lambda_creation(
+    vdc_stack: VirtualDesktopControllerStack, vdc_template: Template
+) -> None:
+    """Verify the scheduled-event handler Lambda is created with correct configuration."""
+    resolved_name = vdc_stack.nested_stack.resolve(vdc_stack.cluster_name)
+    vdc_template.has_resource_properties(
+        "AWS::Lambda::Function",
+        Match.object_like(
+            {
+                "Description": f"{vdc_stack.module_id} Lambda to process scheduled events invoked directly by EventBridge.",
+                "FunctionName": {
+                    "Fn::Join": [
+                        "",
+                        [
+                            resolved_name,
+                            f"-{vdc_stack.module_id}-scheduled-event-handler",
+                        ],
+                    ]
+                },
+                "Handler": "vdc_scheduled_event_lambda.handler.handler",
+                "Runtime": RES_COMMON_LAMBDA_RUNTIME.to_string(),
+                "Timeout": 60,
+            }
+        ),
+    )
+
+
+def test_vdc_scheduled_event_lambda_vpc_configuration(
+    vdc_template: Template,
+) -> None:
+    """Test VDC scheduled-event Lambda is deployed in VPC."""
+    vdc_template.has_resource_properties(
+        "AWS::Lambda::Function",
+        {
+            "Description": Match.string_like_regexp(
+                ".*Lambda to process scheduled events invoked directly by EventBridge.*"
+            ),
+            "VpcConfig": {
+                "SecurityGroupIds": Match.any_value(),
+                "SubnetIds": Match.any_value(),
+            },
+        },
+    )
+
+
+def test_vdc_scheduled_event_lambda_environment_variables(
+    vdc_stack: VirtualDesktopControllerStack,
+    vdc_template: Template,
+) -> None:
+    """Test VDC scheduled-event Lambda has required environment variables."""
+    resolved_name = vdc_stack.nested_stack.resolve(vdc_stack.cluster_name)
+    vdc_template.has_resource_properties(
+        "AWS::Lambda::Function",
+        {
+            "Description": Match.string_like_regexp(
+                ".*Lambda to process scheduled events invoked directly by EventBridge.*"
+            ),
+            "Environment": {
+                "Variables": {
+                    "environment_name": resolved_name,
+                }
+            },
+        },
+    )
+
+
+def test_vdc_scheduled_event_lambda_has_own_security_group(
+    vdc_template: Template,
+) -> None:
+    """Test VDC scheduled-event Lambda has its own security group."""
+    sgs = vdc_template.find_resources(
+        "AWS::EC2::SecurityGroup",
+        {
+            "Properties": {
+                "GroupDescription": "VDC Scheduled Event Lambda security group",
+            }
+        },
+    )
+    assert len(sgs) == 1, f"Expected 1 VDC scheduled-event SG, found {len(sgs)}"
+
+
+def test_vdc_scheduled_event_lambda_external_alb_ingress_rule(
+    vdc_template: Template,
+) -> None:
+    """Test external ALB SG allows HTTPS ingress from the scheduled-event Lambda SG."""
+    rules = vdc_template.find_resources(
+        "AWS::EC2::SecurityGroupIngress",
+        {
+            "Properties": {
+                "Description": "Allow HTTPS from VDC Scheduled Event Lambda",
+                "IpProtocol": "tcp",
+                "FromPort": 443,
+                "ToPort": 443,
+            }
+        },
+    )
+    assert (
+        len(rules) == 1
+    ), f"Expected 1 VDC scheduled-event ALB ingress rule, found {len(rules)}"
+
+
+def test_vdc_scheduled_event_lambda_can_read_schedules_and_secrets(
+    vdc_template: Template,
+) -> None:
+    """Test Lambda IAM policy grants DDB read on schedules and secret access."""
+    vdc_template.has_resource_properties(
+        "AWS::IAM::ManagedPolicy",
+        {
+            "PolicyDocument": {
+                "Statement": Match.array_with(
+                    [
+                        Match.object_like(
+                            {
+                                "Action": ["dynamodb:Query", "dynamodb:GetItem"],
+                                "Effect": "Allow",
+                            }
+                        ),
+                        Match.object_like(
+                            {
+                                "Action": "secretsmanager:GetSecretValue",
+                                "Effect": "Allow",
+                            }
+                        ),
+                    ]
+                )
+            },
+        },
+    )

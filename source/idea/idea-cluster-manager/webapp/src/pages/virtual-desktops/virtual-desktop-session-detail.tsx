@@ -22,12 +22,13 @@ import VirtualDesktopSessionStatusIndicator from "./components/virtual-desktop-s
 import Utils from "../../common/utils";
 import dot from "dot-object";
 import { withRouter } from "../../navigation/navigation-utils";
-import { VirtualDesktopSessionPermission, VirtualDesktopSession } from "../../client/generated/api";
+import { VirtualDesktopSessionPermission, VirtualDesktopSession, VirtualDesktopSoftwareStack, VirtualDesktopBaseOs } from "../../client/generated/api";
 
 export interface VirtualDesktopSessionDetailProps extends IdeaAppLayoutProps, IdeaSideNavigationProps {}
 
 interface VirtualDesktopSessionDetailState {
     session: VirtualDesktopSession;
+    softwareStack?: VirtualDesktopSoftwareStack;
     sessionPermissions: VirtualDesktopSessionPermission[];
     activeTabId: string;
     workingHours: {
@@ -87,9 +88,20 @@ class VirtualDesktopSessionDetail extends Component<VirtualDesktopSessionDetailP
                 owner: this.getSessionOwner(),
             })
             .then((result) => {
-                this.setState({
-                    session: result.session!,
-                });
+                const session = result.session!;
+                this.setState({ session });
+                if (session.software_stack_id && session.base_os) {
+                    AppContext.get()
+                        .client()
+                        .virtualDesktopAdmin()
+                        .getSoftwareStack({
+                            stackId: session.software_stack_id,
+                            baseOs: session.base_os as VirtualDesktopBaseOs,
+                        })
+                        .then((stackResult) => {
+                            this.setState({ softwareStack: stackResult.softwareStack });
+                        });
+                }
             });
 
         AppContext.get()
@@ -214,13 +226,13 @@ class VirtualDesktopSessionDetail extends Component<VirtualDesktopSessionDetailP
                                     content: (
                                         <Container header={<Header variant={"h2"}>Software Stack</Header>}>
                                             <ColumnLayout columns={3} variant={"text-grid"}>
-                                                <KeyValue title="Name" value={this.state.session.software_stack?.name} />
-                                                <KeyValue title="Software Stack ID" value={this.state.session.software_stack?.stack_id} clipboard={true} />
-                                                <KeyValue title="Base OS" value={Utils.getOsTitle(this.state.session.software_stack?.base_os)} />
-                                                <KeyValue title="AMI ID / Systems Manager Parameter ARN" value={this.state.session.software_stack?.ami_id} clipboard={true} />
-                                                <KeyValue title="Minimum Storage Size" value={this.state.session.software_stack?.min_storage} type="memory" />
-                                                <KeyValue title="Architecture" value={this.state.session.software_stack?.architecture} />
-                                                <KeyValue title="GPU" value={this.state.session.software_stack?.gpu?.replaceAll("_", " ")} />
+                                                <KeyValue title="Name" value={this.state.softwareStack?.name} />
+                                                <KeyValue title="Software Stack ID" value={this.state.softwareStack?.stack_id} clipboard={true} />
+                                                <KeyValue title="Base OS" value={Utils.getOsTitle(this.state.softwareStack?.base_os)} />
+                                                <KeyValue title="AMI ID / Systems Manager Parameter ARN" value={this.state.softwareStack?.ami_id} clipboard={true} />
+                                                <KeyValue title="Minimum Storage Size" value={this.state.softwareStack?.min_storage} type="memory" />
+                                                <KeyValue title="Architecture" value={this.state.softwareStack?.architecture} />
+                                                <KeyValue title="GPU" value={this.state.softwareStack?.gpu?.replaceAll("_", " ")} />
                                             </ColumnLayout>
                                         </Container>
                                     ),

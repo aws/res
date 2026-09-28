@@ -7,10 +7,13 @@ import time
 from typing import Any, Dict, List, Tuple
 
 import boto3
+import botocore.exceptions
+from res.clients.aws.aws_provider import AwsClientProvider  # type: ignore
 from res.constants import (  # type: ignore
     ENVIRONMENT_NAME_KEY,
     ENVIRONMENT_NAME_TAG_KEY,
     INSTANCE_NODE_TYPE_TAG_KEY,
+    RES_TAG_ENVIRONMENT_NAME,
 )
 from res.resources import cluster_settings, projects  # type: ignore
 from res.utils import iam_utils  # type: ignore
@@ -25,6 +28,7 @@ logger.setLevel(logging.INFO)
 INFRA_HOST_NODE_TYPE = ["infra", "app"]
 SECURITY_GROUP_IDS = "SECURITY_GROUP_IDS"
 CLUSTER_NAME = os.environ.get(ENVIRONMENT_NAME_KEY, "")
+_DELETE_FLEETS_BATCH_SIZE = 25
 
 
 def clean_up_resources_handler(event: Dict[str, Any], context: Dict[str, Any]) -> None:
@@ -47,13 +51,19 @@ def clean_up_resources_handler(event: Dict[str, Any], context: Dict[str, Any]) -
             logger.info(
                 "Finished terminating ec2 instances during environment deletion."
             )
+            _delete_fleets()
+            logger.info("Finished deleting fleets during environment deletion.")
+            _delete_leftover_launch_templates()
+            logger.info(
+                "Finished deleting leftover launch templates during environment deletion."
+            )
             _delete_vdi_roles()
             logger.info(
                 "Finished deleting VDI roles created for projects during environment deletion."
             )
     except Exception as e:
         response["Status"] = "FAILED"
-        error_msg = f"Failed to terminate ec2 instances or VDI roles: {str(e)}"
+        error_msg = f"Failed to clean up resources: {str(e)}"
         response["Reason"] = error_msg
         logger.error(error_msg)
     finally:
@@ -259,6 +269,120 @@ def _delete_vdi_roles() -> None:
     logger.info(
         "Finished deleting all roles and instance profiles created for projects."
     )
+
+
+def _delete_fleets() -> None:
+    """Delete all EC2 fleets tagged with res:EnvironmentName matching this cluster.
+
+    Uses describe_fleets with tag filters to find fleets, which also catches
+    orphaned fleets from sessions that were previously deleted from DDB.
+    """
+    logger.info("Start deleting fleets.")
+
+    ec2_client = AwsClientProvider().ec2()
+    fleet_ids: List[str] = []
+
+    try:
+        paginator = ec2_client.get_paginator("describe_fleets")
+        for page in paginator.paginate(
+            Filters=[
+                {
+                    "Name": f"tag:{RES_TAG_ENVIRONMENT_NAME}",
+                    "Values": [CLUSTER_NAME],
+                },
+            ]
+        ):
+            for fleet in page.get("Fleets", []):
+                if fleet.get("FleetState") not in (
+                    "deleted",
+                    "deleted_terminating",
+                    "deleted_running",
+                ):
+                    fleet_ids.append(fleet["FleetId"])
+    except botocore.exceptions.ClientError as e:
+        error_msg = f"Error when finding fleets: {e.response['Error']['Code']} - {e.response['Error']['Message']}"
+        logger.error(error_msg)
+        raise Exception(error_msg) from e
+
+    if not fleet_ids:
+        logger.info("No fleets found to delete.")
+        return
+
+    for batch_start in range(0, len(fleet_ids), _DELETE_FLEETS_BATCH_SIZE):
+        batch = fleet_ids[batch_start : batch_start + _DELETE_FLEETS_BATCH_SIZE]
+        logger.info(f"Deleting fleets: {batch}")
+        response = ec2_client.delete_fleets(FleetIds=batch, TerminateInstances=True)
+        unsuccessful = response.get("UnsuccessfulFleetDeletions") or []
+        real_failures = [
+            f
+            for f in unsuccessful
+            if f.get("Error", {}).get("Code") != "fleetIdDoesNotExist"
+        ]
+        if real_failures:
+            error_msg = f"Failed to delete fleets: {real_failures}"
+            logger.error(error_msg)
+            raise Exception(error_msg)
+        if unsuccessful:
+            logger.info(
+                f"Skipped already-deleted fleets: "
+                f"{[f.get('FleetId') for f in unsuccessful]}"
+            )
+
+    logger.info(f"Finished deleting {len(fleet_ids)} fleet(s).")
+
+
+def _delete_leftover_launch_templates() -> None:
+    """Delete per-session launch templates (tagged with idea_session_id).
+
+    Per-session launch templates are created in launch_templates.create_for_session
+    and normally deleted immediately after CreateFleet. This catches any that failed
+    to delete. Filters on res:EnvironmentName + tag-key idea_session_id to avoid
+    deleting CDK-managed infrastructure launch templates.
+    """
+    logger.info("Start deleting leftover launch templates.")
+
+    ec2_client = AwsClientProvider().ec2()
+    launch_template_ids: List[str] = []
+
+    try:
+        paginator = ec2_client.get_paginator("describe_launch_templates")
+        for page in paginator.paginate(
+            Filters=[
+                {
+                    "Name": f"tag:{RES_TAG_ENVIRONMENT_NAME}",
+                    "Values": [CLUSTER_NAME],
+                },
+                {
+                    "Name": "tag-key",
+                    "Values": ["idea_session_id"],
+                },
+            ]
+        ):
+            for lt in page.get("LaunchTemplates", []):
+                launch_template_ids.append(lt["LaunchTemplateId"])
+    except botocore.exceptions.ClientError as e:
+        error_msg = f"Error when finding leftover launch templates: {e.response['Error']['Code']} - {e.response['Error']['Message']}"
+        logger.error(error_msg)
+        raise Exception(error_msg) from e
+
+    if not launch_template_ids:
+        logger.info("No leftover launch templates found to delete.")
+        return
+
+    for lt_id in launch_template_ids:
+        try:
+            ec2_client.delete_launch_template(LaunchTemplateId=lt_id)
+            logger.info(f"Deleted launch template: {lt_id}")
+        except botocore.exceptions.ClientError as e:
+            error_code = e.response["Error"]["Code"]
+            if error_code == "InvalidLaunchTemplateId.NotFound":
+                logger.info(f"Launch template already deleted: {lt_id}")
+                continue
+            error_msg = f"Failed to delete launch template {lt_id}: {error_code} - {e.response['Error']['Message']}"
+            logger.error(error_msg)
+            raise Exception(error_msg) from e
+
+    logger.info(f"Finished deleting {len(launch_template_ids)} launch template(s).")
 
 
 def _get_lambdas_and_security_groups_to_detach() -> Tuple[List[str], List[str]]:

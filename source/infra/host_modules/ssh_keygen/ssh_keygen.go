@@ -52,8 +52,8 @@ func writeAuthorizedKeys(user *user.User, sshDir string, pubPath string) error {
 	}
 	defer out.Close()
 
-	defer syscall.Chmod(authKeysPath, uint32(perm))
-	defer os.Chown(authKeysPath, uid, gid)
+	defer syscall.Fchmod(int(out.Fd()), uint32(perm))
+	defer syscall.Fchown(int(out.Fd()), uid, gid)
 
     // Copy the public key to authorized_keys
 	if _, err = io.Copy(out, in); err != nil {
@@ -78,8 +78,8 @@ func generateSshKeys(user *user.User, sshDir string, privPath string, pubPath st
 		return err
 	}
 	defer privateKeyFile.Close()
-	defer syscall.Chmod(privPath, uint32(perm))
-	defer os.Chown(privPath, uid, gid)
+	defer syscall.Fchmod(int(privateKeyFile.Fd()), uint32(perm))
+	defer syscall.Fchown(int(privateKeyFile.Fd()), uid, gid)
 
 	privateKeyPEM := &pem.Block{
 		Type:  "RSA PRIVATE KEY",
@@ -101,8 +101,8 @@ func generateSshKeys(user *user.User, sshDir string, privPath string, pubPath st
 		return err
 	}
 	defer publicKeyFile.Close()
-	defer syscall.Chmod(pubPath, uint32(perm))
-	defer os.Chown(pubPath, uid, gid)
+	defer syscall.Fchmod(int(publicKeyFile.Fd()), uint32(perm))
+	defer syscall.Fchown(int(publicKeyFile.Fd()), uid, gid)
 
 	if _, err = publicKeyFile.Write(ssh.MarshalAuthorizedKey(pub)); err != nil {
 		return err
@@ -119,16 +119,29 @@ func doKeyGen(sshDir string, user *user.User) C.int {
 	if err != nil {
         return C.PAM_AUTH_ERR
     }
+
+	// Reject symlinks to prevent a user from pointing ~/.ssh at a
+	// root-owned directory and having this module chown the target.
+	if fi, err := os.Lstat(sshDir); err == nil {
+		if fi.Mode()&os.ModeSymlink != 0 {
+			util.Logf("ssh_keygen", "refusing to operate on symlink: %s", sshDir)
+			return C.PAM_AUTH_ERR
+		}
+	}
+
 	// Ensure the .ssh directory exists
 	if err := os.MkdirAll(sshDir, 0700); err != nil && !os.IsExist(err) {
 		util.Logf("ssh_keygen", "error creating directory: %v", err)
 		return C.PAM_AUTH_ERR
 	}
 
-	if err := os.Chown(sshDir, uid, gid); err != nil {
-		util.Logf("ssh_keygen", "error changing ownership of directory: %v", err)
+	// Open with O_NOFOLLOW|O_DIRECTORY to fail if sshDir is a symlink.
+	fd, err := syscall.Open(sshDir, syscall.O_DIRECTORY|syscall.O_NOFOLLOW, 0)
+	if err != nil {
+		util.Logf("ssh_keygen", "error opening directory (possible symlink): %s: %v", sshDir, err)
 		return C.PAM_AUTH_ERR
 	}
+	defer syscall.Close(fd)
 
 	// Paths to the private and public SSH keys
 	privPath := filepath.Join(sshDir, "id_rsa")
@@ -143,6 +156,15 @@ func doKeyGen(sshDir string, user *user.User) C.int {
 			if err := writeAuthorizedKeys(user, sshDir, pubPath); err != nil {
 				return C.PAM_AUTH_ERR
 			}
+
+			// Transfer directory ownership only after all files are created.
+			// While root owns the directory, the user cannot race to plant
+			// symlinks inside it.
+			if err := syscall.Fchown(fd, uid, gid); err != nil {
+				util.Logf("ssh_keygen", "error changing ownership of directory: %v", err)
+				return C.PAM_AUTH_ERR
+			}
+
 			return C.PAM_SUCCESS
 		}
 	}

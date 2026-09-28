@@ -80,6 +80,15 @@ if [[ ! -f ${INSTALL_FINISHED_LOCK} ]]; then
   echo -n "no" > ${BOOTSTRAP_DIR}/reboot_required.txt
 
   if [[ ! -f ${BOOTSTRAP_DIR}/res_installed_all_packages.log ]]; then
+    # Workaround: On Ubuntu 22.04, git-remote-https is linked against libcurl-gnutls
+    # which has a broken HTTP/2 implementation that causes git clone over HTTPS to fail
+    # against GitHub. Force HTTP/1.1 to avoid the issue.
+    # See: https://github.blog/changelog/2026-04-20-sunsetting-sha-1-in-https-on-github/
+    if [[ "$BASE_OS" == "ubuntu2204" ]]; then
+      export HOME="${HOME:-/root}"
+      git config --global http.version HTTP/1.1
+    fi
+
     # Disable SSM agent if exists to avoid unexpected reboot during installation
     # Don't disable ssm during pre baking AMI since it uses SSM to run remote commands
     if [[ $PREBAKING_AMI == "false" ]]; then

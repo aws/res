@@ -1,6 +1,6 @@
 {
   "name": "web-portal", 
-  "version": "2026.06", 
+  "version": "2026.09", 
   "private": true,
   "dependencies": {
     "@cloudscape-design/components": "3.0.334",
@@ -19,7 +19,7 @@
     "@uppy/dashboard": "^3.1.0",
     "@uppy/xhr-upload": "^3.0.3",
     "ace-builds": "^1.12.3",
-    "axios": "^1.13.1",
+    "axios": "^1.18.0",
     "browser-image-compression": "^2.0.0",
     "chonky": "^2.3.2",
     "chonky-icon-fontawesome": "^2.3.2",
@@ -85,12 +85,22 @@
     "d3-color": ">=3.1.0",
     "minimist": ">=1.2.6",
     "moment": ">=2.29.4",
-    "@babel/traverse": ">=7.23.2",
+    "@babel/traverse": ">=7.23.2 <8.0.0",
     "webpack": ">=5.76.0",
-    "postcss": ">=8.4.31",
+    "postcss": ">=8.5.18",
     "underscore": ">=1.13.8",
     "serialize-javascript": ">=7.0.5",
-    "uuid": ">=11.1.1"
+    "uuid": ">=11.1.1",
+    "nanoid": ">=3.3.17 <4.0.0",
+    "immutable": ">=5.1.8",
+    "fast-uri": ">=3.1.5",
+    "websocket-driver": ">=0.7.5",
+    "form-data": ">=3.0.5",
+    "svgo": ">=2.8.3",
+    "brace-expansion": ">=2.1.4 <3.0.0",
+    "http-proxy-middleware": ">=2.0.10 <3.0.0",
+    "js-yaml": ">=3.15.1",
+    "shell-quote": ">=1.9.0"
   },
   "eslintConfig": {
     "extends": [

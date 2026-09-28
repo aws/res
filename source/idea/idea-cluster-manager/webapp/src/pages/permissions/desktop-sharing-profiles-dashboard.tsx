@@ -17,7 +17,7 @@ import IdeaListView from "../../components/list-view";
 import { VirtualDesktopAdminClient } from "../../client";
 import { AppContext } from "../../common";
 import { TableProps } from "@cloudscape-design/components/table/interfaces";
-import { VirtualDesktopPermissionProfile } from "../../client/data-model";
+import { VirtualDesktopPermissionProfile } from "../../client/generated/api";
 import { IdeaSideNavigationProps } from "../../components/side-navigation";
 import { IdeaAppLayoutProps } from "../../components/app-layout";
 import { Container, Header, Link } from "@cloudscape-design/components";

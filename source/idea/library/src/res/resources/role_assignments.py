@@ -4,6 +4,7 @@
 from typing import Any, Dict, List, Optional
 
 import res.constants as constants  # type: ignore
+from res import exceptions  # type: ignore
 from res.resources import accounts, projects, roles  # type: ignore
 from res.utils import logging_utils, table_utils  # type: ignore
 
@@ -183,7 +184,8 @@ def get_user_permissions(username: str, resource_key: str) -> set:
 
 def list_role_assignments_for_user_and_groups(username: str) -> List[Dict[str, Any]]:
     """
-    List all role assignments for a user and their groups
+    List all role assignments for a user and their groups.
+    Only includes assignments from enabled groups.
     :param username: username to get assignments for
     :return: combined list of role assignments
     """
@@ -193,6 +195,12 @@ def list_role_assignments_for_user_and_groups(username: str) -> List[Dict[str, A
     assignments = []
     assignments.extend(list_role_assignments(actor_key=f"{username}:user"))
     for group in groups:
+        try:
+            group_record = accounts.get_group(group)
+            if group_record.get("enabled", True) is False:
+                continue
+        except exceptions.GroupNotFound:
+            continue
         assignments.extend(list_role_assignments(actor_key=f"{group}:group"))
 
     return assignments

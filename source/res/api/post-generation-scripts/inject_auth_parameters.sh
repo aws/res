@@ -31,6 +31,10 @@ find "$GENERATED_DIR" -name "*security_controller*.py" -exec sed -i '' '/^    ""
     Returned value will be passed in '\''token_info'\'' parameter of your operation function, if there is one.\
     '\''sub'\'' or '\''uid'\'' will be set in '\''user'\'' parameter of your operation function, if there is one.\
 \
+    Supports two token flows:\
+    - User tokens (with `username` claim): returns {"uid": <username>}.\
+    - Service tokens (with `scope` and `client_id` claims): returns {"uid": <client_id>, "scope": [<scope>, ...]}.\
+\
     :param token: Token provided by Authorization header\
     :type token: str\
     :param request: The request object containing headers and authorization information\

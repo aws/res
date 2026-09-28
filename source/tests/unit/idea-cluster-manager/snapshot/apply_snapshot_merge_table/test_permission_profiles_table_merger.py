@@ -13,7 +13,17 @@ import unittest
 
 import ideaclustermanager.app.snapshots.helpers.db_utils as db_utils
 import pytest
+import requests
 from _pytest.monkeypatch import MonkeyPatch
+from datamodel.models.backend.create_permission_profile_response_content import (
+    CreatePermissionProfileResponseContent,
+)
+from datamodel.models.backend.get_permission_profile_response_content import (
+    GetPermissionProfileResponseContent,
+)
+from datamodel.models.backend.virtual_desktop_permission_profile import (
+    VirtualDesktopPermissionProfile,
+)
 from ideaclustermanager.app.snapshots.apply_snapshot_merge_table.permission_profiles_table_merger import (
     PermissionProfilesTableMerger,
 )
@@ -24,10 +34,18 @@ from ideaclustermanager.app.snapshots.helpers.merged_record_utils import (
     MergedRecordActionType,
     MergedRecordDelta,
 )
-from ideasdk.utils.utils import Utils
 
-from ideadatamodel import VirtualDesktopPermissionProfile, errorcodes, exceptions
 from ideadatamodel.api.api_model import ApiAuthorization, ApiAuthorizationType
+
+
+def _http_error(status_code: int, reason: str, body: str = "") -> requests.HTTPError:
+    """Build an HTTPError mimicking what ResApiClient raises on non-2xx."""
+    response = requests.Response()
+    response.status_code = status_code
+    response.reason = reason
+    if body:
+        response._content = body.encode("utf-8")
+    return requests.HTTPError(f"{status_code} {reason}", response=response)
 
 
 @pytest.fixture(scope="class")
@@ -58,23 +76,27 @@ class TestPermissionProfilesTableMerger(unittest.TestCase):
     ):
         create_permission_profile_called = False
 
-        def _create_permission_profile_mock(permission_profile):
+        def _create_permission_profile_mock(request_content):
             nonlocal create_permission_profile_called
             create_permission_profile_called = True
-            assert permission_profile.profile_id == "test_permission_profile"
-            return permission_profile
+            assert request_content.profile.profile_id == "test_permission_profile"
+            return CreatePermissionProfileResponseContent(
+                profile=request_content.profile
+            )
 
         self.monkeypatch.setattr(
-            self.context.vdc_client,
+            self.context.res_api_client,
             "create_permission_profile",
             _create_permission_profile_mock,
         )
 
         def _get_permission_profile_mock(_profile_id):
-            raise exceptions.SocaException(errorcodes.INVALID_PARAMS)
+            raise _http_error(
+                404, "Not Found", '{"message": "Permission profile not found"}'
+            )
 
         self.monkeypatch.setattr(
-            self.context.vdc_client,
+            self.context.res_api_client,
             "get_permission_profile",
             _get_permission_profile_mock,
         )
@@ -101,13 +123,13 @@ class TestPermissionProfilesTableMerger(unittest.TestCase):
             record_deltas[0].snapshot_record.get(
                 db_utils.PERMISSION_PROFILE_DB_HASH_KEY
             )
-            == f"test_permission_profile"
+            == "test_permission_profile"
         )
         assert (
             record_deltas[0].resolved_record.get(
                 db_utils.PERMISSION_PROFILE_DB_HASH_KEY
             )
-            == f"test_permission_profile"
+            == "test_permission_profile"
         )
         assert record_deltas[0].action_performed == MergedRecordActionType.CREATE
         assert create_permission_profile_called
@@ -117,22 +139,33 @@ class TestPermissionProfilesTableMerger(unittest.TestCase):
     ):
         create_permission_profile_called = False
 
-        def _create_permission_profile_mock(permission_profile):
+        def _create_permission_profile_mock(request_content):
             nonlocal create_permission_profile_called
             create_permission_profile_called = True
-            assert permission_profile.profile_id == "test_permission_profile_dedup_id"
-            return permission_profile
+            assert (
+                request_content.profile.profile_id == "test_permission_profile_dedup_id"
+            )
+            return CreatePermissionProfileResponseContent(
+                profile=request_content.profile
+            )
 
         self.monkeypatch.setattr(
-            self.context.vdc_client,
+            self.context.res_api_client,
             "create_permission_profile",
             _create_permission_profile_mock,
         )
+
+        existing_permission_profile = VirtualDesktopPermissionProfile(
+            profile_id="test_permission_profile",
+            title="existing-title",
+            description="",
+            permissions=[],
+        )
         self.monkeypatch.setattr(
-            self.context.vdc_client,
+            self.context.res_api_client,
             "get_permission_profile",
-            lambda _profile_id: VirtualDesktopPermissionProfile(
-                profile_id="test_permission_profile"
+            lambda _profile_id: GetPermissionProfileResponseContent(
+                profile=existing_permission_profile
             ),
         )
 
@@ -158,19 +191,19 @@ class TestPermissionProfilesTableMerger(unittest.TestCase):
             record_deltas[0].snapshot_record.get(
                 db_utils.PERMISSION_PROFILE_DB_HASH_KEY
             )
-            == f"test_permission_profile"
+            == "test_permission_profile"
         )
         assert (
             record_deltas[0].resolved_record.get(
                 db_utils.PERMISSION_PROFILE_DB_HASH_KEY
             )
-            == f"test_permission_profile_dedup_id"
+            == "test_permission_profile_dedup_id"
         )
         assert record_deltas[0].action_performed == MergedRecordActionType.CREATE
         assert create_permission_profile_called
 
     def test_permission_profiles_table_resolver_rollback_original_data_succeed(self):
-        test_profile_id = f"test_permission_profile_dedup_id"
+        test_profile_id = "test_permission_profile_dedup_id"
         delete_permission_profile_called = False
 
         def _delete_permission_profile_mock(profile_id):
@@ -179,7 +212,7 @@ class TestPermissionProfilesTableMerger(unittest.TestCase):
             assert profile_id == test_profile_id
 
         self.monkeypatch.setattr(
-            self.context.vdc_client,
+            self.context.res_api_client,
             "delete_permission_profile",
             _delete_permission_profile_mock,
         )
@@ -212,45 +245,41 @@ class TestPermissionProfilesTableMerger(unittest.TestCase):
     ):
         create_permission_profile_called = False
 
-        def _create_permission_profile_mock(permission_profile):
+        def _create_permission_profile_mock(request_content):
             nonlocal create_permission_profile_called
             create_permission_profile_called = True
-            assert permission_profile == VirtualDesktopPermissionProfile(
-                profile_id="test_permission_profile",
-                title="",
-                description="",
-                permissions=[],
-                created_on=Utils.to_datetime(0),
-                updated_on=Utils.to_datetime(0),
+            return CreatePermissionProfileResponseContent(
+                profile=request_content.profile
             )
-            return permission_profile
 
         self.monkeypatch.setattr(
-            self.context.vdc_client,
+            self.context.res_api_client,
             "create_permission_profile",
             _create_permission_profile_mock,
         )
+
+        # Existing profile built from the same db_entry as the snapshot, so
+        # the merger should compare them equal and skip CREATE.
+        db_entry = {
+            db_utils.PERMISSION_PROFILE_DB_HASH_KEY: "test_permission_profile",
+            db_utils.PERMISSION_PROFILE_DB_TITLE_KEY: "test_title",
+            db_utils.PERMISSION_PROFILE_DB_DESCRIPTION_KEY: "",
+        }
+        existing_permission_profile = VirtualDesktopPermissionProfile.from_ddb_dict(
+            db_entry
+        )
         self.monkeypatch.setattr(
-            self.context.vdc_client,
+            self.context.res_api_client,
             "get_permission_profile",
-            lambda _profile_id: VirtualDesktopPermissionProfile(
-                profile_id="test_permission_profile",
-                title="",
-                description="",
-                permissions=[],
-                created_on=Utils.to_datetime(0),
-                updated_on=Utils.to_datetime(0),
+            lambda _profile_id: GetPermissionProfileResponseContent(
+                profile=existing_permission_profile
             ),
         )
-
-        table_data_to_merge = [
-            {db_utils.PERMISSION_PROFILE_DB_HASH_KEY: "test_permission_profile"},
-        ]
 
         resolver = PermissionProfilesTableMerger()
         record_deltas, success = resolver.merge(
             self.context,
-            table_data_to_merge,
+            [dict(db_entry)],
             "dedup_id",
             {},
             ApplySnapshotObservabilityHelper(
@@ -259,5 +288,45 @@ class TestPermissionProfilesTableMerger(unittest.TestCase):
         )
 
         assert success
+        assert not create_permission_profile_called
+        assert len(record_deltas) == 0
+
+    def test_permission_profiles_table_resolver_propagates_non_404_errors(self):
+        create_permission_profile_called = False
+
+        def _create_permission_profile_mock(request_content):
+            nonlocal create_permission_profile_called
+            create_permission_profile_called = True
+            return CreatePermissionProfileResponseContent(
+                profile=request_content.profile
+            )
+
+        self.monkeypatch.setattr(
+            self.context.res_api_client,
+            "create_permission_profile",
+            _create_permission_profile_mock,
+        )
+
+        def _get_permission_profile_mock(_profile_id):
+            raise _http_error(500, "Internal Server Error", '{"message": "boom"}')
+
+        self.monkeypatch.setattr(
+            self.context.res_api_client,
+            "get_permission_profile",
+            _get_permission_profile_mock,
+        )
+
+        resolver = PermissionProfilesTableMerger()
+        record_deltas, success = resolver.merge(
+            self.context,
+            [{db_utils.PERMISSION_PROFILE_DB_HASH_KEY: "test_permission_profile"}],
+            "dedup_id",
+            {},
+            ApplySnapshotObservabilityHelper(
+                self.context.logger("permission_profiles_table_resolver")
+            ),
+        )
+
+        assert not success
         assert not create_permission_profile_called
         assert len(record_deltas) == 0

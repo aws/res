@@ -5,6 +5,7 @@ import logging
 from typing import Any, Dict
 
 import pytest
+from res.clients.api_client.res_api_client import ResApiClient  # type: ignore
 
 from tests.integration.framework.client.api_client import (
     ApiClient,
@@ -14,6 +15,7 @@ from tests.integration.framework.client.api_client import (
 )
 from tests.integration.framework.fixtures.fixture_request import FixtureRequest
 from tests.integration.framework.fixtures.project import project
+from tests.integration.framework.fixtures.res_api_client import res_api_client
 from tests.integration.framework.fixtures.res_environment import (
     ResEnvironment,
     res_environment,
@@ -101,6 +103,10 @@ class TestDeleteSoftwareStack:
             pytest.fail(f"Exception should be raised when software stack is not found")
         except Exception as e:
             assert "404" in str(e)
+            assert hasattr(e, "response"), "Response should exist in the exception"
+            assert (
+                "not found" in e.response.text
+            ), f"Expected 'not found' in response, got: {e.response.text}"
             print(f"Expected API error: {str(e)}")
 
     @pytest.mark.parametrize("admin_username", ["clusteradmin"])
@@ -122,6 +128,10 @@ class TestDeleteSoftwareStack:
             pytest.fail(f"Exception should be raised when user is not found")
         except Exception as e:
             assert "401" in str(e)
+            assert hasattr(e, "response"), "Response should exist in the exception"
+            assert (
+                "User not found" in e.response.text
+            ), f"Expected 'User not found' in response, got: {e.response.text}"
 
     def test_delete_software_stack_with_invalid_auth_token_in_prod(
         self,
@@ -146,6 +156,35 @@ class TestDeleteSoftwareStack:
             pytest.fail("Expected 401 error for invalid auth token")
         except Exception as e:
             assert "401" in str(e)
-            logger.info(f"Invalid auth token correctly received error: {str(e)}")
+            assert hasattr(e, "response"), "Response should exist in the exception"
+            assert (
+                "Unable to retrieve username" in e.response.text
+            ), f"Expected 'Unable to retrieve username' in response, got: {e.response.text}"
         finally:
             set_backend_lambda_test_mode(region, environment_name, True)
+
+    def test_delete_software_stack_with_service_token(
+        self,
+        request: FixtureRequest,
+        region: str,
+        res_environment: ResEnvironment,
+        res_api_client: ResApiClient,
+    ) -> None:
+        """Service-token caller creates then deletes a software stack."""
+        stack_name = "svc-tok-delete-test-stack"
+        try:
+            create_payload = get_software_stack_base_payload(region, name=stack_name)
+            create_request = CreateSoftwareStackRequestContent(**create_payload)
+            create_response = res_api_client.create_software_stack(create_request)
+            stack_id = create_response.software_stack.stack_id
+            base_os = create_response.software_stack.base_os
+
+            delete_response = res_api_client.delete_software_stack(
+                stack_id=stack_id,
+                request_content=DeleteSoftwareStackRequestContent(base_os=base_os),
+            )
+            assert delete_response is not None
+        except Exception as e:
+            pytest.fail(
+                f"Unexpected API error for service-token delete_software_stack: {str(e)}"
+            )

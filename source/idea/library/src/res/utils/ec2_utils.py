@@ -114,10 +114,10 @@ def describe_image_id(ami_id: str) -> dict:
     return {}
 
 
-def get_instance_ram(instance_type: str) -> tuple[float, str]:
-    """Get instance RAM information"""
+def get_instance_ram_in_mib(instance_type: str) -> float:
+    """Get instance RAM in MiB."""
     instance_info = get_instance_type_info(instance_type)
-    return float(instance_info.get("MemoryInfo", {}).get("SizeInMiB", 0)), "MiB"
+    return float(instance_info.get("MemoryInfo", {}).get("SizeInMiB", 0))
 
 
 def is_gpu_instance(instance_type: str) -> bool:
@@ -263,4 +263,19 @@ def create_tag(instance_id: str, tag_key: str, tag_value: str):
     ec2_client = _aws_client_provider.ec2()
     ec2_client.create_tags(
         Resources=[instance_id], Tags=[{"Key": tag_key, "Value": tag_value}]
+    )
+
+
+def create_image(instance_id: str, name: str, description: str = "") -> Dict[str, Any]:
+    """Create an AMI from an EC2 instance. Returns the response dict with ImageId."""
+    if not name:
+        name = f"RES-IMAGE-NAME-{instance_id}"
+    if not description:
+        description = f"RES-IMAGE-DESCRIPTION-{instance_id}"
+
+    ec2_client = _aws_client_provider.ec2()
+    return dict(
+        ec2_client.create_image(
+            Name=name, Description=description, InstanceId=instance_id
+        )
     )

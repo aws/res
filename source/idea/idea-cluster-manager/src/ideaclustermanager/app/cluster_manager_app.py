@@ -13,10 +13,9 @@ from ideadatamodel import constants
 
 import ideasdk.app
 from ideasdk.auth import TokenService, TokenServiceOptions
-from ideasdk.client.evdi_client import EvdiClient
 from ideasdk.server import SocaServerOptions
 from ideasdk.utils import GroupNameHelper
-from ideasdk.client.vdc_client import SocaClientOptions, VirtualDesktopControllerClient
+from res.clients.api_client.res_api_client import ResApiClient
 
 import ideaclustermanager
 from ideaclustermanager.app.api.api_invoker import ClusterManagerApiInvoker
@@ -29,7 +28,6 @@ from ideaclustermanager.app.authz.roles_service import RolesService
 from ideaclustermanager.app.authz.role_assignments_service import RoleAssignmentsService
 from ideaclustermanager.app.accounts.ad_automation_agent import ADAutomationAgent
 from ideaclustermanager.app.web_portal import WebPortal
-from ideaclustermanager.app.notifications.notifications_service import NotificationsService
 from ideaclustermanager.app.snapshots.snapshots_service import SnapshotsService
 from ideaclustermanager.app.shared_filesystem.shared_filesystem_service import SharedFilesystemService
 
@@ -209,11 +207,9 @@ class ClusterManagerApp(ideasdk.app.SocaApp):
             )
 
         # account service
-        evdi_client = EvdiClient(self.context)
         self.context.accounts = AccountsService(
             context=self.context,
             user_pool=self.context.user_pool,
-            evdi_client=evdi_client,
             token_service=self.context.token_service
         )
 
@@ -235,15 +231,16 @@ class ClusterManagerApp(ideasdk.app.SocaApp):
             role_assignments=self.context.role_assignments
         )
 
-        internal_endpoint = self.context.config().get_cluster_internal_endpoint()
-        self.context.vdc_client = VirtualDesktopControllerClient(
-                context=self.context,
-                options=SocaClientOptions(
-                    endpoint=f'{internal_endpoint}/{vdc_module_id}/api/v1',
-                    enable_logging=False,
-                    verify_ssl=False),
-                token_service=self.context.token_service
-            )
+        cluster_name = os.environ.get("IDEA_CLUSTER_NAME", "")
+        self.context.res_api_client = ResApiClient(
+            endpoint=self.context.config().get_cluster_external_endpoint(),
+            client_id=client_id,
+            client_secret=client_secret,
+            scopes=[
+                f"{cluster_name}-{vdc_module_id}/read",
+                f"{cluster_name}-{vdc_module_id}/write",
+            ],
+        )
 
         self.context.snapshots = SnapshotsService(
             context=self.context
@@ -253,13 +250,7 @@ class ClusterManagerApp(ideasdk.app.SocaApp):
         self.context.projects = ProjectsService(
             context=self.context,
             accounts_service=self.context.accounts,
-            vdc_client=self.context.vdc_client
-        )
-
-        # notifications
-        self.context.notifications = NotificationsService(
-            context=self.context,
-            accounts=self.context.accounts
+            res_api_client=self.context.res_api_client,
         )
 
         self.context.shared_filesystem = SharedFilesystemService(
@@ -277,7 +268,6 @@ class ClusterManagerApp(ideasdk.app.SocaApp):
         if self.context.ad_automation_agent is not None:
             self.context.ad_automation_agent.start()
 
-        self.context.notifications.start()
 
         try:
             self.context.distributed_lock().acquire(key='initialize-defaults')
@@ -295,5 +285,3 @@ class ClusterManagerApp(ideasdk.app.SocaApp):
         if self.context.ad_automation_agent is not None:
             self.context.ad_automation_agent.stop()
 
-        if self.context.notifications is not None:
-            self.context.notifications.stop()

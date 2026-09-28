@@ -147,7 +147,6 @@ class TestBatchRebootSession:
                 len(response.unsuccessful_list) == 0
             ), "There should be no unsuccessful sessions"
 
-            logger.info("Non-admin user successfully rebooted their own session")
         finally:
             set_backend_lambda_dry_mode(region, environment_name, False)
 
@@ -176,7 +175,6 @@ class TestBatchRebootSession:
             assert (
                 "User not found" in e.response.text
             ), f"Unexpected error for non-existent user: {str(e)}"
-            logger.info(f"Non-existent user correctly received 401 error: {str(e)}")
 
     @pytest.mark.parametrize("inactive_username", ["user2"])
     def test_batch_reboot_session_with_inactive_user(
@@ -204,7 +202,6 @@ class TestBatchRebootSession:
             assert (
                 "Inactive user" in e.response.text
             ), f"Unexpected error for inactive user: {str(e)}"
-            logger.info(f"Inactive user correctly received 401 error: {str(e)}")
 
     def test_batch_reboot_session_without_auth_token(
         self,
@@ -230,9 +227,6 @@ class TestBatchRebootSession:
             assert (
                 "No authorization token provided" in e.response.text
             ), f"Unexpected error for request without auth token: {str(e)}"
-            logger.info(
-                f"Request without auth token correctly received 401 error: {str(e)}"
-            )
 
     def test_batch_reboot_session_with_invalid_auth_token(
         self,
@@ -264,9 +258,6 @@ class TestBatchRebootSession:
             assert (
                 "Unable to retrieve username" in e.response.text
             ), f"Unexpected error for request with invalid auth token: {str(e)}"
-            logger.info(
-                "Request with invalid auth token correctly received 'Unable to retrieve username' error"
-            )
         finally:
             set_backend_lambda_test_mode(region, environment_name, True)
 
@@ -439,7 +430,6 @@ class TestBatchRebootSession:
                 len(response.unsuccessful_list) == 0
             ), "There should be no unsuccessful sessions"
 
-            logger.info("Session in ERROR state successfully rebooted")
         finally:
             set_backend_lambda_dry_mode(region, environment_name, False)
 
@@ -459,7 +449,10 @@ class TestBatchRebootSession:
             pytest.fail("Expected 400 error for empty sessions list")
         except Exception as e:
             assert "400" in str(e), f"Expected 400 error, got: {str(e)}"
-            logger.info(f"Empty sessions list correctly received 400 error: {str(e)}")
+            assert hasattr(e, "response"), "Response should exist in the exception"
+            assert (
+                "should be non-empty" in e.response.text
+            ), f"Expected 'should be non-empty' validation error, got: {e.response.text}"
 
     @pytest.mark.parametrize("admin_username", ["clusteradmin"])
     def test_batch_reboot_session_missing_sessions_field(
@@ -477,9 +470,10 @@ class TestBatchRebootSession:
             pytest.fail("Expected 400 error for missing sessions field")
         except Exception as e:
             assert "400" in str(e), f"Expected 400 error, got: {str(e)}"
-            logger.info(
-                f"Missing sessions field correctly received 400 error: {str(e)}"
-            )
+            assert hasattr(e, "response"), "Response should exist in the exception"
+            assert (
+                "is a required property" in e.response.text
+            ), f"Expected 'is a required property' error, got: {e.response.text}"
 
     @pytest.mark.parametrize("admin_username", ["clusteradmin"])
     def test_batch_reboot_session_missing_idea_session_id(
@@ -512,8 +506,6 @@ class TestBatchRebootSession:
         assert (
             "idea_session_id is required" in response.unsuccessful_list[0].message
         ), f"Expected 'idea_session_id is required', got: {response.unsuccessful_list[0].message}"
-
-        logger.info("Missing idea_session_id correctly returned in unsuccessful list")
 
     @pytest.mark.parametrize(
         "session_record",

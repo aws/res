@@ -9,6 +9,8 @@
 #  OR CONDITIONS OF ANY KIND, express or implied. See the License for the specific language governing permissions
 #  and limitations under the License.
 
+import uuid
+
 import pytest
 
 from ideadatamodel import (  # type: ignore
@@ -36,12 +38,36 @@ def project(request: FixtureRequest, res_environment: ResEnvironment) -> Project
     """
     Fixture for setting up/tearing down the test project
     """
-    project = request.param[0]
+    # Copy before mutating: request.param[0] may be a module-level constant reused
+    # across parametrize sites, so mutating it in place would compound the unique
+    # suffix across invocations and corrupt the name. Work on a per-test copy.
+    project = request.param[0].copy(deep=True)
     filesystem_names = request.param[1]
     groups = request.param[2]
     users = request.param[3]
     admin = request.getfixturevalue(request.param[4])
     role_id = request.param[5] if len(request.param) > 5 else PROJECT_MEMBER_ROLE_ID
+
+    # Resolve dynamic filesystem names: entries prefixed with "fixture:" are
+    # resolved via getfixturevalue (e.g. "fixture:s3_rw_filesystem" resolves
+    # the s3_rw_filesystem fixture which returns a filesystem name string).
+    # Plain strings like "home" pass through unchanged.
+    resolved_filesystem_names = []
+    for name in filesystem_names:
+        if name.startswith("fixture:"):
+            fixture_name = name[len("fixture:") :]
+            resolved_filesystem_names.append(request.getfixturevalue(fixture_name))
+        else:
+            resolved_filesystem_names.append(name)
+    filesystem_names = resolved_filesystem_names
+
+    # Add a unique short ID to the project name/title to avoid collisions with
+    # leftovers from prior runs (a crashed run can skip teardown, leaving the
+    # hardcoded parametrized name behind and poisoning every subsequent create).
+    unique_id = str(uuid.uuid4())[:4]
+    project.name = f"{project.name}-{unique_id}"
+    project.title = f"{project.title}-{unique_id}"
+
     create_project_request = CreateProjectRequest(
         project=project, filesystem_names=filesystem_names
     )

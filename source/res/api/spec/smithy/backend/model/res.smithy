@@ -34,12 +34,12 @@ service RES {
         GetSoftwareStack
         ListSessions
         GetSession
-        CreateSession
         UpdateSession
         BatchStopSession
         BatchDeleteSession
         BatchRebootSession
         BatchStartSession
+        BatchCreateSession
         BatchGetSessionScreenshot
         GetSessionConnection
     ]

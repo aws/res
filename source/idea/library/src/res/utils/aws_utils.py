@@ -48,7 +48,7 @@ def create_or_update_secret(
 def sqs_send_message(
     payload: Dict[str, Any],
     queue_url: str,
-    group_id: str,
+    group_id: Optional[str] = None,
     dedup_id: Optional[str] = None,
 ):
 
@@ -56,8 +56,9 @@ def sqs_send_message(
     request = {
         "QueueUrl": queue_url,
         "MessageBody": json.dumps(payload),
-        "MessageGroupId": group_id,
     }
+    if group_id:
+        request["MessageGroupId"] = group_id
     if dedup_id:
         request["MessageDeduplicationId"] = dedup_id
 

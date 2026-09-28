@@ -143,6 +143,39 @@ echo;
 
 echo "All RES shared-storage file systems in VPC have been deleted!";
 echo;
+
+#Delete Testing Infra before shared-storage SG (testing infra resources use the SG)
+if [[ $TESTING_INFRA_INCLUDED == "true" ]]; then
+    echo "Deleting Testing Infrastructure Stack...";
+    testingInfraStackId=$(aws cloudformation describe-stacks --stack-name $TESTING_INFRA_INCLUDED_STACK_NAME --region $AWS_REGION 2>/dev/null | jq -r '.Stacks[0].StackId');
+    if [[ $testingInfraStackId != "null" ]] && [[ $testingInfraStackId != "" ]]; then
+        aws cloudformation delete-stack --stack-name $testingInfraStackId --region $AWS_REGION;
+        waitMinutes=0;
+        stackResult=""
+        while [[ $stackResult == "" ]]
+        do
+            echo "$waitMinutes minutes have past...";
+            stackStatus=$(aws cloudformation describe-stacks --stack-name $testingInfraStackId --region $AWS_REGION | jq -r '.Stacks[0].StackStatus');
+            echo "Status: $stackStatus";
+            if [[ $stackStatus == "DELETE_COMPLETE" ]] || [[ $stackStatus == "DELETE_FAILED" ]] ; then
+                stackResult=$stackStatus
+                break
+            fi
+            sleep 60;
+            let waitMinutes++;
+        done
+        if [[ $stackResult == "DELETE_FAILED" ]] ; then
+            echo "Testing Infrastructure Stack deletion FAILED";
+            exit 1;
+        else
+            echo "Testing Infrastructure Stack has been deleted";
+            echo;
+        fi
+    else
+        echo "Testing Infrastructure Stack not found, skipping...";
+    fi
+fi
+
 echo "Deleting $CLUSTER_NAME-shared-storage-security-group...";
 
 SG_SHARED_STORAGE_INFO=$(aws ec2 describe-security-groups --region $AWS_REGION --filters Name=group-name,Values=$CLUSTER_NAME-shared-storage-security-group Name=vpc-id,Values=$VPC_ID);

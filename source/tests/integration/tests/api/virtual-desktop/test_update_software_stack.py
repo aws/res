@@ -4,6 +4,7 @@ import uuid
 from typing import Any, Dict
 
 import pytest
+from res.clients.api_client.res_api_client import ResApiClient  # type: ignore
 
 from tests.integration.framework.client.api_client import (
     ApiClient,
@@ -15,6 +16,7 @@ from tests.integration.framework.client.api_client import (
 )
 from tests.integration.framework.fixtures.fixture_request import FixtureRequest
 from tests.integration.framework.fixtures.project import project
+from tests.integration.framework.fixtures.res_api_client import res_api_client
 from tests.integration.framework.fixtures.res_environment import (
     ResEnvironment,
     res_environment,
@@ -41,7 +43,9 @@ class TestUpdateSoftwareStack:
     ) -> None:
         try:
             api_client = ApiClient(res_environment, admin)
-            software_stack_name = f"basic-software-stack-valid-request"
+            software_stack_name = (
+                f"basic-software-stack-valid-request-{str(uuid.uuid4())[:4]}"
+            )
             payload: Dict[str, Any] = get_software_stack_base_payload(
                 region, name=software_stack_name
             )
@@ -113,8 +117,10 @@ class TestUpdateSoftwareStack:
     ) -> None:
         try:
             api_client = ApiClient(res_environment, admin)
-            # Use unique name to avoid conflicts
-            software_stack_name = f"basic-software-stack-incorrect-stack-id"
+            # Use unique name to avoid conflicts with leftovers from prior runs
+            software_stack_name = (
+                f"basic-software-stack-incorrect-stack-id-{str(uuid.uuid4())[:4]}"
+            )
             payload: Dict[str, Any] = get_software_stack_base_payload(
                 region, name=software_stack_name
             )
@@ -171,8 +177,10 @@ class TestUpdateSoftwareStack:
         admin: ClientAuth,
     ) -> None:
         api_client = ApiClient(res_environment, admin)
-        # Use unique name to avoid conflicts
-        software_stack_name = f"basic-software-stack-incorrect-base-os"
+        # Use unique name to avoid conflicts with leftovers from prior runs
+        software_stack_name = (
+            f"basic-software-stack-incorrect-base-os-{str(uuid.uuid4())[:4]}"
+        )
         payload: Dict[str, Any] = get_software_stack_base_payload(
             region, name=software_stack_name
         )
@@ -239,7 +247,10 @@ class TestUpdateSoftwareStack:
             pytest.fail("Expected 'User not found' error for non-existent user")
         except Exception as e:
             assert "401" in str(e)
-            logger.info(f"Non-existent user correctly received error: {str(e)}")
+            assert hasattr(e, "response"), "Response should exist in the exception"
+            assert (
+                "User not found" in e.response.text
+            ), f"Expected 'User not found' in response, got: {e.response.text}"
 
     def test_update_software_stack_without_auth_token(
         self, res_environment: ResEnvironment, region: str
@@ -253,6 +264,102 @@ class TestUpdateSoftwareStack:
             pytest.fail("Expected 'No authorization token provided' error")
         except Exception as e:
             assert "401" in str(e)
-            logger.info(
-                f"Request without auth token correctly received error: {str(e)}"
+            assert hasattr(e, "response"), "Response should exist in the exception"
+            assert (
+                "No authorization token provided" in e.response.text
+            ), f"Expected 'No authorization token provided' in response, got: {e.response.text}"
+
+    def test_update_software_stack_with_service_token(
+        self,
+        request: FixtureRequest,
+        region: str,
+        res_environment: ResEnvironment,
+        res_api_client: ResApiClient,
+    ) -> None:
+        """Service-token caller updates a software stack."""
+        stack_name = f"basic-software-stack-svc-tok-update-{str(uuid.uuid4())[:4]}"
+        stack_id = None
+        base_os = None
+        try:
+            create_payload = get_software_stack_base_payload(region, name=stack_name)
+            create_request = CreateSoftwareStackRequestContent(**create_payload)
+            create_response = res_api_client.create_software_stack(create_request)
+            stack_id = create_response.software_stack.stack_id
+            base_os = create_response.software_stack.base_os
+
+            update_payload = create_response.software_stack.to_dict()
+            update_payload["description"] = "updated by service token"
+            update_payload["base_os"] = base_os
+            update_request = UpdateSoftwareStackRequestContent(
+                software_stack=update_payload
             )
+
+            update_response = res_api_client.update_software_stack(
+                stack_id=stack_id, request_content=update_request
+            )
+            assert update_response is not None
+            assert (
+                update_response.software_stack.description == "updated by service token"
+            )
+            logger.info(
+                f"Service-token caller successfully updated software stack {stack_id}"
+            )
+        except Exception as e:
+            pytest.fail(
+                f"Unexpected API error for service-token update_software_stack: {str(e)}"
+            )
+        finally:
+            if stack_id and base_os:
+                try:
+                    res_api_client.delete_software_stack(
+                        stack_id=stack_id,
+                        request_content=DeleteSoftwareStackRequestContent(
+                            base_os=base_os
+                        ),
+                    )
+                except Exception:
+                    pass
+
+    @pytest.mark.parametrize("admin_username", ["clusteradmin"])
+    def test_update_software_stack_with_empty_name(
+        self,
+        request: FixtureRequest,
+        region: str,
+        res_environment: ResEnvironment,
+        admin_username: str,
+        admin: ClientAuth,
+    ) -> None:
+        """Verify that an empty name string is rejected by @length(min: 1) validation."""
+        try:
+            api_client = ApiClient(res_environment, admin)
+            payload = {"software_stack": {"name": ""}}
+            request_content = UpdateSoftwareStackRequestContent(**payload)
+            api_client.update_software_stack("fake-stack-id", request_content)
+            pytest.fail("Expected 400 error for empty software stack name")
+        except Exception as e:
+            assert "400" in str(e)
+            assert hasattr(e, "response")
+            assert e.response.status_code == 400
+            assert "should be non-empty" in e.response.text
+
+    @pytest.mark.parametrize("admin_username", ["clusteradmin"])
+    def test_update_software_stack_with_empty_ami_id(
+        self,
+        request: FixtureRequest,
+        region: str,
+        res_environment: ResEnvironment,
+        admin_username: str,
+        admin: ClientAuth,
+    ) -> None:
+        """Verify that an empty ami_id string is rejected by @length(min: 1) validation."""
+        try:
+            api_client = ApiClient(res_environment, admin)
+            payload = {"software_stack": {"ami_id": ""}}
+            request_content = UpdateSoftwareStackRequestContent(**payload)
+            api_client.update_software_stack("fake-stack-id", request_content)
+            pytest.fail("Expected 400 error for empty ami_id")
+        except Exception as e:
+            assert "400" in str(e)
+            assert hasattr(e, "response")
+            assert e.response.status_code == 400
+            assert "should be non-empty" in e.response.text

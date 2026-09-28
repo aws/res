@@ -53,6 +53,17 @@ USERNAME_ERROR_MESSAGE = (
     f"The maximum length of username is 20."
 )
 
+# Cognito username regex follows Ubuntu username standards, the most restrictive
+# of the Linux distros that RES supports.
+# See: https://manpages.ubuntu.com/manpages/focal/en/man5/adduser.conf.5.html
+COGNITO_USERNAME_REGEX = r"^[a-z][-a-z0-9_]{0,31}$"
+COGNITO_USERNAME_ERROR_MESSAGE = (
+    f"Username doesn't match the regex pattern {COGNITO_USERNAME_REGEX}. "
+    f"Username may only contain lower case ASCII letters (a-z), numbers (0-9), "
+    f"and the following special characters: underscore (_), and hyphen (-). "
+    f"The maximum length of username is 32."
+)
+
 # The total allowable number of characters for group name is 65.
 GROUP_NAME_REGEX = "^([a-zA-Z0-9_. -]){1,65}$"
 
@@ -225,6 +236,10 @@ CUSTOM_DOMAIN_NAME_FOR_WEBAPP_KEY = (
 CUSTOM_DOMAIN_NAME_FOR_VDI_KEY = (
     "vdc.dcv_connection_gateway.certificate.custom_dns_name"
 )
+EXTERNAL_ALB_DNS_NAME_KEY = "cluster.load_balancers.external_alb.load_balancer_dns_name"
+CLUSTER_TIMEZONE_KEY = "cluster.timezone"
+CLUSTER_ADMINISTRATOR_USERNAME_KEY = "cluster.administrator_username"
+ENFORCE_SCHEDULE_SETTING_KEY = "vdc.dcv_session.enforce_schedule"
 
 LOGGER_TEMPLATE_APP = "app"
 LOGGER_TEMPLATE_ROOT = "root"

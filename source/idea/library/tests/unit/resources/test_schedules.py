@@ -7,7 +7,6 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 import res as res
-from res.clients.events import events_client
 from res.resources import cluster_settings, schedules
 from res.utils import table_utils, time_utils
 
@@ -40,6 +39,25 @@ class TestSchedules(unittest.TestCase):
             schedules.SCHEDULE_DB_SCHEDULE_TYPE_KEY: TEST_SCHEDULE_TYPE,
         }
 
+    @patch("res.utils.table_utils.query")
+    def test_get_schedules_for_day_of_week(self, mock_query):
+        """get_schedules_for_day_of_week queries table by day_of_week hash key"""
+        from res.resources.schedules import DayOfWeek
+
+        mock_query.return_value = [
+            {"day_of_week": "monday", "idea_session_id": "s-1"},
+            {"day_of_week": "monday", "idea_session_id": "s-2"},
+        ]
+
+        result = schedules.get_schedules_for_day_of_week(DayOfWeek.MONDAY)
+
+        mock_query.assert_called_once_with(
+            table_name=schedules.SCHEDULE_DB_TABLE_NAME,
+            attributes={schedules.SCHEDULE_DB_HASH_KEY: "monday"},
+        )
+        assert len(result) == 2
+        assert result[0]["idea_session_id"] == "s-1"
+
     @patch("res.utils.table_utils.delete_item")
     def test_delete_schedule_pass(self, mock_delete_item):
         """delete schedule happy path"""
@@ -53,9 +71,8 @@ class TestSchedules(unittest.TestCase):
             },
         )
 
-    @patch("res.resources.schedules.events_client.publish_create_event")
     @patch("res.utils.table_utils.create_item")
-    def test_create_schedule_pass(self, mock_create_item, mock_publish_event):
+    def test_create_schedule_pass(self, mock_create_item):
         """create schedule should pass"""
         schedule = {
             schedules.SCHEDULE_DB_HASH_KEY: TEST_DAY_OF_WEEK_2,
@@ -66,7 +83,6 @@ class TestSchedules(unittest.TestCase):
         returned_schedule = schedules.create_schedule(schedule)
 
         mock_create_item.assert_called_once()
-        mock_publish_event.assert_called_once()
         assert returned_schedule[schedules.SCHEDULE_DB_HASH_KEY] == TEST_DAY_OF_WEEK_2
         assert (
             returned_schedule[schedules.SCHEDULE_DB_SCHEDULE_TYPE_KEY]

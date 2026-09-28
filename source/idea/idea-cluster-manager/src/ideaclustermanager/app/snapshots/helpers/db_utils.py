@@ -9,27 +9,13 @@
 #  OR CONDITIONS OF ANY KIND, express or implied. See the License for the specific language governing permissions
 #  and limitations under the License.
 
-# Note: The idea-virtual-desktop-controller module is not available in the cluster manager, so we have to
-# duplicate the code for converting between Python dictionary and virtual desktop specific object here.
-
-from ideadatamodel import (
-    VirtualDesktopSoftwareStack,
-    VirtualDesktopBaseOS,
-    VirtualDesktopArchitecture,
-    VirtualDesktopGPU,
-    VirtualDesktopPermission,
+from datamodel.models.backend.project import Project
+from datamodel.models.backend.virtual_desktop_permission_profile import (
     VirtualDesktopPermissionProfile,
-    VirtualDesktopPlacement,
-    VirtualDesktopAffinity,
-    VirtualDesktopTenancy,
-    Project,
-    SocaMemory,
-    SocaMemoryUnit,
 )
-
-from ideasdk.utils.utils import Utils
-
-from typing import Dict, Optional
+from datamodel.models.backend.virtual_desktop_software_stack import (
+    VirtualDesktopSoftwareStack,
+)
 
 SOFTWARE_STACK_DB_BASE_OS_KEY = "base_os"
 SOFTWARE_STACK_DB_STACK_ID_KEY = "stack_id"
@@ -49,10 +35,10 @@ SOFTWARE_STACK_DB_PROJECTS_KEY = "projects"
 SOFTWARE_STACK_DB_PROJECT_ID_KEY = "project_id"
 SOFTWARE_STACK_DB_PROJECT_NAME_KEY = "name"
 SOFTWARE_STACK_DB_PROJECT_TITLE_KEY = "title"
-SOFTWARE_STACK_DB_AFFINITY_KEY = 'affinity'
-SOFTWARE_STACK_DB_TENANCY_KEY = 'tenancy'
-SOFTWARE_STACK_DB_HOST_ID_KEY = 'host_id'
-SOFTWARE_STACK_DB_HOST_RESOURCE_GROUP_ARN_KEY = 'host_resource_group_arn'
+SOFTWARE_STACK_DB_AFFINITY_KEY = "affinity"
+SOFTWARE_STACK_DB_TENANCY_KEY = "tenancy"
+SOFTWARE_STACK_DB_HOST_ID_KEY = "host_id"
+SOFTWARE_STACK_DB_HOST_RESOURCE_GROUP_ARN_KEY = "host_resource_group_arn"
 SOFTWARE_STACK_DB_ALLOWED_INSTANCE_TYPES_KEY = "allowed_instance_types"
 SOFTWARE_STACK_DB_VERSION_KEY = "version"
 
@@ -80,141 +66,69 @@ PROJECT_DB_PROJECT_ID_KEY = "project_id"
 PROJECT_DB_OLD_LDAP_GROUPS_KEY = "ldap_groups"
 PROJECT_DB_OLD_USERS_KEY = "users"
 
-def convert_db_dict_to_software_stack_object(
-    db_entry: dict,
-) -> Optional[VirtualDesktopSoftwareStack]:
-    if Utils.is_empty(db_entry):
-        return None
 
-    software_stack = VirtualDesktopSoftwareStack(
-        base_os=VirtualDesktopBaseOS(db_entry.get(SOFTWARE_STACK_DB_BASE_OS_KEY)),
-        stack_id=db_entry.get(SOFTWARE_STACK_DB_STACK_ID_KEY),
-        name=db_entry.get(SOFTWARE_STACK_DB_NAME_KEY),
-        description=db_entry.get(SOFTWARE_STACK_DB_DESCRIPTION_KEY),
-        created_on=Utils.to_datetime(db_entry.get(SOFTWARE_STACK_DB_CREATED_ON_KEY)),
-        updated_on=Utils.to_datetime(db_entry.get(SOFTWARE_STACK_DB_UPDATED_ON_KEY)),
-        ami_id=db_entry.get(SOFTWARE_STACK_DB_AMI_ID_KEY),
-        enabled=db_entry.get(SOFTWARE_STACK_DB_ENABLED_KEY),
-        min_storage=SocaMemory(
-            value=db_entry.get(SOFTWARE_STACK_DB_MIN_STORAGE_VALUE_KEY),
-            unit=SocaMemoryUnit(db_entry.get(SOFTWARE_STACK_DB_MIN_STORAGE_UNIT_KEY)),
-        ),
-        min_ram=SocaMemory(
-            value=db_entry.get(SOFTWARE_STACK_DB_MIN_RAM_VALUE_KEY),
-            unit=SocaMemoryUnit(db_entry.get(SOFTWARE_STACK_DB_MIN_RAM_UNIT_KEY)),
-        ),
-        architecture=VirtualDesktopArchitecture(
-            db_entry.get(SOFTWARE_STACK_DB_ARCHITECTURE_KEY)
-        ),
-        gpu=VirtualDesktopGPU(db_entry.get(SOFTWARE_STACK_DB_GPU_KEY)),
-        projects=[],
-        placement=VirtualDesktopPlacement(
-            affinity=VirtualDesktopAffinity(db_entry[SOFTWARE_STACK_DB_AFFINITY_KEY]) if db_entry.get(SOFTWARE_STACK_DB_AFFINITY_KEY) else None,
-            tenancy=VirtualDesktopTenancy(db_entry.get(SOFTWARE_STACK_DB_TENANCY_KEY, VirtualDesktopTenancy.DEFAULT)),
-            host_id=db_entry.get(SOFTWARE_STACK_DB_HOST_ID_KEY),
-            host_resource_group_arn=db_entry.get(SOFTWARE_STACK_DB_HOST_RESOURCE_GROUP_ARN_KEY),
-        ),
-        allowed_instance_types=db_entry.get(SOFTWARE_STACK_DB_ALLOWED_INSTANCE_TYPES_KEY, []),
-        version=db_entry.get(SOFTWARE_STACK_DB_VERSION_KEY, 1)
-    )
+# Fields used to decide whether two software stacks / permission profiles
+# represent the same resource for snapshot-apply purposes. List-valued fields
+# (projects, allowed_instance_types, permissions) are compared as unordered
+# sets — list order isn't stable across environments.
 
-    for project_id in db_entry.get(SOFTWARE_STACK_DB_PROJECTS_KEY, []):
-        software_stack.projects.append(Project(project_id=project_id))
+_SOFTWARE_STACK_SCALAR_COMPARE_FIELDS = (
+    "name",
+    "base_os",
+    "description",
+    "ami_id",
+    "min_storage",
+    "min_ram",
+    "gpu",
+    "placement",
+)
 
-    return software_stack
+_PERMISSION_PROFILE_SCALAR_COMPARE_FIELDS = (
+    "profile_id",
+    "title",
+    "description",
+)
 
 
-def convert_software_stack_object_to_db_dict(
+def software_stacks_equal(
+    a: VirtualDesktopSoftwareStack,
+    b: VirtualDesktopSoftwareStack,
+) -> bool:
+    if not all(
+        getattr(a, f) == getattr(b, f) for f in _SOFTWARE_STACK_SCALAR_COMPARE_FIELDS
+    ):
+        return False
+    a_project_ids = sorted(p.project_id for p in (a.projects or []))
+    b_project_ids = sorted(p.project_id for p in (b.projects or []))
+    if a_project_ids != b_project_ids:
+        return False
+    a_instance_types = sorted(a.allowed_instance_types or [])
+    b_instance_types = sorted(b.allowed_instance_types or [])
+    return a_instance_types == b_instance_types
+
+
+def permission_profiles_equal(
+    a: VirtualDesktopPermissionProfile,
+    b: VirtualDesktopPermissionProfile,
+) -> bool:
+    if not all(
+        getattr(a, f) == getattr(b, f)
+        for f in _PERMISSION_PROFILE_SCALAR_COMPARE_FIELDS
+    ):
+        return False
+    # Compare permissions as a {key -> permission} map so order doesn't matter.
+    a_perms = {p.key: p for p in (a.permissions or [])}
+    b_perms = {p.key: p for p in (b.permissions or [])}
+    return a_perms == b_perms
+
+
+def rebuild_software_stack_projects_from_db_dict(
     software_stack: VirtualDesktopSoftwareStack,
-) -> Dict:
-    if Utils.is_empty(software_stack):
-        return {}
-
-    db_dict = {
-        SOFTWARE_STACK_DB_BASE_OS_KEY: software_stack.base_os,
-        SOFTWARE_STACK_DB_STACK_ID_KEY: software_stack.stack_id,
-        SOFTWARE_STACK_DB_NAME_KEY: software_stack.name,
-        SOFTWARE_STACK_DB_DESCRIPTION_KEY: software_stack.description,
-        SOFTWARE_STACK_DB_CREATED_ON_KEY: Utils.to_milliseconds(
-            software_stack.created_on
-        ),
-        SOFTWARE_STACK_DB_UPDATED_ON_KEY: Utils.to_milliseconds(
-            software_stack.updated_on
-        ),
-        SOFTWARE_STACK_DB_AMI_ID_KEY: software_stack.ami_id,
-        SOFTWARE_STACK_DB_ENABLED_KEY: software_stack.enabled,
-        SOFTWARE_STACK_DB_MIN_STORAGE_VALUE_KEY: str(software_stack.min_storage.value),
-        SOFTWARE_STACK_DB_MIN_STORAGE_UNIT_KEY: software_stack.min_storage.unit,
-        SOFTWARE_STACK_DB_MIN_RAM_VALUE_KEY: str(software_stack.min_ram.value),
-        SOFTWARE_STACK_DB_MIN_RAM_UNIT_KEY: software_stack.min_ram.unit,
-        SOFTWARE_STACK_DB_ARCHITECTURE_KEY: software_stack.architecture,
-        SOFTWARE_STACK_DB_GPU_KEY: software_stack.gpu,
-        SOFTWARE_STACK_DB_AFFINITY_KEY: software_stack.placement.affinity if software_stack.placement else None,
-        SOFTWARE_STACK_DB_TENANCY_KEY: software_stack.placement.tenancy if software_stack.placement else VirtualDesktopTenancy.DEFAULT,
-        SOFTWARE_STACK_DB_HOST_ID_KEY: software_stack.placement.host_id if software_stack.placement else None,
-        SOFTWARE_STACK_DB_HOST_RESOURCE_GROUP_ARN_KEY: software_stack.placement.host_resource_group_arn if software_stack.placement else None,
-        SOFTWARE_STACK_DB_ALLOWED_INSTANCE_TYPES_KEY: software_stack.allowed_instance_types,
-        SOFTWARE_STACK_DB_VERSION_KEY: software_stack.version
-    }
-
-    project_ids = []
-    if software_stack.projects:
-        for project in software_stack.projects:
-            project_ids.append(project.project_id)
-
-    db_dict[SOFTWARE_STACK_DB_PROJECTS_KEY] = project_ids
-    return db_dict
-
-
-def convert_db_dict_to_permission_profile_object(
-    db_dict: Dict, permission_types: list[VirtualDesktopPermission]
-) -> Optional[VirtualDesktopPermissionProfile]:
-    permission_profile = VirtualDesktopPermissionProfile(
-        profile_id=db_dict.get(PERMISSION_PROFILE_DB_HASH_KEY, ""),
-        title=db_dict.get(PERMISSION_PROFILE_DB_TITLE_KEY, ""),
-        description=db_dict.get(PERMISSION_PROFILE_DB_DESCRIPTION_KEY, ""),
-        permissions=[],
-        created_on=Utils.to_datetime(
-            db_dict.get(PERMISSION_PROFILE_DB_CREATED_ON_KEY, 0)
-        ),
-        updated_on=Utils.to_datetime(
-            db_dict.get(PERMISSION_PROFILE_DB_UPDATED_ON_KEY, 0)
-        ),
-    )
-
-    for permission_type in permission_types:
-        permission_profile.permissions.append(
-            VirtualDesktopPermission(
-                key=permission_type.key,
-                name=permission_type.name,
-                description=permission_type.description,
-                enabled=db_dict.get(permission_type.key, False),
-            )
-        )
-
-    return permission_profile
-
-
-def convert_permission_profile_object_to_db_dict(
-    permission_profile: VirtualDesktopPermissionProfile,
-    permission_types: list[VirtualDesktopPermission],
-) -> Dict:
-    db_dict = {
-        PERMISSION_PROFILE_DB_HASH_KEY: permission_profile.profile_id,
-        PERMISSION_PROFILE_DB_TITLE_KEY: permission_profile.title,
-        PERMISSION_PROFILE_DB_DESCRIPTION_KEY: permission_profile.description,
-        PERMISSION_PROFILE_DB_CREATED_ON_KEY: Utils.to_milliseconds(
-            permission_profile.created_on
-        ),
-        PERMISSION_PROFILE_DB_UPDATED_ON_KEY: Utils.to_milliseconds(
-            permission_profile.updated_on
-        ),
-    }
-
-    for permission_type in permission_types:
-        db_dict[permission_type.key] = False
-        permission_entry = permission_profile.get_permission(permission_type.key)
-        if Utils.is_not_empty(permission_entry):
-            db_dict[permission_type.key] = permission_entry.enabled
-
-    return db_dict
+    db_entry: dict,
+) -> None:
+    """Rebuild ``projects`` from the DB record's flat project-id list since
+    ``from_ddb_dict`` doesn't hydrate them into ``Project`` objects."""
+    software_stack.projects = [
+        Project(project_id=pid)
+        for pid in (db_entry.get(SOFTWARE_STACK_DB_PROJECTS_KEY) or [])
+    ]

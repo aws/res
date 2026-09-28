@@ -239,6 +239,27 @@ class ClusterSettingsTableMerger(MergeTable):
                                f"SSO was enabled but missing required params: provider_name={provider_name}, provider_type={provider_type}")
             return True
 
+        provider_type_upper = provider_type.upper()
+        if provider_type_upper == 'OIDC':
+            oidc_client_id = snapshot_settings.get('identity-provider.cognito.sso_oidc_client_id')
+            if not oidc_client_id:
+                logger.warning(TABLE_NAME, "sso_configuration", ApplyResourceStatus.SKIPPED,
+                               "SSO OIDC settings not present in snapshot (oidc_client_id is missing). "
+                               "SSO must be configured manually after snapshot apply.")
+                return True
+        elif provider_type_upper == 'SAML':
+            saml_metadata_url = snapshot_settings.get('identity-provider.cognito.sso_saml_metadata_url')
+            if not saml_metadata_url:
+                logger.warning(TABLE_NAME, "sso_configuration", ApplyResourceStatus.SKIPPED,
+                               "SSO SAML settings not present in snapshot (saml_metadata_url is missing). "
+                               "SSO must be configured manually after snapshot apply.")
+                return True
+        else:
+            logger.warning(TABLE_NAME, "sso_configuration", ApplyResourceStatus.SKIPPED,
+                           f"Unknown SSO provider_type '{provider_type}'. "
+                           "SSO must be configured manually after snapshot apply.")
+            return True
+
         try:
             # Retrieve OIDC client secret from Secrets Manager if present
             oidc_client_secret = None

@@ -68,6 +68,21 @@ def get_private_dns_name() -> str:
         raise Exception(f"Failed to get private DNS name: {e}")
 
 
+def get_private_ip() -> str:
+    try:
+        result = requests.get(
+            f"{EC2_INSTANCE_METADATA_URL_PREFIX}/local-ipv4",
+            headers=get_imds_auth_header(),
+            timeout=5,
+        )
+        if result.status_code == 200:
+            return result.text.strip()
+        else:
+            raise Exception(f"Failed to get private IP: {result.text}")
+    except Exception as e:
+        raise Exception(f"Failed to get private IP: {e}")
+
+
 def get_instance_region() -> str:
     try:
         result = requests.get(

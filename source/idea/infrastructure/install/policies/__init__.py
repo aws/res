@@ -46,9 +46,6 @@ from idea.infrastructure.install.policies.cognito_trigger_workflow_create_uid_po
 from idea.infrastructure.install.policies.configure_sso_lambda_policy import (
     ConfigureSSOLambdaPolicy,
 )
-from idea.infrastructure.install.policies.controller_scheduled_event_transformer_lambda_policy import (
-    ControllerScheduledEventTransformerLambdaPolicy,
-)
 from idea.infrastructure.install.policies.controller_ssm_command_pass_role_policy import (
     ControllerSSMCommandPassRolePolicy,
 )
@@ -66,9 +63,6 @@ from idea.infrastructure.install.policies.detach_vpc_from_lambda_policy import (
 )
 from idea.infrastructure.install.policies.disable_cognito_protection_policy import (
     DisableCognitoProtectionPolicy,
-)
-from idea.infrastructure.install.policies.ec2_state_event_transformer_policy import (
-    Ec2StateEventTransformerPolicy,
 )
 from idea.infrastructure.install.policies.get_alb_listener_default_actions_policy import (
     GetAlbListenerDefaultActionsPolicy,
@@ -118,12 +112,15 @@ from idea.infrastructure.install.policies.update_cluster_settings_policy import 
 from idea.infrastructure.install.policies.vdc_controller_sqs_kms_key_policy import (
     VdcControllerSqsKmsKeyPolicy,
 )
+from idea.infrastructure.install.policies.vdc_events_queue_lambda_policy import (
+    VdcEventsQueueLambdaPolicy,
+)
+from idea.infrastructure.install.policies.vdc_scheduled_event_lambda_policy import (
+    VdcScheduledEventLambdaPolicy,
+)
 from idea.infrastructure.install.policies.vdi_helper_policy import VdiHelperPolicy
 from idea.infrastructure.install.policies.virtual_desktop_connection_gateway_policy import (
     VirtualDesktopConnectionGatewayPolicy,
-)
-from idea.infrastructure.install.policies.virtual_desktop_controller_policy import (
-    VirtualDesktopControllerPolicy,
 )
 from idea.infrastructure.install.policies.virtual_desktop_dcv_host_policy import (
     VirtualDesktopDcvPolicy,
@@ -153,14 +150,12 @@ __all__ = [
     "CloudWatchAgentServerPolicy",
     "CognitoSyncPolicy",
     "ConfigureSSOLambdaPolicy",
-    "ControllerScheduledEventTransformerLambdaPolicy",
     "ControllerSSMCommandPassRolePolicy",
     "CustomCredentialBrokerPolicy",
     "CustomKmsKeyPolicy",
     "DcvSessionManagementLambdaPolicy",
     "DetachVpcFromLambdaPolicy",
     "DisableCognitoProtectionPolicy",
-    "Ec2StateEventTransformerPolicy",
     "GetAlbListenerDefaultActionsPolicy",
     "GetUserPoolClientSecretPolicy",
     "LambdaBasicExecutionPolicy",
@@ -174,9 +169,10 @@ __all__ = [
     "UpdateClusterPrefixListPolicy",
     "UpdateClusterSettingsPolicy",
     "VdcControllerSqsKmsKeyPolicy",
+    "VdcEventsQueueLambdaPolicy",
+    "VdcScheduledEventLambdaPolicy",
     "VdiHelperPolicy",
     "VirtualDesktopConnectionGatewayPolicy",
-    "VirtualDesktopControllerPolicy",
     "VirtualDesktopDcvHostScopedDownPolicy",
     "VirtualDesktopDcvPolicy",
     "VpcLookupPolicy",

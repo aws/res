@@ -4,7 +4,7 @@ $version: "2.0"
 
 namespace res
 
-@http(method: "GET", uri: "/res/virtual-desktop/session/{resSessionId}")
+@http(method: "GET", uri: "/res/virtual-desktop/sessions/{res_session_id}")
 @readonly
 @tags(["virtual-desktop"])
 @documentation("Get details of a session")
@@ -23,7 +23,8 @@ structure GetSessionRequest {
     @httpLabel
     @required
     @length(min: 1)
-    resSessionId: String
+    @suppress(["CamelCase"])
+    res_session_id: String
 
     @documentation("Owner of the session")
     @httpQuery("owner")

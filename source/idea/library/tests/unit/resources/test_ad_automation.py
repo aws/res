@@ -4,16 +4,14 @@ from unittest.mock import Mock
 
 import boto3
 from botocore.config import Config
-from moto import mock_aws
 from res.resources import ad_automation, cluster_settings
 from res.utils import table_utils
 
 
-@mock_aws
 def test_request_ad_authorization_message_sent(monkeypatch):
     client = boto3.client("sqs")
     response = client.create_queue(
-        QueueName="test.fifo",
+        QueueName="test-request.fifo",
         Attributes={
             "FifoQueue": "true",
             "ContentBasedDeduplication": "true",
@@ -37,11 +35,10 @@ def test_request_ad_authorization_message_sent(monkeypatch):
     assert len(messages) == 1
 
 
-@mock_aws
 def test_remove_ad_authorization_message_sent(monkeypatch):
     client = boto3.client("sqs")
     response = client.create_queue(
-        QueueName="test.fifo",
+        QueueName="test-remove.fifo",
         Attributes={
             "FifoQueue": "true",
             "ContentBasedDeduplication": "true",

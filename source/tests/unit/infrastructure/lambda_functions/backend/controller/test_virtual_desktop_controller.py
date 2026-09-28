@@ -71,6 +71,9 @@ from datamodel.models.backend.batch_stop_session_response_content import (
 from datamodel.models.backend.batch_delete_session_response_content import (
     BatchDeleteSessionResponseContent,
 )
+from datamodel.models.batch_create_session_response_content import (
+    BatchCreateSessionResponseContent,
+)
 from datamodel.models.backend.batch_start_session_response_content import (
     BatchStartSessionResponseContent,
 )
@@ -93,30 +96,6 @@ from res.resources import session_permissions
 
 class TestVirtualDesktopController:
     """VirtualDesktopController unit test stubs"""
-
-    def _get_create_session_payload(self, **overrides):
-        """Helper method to create session request payload with optional overrides."""
-        payload = {
-            "session": {
-                "name": "TestDesktopSession",
-                "hibernation_enabled": False,
-                "software_stack_id": "ss-base-windows-x86-64-base",
-                "base_os": "windows",
-                "server": {
-                    "instance_type": "t3.2xlarge",
-                    "root_volume_size": {
-                        "value": 50,
-                        "unit": "gb"
-                    }
-                },
-                "project": {
-                    "project_id": "d6c3e390-3ba8-4a8b-811c-7d0679dde168"
-                }
-            }
-        }
-        if overrides:
-            payload["session"].update(overrides)
-        return payload
 
     def _get_base_body(self, **overrides):
         """Helper method to create base request body with optional overrides."""
@@ -425,11 +404,15 @@ class TestVirtualDesktopController:
         "api.controllers.virtual_desktop_controller.res_session_permissions.list_session_permissions"
     )
     @patch(
+        "api.controllers.virtual_desktop_controller.enrich_and_filter_permissions_with_session_data"
+    )
+    @patch(
         "api.controllers.virtual_desktop_controller.VirtualDesktopSessionPermission.from_ddb_dict"
     )
     def test_list_shared_permissions_admin_success(
         self,
         mock_from_ddb_dict,
+        mock_enrich_and_filter,
         mock_list_permissions,
         mock_is_admin,
     ):
@@ -440,6 +423,7 @@ class TestVirtualDesktopController:
             {"idea_session_id": "session-456", "actor_name": "user1"},
         ]
         mock_list_permissions.return_value = (mock_permissions, None)
+        mock_enrich_and_filter.return_value = mock_permissions
         mock_from_ddb_dict.return_value = Mock()
 
         result = virtual_desktop_controller.list_shared_permissions(
@@ -451,12 +435,17 @@ class TestVirtualDesktopController:
 
         assert isinstance(result, ListSharedPermissionsResponseContent)
         assert len(result.listing) == 2
-        assert result.next_token is None
         mock_list_permissions.assert_called_once()
+        mock_enrich_and_filter.assert_called_once_with(
+            mock_permissions, state="READY", base_os=None, session_name=None
+        )
 
     @patch("api.controllers.virtual_desktop_controller.accounts.is_active_admin")
     @patch(
         "api.controllers.virtual_desktop_controller.res_session_permissions.list_session_permissions"
+    )
+    @patch(
+        "api.controllers.virtual_desktop_controller.enrich_and_filter_permissions_with_session_data"
     )
     @patch(
         "api.controllers.virtual_desktop_controller.VirtualDesktopSessionPermission.from_ddb_dict"
@@ -464,6 +453,7 @@ class TestVirtualDesktopController:
     def test_list_shared_permissions_non_admin_own_username_success(
         self,
         mock_from_ddb_dict,
+        mock_enrich_and_filter,
         mock_list_permissions,
         mock_is_admin,
     ):
@@ -471,6 +461,7 @@ class TestVirtualDesktopController:
         mock_is_admin.return_value = False
         mock_permissions = [{"idea_session_id": "session-123", "actor_name": "user1"}]
         mock_list_permissions.return_value = (mock_permissions, None)
+        mock_enrich_and_filter.return_value = mock_permissions
         mock_from_ddb_dict.return_value = Mock()
 
         result = virtual_desktop_controller.list_shared_permissions(
@@ -506,11 +497,15 @@ class TestVirtualDesktopController:
         "api.controllers.virtual_desktop_controller.res_session_permissions.list_session_permissions"
     )
     @patch(
+        "api.controllers.virtual_desktop_controller.enrich_and_filter_permissions_with_session_data"
+    )
+    @patch(
         "api.controllers.virtual_desktop_controller.VirtualDesktopSessionPermission.from_ddb_dict"
     )
     def test_list_shared_permissions_no_username_defaults_to_current_user(
         self,
         mock_from_ddb_dict,
+        mock_enrich_and_filter,
         mock_list_permissions,
         mock_is_admin,
     ):
@@ -518,6 +513,7 @@ class TestVirtualDesktopController:
         mock_is_admin.return_value = True
         mock_permissions = [{"idea_session_id": "session-123", "actor_name": "user1"}]
         mock_list_permissions.return_value = (mock_permissions, None)
+        mock_enrich_and_filter.return_value = mock_permissions
         mock_from_ddb_dict.return_value = Mock()
 
         result = virtual_desktop_controller.list_shared_permissions(
@@ -530,36 +526,6 @@ class TestVirtualDesktopController:
         assert len(result.listing) == 1
         call_args = mock_list_permissions.call_args
         assert call_args[1]["username"] == "user1"
-
-    @patch("api.controllers.virtual_desktop_controller.accounts.is_active_admin")
-    @patch(
-        "api.controllers.virtual_desktop_controller.res_session_permissions.list_session_permissions"
-    )
-    @patch(
-        "api.controllers.virtual_desktop_controller.VirtualDesktopSessionPermission.from_ddb_dict"
-    )
-    def test_list_shared_permissions_with_pagination(
-        self,
-        mock_from_ddb_dict,
-        mock_list_permissions,
-        mock_is_admin,
-    ):
-        """Test list_shared_permissions with pagination token."""
-        mock_is_admin.return_value = True
-        mock_permissions = [{"idea_session_id": "session-123", "actor_name": "user1"}]
-        mock_list_permissions.return_value = (mock_permissions, "next_token_123")
-        mock_from_ddb_dict.return_value = Mock()
-
-        result = virtual_desktop_controller.list_shared_permissions(
-            username="user1",
-            next_token="current_token",
-            user="user1",
-            token_info={"username": "user1"},
-        )
-
-        assert isinstance(result, ListSharedPermissionsResponseContent)
-        assert result.next_token == "next_token_123"
-        mock_list_permissions.assert_called_once()
 
     # Update Permission Profile Tests
     @patch(
@@ -1353,22 +1319,72 @@ class TestVirtualDesktopController:
 
         assert "Stack ID and Base OS required" in str(exc_info.value)
 
+    @patch("api.controllers.virtual_desktop_controller.res_projects.get_user_projects")
+    @patch(
+        "api.controllers.virtual_desktop_controller.software_stacks.get_software_stack"
+    )
     @patch("api.controllers.virtual_desktop_controller.accounts.is_active_admin")
-    def test_get_software_stack_non_admin_raises_oauth_problem(
-        self, mock_is_active_admin
+    def test_get_software_stack_non_admin_with_shared_project_succeeds(
+        self, mock_is_active_admin, mock_get_stack, mock_get_user_projects
     ):
-        """Test that get_software_stack raises OAuthProblem for non-admin users."""
+        """Test that get_software_stack succeeds for non-admin users who share a project with the stack."""
         mock_is_active_admin.return_value = False
+        mock_get_stack.return_value = {
+            "stack_id": "test-stack-123",
+            "name": "Test Stack",
+            "base_os": "amazonlinux2",
+            "ami_id": "ami-12345678",
+            "created_on": 1672531200000,
+            "min_storage_value": 20,
+            "min_storage_unit": "GB",
+            "min_ram_value": 4,
+            "min_ram_unit": "GB",
+            "gpu": "NO_GPU",
+            "projects": [{"project_id": "project-1"}],
+        }
+        mock_get_user_projects.return_value = [{"project_id": "project-1"}]
 
-        with pytest.raises(OAuthProblem) as exc_info:
+        result = virtual_desktop_controller.get_software_stack(
+            stack_id="test-stack-123",
+            base_os="amazonlinux2",
+            user="user1",
+        )
+
+        assert isinstance(result, GetSoftwareStackResponseContent)
+
+    @patch("api.controllers.virtual_desktop_controller.res_projects.get_user_projects")
+    @patch(
+        "api.controllers.virtual_desktop_controller.software_stacks.get_software_stack"
+    )
+    @patch("api.controllers.virtual_desktop_controller.accounts.is_active_admin")
+    def test_get_software_stack_non_admin_without_shared_project_raises_bad_request(
+        self, mock_is_active_admin, mock_get_stack, mock_get_user_projects
+    ):
+        """Test that get_software_stack raises BadRequestException for non-admin users with no shared project."""
+        mock_is_active_admin.return_value = False
+        mock_get_stack.return_value = {
+            "stack_id": "test-stack-123",
+            "name": "Test Stack",
+            "base_os": "amazonlinux2",
+            "ami_id": "ami-12345678",
+            "created_on": 1672531200000,
+            "min_storage_value": 20,
+            "min_storage_unit": "GB",
+            "min_ram_value": 4,
+            "min_ram_unit": "GB",
+            "gpu": "NO_GPU",
+            "projects": [{"project_id": "project-2"}],
+        }
+        mock_get_user_projects.return_value = [{"project_id": "project-1"}]
+
+        with pytest.raises(BadRequestException) as exc_info:
             virtual_desktop_controller.get_software_stack(
                 stack_id="test-stack-123",
                 base_os="amazonlinux2",
-                user={"username": "user1"},
+                user="user1",
             )
 
-        assert "Unauthorized user" in str(exc_info.value)
-        mock_is_active_admin.assert_called_once()
+        assert "not found" in str(exc_info.value)
 
     @patch(
         "api.controllers.virtual_desktop_controller.software_stacks.get_software_stack"
@@ -1406,16 +1422,6 @@ class TestVirtualDesktopController:
         mock_is_active_admin.return_value = True
 
         raw_stack = {
-            "stack_id": "test-stack-123",
-            "name": "Test Stack",
-            "base_os": "amazonlinux2",
-            "ami_id": "ami-12345678",
-            "description": "Test Description",
-            "created_on": 1640995200,  # Unix timestamp
-            "updated_on": 1640995200,
-        }
-
-        formatted_stack = {
             "stack_id": "test-stack-123",
             "name": "Test Stack",
             "base_os": "amazonlinux2",
@@ -1853,7 +1859,8 @@ class TestVirtualDesktopController:
         body = self._get_update_session_permissions_body()
 
         mock_is_admin.return_value = True
-        mock_validate.return_value = (False, Mock())
+        invalid_request = Mock(create=[], update=[], delete=[])
+        mock_validate.return_value = (False, invalid_request)
 
         with pytest.raises(BadRequestException):
             virtual_desktop_controller.update_session_permissions(
@@ -1996,6 +2003,61 @@ class TestVirtualDesktopController:
             in str(exc_info.value)
         )
 
+    @patch(
+        "api.controllers.virtual_desktop_controller.VirtualDesktopSessionPermission.from_ddb_dict"
+    )
+    @patch(
+        "datamodel.models.virtual_desktop_session_permission.VirtualDesktopSessionPermission.to_ddb_dict"
+    )
+    @patch("api.utils.session_permission_utils.sessions.get_session_if_owner")
+    @patch(
+        "api.controllers.virtual_desktop_controller.res_session_permissions.update_permissions_for_sessions"
+    )
+    @patch(
+        "api.controllers.virtual_desktop_controller.res_session_permissions.get_session_permission"
+    )
+    @patch("api.controllers.virtual_desktop_controller.check_app_client_token")
+    @patch("api.controllers.virtual_desktop_controller.accounts.is_active_admin")
+    def test_update_session_permissions_service_token_bypasses_owner_check(
+        self,
+        mock_is_admin,
+        mock_check_app_client_token,
+        mock_get_permission,
+        mock_update_permissions,
+        mock_get_session_if_owner,
+        mock_to_ddb,
+        mock_from_ddb,
+    ):
+        """Service-token caller (e.g. scheduled-event Lambda) bypasses the per-permission owner check."""
+        body = self._get_update_session_permissions_body()
+        mock_check_app_client_token.return_value = True
+        mock_get_session_if_owner.return_value = {
+            "session_id": "session-123",
+            "owner": "user1",
+            "base_os": "amzn2023",
+        }
+        mock_get_permission.return_value = None
+        mock_update_permissions.return_value = [
+            {"idea_session_id": "session-123", "actor_name": "user1"}
+        ]
+        mock_to_ddb.return_value = {
+            "idea_session_id": "session-123",
+            "actor_name": "user1",
+        }
+        mock_from_ddb.return_value = Mock()
+        token_info = {"uid": "vdc-client-id", "scope": ["env-vdc/write"]}
+
+        result = virtual_desktop_controller.update_session_permissions(
+            body=body, user="vdc-client-id", token_info=token_info
+        )
+
+        assert isinstance(result, UpdateSessionPermissionsResponseContent)
+        mock_check_app_client_token.assert_called_once_with(
+            token_info, "update_session_permissions"
+        )
+        mock_is_admin.assert_not_called()
+        mock_update_permissions.assert_called_once()
+
     # List Sessions Tests
     @patch(
         "api.controllers.virtual_desktop_controller.VirtualDesktopSession.from_ddb_dict"
@@ -2088,6 +2150,39 @@ class TestVirtualDesktopController:
         assert len(result.listing) == 0
         assert result.next_token is None
         mock_from_ddb_dict.assert_not_called()
+
+    @patch("api.controllers.virtual_desktop_controller.check_app_client_token")
+    @patch("api.controllers.virtual_desktop_controller.res_sessions.list_sessions")
+    def test_list_sessions_service_token_calls_enforce_scope_and_admin_override(
+        self, mock_list_sessions, mock_check_app_client_token
+    ):
+        """Service-token caller routes through the admin path on list_sessions."""
+        mock_list_sessions.return_value = ([], None)
+        mock_check_app_client_token.return_value = True
+        token_info = {"uid": "cm-client-id", "scope": ["env-vdc/read"]}
+
+        virtual_desktop_controller.list_sessions(
+            user="cm-client-id", token_info=token_info
+        )
+
+        mock_check_app_client_token.assert_called_once_with(token_info, "list_sessions")
+        assert mock_list_sessions.call_args.kwargs["is_app_client"] is True
+
+    @patch("api.controllers.virtual_desktop_controller.check_app_client_token")
+    @patch("api.controllers.virtual_desktop_controller.res_sessions.list_sessions")
+    @patch("api.controllers.virtual_desktop_controller.accounts.is_active_admin")
+    def test_list_sessions_user_token_skips_enforce_scope(
+        self, mock_is_active_admin, mock_list_sessions, mock_check_app_client_token
+    ):
+        """User-token requests (no 'scope' key) must not take the app-client path."""
+        mock_is_active_admin.return_value = True
+        mock_list_sessions.return_value = ([], None)
+        mock_check_app_client_token.return_value = False
+
+        virtual_desktop_controller.list_sessions(user={"username": "clusteradmin"})
+
+        mock_check_app_client_token.assert_called_once_with(None, "list_sessions")
+        assert mock_list_sessions.call_args.kwargs["is_app_client"] is False
 
     # Get Session Tests
     @patch(
@@ -2182,63 +2277,6 @@ class TestVirtualDesktopController:
         )
         mock_get_session.assert_called_once_with("user1", "nonexistent-session")
 
-    @patch("api.controllers.virtual_desktop_controller.session_utils._create_session")
-    @patch("api.controllers.virtual_desktop_controller.session_utils.complete_create_session_request")
-    @patch("api.controllers.virtual_desktop_controller.session_utils._validate_create_session_request")
-    @patch("res.resources.sessions.get_session_logins")
-    @patch("api.controllers.virtual_desktop_controller.accounts.is_active_admin")
-    @patch("api.controllers.virtual_desktop_controller.CreateSessionRequestContent.from_dict")
-    def test_create_session_valid_input(
-        self, mock_from_dict, mock_is_admin, mock_get_logins, mock_validate, mock_complete, mock_create
-    ):
-        """Test successful session creation with all required fields."""
-        body = self._get_create_session_payload()
-        
-        mock_request = Mock()
-        mock_session = Mock()
-        mock_session.name = "CreateSessionSuccess"
-        mock_session.failure_reason = None
-        mock_session.owner = "user1"
-        mock_session.idea_session_id = "session-123"
-        mock_request.session = mock_session
-        mock_from_dict.return_value = mock_request
-        
-        mock_is_admin.return_value = False
-        mock_get_logins.return_value = ["sso"]
-        mock_validate.return_value = (mock_session, True)
-        mock_complete.return_value = mock_session
-        mock_create.return_value = mock_session
-        
-        result = virtual_desktop_controller.create_session(body, user="user1")
-        
-        assert result.session == mock_session
-        mock_validate.assert_called_once()
-        mock_complete.assert_called_once()
-        mock_create.assert_called_once()
-    
-    @patch("api.controllers.virtual_desktop_controller.os.environ.get")
-    @patch("api.controllers.virtual_desktop_controller.CreateSessionRequestContent.from_dict")
-    def test_create_session_dry_run_mode(self, mock_from_dict, mock_env_get):
-        """Test session creation in dry run mode returns session without processing."""
-        body = self._get_create_session_payload()
-        
-        mock_session = Mock()
-        mock_session.name = "DryRunSession"
-        mock_session.owner = "user1"
-        mock_request = Mock()
-        mock_request.session = mock_session
-        mock_from_dict.return_value = mock_request
-        
-        # Enable dry run mode
-        mock_env_get.return_value = 'true'
-        
-        result = virtual_desktop_controller.create_session(body, user="user1")
-        
-        assert result == {"session": mock_session}
-        # Verify no validation or creation methods were called
-        mock_env_get.assert_called_once_with('DRY_RUN_ENABLED', 'false')
-
-
     # Batch Stop Session Tests
 
     def _get_batch_stop_session_payload(self, sessions=None):
@@ -2265,6 +2303,27 @@ class TestVirtualDesktopController:
             body, user="clusteradmin"
         )
 
+        mock_get_session.assert_not_called()
+
+    @patch("api.controllers.virtual_desktop_controller.check_app_client_token")
+    @patch("api.controllers.virtual_desktop_controller.vdi_management.stop_sessions")
+    @patch("api.utils.session_utils.res_sessions.get_session")
+    @patch("api.utils.session_utils.accounts.is_active_admin")
+    def test_batch_stop_session_service_token_skips_per_session_lookup(
+        self, mock_is_admin, mock_get_session, mock_stop_sessions, mock_check_app_client_token
+    ):
+        """Service-token caller bypasses per-session ownership checks."""
+        mock_stop_sessions.return_value = ([], [])
+        mock_check_app_client_token.return_value = True
+        body = self._get_batch_stop_session_payload()
+        token_info = {"uid": "cm-client-id", "scope": ["env-vdc/write"]}
+
+        virtual_desktop_controller.batch_stop_session(
+            body, user="cm-client-id", token_info=token_info
+        )
+
+        mock_check_app_client_token.assert_called_once_with(token_info, "batch_stop_session")
+        mock_is_admin.assert_not_called()
         mock_get_session.assert_not_called()
 
     @patch("api.controllers.virtual_desktop_controller.vdi_management.stop_sessions")
@@ -2561,6 +2620,36 @@ class TestVirtualDesktopController:
         assert isinstance(result, BatchDeleteSessionResponseContent)
         assert result.successful_list == []
         assert len(result.unsuccessful_list) == 2
+
+    @patch("api.controllers.virtual_desktop_controller.check_app_client_token")
+    @patch("api.controllers.virtual_desktop_controller.vdi_management.terminate_sessions")
+    @patch("api.utils.session_utils.res_sessions.get_session")
+    @patch("api.utils.session_utils.accounts.is_active_admin")
+    def test_batch_delete_session_service_token_takes_admin_path(
+        self, mock_is_admin, mock_get_session, mock_terminate_sessions, mock_check_app_client_token
+    ):
+        """Service-token requests must enforce scope and validate via the admin path."""
+        mock_get_session.return_value = {
+            "owner": "user1",
+            "idea_session_id": "session-1",
+            "project": {"project_id": "p1"},
+        }
+        mock_terminate_sessions.return_value = ([], [])
+        mock_check_app_client_token.return_value = True
+        body = self._get_batch_delete_session_payload(sessions=[
+            {"idea_session_id": "session-1", "owner": "user1", "name": "S"},
+        ])
+        token_info = {"uid": "cm-client-id", "scope": ["env-vdc/write"]}
+
+        virtual_desktop_controller.batch_delete_session(
+            body, user="cm-client-id", token_info=token_info
+        )
+
+        mock_check_app_client_token.assert_called_once_with(token_info, "batch_delete_session")
+        mock_is_admin.assert_not_called()
+        # Admin path looks up via the client-provided owner
+        mock_get_session.assert_called_once_with("user1", "session-1")
+        mock_terminate_sessions.assert_called_once()
 
     @patch("api.controllers.virtual_desktop_controller.vdi_management.terminate_sessions")
     @patch("api.utils.session_utils.res_sessions.get_session")
@@ -2872,6 +2961,34 @@ class TestVirtualDesktopController:
         with pytest.raises(RuntimeError, match="EC2 API failure"):
             virtual_desktop_controller.batch_start_session(body, user="clusteradmin")
 
+    @patch("api.controllers.virtual_desktop_controller.check_app_client_token")
+    @patch("api.controllers.virtual_desktop_controller.vdi_management.start_sessions")
+    @patch("api.utils.session_utils.res_sessions.get_session")
+    @patch("api.utils.session_utils.accounts.is_active_admin")
+    def test_batch_start_session_service_token_takes_admin_path(
+        self, mock_is_admin, mock_get_session, mock_start_sessions, mock_check_app_client_token
+    ):
+        """Service-token caller (e.g. scheduled-event Lambda) bypasses the user
+        admin check and looks each session up by ``session.owner``."""
+        mock_check_app_client_token.return_value = True
+        mock_get_session.return_value = {
+            "owner": "user1", "idea_session_id": "session-1", "state": "STOPPED",
+            "project": {"project_id": "p1"},
+        }
+        mock_start_sessions.return_value = ([], [])
+        body = self._get_batch_start_session_payload(sessions=[
+            {"idea_session_id": "session-1", "owner": "user1", "name": "Session 1"},
+        ])
+        token_info = {"uid": "vdc-client-id", "scope": ["env-vdc/write"]}
+
+        virtual_desktop_controller.batch_start_session(
+            body, user="vdc-client-id", token_info=token_info
+        )
+
+        mock_check_app_client_token.assert_called_once_with(token_info, "batch_start_session")
+        mock_is_admin.assert_not_called()
+        mock_get_session.assert_called_once_with("user1", "session-1")
+
     @patch("api.utils.session_utils.get_active_counts_for_sessions")
     @patch("api.controllers.virtual_desktop_controller.vdi_management.reboot_sessions")
     @patch("api.utils.session_utils.res_sessions.get_session")
@@ -3068,12 +3185,12 @@ class TestVirtualDesktopController:
         """Test that admin can get connection info for any user's session."""
         mock_is_active_admin.return_value = True
         mock_get_session.return_value = {"owner": "user1", "idea_session_id": "session-123", "state": "READY"}
-        mock_connection_result = {"idea-session-id": "session-123", "idea-session-owner": "user1", "endpoint": "https://example.com", "web-url-path": "/", "access-token": "token"}
+        mock_connection_result = {"idea_session_id": "session-123", "idea_session_owner": "user1", "endpoint": "https://example.com", "web_url_path": "/", "access_token": "token"}
         mock_get_session_connection.return_value = mock_connection_result
         mock_connection_obj = Mock()
         mock_from_dict.return_value = mock_connection_obj
 
-        body = {"connection": {"idea-session-id": "session-123", "idea-session-owner": "user1"}}
+        body = {"connection": {"idea_session_id": "session-123", "idea_session_owner": "user1"}}
         result = virtual_desktop_controller.get_session_connection(body, user="clusteradmin")
 
         assert result.connection == mock_connection_obj
@@ -3091,10 +3208,10 @@ class TestVirtualDesktopController:
         """Test that non-admin can get connection info for their own session."""
         mock_is_active_admin.return_value = False
         mock_get_session.return_value = {"owner": "user1", "idea_session_id": "session-123", "state": "READY"}
-        mock_get_session_connection.return_value = {"idea-session-id": "session-123", "idea-session-owner": "user1", "endpoint": "https://example.com", "web-url-path": "/", "access-token": "token"}
+        mock_get_session_connection.return_value = {"idea_session_id": "session-123", "idea_session_owner": "user1", "endpoint": "https://example.com", "web_url_path": "/", "access_token": "token"}
         mock_from_dict.return_value = Mock()
 
-        body = {"connection": {"idea-session-id": "session-123", "idea-session-owner": "user1"}}
+        body = {"connection": {"idea_session_id": "session-123", "idea_session_owner": "user1"}}
         result = virtual_desktop_controller.get_session_connection(body, user="user1")
 
         assert result.connection is not None
@@ -3108,7 +3225,7 @@ class TestVirtualDesktopController:
         mock_is_active_admin.return_value = False
         mock_get_permission.side_effect = SessionPermissionsNotFound("No permission")
 
-        body = {"connection": {"idea-session-id": "session-123", "idea-session-owner": "user2"}}
+        body = {"connection": {"idea_session_id": "session-123", "idea_session_owner": "user2"}}
         with pytest.raises(OAuthProblem):
             virtual_desktop_controller.get_session_connection(body, user="user1")
 
@@ -3124,10 +3241,10 @@ class TestVirtualDesktopController:
         mock_is_active_admin.return_value = False
         mock_get_permission.return_value = {"idea_session_id": "session-123", "actor_name": "user1"}
         mock_get_session.return_value = {"owner": "user2", "idea_session_id": "session-123", "state": "READY"}
-        mock_get_session_connection.return_value = {"idea-session-id": "session-123", "idea-session-owner": "user2", "endpoint": "https://example.com", "web-url-path": "/", "access-token": "token"}
+        mock_get_session_connection.return_value = {"idea_session_id": "session-123", "idea_session_owner": "user2", "endpoint": "https://example.com", "web_url_path": "/", "access_token": "token"}
         mock_from_dict.return_value = Mock()
 
-        body = {"connection": {"idea-session-id": "session-123", "idea-session-owner": "user2"}}
+        body = {"connection": {"idea_session_id": "session-123", "idea_session_owner": "user2"}}
         result = virtual_desktop_controller.get_session_connection(body, user="user1")
 
         assert result.connection is not None
@@ -3144,7 +3261,7 @@ class TestVirtualDesktopController:
         mock_is_active_admin.return_value = True
         mock_get_session.side_effect = UserSessionNotFound("Session not found")
 
-        body = {"connection": {"idea-session-id": "nonexistent", "idea-session-owner": "user1"}}
+        body = {"connection": {"idea_session_id": "nonexistent", "idea_session_owner": "user1"}}
         with pytest.raises(BadRequestException):
             virtual_desktop_controller.get_session_connection(body, user="clusteradmin")
 
@@ -3157,7 +3274,7 @@ class TestVirtualDesktopController:
         mock_is_active_admin.return_value = True
         mock_get_session.return_value = {"owner": "user1", "idea_session_id": "session-123", "state": "STOPPED"}
 
-        body = {"connection": {"idea-session-id": "session-123", "idea-session-owner": "user1"}}
+        body = {"connection": {"idea_session_id": "session-123", "idea_session_owner": "user1"}}
         with pytest.raises(BadRequestException) as exc_info:
             virtual_desktop_controller.get_session_connection(body, user="clusteradmin")
 
@@ -3175,7 +3292,7 @@ class TestVirtualDesktopController:
         mock_get_session.return_value = {"owner": "user1", "idea_session_id": "session-123", "state": "READY"}
         mock_get_session_connection.side_effect = Exception("DCV service unavailable")
 
-        body = {"connection": {"idea-session-id": "session-123", "idea-session-owner": "user1"}}
+        body = {"connection": {"idea_session_id": "session-123", "idea_session_owner": "user1"}}
         with pytest.raises(InternalServiceException):
             virtual_desktop_controller.get_session_connection(body, user="clusteradmin")
 
@@ -3190,7 +3307,7 @@ class TestVirtualDesktopController:
         mock_is_active_admin.return_value = True
         mock_get_session.side_effect = Exception("DynamoDB unavailable")
 
-        body = {"connection": {"idea-session-id": "session-123", "idea-session-owner": "user1"}}
+        body = {"connection": {"idea_session_id": "session-123", "idea_session_owner": "user1"}}
         with pytest.raises(InternalServiceException):
             virtual_desktop_controller.get_session_connection(body, user="clusteradmin")
 
@@ -3206,7 +3323,7 @@ class TestVirtualDesktopController:
         mock_get_session.return_value = {"owner": "user1", "idea_session_id": "session-123", "state": "READY"}
         mock_get_session_connection.side_effect = SettingNotFound("No connection gateway endpoint configured")
 
-        body = {"connection": {"idea-session-id": "session-123", "idea-session-owner": "user1"}}
+        body = {"connection": {"idea_session_id": "session-123", "idea_session_owner": "user1"}}
         with pytest.raises(InternalServiceException):
             virtual_desktop_controller.get_session_connection(body, user="clusteradmin")
 
@@ -3325,3 +3442,564 @@ class TestVirtualDesktopController:
 
         with pytest.raises(RuntimeError, match="DCV failure"):
             virtual_desktop_controller.batch_get_session_screenshot(body, user="clusteradmin")
+
+
+    # --- BatchCreateSession tests ---
+
+    def _get_batch_create_session_payload(self, sessions=None):
+        """Helper method to create batch create session request payload."""
+        if sessions is None:
+            sessions = [
+                {
+                    "name": "Session 1",
+                    "owner": "user1",
+                    "software_stack_id": "ss-1",
+                    "base_os": "amzn2023",
+                    "hibernation_enabled": False,
+                    "project": {"project_id": "proj-1"},
+                    "server": {"instance_type": "t3.medium", "root_volume_size": {"value": 50, "unit": "gb"}},
+                },
+                {
+                    "name": "Session 2",
+                    "owner": "user1",
+                    "software_stack_id": "ss-1",
+                    "base_os": "amzn2023",
+                    "hibernation_enabled": False,
+                    "project": {"project_id": "proj-1"},
+                    "server": {"instance_type": "t3.medium", "root_volume_size": {"value": 50, "unit": "gb"}},
+                },
+            ]
+        return {"sessions": sessions}
+
+    @patch("api.controllers.virtual_desktop_controller.vdi_management.create_virtual_desktop")
+    @patch("api.controllers.virtual_desktop_controller.session_utils.complete_create_session_request")
+    @patch("api.controllers.virtual_desktop_controller.session_utils.validate_batch_create_sessions")
+    def test_batch_create_session_all_validated_creates_sessions(
+        self, mock_validate, mock_complete, mock_create
+    ):
+        """Test that validated sessions are passed to complete + provision."""
+        s1 = Mock()
+        s1.to_ddb_dict.return_value = {"owner": "user1", "name": "Session 1", "idea_session_id": "id-1"}
+        s2 = Mock()
+        s2.to_ddb_dict.return_value = {"owner": "user1", "name": "Session 2", "idea_session_id": "id-2"}
+        mock_validate.return_value = ([s1, s2], [])
+        mock_complete.side_effect = lambda s, u: s
+        mock_create.side_effect = lambda s: s
+
+        body = self._get_batch_create_session_payload()
+        result = virtual_desktop_controller.batch_create_session(body, user="user1")
+
+        assert isinstance(result, BatchCreateSessionResponseContent)
+        assert len(result.successful_list) == 2
+        assert result.unsuccessful_list == []
+
+    @patch("api.controllers.virtual_desktop_controller.session_utils.validate_batch_create_sessions")
+    def test_batch_create_session_all_validation_failures_returns_empty_success(
+        self, mock_validate
+    ):
+        """Test that when all sessions fail validation, successful_list is empty."""
+        failure = Mock()
+        mock_validate.return_value = ([], [failure])
+
+        body = self._get_batch_create_session_payload()
+        result = virtual_desktop_controller.batch_create_session(body, user="user1")
+
+        assert isinstance(result, BatchCreateSessionResponseContent)
+        assert result.successful_list == []
+        assert len(result.unsuccessful_list) == 1
+
+    @patch("api.controllers.virtual_desktop_controller.vdi_management.create_virtual_desktop")
+    @patch("api.controllers.virtual_desktop_controller.session_utils.complete_create_session_request")
+    @patch("api.controllers.virtual_desktop_controller.session_utils.validate_batch_create_sessions")
+    def test_batch_create_session_create_failure_adds_to_unsuccessful(
+        self, mock_validate, mock_complete, mock_create
+    ):
+        """Test that create_virtual_desktop failure adds to unsuccessful list."""
+        session = Mock()
+        session.to_ddb_dict.return_value = {"owner": "user1", "name": "Session 1", "failure_reason": "EC2 provisioning failed"}
+        mock_validate.return_value = ([session], [])
+        mock_complete.side_effect = lambda s, u: s
+        mock_create.side_effect = lambda s: s
+
+        body = self._get_batch_create_session_payload()
+        result = virtual_desktop_controller.batch_create_session(body, user="user1")
+
+        assert isinstance(result, BatchCreateSessionResponseContent)
+        assert result.successful_list == []
+        assert len(result.unsuccessful_list) == 1
+        assert result.unsuccessful_list[0].error_code == BatchOperationErrorCode.INTERNALSERVICEEXCEPTION
+
+    @patch("api.controllers.virtual_desktop_controller.vdi_management.create_virtual_desktop")
+    @patch("api.controllers.virtual_desktop_controller.session_utils.complete_create_session_request")
+    @patch("api.controllers.virtual_desktop_controller.session_utils.validate_batch_create_sessions")
+    def test_batch_create_session_unexpected_exception_caught_per_session(
+        self, mock_validate, mock_complete, mock_create
+    ):
+        """Test that an unexpected exception in create_virtual_desktop doesn't abort the batch."""
+        s1 = Mock()
+        s1.to_ddb_dict.return_value = {"owner": "user1", "name": "Session 1"}
+        s2 = Mock()
+        s2.to_ddb_dict.return_value = {"owner": "user1", "name": "Session 2", "idea_session_id": "id-2"}
+        mock_validate.return_value = ([s1, s2], [])
+        mock_complete.side_effect = lambda s, u: s
+        mock_create.side_effect = [RuntimeError("DDB write failed"), {"owner": "user1", "name": "Session 2", "idea_session_id": "id-2"}]
+
+        body = self._get_batch_create_session_payload()
+        result = virtual_desktop_controller.batch_create_session(body, user="user1")
+
+        assert isinstance(result, BatchCreateSessionResponseContent)
+        assert len(result.successful_list) == 1
+        assert len(result.unsuccessful_list) == 1
+        assert "DDB write failed" in result.unsuccessful_list[0].message
+
+    @patch("api.controllers.virtual_desktop_controller.os.environ.get")
+    @patch("api.controllers.virtual_desktop_controller.session_utils.validate_batch_create_sessions")
+    def test_batch_create_session_dry_run_mode(self, mock_validate, mock_env_get):
+        """Test batch create session in dry run mode returns without creating."""
+        s1 = Mock()
+        mock_validate.return_value = ([s1], [])
+        mock_env_get.return_value = "true"
+
+        body = self._get_batch_create_session_payload()
+        result = virtual_desktop_controller.batch_create_session(body, user="user1")
+
+        assert isinstance(result, BatchCreateSessionResponseContent)
+        assert len(result.successful_list) == 1
+        assert result.unsuccessful_list == []
+
+    @patch("api.controllers.virtual_desktop_controller.check_app_client_token")
+    @patch("api.controllers.virtual_desktop_controller.session_utils.validate_batch_create_sessions")
+    def test_batch_create_session_passes_is_app_client_to_validation(
+        self, mock_validate, mock_check_app_client
+    ):
+        """Test that is_app_client is passed through to validate_batch_create_sessions."""
+        mock_check_app_client.return_value = True
+        mock_validate.return_value = ([], [])
+
+        body = self._get_batch_create_session_payload()
+        virtual_desktop_controller.batch_create_session(body, user="user1", token_info={"scope": "write"})
+
+        mock_check_app_client.assert_called_once_with({"scope": "write"}, "batch_create_session")
+        mock_validate.assert_called_once()
+        _, kwargs = mock_validate.call_args
+        assert kwargs["is_app_client"] is True
+
+    # Service-token wiring tests for software-stack / permission-profile
+    # controllers — each one verifies the admin check is bypassed for app-client callers.
+
+    @patch("api.controllers.virtual_desktop_controller.check_app_client_token")
+    @patch("api.controllers.virtual_desktop_controller.accounts.is_active_admin")
+    @patch(
+        "api.controllers.virtual_desktop_controller.software_stacks.create_software_stack"
+    )
+    @patch("api.controllers.virtual_desktop_controller.validate_software_stack_fields")
+    @patch(
+        "api.controllers.virtual_desktop_controller.CreateSoftwareStackRequestContent.from_dict"
+    )
+    @patch(
+        "api.controllers.virtual_desktop_controller.VirtualDesktopSoftwareStack.from_ddb_dict"
+    )
+    def test_create_software_stack_service_token_skips_admin_check(
+        self,
+        mock_from_ddb_dict,
+        mock_from_dict,
+        mock_validate,
+        mock_create,
+        mock_is_active_admin,
+        mock_check_app_client_token,
+    ):
+        mock_check_app_client_token.return_value = True
+        mock_software_stack = Mock()
+        mock_software_stack.to_ddb_dict.return_value = {"name": "ss", "ami_id": "ami-1"}
+        mock_request = Mock()
+        mock_request.software_stack = mock_software_stack
+        mock_from_dict.return_value = mock_request
+        mock_validate.return_value = (mock_software_stack, True)
+        mock_create.return_value = {"stack_id": "ss-1", "name": "ss"}
+        mock_from_ddb_dict.return_value = VirtualDesktopSoftwareStack(
+            name="ss", stack_id="ss-1"
+        )
+
+        body = self._get_base_body()
+        token_info = {"uid": "cm-client", "scope": ["env-vdc/write"]}
+        virtual_desktop_controller.create_software_stack(
+            body, user="cm-client", token_info=token_info
+        )
+
+        mock_check_app_client_token.assert_called_once_with(
+            token_info, "create_software_stack"
+        )
+        mock_is_active_admin.assert_not_called()
+        mock_create.assert_called_once()
+
+    @patch("api.controllers.virtual_desktop_controller.check_app_client_token")
+    @patch("api.controllers.virtual_desktop_controller.accounts.is_active_admin")
+    @patch(
+        "api.controllers.virtual_desktop_controller.software_stacks.delete_software_stack"
+    )
+    def test_delete_software_stack_service_token_skips_admin_check(
+        self,
+        mock_delete,
+        mock_is_active_admin,
+        mock_check_app_client_token,
+    ):
+        mock_check_app_client_token.return_value = True
+        mock_delete.return_value = None
+
+        token_info = {"uid": "cm-client", "scope": ["env-vdc/write"]}
+        virtual_desktop_controller.delete_software_stack(
+            stack_id="ss-1",
+            body={"base_os": "amazonlinux2"},
+            user="cm-client",
+            token_info=token_info,
+        )
+
+        mock_check_app_client_token.assert_called_once_with(
+            token_info, "delete_software_stack"
+        )
+        mock_is_active_admin.assert_not_called()
+        mock_delete.assert_called_once_with("amazonlinux2", "ss-1")
+
+    @patch("api.controllers.virtual_desktop_controller.check_app_client_token")
+    @patch("api.controllers.virtual_desktop_controller.accounts.is_active_admin")
+    @patch(
+        "api.controllers.virtual_desktop_controller.software_stacks.list_software_stacks"
+    )
+    def test_list_software_stacks_service_token_skips_admin_check_no_project_id(
+        self,
+        mock_list,
+        mock_is_active_admin,
+        mock_check_app_client_token,
+    ):
+        """Service tokens are treated as admin → list_software_stacks succeeds without project_id."""
+        mock_check_app_client_token.return_value = True
+        mock_list.return_value = ([], None)
+
+        token_info = {"uid": "cm-client", "scope": ["env-vdc/read"]}
+        result = virtual_desktop_controller.list_software_stacks(
+            user="cm-client", token_info=token_info
+        )
+
+        mock_check_app_client_token.assert_called_once_with(
+            token_info, "list_software_stacks"
+        )
+        mock_is_active_admin.assert_not_called()
+        mock_list.assert_called_once()
+        assert result.listing == []
+
+    @patch("api.controllers.virtual_desktop_controller.check_app_client_token")
+    @patch("api.controllers.virtual_desktop_controller.accounts.is_active_admin")
+    @patch(
+        "api.controllers.virtual_desktop_controller.software_stacks.update_software_stack"
+    )
+    @patch(
+        "api.controllers.virtual_desktop_controller.software_stacks.get_software_stack"
+    )
+    @patch(
+        "api.controllers.virtual_desktop_controller.software_stacks.get_software_stack_by_name"
+    )
+    @patch("api.controllers.virtual_desktop_controller.validate_software_stack_fields")
+    @patch(
+        "api.controllers.virtual_desktop_controller.UpdateSoftwareStackRequestContent.from_dict"
+    )
+    @patch(
+        "api.controllers.virtual_desktop_controller.VirtualDesktopSoftwareStack.from_ddb_dict"
+    )
+    def test_update_software_stack_service_token_skips_admin_check(
+        self,
+        mock_from_ddb_dict,
+        mock_from_dict,
+        mock_validate,
+        mock_get_by_name,
+        mock_get,
+        mock_update,
+        mock_is_active_admin,
+        mock_check_app_client_token,
+    ):
+        mock_check_app_client_token.return_value = True
+        mock_software_stack = Mock()
+        mock_software_stack.to_ddb_dict.return_value = {"name": "ss"}
+        mock_software_stack.base_os = "amazonlinux2"
+        mock_software_stack.stack_id = "ss-1"
+        mock_request = Mock()
+        mock_request.software_stack = mock_software_stack
+        mock_from_dict.return_value = mock_request
+        mock_validate.return_value = (mock_software_stack, True)
+        mock_get_by_name.return_value = None
+        mock_get.return_value = {"stack_id": "ss-1"}
+        mock_update.return_value = {"stack_id": "ss-1", "name": "ss"}
+        mock_from_ddb_dict.return_value = VirtualDesktopSoftwareStack(
+            name="ss", stack_id="ss-1"
+        )
+
+        body = self._get_base_body()
+        token_info = {"uid": "cm-client", "scope": ["env-vdc/write"]}
+        virtual_desktop_controller.update_software_stack(
+            body, stack_id="ss-1", user="cm-client", token_info=token_info
+        )
+
+        mock_check_app_client_token.assert_called_once_with(
+            token_info, "update_software_stack"
+        )
+        mock_is_active_admin.assert_not_called()
+        mock_update.assert_called_once()
+
+    @patch("api.controllers.virtual_desktop_controller.check_app_client_token")
+    @patch("api.controllers.virtual_desktop_controller.accounts.is_active_admin")
+    @patch(
+        "api.controllers.virtual_desktop_controller.software_stacks.get_software_stack"
+    )
+    @patch(
+        "api.controllers.virtual_desktop_controller.VirtualDesktopSoftwareStack.from_ddb_dict"
+    )
+    def test_get_software_stack_service_token_skips_admin_check(
+        self,
+        mock_from_ddb_dict,
+        mock_get,
+        mock_is_active_admin,
+        mock_check_app_client_token,
+    ):
+        mock_check_app_client_token.return_value = True
+        mock_get.return_value = {"stack_id": "ss-1"}
+        mock_from_ddb_dict.return_value = VirtualDesktopSoftwareStack(
+            stack_id="ss-1", name="ss"
+        )
+
+        token_info = {"uid": "cm-client", "scope": ["env-vdc/read"]}
+        virtual_desktop_controller.get_software_stack(
+            stack_id="ss-1",
+            base_os="amazonlinux2",
+            user="cm-client",
+            token_info=token_info,
+        )
+
+        mock_check_app_client_token.assert_called_once_with(
+            token_info, "get_software_stack"
+        )
+        mock_is_active_admin.assert_not_called()
+        mock_get.assert_called_once()
+
+    @patch("api.controllers.virtual_desktop_controller.check_app_client_token")
+    @patch("api.controllers.virtual_desktop_controller.accounts.is_active_admin")
+    @patch(
+        "api.controllers.virtual_desktop_controller.permission_profiles.create_permission_profile"
+    )
+    @patch(
+        "api.controllers.virtual_desktop_controller.permission_profiles.get_permission_profile"
+    )
+    @patch(
+        "api.controllers.virtual_desktop_controller.CreatePermissionProfileRequestContent.from_dict"
+    )
+    @patch(
+        "api.controllers.virtual_desktop_controller.VirtualDesktopPermissionProfile.from_ddb_dict"
+    )
+    def test_create_permission_profile_service_token_skips_admin_check(
+        self,
+        mock_from_ddb_dict,
+        mock_from_dict,
+        mock_get,
+        mock_create,
+        mock_is_active_admin,
+        mock_check_app_client_token,
+    ):
+        mock_check_app_client_token.return_value = True
+        mock_profile = Mock()
+        mock_profile.profile_id = "pp-1"
+        mock_profile.to_ddb_dict.return_value = {"profile_id": "pp-1"}
+        mock_request = Mock()
+        mock_request.profile = mock_profile
+        mock_from_dict.return_value = mock_request
+        mock_get.return_value = None  # no pre-existing profile
+        mock_create.return_value = {"profile_id": "pp-1"}
+        mock_from_ddb_dict.return_value = Mock()
+
+        token_info = {"uid": "cm-client", "scope": ["env-vdc/write"]}
+        virtual_desktop_controller.create_permission_profile(
+            body={}, user="cm-client", token_info=token_info
+        )
+
+        mock_check_app_client_token.assert_called_once_with(
+            token_info, "create_permission_profile"
+        )
+        mock_is_active_admin.assert_not_called()
+        mock_create.assert_called_once()
+
+    @patch("api.controllers.virtual_desktop_controller.check_app_client_token")
+    @patch("api.controllers.virtual_desktop_controller.accounts.is_active_admin")
+    @patch(
+        "api.controllers.virtual_desktop_controller.permission_profiles.delete_permission_profile"
+    )
+    def test_delete_permission_profile_service_token_skips_admin_check(
+        self,
+        mock_delete,
+        mock_is_active_admin,
+        mock_check_app_client_token,
+    ):
+        mock_check_app_client_token.return_value = True
+        mock_delete.return_value = None
+
+        token_info = {"uid": "cm-client", "scope": ["env-vdc/write"]}
+        virtual_desktop_controller.delete_permission_profile(
+            profile_id="pp-1", user="cm-client", token_info=token_info
+        )
+
+        mock_check_app_client_token.assert_called_once_with(
+            token_info, "delete_permission_profile"
+        )
+        mock_is_active_admin.assert_not_called()
+        mock_delete.assert_called_once_with("pp-1")
+
+    def test_update_session_missing_owner_raises_bad_request(self) -> None:
+        """update_session raises BadRequestException when owner is missing."""
+        body = {
+            "session": {
+                "idea_session_id": "test-session-id",
+                "server": {"instance_type": "t3.large"},
+            }
+        }
+        with pytest.raises(BadRequestException):
+            virtual_desktop_controller.update_session(
+                body=body,
+                res_session_id="test-session-id",
+                user="admin1",
+                token_info={"uid": "admin1"},
+            )
+
+    def test_update_session_missing_idea_session_id_raises_bad_request(self) -> None:
+        """update_session raises BadRequestException when idea_session_id is missing."""
+        body = {
+            "session": {
+                "owner": "admin1",
+                "server": {"instance_type": "t3.large"},
+            }
+        }
+        with pytest.raises(BadRequestException):
+            virtual_desktop_controller.update_session(
+                body=body,
+                res_session_id="test-session-id",
+                user="admin1",
+                token_info={"uid": "admin1"},
+            )
+
+    @patch("api.controllers.virtual_desktop_controller.accounts.is_active_admin")
+    @patch("api.controllers.virtual_desktop_controller.res_sessions.get_session")
+    @patch("api.controllers.virtual_desktop_controller.validate_update_session_request")
+    @patch("api.controllers.virtual_desktop_controller.res_sessions.update_session")
+    def test_update_session_with_owner_and_session_id_succeeds(
+        self,
+        mock_update: Mock,
+        mock_validate: Mock,
+        mock_get_session: Mock,
+        mock_is_admin: Mock,
+    ) -> None:
+        """update_session succeeds when owner and idea_session_id are provided."""
+        mock_is_admin.return_value = True
+        mock_get_session.return_value = {
+            "owner": "admin1",
+            "idea_session_id": "test-session-id",
+            "state": "STOPPED",
+            "server": {"instance_type": "t3.medium"},
+            "hibernation_enabled": False,
+            "base_os": "amzn2023",
+            "software_stack_id": "stack-1",
+        }
+        mock_update.return_value = {
+            "owner": "admin1",
+            "idea_session_id": "test-session-id",
+            "state": "STOPPED",
+            "server": {"instance_type": "t3.large"},
+        }
+
+        body = {
+            "session": {
+                "idea_session_id": "test-session-id",
+                "owner": "admin1",
+                "server": {"instance_type": "t3.large"},
+            }
+        }
+        result = virtual_desktop_controller.update_session(
+            body=body,
+            res_session_id="test-session-id",
+            user="admin1",
+            token_info={"uid": "admin1"},
+        )
+        assert result is not None
+        mock_get_session.assert_called_once_with("admin1", "test-session-id")
+
+    # Create Software Stack From Session Tests
+
+    def _get_create_software_stack_from_session_body(self, **session_overrides):
+        """Helper to create a request body for create_software_stack_from_session."""
+        session = {
+            "idea_session_id": "session-123",
+            "owner": "user1",
+        }
+        session.update(session_overrides)
+        return {
+            "session": session,
+            "software_stack": {
+                "name": "New Stack From Session",
+                "description": "Created from session",
+                "base_os": "amzn2023",
+                "gpu": "NO_GPU",
+                "min_ram": {"value": 4, "unit": "gb"},
+                "min_storage": {"value": 50, "unit": "gb"},
+            },
+        }
+
+    @patch("api.controllers.virtual_desktop_controller.res_sessions.get_session")
+    @patch("api.controllers.virtual_desktop_controller.accounts.is_active_admin")
+    def test_create_software_stack_from_session_non_ready_state_raises_bad_request(
+        self, mock_is_active_admin, mock_get_session
+    ):
+        """Test that create_software_stack_from_session raises BadRequestException when session is not in READY state."""
+        mock_is_active_admin.return_value = True
+        mock_get_session.return_value = {
+            "owner": "user1",
+            "idea_session_id": "session-123",
+            "state": "STOPPED",
+        }
+
+        body = self._get_create_software_stack_from_session_body()
+
+        with pytest.raises(BadRequestException) as exc_info:
+            virtual_desktop_controller.create_software_stack_from_session(
+                body, user={"username": "clusteradmin"}
+            )
+
+        assert "READY" in str(exc_info.value)
+        assert "STOPPED" in str(exc_info.value)
+
+    @patch("api.controllers.virtual_desktop_controller.ami_name_exists")
+    @patch("api.controllers.virtual_desktop_controller.validate_software_stack_fields")
+    @patch("api.controllers.virtual_desktop_controller.res_sessions.get_session")
+    @patch("api.controllers.virtual_desktop_controller.accounts.is_active_admin")
+    @patch("api.controllers.virtual_desktop_controller.software_stacks.create_software_stack_from_session")
+    @patch("api.controllers.virtual_desktop_controller.ad_automation.remove_ad_authorization")
+    def test_create_software_stack_from_session_ready_state_succeeds(
+        self, mock_ad_remove, mock_create_stack, mock_is_active_admin, mock_get_session,
+        mock_validate, mock_ami_exists
+    ):
+        """Test that create_software_stack_from_session succeeds when session is in READY state."""
+        mock_is_active_admin.return_value = True
+        mock_get_session.return_value = {
+            "owner": "user1",
+            "idea_session_id": "session-123",
+            "state": "READY",
+            "server": {"instance_id": "i-abc123"},
+        }
+        mock_validate.return_value = (Mock(), True)
+        mock_ami_exists.return_value = False
+        mock_create_stack.return_value = {
+            "stack_id": "ss-new-123",
+            "name": "New Stack From Session",
+        }
+
+        body = self._get_create_software_stack_from_session_body()
+
+        result = virtual_desktop_controller.create_software_stack_from_session(
+            body, user={"username": "clusteradmin"}
+        )
+
+        assert result is not None
+        mock_create_stack.assert_called_once()

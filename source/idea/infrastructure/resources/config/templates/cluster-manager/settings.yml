@@ -89,8 +89,3 @@ cache:
   short_term:
     max_size: 10000
     ttl_seconds: 600 # 10 minutes
-
-notifications:
-  # email notifications are supported at the moment. slack, sms and other channels will be supported in a future release.
-  email:
-    enabled: true

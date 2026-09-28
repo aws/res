@@ -426,3 +426,39 @@ class TestReadCommandOutputFromS3:
     def test_raises_on_unrecognized_url_format(self):
         with pytest.raises(ValueError, match="Unrecognized S3 URL format"):
             ssm_utils.read_command_output_from_s3("https://example.com/some/path")
+
+
+class TestGetCommandInvocation:
+    def test_get_command_invocation_success(self):
+        """Test get_command_invocation calls SSM with correct parameters."""
+        _mock_ssm.get_command_invocation.return_value = {
+            "CommandId": COMMAND_ID,
+            "InstanceId": INSTANCE_ID,
+            "Status": "Success",
+            "StandardOutputContent": '{"CPUAveragePerformanceLast10Secs": 5.0}',
+        }
+
+        result = ssm_utils.get_command_invocation(
+            command_id=COMMAND_ID, instance_id=INSTANCE_ID
+        )
+
+        assert result["Status"] == "Success"
+        assert (
+            result["StandardOutputContent"]
+            == '{"CPUAveragePerformanceLast10Secs": 5.0}'
+        )
+        _mock_ssm.get_command_invocation.assert_called_once_with(
+            CommandId=COMMAND_ID, InstanceId=INSTANCE_ID
+        )
+
+    def test_get_command_invocation_propagates_client_error(self):
+        """Test get_command_invocation propagates ClientError."""
+        _mock_ssm.get_command_invocation.side_effect = ClientError(
+            {"Error": {"Code": "InvocationDoesNotExist"}}, "GetCommandInvocation"
+        )
+
+        with pytest.raises(ClientError) as exc_info:
+            ssm_utils.get_command_invocation(
+                command_id="cmd-invalid", instance_id=INSTANCE_ID
+            )
+        assert "InvocationDoesNotExist" in str(exc_info.value)

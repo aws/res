@@ -3,14 +3,14 @@
 
 import configparser
 import os
-import shutil
 import pwd
+import shutil
 import subprocess
 import time
 
 import ideabootstrap.dcv.constants as constants
-from res.resources import cluster_settings
 from ideabootstrap.dcv import dcv_utils
+from res.resources import cluster_settings
 from res.utils import logging_utils
 
 logger = logging_utils.get_logger("bootstrap")
@@ -19,7 +19,8 @@ logger = logging_utils.get_logger("bootstrap")
 def _configure_storage_root() -> None:
     logger.info("Creating storage root ...")
     session_owner = os.environ.get("IDEA_SESSION_OWNER")
-    dcv_storage_root = f"/home/{session_owner}/storage-root"
+    home_dir = f"/home/{session_owner}"
+    dcv_storage_root = f"{home_dir}/storage-root"
 
     if os.path.islink(dcv_storage_root):
         error_msg = "something fishy is going on here. a sym-link should not exist. check with the session owner for bad actor or unwarranted usage of system."
@@ -27,11 +28,29 @@ def _configure_storage_root() -> None:
         return
 
     try:
-        if not os.path.exists(dcv_storage_root):
-            os.makedirs(dcv_storage_root, exist_ok=True)
-            uid = pwd.getpwnam(session_owner).pw_uid
-            gid = pwd.getpwnam(session_owner).pw_gid
+        storage_root_created = not os.path.exists(dcv_storage_root)
+        os.makedirs(dcv_storage_root, exist_ok=True)
+
+        uid = pwd.getpwnam(session_owner).pw_uid
+        gid = pwd.getpwnam(session_owner).pw_gid
+
+        # /home is a shared NFS mount. The home dir can end up owned by root
+        # instead of the session owner in several ways: makedirs above created
+        # it before pam_mkhomedir ran, or a prior session on this or another
+        # host created it root-owned and the damage persists on the shared
+        # filesystem across sessions. pam_mkhomedir never chowns a dir that
+        # already exists, so nothing else repairs this. Verify and repair
+        # unconditionally: a non-root user's home must not be owned by root.
+        if uid != 0 and os.stat(home_dir).st_uid == 0:
+            logger.warning(
+                f"{home_dir} is owned by root; repairing ownership to {session_owner} ({uid}:{gid})"
+            )
+            os.chown(home_dir, uid, gid)
+
+        if storage_root_created or os.stat(dcv_storage_root).st_uid != uid:
             os.chown(dcv_storage_root, uid, gid)
+
+        if storage_root_created:
             logger.info(
                 f"Created storage root: {dcv_storage_root} for session_owner: {session_owner}"
             )

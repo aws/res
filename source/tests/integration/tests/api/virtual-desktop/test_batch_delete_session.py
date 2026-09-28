@@ -5,6 +5,7 @@ import logging
 from typing import Any, Dict, List
 
 import pytest
+from res.clients.api_client.res_api_client import ResApiClient  # type: ignore
 from res.resources import sessions  # type: ignore
 
 from ideadatamodel import Project  # type: ignore
@@ -12,6 +13,10 @@ from ideadatamodel.constants import PROJECT_OWNER_ROLE_ID  # type: ignore
 from tests.integration.framework.client.api_client import ApiClient
 from tests.integration.framework.fixtures.fixture_request import FixtureRequest
 from tests.integration.framework.fixtures.project import project
+from tests.integration.framework.fixtures.res_api_client import (
+    res_api_client,
+    res_api_client_read_only,
+)
 from tests.integration.framework.fixtures.res_environment import (
     ResEnvironment,
     res_environment,
@@ -97,7 +102,6 @@ class TestBatchDeleteSession:
                 len(response.unsuccessful_list) == 0
             ), "There should be no unsuccessful sessions"
 
-            logger.info("Admin successfully deleted both own and other user's sessions")
         finally:
             set_backend_lambda_dry_mode(region, environment_name, False)
 
@@ -143,7 +147,6 @@ class TestBatchDeleteSession:
                 len(response.unsuccessful_list) == 0
             ), "There should be no unsuccessful sessions"
 
-            logger.info("Non-admin user successfully deleted their own session")
         finally:
             set_backend_lambda_dry_mode(region, environment_name, False)
 
@@ -173,7 +176,6 @@ class TestBatchDeleteSession:
             assert (
                 "User not found" in e.response.text
             ), f"Unexpected error for non-existent user: {str(e)}"
-            logger.info(f"Non-existent user correctly received 401 error: {str(e)}")
 
     @pytest.mark.parametrize("inactive_username", ["user2"])
     def test_batch_delete_session_with_inactive_user(
@@ -202,7 +204,6 @@ class TestBatchDeleteSession:
             assert (
                 "Inactive user" in e.response.text
             ), f"Unexpected error for inactive user: {str(e)}"
-            logger.info(f"Inactive user correctly received 401 error: {str(e)}")
 
     def test_batch_delete_session_without_auth_token(
         self,
@@ -229,9 +230,6 @@ class TestBatchDeleteSession:
             assert (
                 "No authorization token provided" in e.response.text
             ), f"Unexpected error for request without auth token: {str(e)}"
-            logger.info(
-                f"Request without auth token correctly received 401 error: {str(e)}"
-            )
 
     def test_batch_delete_session_with_invalid_auth_token(
         self,
@@ -264,9 +262,6 @@ class TestBatchDeleteSession:
             assert (
                 "Unable to retrieve username" in e.response.text
             ), f"Unexpected error for request with invalid auth token: {str(e)}"
-            logger.info(
-                "Request with invalid auth token correctly received 'Unable to retrieve username' error"
-            )
         finally:
             set_backend_lambda_test_mode(region, environment_name, True)
 
@@ -437,7 +432,10 @@ class TestBatchDeleteSession:
             pytest.fail("Expected 400 error for empty sessions list")
         except Exception as e:
             assert "400" in str(e), f"Expected 400 error, got: {str(e)}"
-            logger.info(f"Empty sessions list correctly received 400 error: {str(e)}")
+            assert hasattr(e, "response"), "Response should exist in the exception"
+            assert (
+                "should be non-empty" in e.response.text
+            ), f"Expected 'should be non-empty' validation error, got: {e.response.text}"
 
     @pytest.mark.parametrize("admin_username", ["clusteradmin"])
     def test_batch_delete_session_missing_sessions_field(
@@ -455,9 +453,10 @@ class TestBatchDeleteSession:
             pytest.fail("Expected 400 error for missing sessions field")
         except Exception as e:
             assert "400" in str(e), f"Expected 400 error, got: {str(e)}"
-            logger.info(
-                f"Missing sessions field correctly received 400 error: {str(e)}"
-            )
+            assert hasattr(e, "response"), "Response should exist in the exception"
+            assert (
+                "is a required property" in e.response.text
+            ), f"Expected 'is a required property' error, got: {e.response.text}"
 
     @pytest.mark.parametrize("admin_username", ["clusteradmin"])
     def test_batch_delete_session_missing_idea_session_id(
@@ -493,8 +492,6 @@ class TestBatchDeleteSession:
             in response.unsuccessful_list[0].message
         ), f"Expected 'idea_session_id and session.owner are required', got: {response.unsuccessful_list[0].message}"
 
-        logger.info("Missing idea_session_id correctly returned in unsuccessful list")
-
     @pytest.mark.parametrize("admin_username", ["clusteradmin"])
     def test_batch_delete_session_missing_owner(
         self,
@@ -528,4 +525,72 @@ class TestBatchDeleteSession:
             "owner are required" in response.unsuccessful_list[0].message
         ), f"Expected owner required message, got: {response.unsuccessful_list[0].message}"
 
-        logger.info("Missing owner correctly returned in unsuccessful list")
+    @pytest.mark.parametrize(
+        "session_record",
+        [
+            [
+                {
+                    "session_id": "test-batch-delete-service-token",
+                    sessions.SESSION_DB_HASH_KEY: "user1",
+                }
+            ]
+        ],
+        indirect=True,
+    )
+    def test_batch_delete_session_with_service_token(
+        self,
+        request: FixtureRequest,
+        region: str,
+        res_environment: ResEnvironment,
+        environment_name: str,
+        session_record: List[Dict[str, Any]],
+        res_api_client: ResApiClient,
+    ) -> None:
+        """ResApiClient (service-token caller) deletes a session owned by another
+        user. The backend should enforce_scope, set skip_user_authz=True, and
+        bypass per-session ownership validation. DRY_RUN_ENABLED prevents the
+        actual EC2 termination."""
+        set_backend_lambda_dry_mode(region, environment_name, True)
+        try:
+            request_content = self._build_request(session_record)
+            response = res_api_client.batch_delete_session(request_content)
+
+            assert response is not None, "Response should not be None"
+            assert (
+                len(response.successful_list) == 1
+            ), "Service-token caller should successfully delete the session"
+            assert (
+                response.successful_list[0].idea_session_id
+                == "test-batch-delete-service-token"
+            )
+            assert len(response.unsuccessful_list) == 0
+        finally:
+            set_backend_lambda_dry_mode(region, environment_name, False)
+
+    def test_batch_delete_session_with_service_token_read_only_scope_rejected(
+        self,
+        request: FixtureRequest,
+        region: str,
+        res_environment: ResEnvironment,
+        res_api_client_read_only: ResApiClient,
+    ) -> None:
+        """Service token without write scope must be rejected by enforce_scope
+        before any session work happens."""
+        try:
+            session_list = [
+                VirtualDesktopSession(
+                    idea_session_id="test-session-readonly-rejected",
+                    owner="user1",
+                    name="test-session",
+                    hibernation_enabled=False,
+                )
+            ]
+            request_content = BatchDeleteSessionRequestContent(sessions=session_list)
+            res_api_client_read_only.batch_delete_session(request_content)
+            pytest.fail("Expected 401 for service token missing write scope")
+        except Exception as e:
+            assert "401" in str(e), f"Expected 401 error, got: {str(e)}"
+            assert hasattr(e, "response"), "Response should exist in the exception"
+            assert (
+                "Insufficient scope" in e.response.text
+            ), f"Unexpected error for service token missing write scope: {str(e)}"

@@ -81,6 +81,11 @@ if [[ ! -f ${INSTALL_POST_REBOOT_FINISHED_LOCK} ]]; then
     /bin/bash "${SCRIPT_DIR}/../../common/linux/aws_ssm.sh" -o $BASE_OS -s "${SCRIPT_DIR}/.."
     # End: Install AWS Systems Manager Agent
 
+    # Revert the git HTTP/1.1 workaround set in install.sh so it doesn't persist on the VDI
+    if [[ "$BASE_OS" == "ubuntu2204" ]]; then
+      git config --global --unset http.version 2>/dev/null || true
+    fi
+
     echo "$(date)" >> /root/bootstrap/res_installed_all_packages.log
     set_reboot_required "DCV and any associated GPU drivers have been installed, reboot required for changes to take effect..."
   else

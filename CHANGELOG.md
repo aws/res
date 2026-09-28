@@ -1,6 +1,33 @@
 # Change Log
 This file is used to list changes made in each release of Research and Engineering Studio (RES).
 
+2026.09
+------
+
+**SECURITY FIXES**
+
+- Addressed arbitrary file deletion as root via FileBrowser DeleteFiles API. A TOCTOU symlink vulnerability allowed non-admin users to delete files anywhere on the Cluster Manager host.
+- Addressed privilege escalation via the ssh_keygen PAM module. Ownership changes followed symlinks, letting non-admin users take ownership of a root-owned path.
+- Addressed a privilege escalation vulnerability which allowed admin impersonation caused by Cognito username truncation.
+- Addressed a vulnerability which allowed infrastructure configuration details to be disclosed to non-admin users via the GetModuleSettings API.
+- Addressed a session-limit bypass via the BatchCreateSession API, allowing users to create sessions beyond their allowed limit.
+- Addressed a vulnerability where user-provided subnet IDs were accepted without validation against the allowed subnets list.
+- Addressed disabled-group and disabled-project restrictions not being enforced on VDI creation, allowing direct API calls to create sessions in disabled projects and users to create sessions from projects granted through disabled groups.
+- Addressed an issue where users could overwrite reserved RES-managed tags on VDI creation.
+
+**ENHANCEMENTS**
+
+- Added a smart retry mechanism that automatically retries VDI launches on transient instance-capacity failures, with corresponding web portal updates.
+- Replaced the VDC controller infrastructure host with serverless Lambda-based session management, reducing infrastructure overhead and improving scalability.
+
+**BUG FIXES**
+
+- Fixed VDI launch failures when project tags were configured.
+- Removed the unsupported front-end session-type selection, since CONSOLE is the only supported type.
+- Added session-state validation for "Create Software Stack from Session", which previously failed with an unhandled error when the session was not in a READY state.
+- Fixed a Minimum RAM mismatch where a Software Stack created via "Create Software Stack from Session" had a higher default Minimum RAM than the source stack.
+- Fixed VDI home directories being left root-owned after DCV setup, locking users out of their own home directory.
+
 2026.06
 ------
 

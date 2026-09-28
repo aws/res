@@ -226,3 +226,14 @@ class BiStack(Stack):
         )
 
         self.existing_home_fs_id.node.add_dependency(self.bi_stack)
+
+        self.ad_dns_ips = aws_ssm.StringParameter(
+            self,
+            id=f"/{parameters.cluster_name}/external/ADDnsIPs",
+            parameter_name=f"/{parameters.cluster_name}/external/ADDnsIPs",
+            string_value=self.bi_stack.get_att(
+                "Outputs.ActiveDirectoryDNSIPs"
+            ).to_string(),
+        )
+
+        self.ad_dns_ips.node.add_dependency(self.bi_stack)

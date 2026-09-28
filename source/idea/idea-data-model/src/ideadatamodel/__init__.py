@@ -22,7 +22,6 @@ from .filesystem import *
 from .user_input import *
 from .cluster_resources import *
 from .scheduler import *
-from .virtual_desktop import *
 from .cluster_settings import *
 from .email_templates import *
 from .notifications import *

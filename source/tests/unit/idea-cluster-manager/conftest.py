@@ -34,12 +34,11 @@ from ideaclustermanager.app.shared_filesystem.shared_filesystem_service import (
 from ideaclustermanager.app.snapshots.snapshots_service import SnapshotsService
 from ideasdk.auth import TokenService, TokenServiceOptions
 from ideasdk.aws import AwsClientProvider, AWSUtil, EC2InstanceTypesDB
-from ideasdk.client.evdi_client import EvdiClient
 from ideasdk.context import SocaContextOptions
 from ideasdk.utils import GroupNameHelper, Utils
 from ideatestutils import IdeaTestProps, MockConfig, MockInstanceTypes
 from ideatestutils.dynamodb.dynamodb_local import DynamoDBLocal
-from mock_vdc_client import MockVirtualDesktopControllerClient
+from mock_res_api_client import MockResApiClient
 from res.resources import accounts, cluster_settings
 
 from ideadatamodel import SocaAnyPayload
@@ -239,7 +238,6 @@ def context(ddb_local):
         "_instance_type_names_from_botocore",
         MockInstanceTypes.get_instance_type_names,
     )
-    monkeypatch.setattr(EvdiClient, "publish_user_disabled_event", mock_function)
 
     def create_mock_boto_session(**_):
         return boto3.Session(
@@ -459,7 +457,6 @@ def context(ddb_local):
     context.accounts = AccountsService(
         context=context,
         user_pool=context.user_pool,
-        evdi_client=EvdiClient(context=context),
         token_service=context.token_service,
     )
 
@@ -480,12 +477,12 @@ def context(ddb_local):
         role_assignments=context.role_assignments,
     )
 
-    context.vdc_client = MockVirtualDesktopControllerClient()
+    context.res_api_client = MockResApiClient()
 
     context.projects = ProjectsService(
         context=context,
         accounts_service=context.accounts,
-        vdc_client=context.vdc_client,
+        res_api_client=context.res_api_client,
     )
 
     context.roles = RolesService(context=context)

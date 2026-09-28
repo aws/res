@@ -10,9 +10,11 @@ from functools import lru_cache
 from typing import Any, Dict, List, Optional, Tuple
 
 import boto3
+import botocore.exceptions
 from boto3.dynamodb.conditions import And, Attr, Key
 from python_dynamodb_lock.python_dynamodb_lock import DynamoDBLockClient
 from res.constants import ENVIRONMENT_NAME_KEY
+from res.exceptions import ConditionalCheckFailed
 
 
 class FilterOperator(str, Enum):
@@ -201,7 +203,11 @@ def query(
 
 
 def update_item(
-    table_name: str, key: Dict[str, str], item: Dict[str, Any], versioned: bool = False
+    table_name: str,
+    key: Dict[str, str],
+    item: Dict[str, Any],
+    versioned: bool = False,
+    condition_expression: Any = None,
 ) -> Dict[str, Any]:
     update_expression_tokens = []
     expression_attr_names = {}
@@ -220,13 +226,24 @@ def update_item(
         expression_attr_values[":version"] = 1
         expression_attr_names["#version"] = "version"
 
-    result = table(table_name).update_item(
+    update_kwargs: Dict[str, Any] = dict(
         Key=key,
         UpdateExpression=update_expression,
         ExpressionAttributeNames=expression_attr_names,
         ExpressionAttributeValues=expression_attr_values,
         ReturnValues="ALL_NEW",
     )
+    if condition_expression is not None:
+        update_kwargs["ConditionExpression"] = condition_expression
+
+    try:
+        result = table(table_name).update_item(**update_kwargs)
+    except botocore.exceptions.ClientError as e:
+        if e.response.get("Error", {}).get("Code") == "ConditionalCheckFailedException":
+            raise ConditionalCheckFailed(
+                f"Conditional update rejected for key {key}"
+            ) from e
+        raise
 
     updated_item: Dict[str, Any] = result["Attributes"]
     for attribute_name, attribute_value in key.items():

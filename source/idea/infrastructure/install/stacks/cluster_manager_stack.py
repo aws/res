@@ -13,7 +13,6 @@ from aws_cdk import aws_autoscaling as asg
 from aws_cdk import aws_cognito as cognito
 from aws_cdk import aws_elasticloadbalancingv2 as elbv2
 from aws_cdk import aws_kms as kms
-from aws_cdk import aws_sqs as sqs
 from cdk_nag import NagSuppressions
 from res.constants import ENVIRONMENT_NAME_KEY, OLD_CUSTOM_TAG_KEYS  # type: ignore
 
@@ -24,7 +23,6 @@ from idea.infrastructure.install.constructs import ec2 as res_ec2
 from idea.infrastructure.install.constructs import iam, lambda_
 from idea.infrastructure.install.constructs.base import ResBaseConstruct
 from idea.infrastructure.install.constructs.secretmanager import OAuthClient
-from idea.infrastructure.install.constructs.sqs import SQSQueue
 from idea.infrastructure.install.infra_utils.arn_builder import ArnBuilder
 from idea.infrastructure.install.infra_utils.cluster_manager_settings import (
     ClusterManagerSettings,
@@ -109,7 +107,6 @@ class ClusterManagerStack(ResBaseConstruct):
         }
 
         self.oauth2_client_secret: Optional[OAuthClient] = None
-        self.notifications_sqs_queue: Optional[SQSQueue] = None
         self.cluster_manager_role: Optional[iam.Role] = None
         self.cluster_manager_security_group: Optional[
             ec2.ClusterManagerSecurityGroup
@@ -165,7 +162,6 @@ class ClusterManagerStack(ResBaseConstruct):
 
         self.setup_vpc()
         self.build_oauth2_client()
-        self.build_sqs_queues()
         self.build_iam_roles()
         self.build_security_groups()
         self.build_auto_scaling_group()
@@ -276,36 +272,6 @@ class ClusterManagerStack(ResBaseConstruct):
         )
 
         self.instance_profile.node.add_dependency(self.cluster_manager_role)
-
-    def build_sqs_queues(self) -> None:
-
-        sqs_kms_key_id = self.cluster_settings.kms_sqs_key_id
-
-        self.notification_dlq = SQSQueue(
-            id=f"{self.module_id}-notifications-dlq",
-            scope=self.nested_stack,
-            parameters=self.parameters,
-            arn_builder=self.arn_builder,
-            fifo=True,
-            content_based_deduplication=True,
-            encryption_master_key=sqs_kms_key_id,
-        )
-
-        self.notifications_sqs_queue = SQSQueue(
-            id=f"{self.module_id}-notifications",
-            scope=self.nested_stack,
-            parameters=self.parameters,
-            arn_builder=self.arn_builder,
-            fifo=True,
-            content_based_deduplication=True,
-            encryption_master_key=sqs_kms_key_id,
-            dead_letter_queue=sqs.DeadLetterQueue(
-                max_receive_count=3, queue=self.notification_dlq
-            ),
-        )
-
-        cdk.Tags.of(self.notifications_sqs_queue).add("Module", self.module_id)
-        cdk.Tags.of(self.notification_dlq).add("Module", self.module_id)
 
     def build_security_groups(self) -> None:
         self.cluster_manager_security_group = ec2.ClusterManagerSecurityGroup(
@@ -529,8 +495,6 @@ class ClusterManagerStack(ResBaseConstruct):
             constants.RES_TAG_NODE_TYPE, constants.NODE_TYPE_APP
         )
 
-        self.auto_scaling_group.node.add_dependency(self.notifications_sqs_queue)
-
     def build_endpoints(self) -> None:
 
         external_https_listener_arn = (
@@ -689,8 +653,6 @@ class ClusterManagerStack(ResBaseConstruct):
             "client_secret_id_ref": self.oauth2_client_secret.client_id.ref,  # type: ignore[union-attr]
             "security_group_id": self.cluster_manager_security_group.security_group_id,  # type: ignore[union-attr]
             "iam_role_arn": self.cluster_manager_role.role_arn,  # type: ignore[union-attr]
-            "notifications_queue_url": self.notifications_sqs_queue.queue_url,  # type: ignore[union-attr]
-            "notifications_queue_arn": self.notifications_sqs_queue.queue_arn,  # type: ignore[union-attr]
         }
 
         host_modules = self.host_modules()

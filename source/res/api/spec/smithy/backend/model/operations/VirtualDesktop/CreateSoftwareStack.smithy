@@ -4,7 +4,7 @@ $version: "2.0"
 
 namespace res
 
-@http(method: "POST", uri: "/res/virtual-desktop/software-stack")
+@http(method: "POST", uri: "/res/virtual-desktop/software-stacks")
 @tags(["virtual-desktop"])
 @documentation("Create Software Stack")
 operation CreateSoftwareStack {
