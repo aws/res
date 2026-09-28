@@ -14,6 +14,12 @@ from typing import Any, Callable, Optional, Tuple, Type
 
 logger = logging.getLogger(__name__)
 
+# Default retry configuration for polling state changes
+DEFAULT_MAX_RETRIES = 5
+DEFAULT_INITIAL_DELAY = 3
+DEFAULT_BACKOFF_FACTOR = 2
+DEFAULT_MAX_DELAY = 15
+
 
 def retry_with_backoff(
     func: Callable[[], Any],

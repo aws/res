@@ -278,6 +278,9 @@ class InstallStack(Stack):
             self.cluster_stack,
             self.identity_stack,
             self.parameters,
+            shared_res_library_layer=self.lambda_layers[
+                SHARED_RES_LIBRARY_LAMBDA_LAYER_NAME
+            ],
         )
         cognito_trigger_workflow.node.add_dependency(self.cluster_stack.nested_stack)
         cognito_trigger_workflow.node.add_dependency(self.identity_stack.nested_stack)
@@ -289,6 +292,9 @@ class InstallStack(Stack):
             self.identity_stack,
             self.parameters,
             lambda_layer=self.lambda_layers[API_PROXY_LAMBDA_LAYER_NAME],
+            shared_res_library_layer=self.lambda_layers[
+                SHARED_RES_LIBRARY_LAMBDA_LAYER_NAME
+            ],
         )
         proxy_lambda.node.add_dependency(self.cluster_stack.nested_stack)
         proxy_lambda.node.add_dependency(self.identity_stack.nested_stack)

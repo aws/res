@@ -314,15 +314,15 @@ class ApplySnapshot:
                         self.logger.info(f"Completed executing {type(merger).__name__}'s rollback()")
             except botocore.exceptions.ClientError as e:
                 error_message = e.response["Error"]["Message"]
-                self.logger.error(f"Apply Snapshot {self.apply_snapshot_record.apply_snapshot_identifier} failed to rollback with error {error_message}. Tables {list(merged_table_to_delta_mappings.keys())} failed to rollback.")
+                self.logger.error(f"Apply Snapshot {self.apply_snapshot_record.apply_snapshot_identifier} failed to rollback with error {error_message}. Tables {[t.value for t in merged_table_to_delta_mappings.keys()]} failed to rollback.")
                 raise exceptions.table_rollback_failed(error_message)
             except exceptions.SocaException as e:
                 error_message = e.message
-                self.logger.error(f"Apply Snapshot {self.apply_snapshot_record.apply_snapshot_identifier} failed to rollback with error {error_message}. Tables {list(merged_table_to_delta_mappings.keys())} failed to rollback.")
+                self.logger.error(f"Apply Snapshot {self.apply_snapshot_record.apply_snapshot_identifier} failed to rollback with error {error_message}. Tables {[t.value for t in merged_table_to_delta_mappings.keys()]} failed to rollback.")
                 raise exceptions.table_rollback_failed(error_message)
             except Exception as e:
                 error_message = repr(e)
-                self.logger.error(f"Apply Snapshot {self.apply_snapshot_record.apply_snapshot_identifier} failed to rollback with error {error_message}. Tables {list(merged_table_to_delta_mappings.keys())} failed to rollback.")
+                self.logger.error(f"Apply Snapshot {self.apply_snapshot_record.apply_snapshot_identifier} failed to rollback with error {error_message}. Tables {[t.value for t in merged_table_to_delta_mappings.keys()]} failed to rollback.")
                 raise exceptions.table_rollback_failed(error_message)
 
         try:
@@ -343,7 +343,7 @@ class ApplySnapshot:
                     if success:
                         self.logger.info(f"Completed executing {type(merger).__name__}'s merge()")
                     else:
-                        error_message = f"Apply Snapshot {self.apply_snapshot_record.apply_snapshot_identifier} failed to apply {table_name}. Initiating rollback."
+                        error_message = f"Apply Snapshot {self.apply_snapshot_record.apply_snapshot_identifier} failed to apply {table_name.value}. Initiating rollback."
                         raise exceptions.table_merge_failed(error_message)
 
             self.apply_snapshot_dao.update_status(self.apply_snapshot_record, ApplySnapshotStatus.COMPLETED)

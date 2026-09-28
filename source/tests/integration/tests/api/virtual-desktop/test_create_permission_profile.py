@@ -12,6 +12,7 @@ import logging
 from typing import Any, Dict
 
 import pytest
+from res.clients.api_client.res_api_client import ResApiClient  # type: ignore
 
 # Import RES framework components
 from tests.integration.framework.client.api_client import (
@@ -20,6 +21,7 @@ from tests.integration.framework.client.api_client import (
     CreatePermissionProfileResponseContent,
 )
 from tests.integration.framework.fixtures.fixture_request import FixtureRequest
+from tests.integration.framework.fixtures.res_api_client import res_api_client
 from tests.integration.framework.fixtures.res_environment import (
     ResEnvironment,
     res_environment,
@@ -202,10 +204,10 @@ class TestCreatePermissionProfile:
             api_client.create_permission_profile(request_content)
             pytest.fail("Expected 401/403 error for non-admin user")
         except Exception as e:
-            if "401" in str(e) or "403" in str(e):
-                logger.info(f"Non-admin user correctly denied access: {str(e)}")
-            else:
-                pytest.fail(f"Unexpected API error: {str(e)}")
+            assert "401" in str(e) or "403" in str(
+                e
+            ), f"Expected 401/403 error, got: {str(e)}"
+            assert hasattr(e, "response"), "Response should exist in the exception"
 
     @pytest.mark.parametrize("inactive_username", ["user2"])
     def test_create_permission_profile_with_inactive_user(
@@ -224,6 +226,10 @@ class TestCreatePermissionProfile:
             pytest.fail("Expected error for inactive user")
         except Exception as e:
             assert "401" in str(e)
+            assert hasattr(e, "response"), "Response should exist in the exception"
+            assert (
+                "Inactive user" in e.response.text
+            ), f"Expected 'Inactive user' in response, got: {e.response.text}"
             logger.info(f"Correctly received inactive user error: {str(e)}")
 
     def test_create_permission_profile_with_nonexistent_user(
@@ -238,7 +244,10 @@ class TestCreatePermissionProfile:
             pytest.fail("Expected 'User not found' error for non-existent user")
         except Exception as e:
             assert "401" in str(e)
-            logger.info(f"Non-existent user correctly received error: {str(e)}")
+            assert hasattr(e, "response"), "Response should exist in the exception"
+            assert (
+                "User not found" in e.response.text
+            ), f"Expected 'User not found' in response, got: {e.response.text}"
 
     def test_create_permission_profile_without_auth_token(
         self, res_environment: ResEnvironment, region: str
@@ -252,9 +261,10 @@ class TestCreatePermissionProfile:
             pytest.fail("Expected 'No authorization token provided' error")
         except Exception as e:
             assert "401" in str(e)
-            logger.info(
-                f"Request without auth token correctly received error: {str(e)}"
-            )
+            assert hasattr(e, "response"), "Response should exist in the exception"
+            assert (
+                "No authorization token provided" in e.response.text
+            ), f"Expected 'No authorization token provided' in response, got: {e.response.text}"
 
     def test_create_permission_profile_with_invalid_auth_token_in_prod(
         self,
@@ -282,6 +292,60 @@ class TestCreatePermissionProfile:
             )
         except Exception as e:
             assert "401" in str(e)
-            logger.info(f"Invalid auth token correctly received error: {str(e)}")
+            assert hasattr(e, "response"), "Response should exist in the exception"
+            assert (
+                "Unable to retrieve username" in e.response.text
+            ), f"Expected 'Unable to retrieve username' in response, got: {e.response.text}"
         finally:
             set_backend_lambda_test_mode(region, environment_name, True)
+
+    def test_create_permission_profile_with_service_token(
+        self,
+        request: FixtureRequest,
+        region: str,
+        res_environment: ResEnvironment,
+        res_api_client: ResApiClient,
+    ) -> None:
+        """Service-token caller creates a permission profile."""
+        profile_id = "svc-tok-create-test-profile"
+        try:
+            payload = get_permission_profile_base_payload(profile_id)
+            request_content = CreatePermissionProfileRequestContent(**payload)
+            response = res_api_client.create_permission_profile(request_content)
+            assert response is not None
+            assert response.profile is not None
+            assert response.profile.profile_id == profile_id
+            logger.info(
+                f"Service-token caller successfully created permission profile {profile_id}"
+            )
+            # Best-effort cleanup so this test stays idempotent.
+            try:
+                res_api_client.delete_permission_profile(profile_id)
+            except Exception:
+                pass
+        except Exception as e:
+            pytest.fail(
+                f"Unexpected API error for service-token create_permission_profile: {str(e)}"
+            )
+
+    @pytest.mark.parametrize("admin_username", ["clusteradmin"])
+    def test_create_permission_profile_with_empty_profile_id(
+        self,
+        request: FixtureRequest,
+        region: str,
+        res_environment: ResEnvironment,
+        admin_username: str,
+        admin: ClientAuth,
+    ) -> None:
+        """Verify that an empty profile_id string is rejected by @length(min: 1) validation."""
+        try:
+            api_client = ApiClient(res_environment, admin)
+            payload = get_permission_profile_base_payload("")
+            request_content = CreatePermissionProfileRequestContent(**payload)
+            api_client.create_permission_profile(request_content)
+            pytest.fail("Expected 400 error for empty profile_id")
+        except Exception as e:
+            assert "400" in str(e)
+            assert hasattr(e, "response")
+            assert e.response.status_code == 400
+            assert "should be non-empty" in e.response.text

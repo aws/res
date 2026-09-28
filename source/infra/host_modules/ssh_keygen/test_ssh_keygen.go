@@ -13,6 +13,7 @@ import (
 	"os"
 	"os/user"
 	"path/filepath"
+	"syscall"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -72,6 +73,55 @@ func fileSize(filePath string) (int64, error) {
 
 // Test function
 func testPamKeygen(t *testing.T) {
+	t.Run("Rejects symlinked sshDir", func(t *testing.T) {
+		targetDir, err := os.MkdirTemp("", "target")
+		assert.NoError(t, err)
+		defer os.RemoveAll(targetDir)
+
+		parentDir, err := os.MkdirTemp("", "parent")
+		assert.NoError(t, err)
+		defer os.RemoveAll(parentDir)
+
+		symlinkPath := filepath.Join(parentDir, ".ssh")
+		err = os.Symlink(targetDir, symlinkPath)
+		assert.NoError(t, err)
+
+		// Record original ownership of the target directory
+		origInfo, err := os.Stat(targetDir)
+		assert.NoError(t, err)
+		origStat := origInfo.Sys().(*syscall.Stat_t)
+
+		currentUser, err := user.Current()
+		assert.NoError(t, err)
+
+		status := doKeyGen(symlinkPath, currentUser)
+		assert.Equal(t, int(C.PAM_AUTH_ERR), int(status))
+
+		// Verify the target directory ownership was NOT changed
+		afterInfo, err := os.Stat(targetDir)
+		assert.NoError(t, err)
+		afterStat := afterInfo.Sys().(*syscall.Stat_t)
+		assert.Equal(t, origStat.Uid, afterStat.Uid)
+		assert.Equal(t, origStat.Gid, afterStat.Gid)
+
+		assert.False(t, fileExists(filepath.Join(targetDir, "id_rsa")))
+		assert.False(t, fileExists(filepath.Join(targetDir, "id_rsa.pub")))
+		assert.False(t, fileExists(filepath.Join(targetDir, "authorized_keys")))
+	})
+
+	t.Run("Rejects non-directory path", func(t *testing.T) {
+		tmpFile, err := os.CreateTemp("", "notadir")
+		assert.NoError(t, err)
+		tmpFile.Close()
+		defer os.Remove(tmpFile.Name())
+
+		currentUser, err := user.Current()
+		assert.NoError(t, err)
+
+		status := doKeyGen(tmpFile.Name(), currentUser)
+		assert.Equal(t, int(C.PAM_AUTH_ERR), int(status))
+	})
+
 	t.Run("Creates keys and authorized_keys with correct permissions", func(t *testing.T) {
 		sshDir, err := os.MkdirTemp("", "temp")
 		assert.NoError(t, err)

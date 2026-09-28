@@ -9,7 +9,6 @@
 #  OR CONDITIONS OF ANY KIND, express or implied. See the License for the specific language governing permissions
 #  and limitations under the License.
 import re
-from ideasdk.client.evdi_client import EvdiClient
 from ideasdk.context import SocaContext
 
 from ideadatamodel import (
@@ -35,6 +34,11 @@ from ideadatamodel import exceptions, errorcodes, constants
 from ideasdk.utils import Utils, GroupNameHelper
 from ideasdk.auth import TokenService
 
+from datamodel.models.backend.batch_delete_session_request_content import (
+    BatchDeleteSessionRequestContent,
+)
+from datamodel.models.backend.virtual_desktop_session import VirtualDesktopSession
+
 from ideaclustermanager.app.accounts.cognito_user_pool import CognitoUserPool
 from ideaclustermanager.app.accounts import auth_constants
 from ideaclustermanager.app.accounts.auth_utils import AuthUtils
@@ -49,6 +53,7 @@ from ideaclustermanager.app.accounts.helpers.quic_update_helper import QuicUpdat
 from res.resources import accounts
 from res.clients.ad_sync import ad_sync_client
 from res import exceptions as res_exceptions
+from res.constants import COGNITO_USERNAME_REGEX, COGNITO_USERNAME_ERROR_MESSAGE
 
 from typing import Optional
 import os
@@ -75,13 +80,11 @@ class AccountsService:
 
     def __init__(self, context: SocaContext,
                  user_pool: Optional[CognitoUserPool],
-                 evdi_client: Optional[EvdiClient],
                  token_service: Optional[TokenService]):
 
         self.context = context
         self.logger = context.logger('accounts-service')
         self.user_pool = user_pool
-        self.evdi_client = evdi_client
         self.token_service = token_service
 
         self.sssd = SSSD(context)
@@ -190,8 +193,8 @@ class AccountsService:
             raise exceptions.invalid_params('password is required')
 
         username = request.email.split('@')[0].replace('.', '')
-        if not re.match(constants.COGNITO_USERNAME_REGEX, username):
-            raise exceptions.invalid_params(constants.COGNITO_USERNAME_ERROR_MESSAGE)
+        if not re.match(COGNITO_USERNAME_REGEX, username):
+            raise exceptions.invalid_params(COGNITO_USERNAME_ERROR_MESSAGE)
 
         try:
             existing_user = accounts.get_user(username)
@@ -224,8 +227,8 @@ class AccountsService:
             raise exceptions.invalid_params('confirmation code is required')
 
         username = request.email.split('@')[0].replace('.', '')
-        if not re.match(constants.COGNITO_USERNAME_REGEX, username):
-            raise exceptions.invalid_params(constants.COGNITO_USERNAME_ERROR_MESSAGE)
+        if not re.match(COGNITO_USERNAME_REGEX, username):
+            raise exceptions.invalid_params(COGNITO_USERNAME_ERROR_MESSAGE)
 
         self.user_pool.confirm_sign_up(
             username=username,
@@ -256,8 +259,8 @@ class AccountsService:
         if Utils.is_empty(username):
             raise exceptions.invalid_params('username is required')
 
-        if not re.match(constants.COGNITO_USERNAME_REGEX, username):
-            raise exceptions.invalid_params(constants.COGNITO_USERNAME_ERROR_MESSAGE)
+        if not re.match(COGNITO_USERNAME_REGEX, username):
+            raise exceptions.invalid_params(COGNITO_USERNAME_ERROR_MESSAGE)
 
         self.user_pool.resend_confirmation_code(username)
 
@@ -300,7 +303,39 @@ class AccountsService:
             raise AuthUtils.invalid_operation('Cluster Administrator cannot be disabled.')
 
         accounts.update_user({'username': username, 'enabled': False}, force=True)
-        self.evdi_client.publish_user_disabled_event(username=username)
+        self._delete_user_sessions(username)
+
+    def _delete_user_sessions(self, username: str) -> None:
+        """Delete all VDI sessions owned by the disabled user via ResApiClient."""
+        res_api_client = self.context.res_api_client
+        if not res_api_client:
+            self.logger.error("ResApiClient is not configured. Cannot delete sessions for disabled user.")
+            return
+
+        try:
+            sessions = res_api_client.list_all_sessions(owner=username)
+            if not sessions:
+                return
+
+            response = res_api_client.batch_delete_session(
+                BatchDeleteSessionRequestContent(
+                    sessions=[
+                        VirtualDesktopSession(
+                            idea_session_id=s.idea_session_id,
+                            owner=s.owner,
+                            force=True,
+                        )
+                        for s in sessions
+                    ]
+                )
+            )
+            if response and response.unsuccessful_list:
+                failed_ids = [s.idea_session_id for s in response.unsuccessful_list]
+                self.logger.warning(
+                    f"Failed to delete {len(failed_ids)} sessions for disabled user {username}: {failed_ids}."
+                )
+        except Exception:
+            self.logger.exception(f"Error deleting sessions for disabled user {username}")
 
     def reset_password(self, username: str):
         username = AuthUtils.sanitize_username(username)

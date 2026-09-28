@@ -4,7 +4,7 @@ $version: "2.0"
 
 namespace res
 
-@http(method: "POST", uri: "/res/virtual-desktop/software-stack/create-from-session")
+@http(method: "POST", uri: "/res/virtual-desktop/software-stacks/create-from-session")
 @tags(["virtual-desktop"])
 @documentation("Create a software stack from an existing session")
 operation CreateSoftwareStackFromSession {

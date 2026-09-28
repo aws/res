@@ -20,6 +20,9 @@ from unittest.mock import MagicMock
 import botocore.exceptions
 import pytest
 from _pytest.monkeypatch import MonkeyPatch
+from datamodel.models.project import Project as VdiProject
+from datamodel.models.virtual_desktop_session import VirtualDesktopSession
+from datamodel.models.virtual_desktop_software_stack import VirtualDesktopSoftwareStack
 from ideaclustermanager import AppContext
 from ideaclustermanager.app.accounts.db.group_dao import GroupDAO
 from ideaclustermanager.app.accounts.db.user_dao import UserDAO
@@ -46,8 +49,6 @@ from ideadatamodel import (
     SocaSortBy,
     UpdateProjectRequest,
     User,
-    VirtualDesktopSession,
-    VirtualDesktopSoftwareStack,
     constants,
     errorcodes,
     exceptions,
@@ -916,13 +917,13 @@ def test_projects_crud_disable_project(context):
     # When disabling a project, all associated sessions will be stopped
     test_session = VirtualDesktopSession(
         idea_session_id="test-session-id",
-        project={
-            "project_id": project_id,
-            "name": "test-project",
-            "title": "Test Project",
-        },
+        project=VdiProject(
+            project_id=project_id,
+            name="test-project",
+            title="Test Project",
+        ),
     )
-    context.projects.vdc_client.sessions = [test_session]
+    context.projects.res_api_client.sessions = [test_session]
     context.projects.disable_project(
         DisableProjectRequest(project_id=ProjectsTestContext.crud_project.project_id)
     )
@@ -933,12 +934,18 @@ def test_projects_crud_disable_project(context):
     assert result is not None
     assert result.project is not None
     assert result.project.enabled is False
-    remaining_sessions = context.projects.vdc_client.list_sessions_by_project_id(
-        project_id
-    )
+    remaining_sessions = [
+        s
+        for s in context.projects.res_api_client.sessions
+        if s.project and s.project.project_id == project_id
+    ]
     assert len(remaining_sessions) == 1
     assert remaining_sessions[0].state == "STOPPING"
-    assert remaining_sessions[0].force == True
+    # batch_stop_session must be sent with force=True so the backend force-stops
+    # all sessions associated with the disabled project.
+    stop_request = context.projects.res_api_client.last_batch_stop_request
+    assert stop_request is not None
+    assert all(s.force is True for s in stop_request.sessions)
 
 
 def test_projects_crud_list_projects(context, monkey_session):
@@ -1040,20 +1047,20 @@ def test_projects_crud_delete_project(context, monkey_session, membership):
     # and the project will be removed from any software stacks that contain it
     test_session = VirtualDesktopSession(
         idea_session_id="test-session-id",
-        project={
-            "project_id": project_id,
-            "name": "test-project",
-            "title": "Test Project",
-        },
+        project=VdiProject(
+            project_id=project_id,
+            name="test-project",
+            title="Test Project",
+        ),
     )
     test_stack = VirtualDesktopSoftwareStack(
         stack_id="test-stack-id",
         name="test-stack",
-        projects=[{"project_id": project_id}],
+        projects=[VdiProject(project_id=project_id)],
     )
 
-    context.projects.vdc_client.sessions = [test_session]
-    context.projects.vdc_client.software_stacks = [test_stack]
+    context.projects.res_api_client.sessions = [test_session]
+    context.projects.res_api_client.software_stacks = [test_stack]
 
     mock_get_role_attached_policies_arns = MagicMock()
     mock_get_role_attached_policies_arns.return_value = (True, ["test_arn"])
@@ -1092,19 +1099,20 @@ def test_projects_crud_delete_project(context, monkey_session, membership):
     assert excinfo.value.error_code == "PROJECT_NOT_FOUND"
 
     # Verify sessions are terminated
-    remaining_sessions = context.projects.vdc_client.list_sessions_by_project_id(
-        project_id
-    )
+    remaining_sessions = [
+        s
+        for s in context.projects.res_api_client.sessions
+        if s.project and s.project.project_id == project_id
+    ]
     assert len(remaining_sessions) == 0
 
-    # Verify project is removed from software stacks and cannot get software stacks by this project_id
-    remaining_stacks = context.projects.vdc_client.get_software_stacks_by_name(
-        test_stack.name
-    )
-    assert len(remaining_stacks) == 1
-    assert len(remaining_stacks[0].projects) == 0
+    all_stacks = context.projects.res_api_client.software_stacks
+    assert len(all_stacks) == 1
+    assert len(all_stacks[0].projects) == 0
     remaining_stacks_with_project_id = (
-        context.projects.vdc_client.list_software_stacks_by_project_id(project_id)
+        context.projects.res_api_client.list_software_stacks(
+            project_id=project_id
+        ).listing
     )
     assert len(remaining_stacks_with_project_id) == 0
 

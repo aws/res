@@ -4,7 +4,7 @@ $version: "2.0"
 
 namespace res
 
-@http(method: "GET", uri: "/res/virtual-desktop/software-stack/{stackId}")
+@http(method: "GET", uri: "/res/virtual-desktop/software-stacks/{stack_id}")
 @readonly
 @tags(["virtual-desktop"])
 @documentation("Get details of a software stack")
@@ -23,7 +23,8 @@ structure GetSoftwareStackRequest {
     @httpLabel
     @required
     @length(min: 1)
-    stackId: String
+    @suppress(["CamelCase"])
+    stack_id: String
 
     @documentation("Base operating system for the software stack")
     @length(min: 1)

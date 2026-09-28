@@ -17,6 +17,7 @@ from res.resources import (
     projects as res_projects,
 )
 from res.utils import ec2_utils
+from res.clients.aws.aws_client_provider import AwsClientProvider
 from datamodel.models.virtual_desktop_affinity import (
     VirtualDesktopAffinity,
 )  # noqa: E501
@@ -76,9 +77,10 @@ def validate_software_stack_fields(
         if software_stack.enabled is None:
             software_stack.enabled = existing_software_stack.get("enabled")
 
-    set_software_stack_architecture(software_stack)
+    if software_stack.ami_id:
+        set_software_stack_architecture(software_stack)
 
-    for project in software_stack.projects:
+    for project in software_stack.projects or []:
         if project.project_id is None or project.project_id == "":
             software_stack.failure_reason = "software_stack.project.project_id missing"
             return software_stack, False
@@ -114,3 +116,12 @@ def validate_placement(software_stack: VirtualDesktopSoftwareStack) -> bool:
         )
 
     return True
+
+
+def ami_name_exists(name: str) -> bool:
+    """Check if an AMI with the given name already exists in the account."""
+    ec2_client = AwsClientProvider().ec2()
+    images = ec2_client.describe_images(
+        Filters=[{"Name": "name", "Values": [name]}]
+    ).get("Images", [])
+    return len(images) > 0

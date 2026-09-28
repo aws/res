@@ -276,6 +276,7 @@ MODULE_SHARED_STORAGE = 'shared-storage'
 MODULE_SCHEDULER = 'scheduler'
 MODULE_CLUSTER_MANAGER = 'cluster-manager'
 MODULE_VIRTUAL_DESKTOP_CONTROLLER = 'virtual-desktop-controller'
+MODULE_ID_VIRTUAL_DESKTOP_CONTROLLER = 'vdc'
 MODULE_VIRTUAL_DESKTOP_APP = 'virtual-desktop-app'
 MODULE_ID_VIRTUAL_DESKTOP_APP = 'vdi-app'
 MODULE_BASTION_HOST = 'bastion-host'
@@ -297,10 +298,40 @@ MODULE_TYPE_CONFIG = 'config'
 MODULE_TYPE_STACK = 'stack'
 
 # restricted modules and keys for non-admins
-RESTRICTED_MODULES_FOR_NON_ADMINS = [MODULE_SHARED_STORAGE]
+# When a non-admin user requests settings for a module listed here,
+# only the top-level keys present in RESTRICTED_MODULE_NON_ADMIN_PARENT_KEYS
+# are returned. All other keys are stripped from the response.
+RESTRICTED_MODULES_FOR_NON_ADMINS = [
+    MODULE_SHARED_STORAGE,
+    MODULE_DIRECTORYSERVICE,
+    MODULE_IDENTITY_PROVIDER,
+    MODULE_CLUSTER,
+    MODULE_ID_VIRTUAL_DESKTOP_CONTROLLER,
+    MODULE_BASTION_HOST,
+]
 RESTRICTED_MODULE_NON_ADMIN_PARENT_KEYS = dict()
 RESTRICTED_MODULE_NON_ADMIN_PARENT_KEYS[MODULE_SHARED_STORAGE] = {
     "enable_file_browser"
+}
+RESTRICTED_MODULE_NON_ADMIN_PARENT_KEYS[MODULE_DIRECTORYSERVICE] = {
+    "provider",  # used by my-virtual-desktop-sessions to determine AD provider type
+}
+RESTRICTED_MODULE_NON_ADMIN_PARENT_KEYS[MODULE_IDENTITY_PROVIDER] = {
+    "cognito",  # domain_url needed for SSO logout redirect
+}
+RESTRICTED_MODULE_NON_ADMIN_PARENT_KEYS[MODULE_CLUSTER] = {
+    "locale",
+    "timezone",
+    "cluster_name",
+    "aws",  # partition needed for GovCloud detection
+}
+RESTRICTED_MODULE_NON_ADMIN_PARENT_KEYS[MODULE_ID_VIRTUAL_DESKTOP_CONTROLLER] = {
+    "server",       # enable_adv_options_non_admin
+    "dcv_session",  # default_dcv_session_type
+}
+RESTRICTED_MODULE_NON_ADMIN_PARENT_KEYS[MODULE_BASTION_HOST] = {
+    "instance_id",  # existence check determines if SSH is enabled
+    "public",       # whether bastion host is publicly accessible
 }
 
 # group types
@@ -530,15 +561,6 @@ USERNAME_ERROR_MESSAGE = (f"Username (SAM-Account-Name of the AD user) doesn't m
                           f"digits, period, underscore, and hyphen, with the restriction that "
                           f"hyphen is not allowed as first character of the username. "
                           f"The maximum length of username is 20.")
-
-# Cogito username regex follows Ubuntu username standards, the most restrictive
-# of the Linux distros that RES supports.
-# See: https://manpages.ubuntu.com/manpages/focal/en/man5/adduser.conf.5.html
-COGNITO_USERNAME_REGEX = rf'^[a-z][-a-z0-9_]{{0,31}}$'
-COGNITO_USERNAME_ERROR_MESSAGE = (f"Username doesn't match the regex pattern {COGNITO_USERNAME_REGEX}. "
-                          f"Username may only contain lower case ASCII letters (a-z), numbers (0-9),"
-                          f"and the following special characters: underscore (_), and hypen (-)."
-                          f"The maximum length of username is 32.")
 
 COGNITO_USER_IDP_TYPE = 'Native user'
 SSO_USER_IDP_TYPE = 'SSO'

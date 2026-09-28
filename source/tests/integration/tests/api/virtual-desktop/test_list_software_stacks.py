@@ -9,12 +9,14 @@ using the RES framework ResClient for proper API interaction.
 """
 
 import logging
+import uuid
 
 import pytest
 
-from ideadatamodel import Project  # type: ignore
-
 # Import RES framework components
+from res.clients.api_client.res_api_client import ResApiClient  # type: ignore
+
+from ideadatamodel import Project  # type: ignore
 from tests.integration.framework.client.api_client import (
     ApiClient,
     CreateSoftwareStackRequestContent,
@@ -23,6 +25,10 @@ from tests.integration.framework.client.api_client import (
 )
 from tests.integration.framework.fixtures.fixture_request import FixtureRequest
 from tests.integration.framework.fixtures.project import project
+from tests.integration.framework.fixtures.res_api_client import (
+    res_api_client,
+    res_api_client_read_only,
+)
 from tests.integration.framework.fixtures.res_environment import (
     ResEnvironment,
     res_environment,
@@ -198,7 +204,7 @@ class TestListSoftwareStacks:
 
             payload = get_software_stack_base_payload(
                 region,
-                name="test-stack-admin-project",
+                name=f"test-stack-admin-project-{str(uuid.uuid4())[:4]}",
                 projects=[{"project_id": project.project_id}],
             )
 
@@ -260,7 +266,7 @@ class TestListSoftwareStacks:
         created_stack = None
 
         try:
-            test_name = "test-stack-name-baseos-filter"
+            test_name = f"test-stack-name-baseos-filter-{str(uuid.uuid4())[:4]}"
             test_base_os = "amzn2023"
             payload = get_software_stack_base_payload(
                 region,
@@ -376,7 +382,7 @@ class TestListSoftwareStacks:
 
             payload = get_software_stack_base_payload(
                 region,
-                name="test-stack-nonadmin-project-filter",
+                name=f"test-stack-nonadmin-project-filter-{str(uuid.uuid4())[:4]}",
                 projects=[{"project_id": project.project_id}],
                 enabled=True,
             )
@@ -405,10 +411,6 @@ class TestListSoftwareStacks:
                 response.listing[0].enabled is True
             ), "Non-admin user should only see enabled stacks"
 
-            logger.info(
-                "Successfully retrieved enabled software stack as non-admin with project_id"
-            )
-
         except Exception as e:
             pytest.fail(f"Unexpected API error: {str(e)}")
         finally:
@@ -435,18 +437,11 @@ class TestListSoftwareStacks:
             api_client.list_software_stacks()
             pytest.fail("Expected 'User not found' error for non-existent user")
         except Exception as e:
-            if "401" in str(e):
-                assert hasattr(e, "response"), "Response should exist in the exception"
-                assert e.response is not None, "Response should not be None"
-
-                response_content = e.response.text
-                if "User not found" in response_content:
-                    logger.info(
-                        "Non-existent user correctly received 'User not found' error"
-                    )
-                    return
-
-            pytest.fail(f"Unexpected error for non-existent user: {str(e)}")
+            assert "401" in str(e), f"Expected 401 error, got: {str(e)}"
+            assert hasattr(e, "response"), "Response should exist in the exception"
+            assert (
+                "User not found" in e.response.text
+            ), f"Expected 'User not found' in response, got: {e.response.text}"
 
     @pytest.mark.parametrize("inactive_username", ["user2"])
     def test_list_software_stacks_with_inactive_user_returns_inactive_user_error(
@@ -465,18 +460,11 @@ class TestListSoftwareStacks:
             api_client.list_software_stacks()
             pytest.fail("Expected 'Inactive user' error for inactive user")
         except Exception as e:
-            if "401" in str(e):
-                assert hasattr(e, "response"), "Response should exist in the exception"
-                assert e.response is not None, "Response should not be None"
-
-                response_content = e.response.text
-                if "Inactive user" in response_content:
-                    logger.info(
-                        "Inactive user correctly received 'Inactive user' error"
-                    )
-                    return
-
-            pytest.fail(f"Unexpected error for inactive user: {str(e)}")
+            assert "401" in str(e), f"Expected 401 error, got: {str(e)}"
+            assert hasattr(e, "response"), "Response should exist in the exception"
+            assert (
+                "Inactive user" in e.response.text
+            ), f"Expected 'Inactive user' in response, got: {e.response.text}"
 
     def test_list_software_stacks_without_auth_token_returns_no_authorization_token_provided_error(
         self,
@@ -495,18 +483,11 @@ class TestListSoftwareStacks:
                 "Expected 'No authorization token provided' error for request without auth token"
             )
         except Exception as e:
-            if "401" in str(e):
-                assert hasattr(e, "response"), "Response should exist in the exception"
-                assert e.response is not None, "Response should not be None"
-
-                response_content = e.response.text
-                if "No authorization token provided" in response_content:
-                    logger.info(
-                        "Request without auth token correctly received 'No authorization token provided' error"
-                    )
-                    return
-
-            pytest.fail(f"Unexpected error for request without auth token: {str(e)}")
+            assert "401" in str(e), f"Expected 401 error, got: {str(e)}"
+            assert hasattr(e, "response"), "Response should exist in the exception"
+            assert (
+                "No authorization token provided" in e.response.text
+            ), f"Expected 'No authorization token provided' in response, got: {e.response.text}"
 
     @pytest.mark.parametrize("admin_username", ["clusteradmin"])
     def test_list_software_stacks_in_prod_with_invalid_auth_token_returns_unable_to_retrieve_username_error(
@@ -528,19 +509,51 @@ class TestListSoftwareStacks:
                 "Expected 'Unable to retrieve username' error for request with invalid auth token"
             )
         except Exception as e:
-            if "401" in str(e):
-                assert hasattr(e, "response"), "Response should exist in the exception"
-                assert e.response is not None, "Response should not be None"
-
-                response_content = e.response.text
-                if "Unable to retrieve username" in response_content:
-                    logger.info(
-                        "Request with invalid auth token correctly received 'Unable to retrieve username' error"
-                    )
-                    return
-
-            pytest.fail(
-                f"Unexpected error for request with invalid auth token: {str(e)}"
-            )
+            assert "401" in str(e), f"Expected 401 error, got: {str(e)}"
+            assert hasattr(e, "response"), "Response should exist in the exception"
+            assert (
+                "Unable to retrieve username" in e.response.text
+            ), f"Expected 'Unable to retrieve username' in response, got: {e.response.text}"
         finally:
             set_backend_lambda_test_mode(region, environment_name, True)
+
+    def test_list_software_stacks_with_service_token(
+        self,
+        request: FixtureRequest,
+        region: str,
+        res_environment: ResEnvironment,
+        res_api_client: ResApiClient,
+    ) -> None:
+        """Service-token caller lists software stacks."""
+        try:
+            response = res_api_client.list_software_stacks()
+            assert response is not None
+            assert response.listing is not None
+            assert isinstance(response.listing, list)
+            logger.info(
+                f"Service-token caller successfully retrieved {len(response.listing)} software stacks"
+            )
+        except Exception as e:
+            pytest.fail(
+                f"Unexpected API error for service-token list_software_stacks: {str(e)}"
+            )
+
+    def test_list_software_stacks_with_service_token_read_only_scope_succeeds(
+        self,
+        request: FixtureRequest,
+        region: str,
+        res_environment: ResEnvironment,
+        res_api_client_read_only: ResApiClient,
+    ) -> None:
+        """Read-only service token can list software stacks."""
+        try:
+            response = res_api_client_read_only.list_software_stacks()
+            assert response is not None
+            assert isinstance(response.listing, list)
+            logger.info(
+                "Read-only service token correctly accepted on list_software_stacks"
+            )
+        except Exception as e:
+            pytest.fail(
+                f"Unexpected API error for read-only service-token list_software_stacks: {str(e)}"
+            )

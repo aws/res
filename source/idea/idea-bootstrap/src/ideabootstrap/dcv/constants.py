@@ -1,5 +1,9 @@
 GL_DISPLAYS_VALUE = ":0.0"
 X_SERVER_MAX_TIMEOUT_SEC = 120
+# Ceiling for bootstrap subprocess calls (systemctl, dpkg-divert, ln, PAM tools). A hung call
+# here silently leaves the session in PROVISIONING forever, so fail loudly
+# instead. systemctl isolate waits for the whole target job set, hence generous.
+SUBPROCESS_TIMEOUT_SEC = 120
 GDM_CONFIG_RHEL_PATH = "/etc/gdm/custom.conf"
 GDM_CONFIG_DEBIAN_PATH = "/etc/gdm3/custom.conf"
 DCV_CONFIG_FILE_PATH = "/etc/dcv/dcv.conf"

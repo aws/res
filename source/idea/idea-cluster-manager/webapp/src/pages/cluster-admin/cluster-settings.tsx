@@ -512,21 +512,6 @@ class ClusterSettings extends Component<ClusterSettingsProps, ClusterSettingsSta
                                     ),
                                 },
                                 {
-                                    label: "SES",
-                                    id: "ses",
-                                    content: (
-                                        <Container header={<Header variant={"h2"}>Simple Email Service (SES)</Header>}>
-                                            <ColumnLayout variant={"text-grid"} columns={3}>
-                                                <KeyValue title="Status" value={<EnabledDisabledStatusIndicator enabled={Utils.asBoolean(dot.pick("ses.enabled", this.state.cluster), false)} />} type={"react-node"} />
-                                                <KeyValue title="AWS Account ID" value={dot.pick("ses.account_id", this.state.cluster)} clipboard={true} />
-                                                <KeyValue title="AWS Region" value={dot.pick("ses.region", this.state.cluster)} />
-                                                <KeyValue title="Sender Email" value={dot.pick("ses.sender_email", this.state.cluster)} clipboard={true} />
-                                                <KeyValue title="Max Sending Rate" value={dot.pick("ses.max_sending_rate", this.state.cluster)} suffix={" / second"} />
-                                            </ColumnLayout>
-                                        </Container>
-                                    ),
-                                },
-                                {
                                     label: "EC2",
                                     id: "ec2",
                                     content: (

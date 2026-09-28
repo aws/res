@@ -12,7 +12,7 @@
  */
 
 import { VirtualDesktopClient } from "../../../client";
-import { VirtualDesktopSchedule, VirtualDesktopSession } from "../../../client/data-model";
+import { VirtualDesktopSchedule, VirtualDesktopSession } from "../../../client/generated/api";
 import React, { Component } from "react";
 import Utils from "../../../common/utils";
 import "moment-timezone";
@@ -190,7 +190,7 @@ class VirtualDesktopSessionCard extends Component<VirtualDesktopSessionCardProps
                 </div>
                 <SpaceBetween size="s" direction={"horizontal"}>
                     <VirtualDesktopSessionStatusIndicator state={this.props.session.state!} hibernation_enabled={this.props.session.hibernation_enabled!} />
-                    <small style={{ color: "grey" }}>{Utils.getOsTitle(this.props.session.software_stack?.base_os)}</small>
+                    <small style={{ color: "grey" }}>{Utils.getOsTitle(this.props.session.base_os)}</small>
                     <small style={{ color: "grey" }}>{this.props.session.server?.instance_type}</small>
                     {this.hasSchedule() && (
                         <small style={{ color: "grey" }}>
@@ -276,7 +276,7 @@ class VirtualDesktopSessionCard extends Component<VirtualDesktopSessionCardProps
                         <strong>DCV Session Id</strong> {this.getSession().dcv_session_id}
                     </li>
                     <li>
-                        <strong>OS</strong> {Utils.getOsTitle(this.getSession().software_stack?.base_os)}
+                        <strong>OS</strong> {Utils.getOsTitle(this.getSession().base_os)}
                     </li>
                     <li>
                         <strong>Session State</strong> {this.getSession().state}
@@ -288,7 +288,7 @@ class VirtualDesktopSessionCard extends Component<VirtualDesktopSessionCardProps
                         <strong>Private IP</strong> {this.getSession().server?.private_ip}{" "}
                     </li>
                     <li>
-                        <strong>Instance AMI</strong> {this.getSession().software_stack?.ami_id}
+                        <strong>Instance AMI</strong> {this.getSession().server?.ami_id}
                     </li>
                     <li>
                         <strong>Instance Id</strong> {this.getSession().server?.instance_id}

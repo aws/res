@@ -123,8 +123,8 @@ class MySharedVirtualDesktopSessions extends Component<MySharedVirtualDesktopPro
             .virtualDesktop()
             .getSessionConnection({
                 connection: {
-                    'idea-session-id': idea_session_id,
-                    'idea-session-owner': idea_session_owner,
+                    idea_session_id: idea_session_id,
+                    idea_session_owner: idea_session_owner,
                 },
             })
             .then((result) => {
@@ -138,13 +138,13 @@ class MySharedVirtualDesktopSessions extends Component<MySharedVirtualDesktopPro
                 sessionFileContent += "format=1.0\n";
                 sessionFileContent += "[connect]\n";
                 sessionFileContent += `user=${AppContext.get().auth().getUsername()}\n`;
-                sessionFileContent += `sessionid=${result.connection?.['idea-session-id']}\n`;
+                sessionFileContent += `sessionid=${result.connection?.['idea_session_id']}\n`;
                 sessionFileContent += `host=${url.host}\n`;
                 sessionFileContent += `port=443\n`;
                 sessionFileContent += `webport=443\n`;
                 sessionFileContent += `quicport=443\n`;
                 sessionFileContent += `certificatevalidationpolicy=${certificatevalidationpolicy}\n`;
-                sessionFileContent += `authtoken=${result.connection?.['access-token']}\n`;
+                sessionFileContent += `authtoken=${result.connection?.['access_token']}\n`;
 
                 const element = document.createElement("a");
                 element.setAttribute("href", "data:text/plain;charset=utf-8," + encodeURIComponent(sessionFileContent));
@@ -170,12 +170,12 @@ class MySharedVirtualDesktopSessions extends Component<MySharedVirtualDesktopPro
         return AppContext.get().client().virtualDesktop()
             .getSessionConnection({
                 connection: {
-                    'idea-session-id': idea_session_id,
-                    'idea-session-owner': idea_session_owner,
+                    idea_session_id: idea_session_id,
+                    idea_session_owner: idea_session_owner,
                 },
             })
             .then((result) => {
-                return `${result.connection?.endpoint}${result.connection?.['web-url-path']}?authToken=${result.connection?.['access-token']}#${result.connection?.['idea-session-id']}`;
+                return `${result.connection?.endpoint}${result.connection?.['web_url_path']}?authToken=${result.connection?.['access_token']}#${result.connection?.['idea_session_id']}`;
             })
             .then((url) => {
                 window.open(url);
@@ -356,6 +356,7 @@ class MySharedVirtualDesktopSessions extends Component<MySharedVirtualDesktopPro
                             })
                             return {
                                 listing: data.listing!,
+                                nextToken: data.nextToken,
                             };
                         })
                         .catch((error) => {

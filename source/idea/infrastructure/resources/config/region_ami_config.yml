@@ -1,48 +1,48 @@
 ap-northeast-1:
-  amzn2023: ami-08f122f8e6e9d868f
+  amzn2023: ami-0b9e39b1fe1c62cac
 ap-northeast-2:
-  amzn2023: ami-010502f62836f0c67
+  amzn2023: ami-06882388850fd4a12
 ap-northeast-3:
-  amzn2023: ami-050e19643b8e4a951
+  amzn2023: ami-085a2e1351169ba01
 ap-south-1:
-  amzn2023: ami-085c5e1d88d722545
+  amzn2023: ami-0d15e9052c94acb75
 ap-southeast-1:
-  amzn2023: ami-05b741ae2ab9f1742
+  amzn2023: ami-0835cef4452581dc0
 ap-southeast-2:
-  amzn2023: ami-024050934c1c66b27
+  amzn2023: ami-0d309527510a8a0d2
 ap-southeast-3:
-  amzn2023: ami-0b1a7d9fc455877c5
+  amzn2023: ami-0e3bdbbb7e5f18687
 ap-southeast-5:
-  amzn2023: ami-04032a1a46e6cce85
+  amzn2023: ami-0b36052818f03d0cb
 ca-central-1:
-  amzn2023: ami-0344a23c782460e34
+  amzn2023: ami-0f82f408f5558e47b
 eu-central-1:
-  amzn2023: ami-036bdae36143a955f
+  amzn2023: ami-0ecc79fb44c0b5dc4
 eu-north-1:
-  amzn2023: ami-048a4ba4502b46dd7
+  amzn2023: ami-0ef91fd8b3791aac0
 eu-south-1:
-  amzn2023: ami-093fbcd9ec41a255d
+  amzn2023: ami-0efd219d91e121387
 eu-west-1:
-  amzn2023: ami-07da2223cc32a6898
+  amzn2023: ami-062a8901a5ddcf280
 eu-west-2:
-  amzn2023: ami-0272ade54c4f22c84
+  amzn2023: ami-0de87753593ec47fd
 eu-west-3:
-  amzn2023: ami-01f71c6770cfff327
+  amzn2023: ami-0961b69edb47951c9
 il-central-1:
-  amzn2023: ami-01a7bea286eb84096
+  amzn2023: ami-0b3dad5509b9e88ac
 me-central-1:
   amzn2023: ami-0df6aa23903f06b06
 sa-east-1:
-  amzn2023: ami-032dfc01c7f1df070
+  amzn2023: ami-0c153b1b27542dbd5
 us-east-1:
-  amzn2023: ami-01bda64f81b5f8e4f
+  amzn2023: ami-0bdc7d025135d7b49
 us-east-2:
-  amzn2023: ami-097a65b0520ee672f
+  amzn2023: ami-0742fcde83639b335
 us-gov-west-1:
-  amzn2023: ami-001f5163d903ef5dd
+  amzn2023: ami-014bf1b4b82c73a7f
 us-gov-east-1:
-  amzn2023: ami-059a7766742eefb2e
+  amzn2023: ami-0c3c05fdd8bd53e3b
 us-west-1:
-  amzn2023: ami-031776b784341ba93
+  amzn2023: ami-0dcea41720906e07c
 us-west-2:
-  amzn2023: ami-00563078bca04e287
+  amzn2023: ami-072f44400e27b9115

@@ -78,7 +78,6 @@ class TestUpdateSession:
                 session.description == payload["session"]["description"]
             ), "Description should match input"
 
-            logger.info("Admin successfully updated session in dry run mode")
         except Exception as e:
             pytest.fail(f"Unexpected API error while updating session: {str(e)}")
         finally:
@@ -122,18 +121,11 @@ class TestUpdateSession:
             api_client.update_session(session_id, request_content)
             pytest.fail("Expected 'User not found' error for non-existent user")
         except Exception as e:
-            if "401" in str(e):
-                assert hasattr(e, "response"), "Response should exist in the exception"
-                assert e.response is not None, "Response should not be None"
-
-                response_content = e.response.text
-                if "User not found" in response_content:
-                    logger.info(
-                        "Non-existent user correctly received 'User not found' error for update session endpoint"
-                    )
-                    return
-
-            pytest.fail(f"Unexpected error for non-existent user: {str(e)}")
+            assert "401" in str(e), f"Expected 401 error, got: {str(e)}"
+            assert hasattr(e, "response"), "Response should exist in the exception"
+            assert (
+                "User not found" in e.response.text
+            ), f"Expected 'User not found' in response, got: {e.response.text}"
 
     def test_update_session_without_auth_token_returns_no_authorization_token_provided_error(
         self,
@@ -154,18 +146,11 @@ class TestUpdateSession:
                 "Expected 'No authorization token provided' error for request without auth token"
             )
         except Exception as e:
-            if "401" in str(e):
-                assert hasattr(e, "response"), "Response should exist in the exception"
-                assert e.response is not None, "Response should not be None"
-
-                response_content = e.response.text
-                if "No authorization token provided" in response_content:
-                    logger.info(
-                        "Request without auth token correctly received 'No authorization token provided' error for update session endpoint"
-                    )
-                    return
-
-            pytest.fail(f"Unexpected error for request without auth token: {str(e)}")
+            assert "401" in str(e), f"Expected 401 error, got: {str(e)}"
+            assert hasattr(e, "response"), "Response should exist in the exception"
+            assert (
+                "No authorization token provided" in e.response.text
+            ), f"Expected 'No authorization token provided' in response, got: {e.response.text}"
 
     @pytest.mark.parametrize("admin_username", ["clusteradmin"])
     def test_update_session_in_prod_with_invalid_auth_token_returns_unable_to_retrieve_username_error(
@@ -193,20 +178,11 @@ class TestUpdateSession:
                 "Expected 'Unable to retrieve username' error for request with invalid auth token"
             )
         except Exception as e:
-            if "401" in str(e):
-                assert hasattr(e, "response"), "Response should exist in the exception"
-                assert e.response is not None, "Response should not be None"
-
-                response_content = e.response.text
-                if "Unable to retrieve username" in response_content:
-                    logger.info(
-                        "Request with invalid auth token correctly received 'Unable to retrieve username' error for update session endpoint"
-                    )
-                    return
-
-            pytest.fail(
-                f"Unexpected error for request with invalid auth token: {str(e)}"
-            )
+            assert "401" in str(e), f"Expected 401 error, got: {str(e)}"
+            assert hasattr(e, "response"), "Response should exist in the exception"
+            assert (
+                "Unable to retrieve username" in e.response.text
+            ), f"Expected 'Unable to retrieve username' in response, got: {e.response.text}"
         finally:
             set_backend_lambda_test_mode(region, environment_name, True)
 
@@ -244,7 +220,6 @@ class TestUpdateSession:
             assert (
                 session.name == payload["session"]["name"]
             ), "Session name should match input"
-            logger.info("Non-admin user successfully updated session in dry run mode")
         except Exception as e:
             pytest.fail(
                 f"Unexpected API error while updating session as non-admin: {str(e)}"
@@ -273,6 +248,7 @@ class TestUpdateSession:
             pytest.fail("Expected error for non-admin updating another user's session")
         except Exception as e:
             assert "401" in str(e), f"Expected 401 error, got: {str(e)}"
+            assert hasattr(e, "response"), "Response should exist in the exception"
             logger.info(
                 "Non-admin correctly denied from updating another user's session"
             )
@@ -299,4 +275,84 @@ class TestUpdateSession:
             assert "400" in str(e) or "does not exist" in str(
                 e
             ), f"Expected 400 error, got: {str(e)}"
-            logger.info("Non-existent session correctly returned error")
+            assert hasattr(e, "response"), "Response should exist in the exception"
+
+    @pytest.mark.parametrize("admin_username", ["clusteradmin"])
+    def test_update_session_with_empty_project_id(
+        self,
+        request: FixtureRequest,
+        region: str,
+        res_environment: ResEnvironment,
+        admin_username: str,
+        admin: ClientAuth,
+    ) -> None:
+        """Verify that an empty project_id string is rejected by @length(min: 1) validation."""
+        api_client = ApiClient(res_environment, admin)
+
+        try:
+            payload = {
+                "session": {
+                    "idea_session_id": "fake-session-id",
+                    "project": {"project_id": ""},
+                }
+            }
+            request_content = UpdateSessionRequestContent(**payload)
+            api_client.update_session("fake-session-id", request_content)
+            pytest.fail("Expected 400 error for empty project_id")
+        except Exception as e:
+            assert "400" in str(e)
+            assert hasattr(e, "response")
+            assert e.response.status_code == 400
+            assert "should be non-empty" in e.response.text
+
+    @pytest.mark.parametrize("admin_username", ["clusteradmin"])
+    def test_update_session_missing_owner_returns_400(
+        self,
+        request: FixtureRequest,
+        res_environment: ResEnvironment,
+        admin_username: str,
+        admin: ClientAuth,
+    ) -> None:
+        """Test that update session fails with 400 when owner is missing."""
+        api_client = ApiClient(res_environment, admin)
+
+        try:
+            payload: Dict[str, Any] = {
+                "session": {
+                    "idea_session_id": "fake-session-id",
+                    "server": {"instance_type": "t3.large"},
+                }
+            }
+            request_content = UpdateSessionRequestContent(**payload)
+            api_client.update_session("fake-session-id", request_content)
+            pytest.fail("Expected 400 error for missing owner")
+        except Exception as e:
+            assert hasattr(e, "response")
+            assert e.response.status_code == 400
+            assert "owner" in e.response.text.lower()
+
+    @pytest.mark.parametrize("admin_username", ["clusteradmin"])
+    def test_update_session_missing_idea_session_id_returns_400(
+        self,
+        request: FixtureRequest,
+        res_environment: ResEnvironment,
+        admin_username: str,
+        admin: ClientAuth,
+    ) -> None:
+        """Test that update session fails with 400 when idea_session_id is missing."""
+        api_client = ApiClient(res_environment, admin)
+
+        try:
+            payload: Dict[str, Any] = {
+                "session": {
+                    "owner": "clusteradmin",
+                    "server": {"instance_type": "t3.large"},
+                }
+            }
+            request_content = UpdateSessionRequestContent(**payload)
+            api_client.update_session("fake-session-id", request_content)
+            pytest.fail("Expected 400 error for missing idea_session_id")
+        except Exception as e:
+            assert hasattr(e, "response")
+            assert e.response.status_code == 400
+            assert "idea_session_id" in e.response.text.lower()

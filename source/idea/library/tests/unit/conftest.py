@@ -1,12 +1,10 @@
 #  Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 #  SPDX-License-Identifier: Apache-2.0
 import os
-import time
 
 import boto3
 import pytest
-from _pytest.monkeypatch import MonkeyPatch
-from ideatestutils.dynamodb.dynamodb_local import DynamoDBLocal
+from moto import mock_aws
 from res.constants import (
     AD_AUTOMATION_DB_HASH_KEY,
     AD_AUTOMATION_TABLE_NAME,
@@ -27,45 +25,14 @@ from res.resources import (
     software_stacks,
 )
 
-# initialize monkey patch globally, so that it can be used inside session scoped context fixtures
-# this allows session scoped monkey patches to be applicable across all unit tests
-# monkeypatch.undo() is called at the end of context fixture
-monkeypatch = MonkeyPatch()
+ENVIRONMENT_NAME = "res-test"
 
 
-@pytest.fixture(scope="session")
-def ddb_local():
-    ddb_local = DynamoDBLocal(db_name="ad-sync", reset=True)
-    ddb_local.start()
+def _create_tables():
+    """Create all DynamoDB tables needed by RES library unit tests."""
+    client = boto3.client("dynamodb", region_name="us-west-1")
 
-    # wait for ddb local server to start ...
-    time.sleep(1)
-
-    yield ddb_local
-
-    ddb_local.stop()
-
-
-@pytest.fixture(scope="session")
-def context(ddb_local):
-    os.environ[ENVIRONMENT_NAME_KEY] = "res-test"
-    ENVIRONMENT_NAME = "res-test"
-    boto3.setup_default_session(
-        region_name="us-west-1", aws_access_key_id="test", aws_secret_access_key="test"
-    )
-
-    # Override the endpoint for boto3.resource("dynamodb") to use DynamoDB local
-    dynamodb = boto3.resource("dynamodb", endpoint_url="http://localhost:9000")
-
-    def _resource(service_name: str):
-        if service_name == "dynamodb":
-            return dynamodb
-
-    monkeypatch.setattr(boto3, "resource", _resource)
-
-    # Create all the tables in DynamoDB local
-    dynamodb_client = boto3.client("dynamodb", endpoint_url="http://localhost:9000")
-    dynamodb_client.create_table(
+    client.create_table(
         TableName=f"{ENVIRONMENT_NAME}.accounts.users",
         AttributeDefinitions=[
             {"AttributeName": "username", "AttributeType": "S"},
@@ -93,15 +60,13 @@ def context(ddb_local):
         ],
         BillingMode="PAY_PER_REQUEST",
     )
-
-    dynamodb_client.create_table(
+    client.create_table(
         TableName=f"{ENVIRONMENT_NAME}.accounts.groups",
         AttributeDefinitions=[{"AttributeName": "group_name", "AttributeType": "S"}],
         KeySchema=[{"AttributeName": "group_name", "KeyType": "HASH"}],
         BillingMode="PAY_PER_REQUEST",
     )
-
-    dynamodb_client.create_table(
+    client.create_table(
         TableName=f"{ENVIRONMENT_NAME}.accounts.group-members",
         AttributeDefinitions=[
             {"AttributeName": "group_name", "AttributeType": "S"},
@@ -113,8 +78,7 @@ def context(ddb_local):
         ],
         BillingMode="PAY_PER_REQUEST",
     )
-
-    dynamodb_client.create_table(
+    client.create_table(
         TableName=f"{ENVIRONMENT_NAME}.authz.role-assignments",
         AttributeDefinitions=[
             {"AttributeName": "actor_key", "AttributeType": "S"},
@@ -136,8 +100,7 @@ def context(ddb_local):
         ],
         BillingMode="PAY_PER_REQUEST",
     )
-
-    dynamodb_client.create_table(
+    client.create_table(
         TableName=f"{ENVIRONMENT_NAME}.projects",
         AttributeDefinitions=[
             {"AttributeName": "project_id", "AttributeType": "S"},
@@ -153,9 +116,7 @@ def context(ddb_local):
         ],
         BillingMode="PAY_PER_REQUEST",
     )
-
-    # Create sessions table
-    dynamodb_client.create_table(
+    client.create_table(
         TableName=f"{ENVIRONMENT_NAME}.{sessions.SESSIONS_TABLE_NAME}",
         AttributeDefinitions=[
             {"AttributeName": sessions.SESSION_DB_HASH_KEY, "AttributeType": "S"},
@@ -167,15 +128,13 @@ def context(ddb_local):
         ],
         BillingMode="PAY_PER_REQUEST",
     )
-
-    # Create cluster settings table
-    dynamodb_client.create_table(
+    client.create_table(
         TableName=f"{ENVIRONMENT_NAME}.{cluster_settings.CLUSTER_SETTINGS_TABLE_NAME}",
         AttributeDefinitions=[
             {
                 "AttributeName": cluster_settings.CLUSTER_SETTINGS_HASH_KEY,
                 "AttributeType": "S",
-            },
+            }
         ],
         KeySchema=[
             {
@@ -185,9 +144,7 @@ def context(ddb_local):
         ],
         BillingMode="PAY_PER_REQUEST",
     )
-
-    # Create session permissions table
-    dynamodb_client.create_table(
+    client.create_table(
         TableName=f"{ENVIRONMENT_NAME}.{session_permissions.SESSION_PERMISSION_TABLE_NAME}",
         AttributeDefinitions=[
             {
@@ -211,43 +168,25 @@ def context(ddb_local):
         ],
         BillingMode="PAY_PER_REQUEST",
     )
-
-    # Create schedules table
-    dynamodb_client.create_table(
+    client.create_table(
         TableName=f"{ENVIRONMENT_NAME}.{schedules.SCHEDULE_DB_TABLE_NAME}",
         AttributeDefinitions=[
-            {
-                "AttributeName": schedules.SCHEDULE_DB_HASH_KEY,
-                "AttributeType": "S",
-            },
-            {
-                "AttributeName": schedules.SCHEDULE_DB_RANGE_KEY,
-                "AttributeType": "S",
-            },
+            {"AttributeName": schedules.SCHEDULE_DB_HASH_KEY, "AttributeType": "S"},
+            {"AttributeName": schedules.SCHEDULE_DB_RANGE_KEY, "AttributeType": "S"},
         ],
         KeySchema=[
-            {
-                "AttributeName": schedules.SCHEDULE_DB_HASH_KEY,
-                "KeyType": "HASH",
-            },
-            {
-                "AttributeName": schedules.SCHEDULE_DB_RANGE_KEY,
-                "KeyType": "RANGE",
-            },
+            {"AttributeName": schedules.SCHEDULE_DB_HASH_KEY, "KeyType": "HASH"},
+            {"AttributeName": schedules.SCHEDULE_DB_RANGE_KEY, "KeyType": "RANGE"},
         ],
         BillingMode="PAY_PER_REQUEST",
     )
-
-    # Create ad sync lock table
-    dynamodb_client.create_table(
+    client.create_table(
         TableName=f"{ENVIRONMENT_NAME}.{AD_SYNC_LOCK_TABLE}",
         KeySchema=[{"AttributeName": "lock_key", "KeyType": "HASH"}],
         AttributeDefinitions=[{"AttributeName": "lock_key", "AttributeType": "S"}],
         BillingMode="PAY_PER_REQUEST",
     )
-
-    # Create ad automation table
-    dynamodb_client.create_table(
+    client.create_table(
         TableName=f"{ENVIRONMENT_NAME}.{AD_AUTOMATION_TABLE_NAME}",
         KeySchema=[{"AttributeName": AD_AUTOMATION_DB_HASH_KEY, "KeyType": "HASH"}],
         AttributeDefinitions=[
@@ -255,9 +194,7 @@ def context(ddb_local):
         ],
         BillingMode="PAY_PER_REQUEST",
     )
-
-    # Create AD sync status table
-    dynamodb_client.create_table(
+    client.create_table(
         TableName=f"{ENVIRONMENT_NAME}.{AD_SYNC_STATUS_TABLE}",
         AttributeDefinitions=[
             {"AttributeName": AD_SYNC_STATUS_TASK_ID_KEY, "AttributeType": "S"},
@@ -269,39 +206,33 @@ def context(ddb_local):
         ],
         BillingMode="PAY_PER_REQUEST",
     )
-
-    # Create permission profiles table
-    dynamodb_client.create_table(
+    client.create_table(
         TableName=f"{ENVIRONMENT_NAME}.{permission_profiles.PERMISSION_PROFILE_TABLE_NAME}",
         KeySchema=[
             {
                 "AttributeName": permission_profiles.PERMISSION_PROFILE_DB_HASH_KEY,
                 "KeyType": "HASH",
-            },
+            }
         ],
         AttributeDefinitions=[
             {
                 "AttributeName": permission_profiles.PERMISSION_PROFILE_DB_HASH_KEY,
                 "AttributeType": "S",
-            },
+            }
         ],
         BillingMode="PAY_PER_REQUEST",
     )
-
-    # Create modules table
-    dynamodb_client.create_table(
+    client.create_table(
         TableName=f"{ENVIRONMENT_NAME}.modules",
         KeySchema=[
-            {"AttributeName": modules.MODULES_TABLE_HASH_KEY, "KeyType": "HASH"},
+            {"AttributeName": modules.MODULES_TABLE_HASH_KEY, "KeyType": "HASH"}
         ],
         AttributeDefinitions=[
-            {"AttributeName": modules.MODULES_TABLE_HASH_KEY, "AttributeType": "S"},
+            {"AttributeName": modules.MODULES_TABLE_HASH_KEY, "AttributeType": "S"}
         ],
         BillingMode="PAY_PER_REQUEST",
     )
-
-    # Create software stacks table
-    dynamodb_client.create_table(
+    client.create_table(
         TableName=f"{ENVIRONMENT_NAME}.{software_stacks.SOFTWARE_STACK_TABLE_NAME}",
         KeySchema=[
             {
@@ -325,56 +256,39 @@ def context(ddb_local):
         ],
         BillingMode="PAY_PER_REQUEST",
     )
-    # Create email template table
-    dynamodb_client.create_table(
+    client.create_table(
         TableName=f"{ENVIRONMENT_NAME}.{email_templates.EMAIL_TEMPLATE_TABLE_NAME}",
         KeySchema=[
             {
                 "AttributeName": email_templates.EMAIL_TEMPLATE_DB_NAME_KEY,
                 "KeyType": "HASH",
-            },
+            }
         ],
         AttributeDefinitions=[
             {
                 "AttributeName": email_templates.EMAIL_TEMPLATE_DB_NAME_KEY,
                 "AttributeType": "S",
-            },
+            }
         ],
         BillingMode="PAY_PER_REQUEST",
     )
 
-    yield context
 
-    # Clean up all the tables related to the AD Sync process after running tests
-    dynamodb_client.delete_table(TableName=f"{ENVIRONMENT_NAME}.projects")
-    dynamodb_client.delete_table(TableName=f"{ENVIRONMENT_NAME}.authz.role-assignments")
-    dynamodb_client.delete_table(TableName=f"{ENVIRONMENT_NAME}.accounts.group-members")
-    dynamodb_client.delete_table(TableName=f"{ENVIRONMENT_NAME}.accounts.groups")
-    dynamodb_client.delete_table(TableName=f"{ENVIRONMENT_NAME}.accounts.users")
-    dynamodb_client.delete_table(
-        TableName=f"{ENVIRONMENT_NAME}.{sessions.SESSIONS_TABLE_NAME}"
-    )
-    dynamodb_client.delete_table(
-        TableName=f"{ENVIRONMENT_NAME}.{session_permissions.SESSION_PERMISSION_TABLE_NAME}"
-    )
-    dynamodb_client.delete_table(
-        TableName=f"{ENVIRONMENT_NAME}.{schedules.SCHEDULE_DB_TABLE_NAME}"
-    )
-    dynamodb_client.delete_table(
-        TableName=f"{ENVIRONMENT_NAME}.{cluster_settings.CLUSTER_SETTINGS_TABLE_NAME}"
-    )
-    dynamodb_client.delete_table(TableName=f"{ENVIRONMENT_NAME}.{AD_SYNC_LOCK_TABLE}")
-    dynamodb_client.delete_table(
-        TableName=f"{ENVIRONMENT_NAME}.{AD_AUTOMATION_TABLE_NAME}"
-    )
-    dynamodb_client.delete_table(TableName=f"{ENVIRONMENT_NAME}.{AD_SYNC_STATUS_TABLE}")
-    dynamodb_client.delete_table(
-        TableName=f"{ENVIRONMENT_NAME}.{permission_profiles.PERMISSION_PROFILE_TABLE_NAME}"
-    )
-    dynamodb_client.delete_table(
-        TableName=f"{ENVIRONMENT_NAME}.{software_stacks.SOFTWARE_STACK_TABLE_NAME}"
-    )
-    dynamodb_client.delete_table(TableName=f"{ENVIRONMENT_NAME}.modules")
-    dynamodb_client.delete_table(
-        TableName=f"{ENVIRONMENT_NAME}.{email_templates.EMAIL_TEMPLATE_TABLE_NAME}"
-    )
+@pytest.fixture(autouse=True)
+def aws_env():
+    """Set AWS environment variables for all tests."""
+    os.environ[ENVIRONMENT_NAME_KEY] = ENVIRONMENT_NAME
+    os.environ["AWS_DEFAULT_REGION"] = "us-west-1"
+    os.environ["AWS_ACCESS_KEY_ID"] = "testing"
+    os.environ["AWS_SECRET_ACCESS_KEY"] = "testing"
+    os.environ["AWS_SECURITY_TOKEN"] = "testing"
+    os.environ["AWS_SESSION_TOKEN"] = "testing"
+
+
+@pytest.fixture(autouse=True, scope="module")
+def context():
+    """Module-scoped mock_aws + DDB tables. Tests within a file share state."""
+    with mock_aws():
+        boto3.setup_default_session(region_name="us-west-1")
+        _create_tables()
+        yield

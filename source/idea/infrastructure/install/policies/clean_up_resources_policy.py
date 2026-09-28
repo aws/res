@@ -24,7 +24,9 @@ class CleanupResources(Policy):
             iam.PolicyStatement(
                 effect=iam.Effect.ALLOW,
                 actions=[
+                    "ec2:DescribeFleets",
                     "ec2:DescribeInstances",
+                    "ec2:DescribeLaunchTemplates",
                     "lambda:ListFunctions",
                     "lambda:ListTags",
                 ],
@@ -41,6 +43,28 @@ class CleanupResources(Policy):
                     arn_builder.get_arn(
                         service="ec2",
                         resource="instance/*",
+                    )
+                ],
+                conditions=tag_condition,
+            ),
+            iam.PolicyStatement(
+                effect=iam.Effect.ALLOW,
+                actions=["ec2:DeleteFleets"],
+                resources=[
+                    arn_builder.get_arn(
+                        service="ec2",
+                        resource="fleet/*",
+                    )
+                ],
+                conditions=tag_condition,
+            ),
+            iam.PolicyStatement(
+                effect=iam.Effect.ALLOW,
+                actions=["ec2:DeleteLaunchTemplate"],
+                resources=[
+                    arn_builder.get_arn(
+                        service="ec2",
+                        resource="launch-template/*",
                     )
                 ],
                 conditions=tag_condition,

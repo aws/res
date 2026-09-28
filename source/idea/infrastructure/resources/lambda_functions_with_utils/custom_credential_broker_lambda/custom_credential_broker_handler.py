@@ -85,7 +85,7 @@ def handler(event: Dict[str, Any], context: Dict[str, Any]) -> Dict[str, Any]:
                         "body": json.dumps(aws_boostrap_credentials),
                     }
                 else:
-                    return {"statusCode": 403, "body": "Error retriving credentials"}
+                    return {"statusCode": 403, "body": "Error retrieving credentials"}
         filesystem_name = Utils.get_filesystem_name_from_request_context(event)
         instance_id = Utils.get_instance_id_from_request_context(request_context)
         source_ip = Utils.get_source_ip_from_request_context(request_context)

@@ -4,7 +4,7 @@ $version: "2.0"
 
 namespace res
 
-@http(method: "POST", uri: "/res/virtual-desktop/permission-profile")
+@http(method: "POST", uri: "/res/virtual-desktop/permission-profiles")
 @tags(["virtual-desktop"])
 @documentation("Create Permission Profile")
 operation CreatePermissionProfile {

@@ -37,16 +37,6 @@ def cluster_manager(c, args):
     invoke_cli(c, 'resctl', 'ideaclustermanager.cli.cli_main', tokens)
 
 @task
-def scheduler(c, args):
-    # type: (Context, str) -> None
-    """
-    invoke virtual desktop controller cli
-    """
-    from ideasdk.utils import Utils
-    tokens = Utils.from_json(Utils.base64_decode(args))
-    invoke_cli(c, 'resctl', 'ideavirtualdesktopcontroller.cli.cli_main', tokens)
-
-@task
 def admin(c, args):
     # type: (Context, str) -> None
     """

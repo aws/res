@@ -12,7 +12,6 @@ from datamodel.models.virtual_desktop_base_os import VirtualDesktopBaseOs
 from datamodel.models.virtual_desktop_server import VirtualDesktopServer
 from datamodel.models.virtual_desktop_session_state import VirtualDesktopSessionState
 from datamodel.models.virtual_desktop_session_type import VirtualDesktopSessionType
-from datamodel.models.virtual_desktop_software_stack import VirtualDesktopSoftwareStack
 from datamodel.models.virtual_desktop_week_schedule import VirtualDesktopWeekSchedule
 from datamodel import util
 from datamodel.serializers.virtual_desktop_session_serializer import virtualdesktopsession_serializer
@@ -22,7 +21,6 @@ from datamodel.models.virtual_desktop_base_os import VirtualDesktopBaseOs  # noq
 from datamodel.models.virtual_desktop_server import VirtualDesktopServer  # noqa: E501
 from datamodel.models.virtual_desktop_session_state import VirtualDesktopSessionState  # noqa: E501
 from datamodel.models.virtual_desktop_session_type import VirtualDesktopSessionType  # noqa: E501
-from datamodel.models.virtual_desktop_software_stack import VirtualDesktopSoftwareStack  # noqa: E501
 from datamodel.models.virtual_desktop_week_schedule import VirtualDesktopWeekSchedule  # noqa: E501
 
 class VirtualDesktopSession(Model):
@@ -31,7 +29,7 @@ class VirtualDesktopSession(Model):
     Do not edit the class manually.
     """
 
-    def __init__(self, dcv_session_id=None, idea_session_id=None, base_os=None, name=None, owner=None, type=None, server=None, created_on=None, updated_on=None, state=None, description=None, software_stack=None, software_stack_id=None, project=None, schedule=None, connection_count=None, force=None, hibernation_enabled=None, is_launched_by_admin=None, locked=None, tags=None, logins=None, is_idle=None, failure_reason=None):  # noqa: E501
+    def __init__(self, dcv_session_id=None, idea_session_id=None, base_os=None, name=None, owner=None, type=None, server=None, created_on=None, updated_on=None, state=None, description=None, software_stack_id=None, project=None, schedule=None, connection_count=None, force=None, hibernation_enabled=None, is_launched_by_admin=None, locked=None, tags=None, is_idle=None, failure_reason=None):  # noqa: E501
         """VirtualDesktopSession - a model defined in OpenAPI
 
         :param dcv_session_id: The dcv_session_id of this VirtualDesktopSession.  # noqa: E501
@@ -56,8 +54,6 @@ class VirtualDesktopSession(Model):
         :type state: VirtualDesktopSessionState
         :param description: The description of this VirtualDesktopSession.  # noqa: E501
         :type description: str
-        :param software_stack: The software_stack of this VirtualDesktopSession.  # noqa: E501
-        :type software_stack: VirtualDesktopSoftwareStack
         :param software_stack_id: The software_stack_id of this VirtualDesktopSession.  # noqa: E501
         :type software_stack_id: str
         :param project: The project of this VirtualDesktopSession.  # noqa: E501
@@ -76,8 +72,6 @@ class VirtualDesktopSession(Model):
         :type locked: bool
         :param tags: The tags of this VirtualDesktopSession.  # noqa: E501
         :type tags: List[object]
-        :param logins: The logins of this VirtualDesktopSession.  # noqa: E501
-        :type logins: List[str]
         :param is_idle: The is_idle of this VirtualDesktopSession.  # noqa: E501
         :type is_idle: bool
         :param failure_reason: The failure_reason of this VirtualDesktopSession.  # noqa: E501
@@ -95,7 +89,6 @@ class VirtualDesktopSession(Model):
             'updated_on': str,
             'state': VirtualDesktopSessionState,
             'description': str,
-            'software_stack': VirtualDesktopSoftwareStack,
             'software_stack_id': str,
             'project': Project,
             'schedule': VirtualDesktopWeekSchedule,
@@ -105,7 +98,6 @@ class VirtualDesktopSession(Model):
             'is_launched_by_admin': bool,
             'locked': bool,
             'tags': List[object],
-            'logins': List[str],
             'is_idle': bool,
             'failure_reason': str
         }
@@ -122,7 +114,6 @@ class VirtualDesktopSession(Model):
             'updated_on': 'updated_on',
             'state': 'state',
             'description': 'description',
-            'software_stack': 'software_stack',
             'software_stack_id': 'software_stack_id',
             'project': 'project',
             'schedule': 'schedule',
@@ -132,7 +123,6 @@ class VirtualDesktopSession(Model):
             'is_launched_by_admin': 'is_launched_by_admin',
             'locked': 'locked',
             'tags': 'tags',
-            'logins': 'logins',
             'is_idle': 'is_idle',
             'failure_reason': 'failure_reason'
         }
@@ -148,7 +138,6 @@ class VirtualDesktopSession(Model):
         self._updated_on = updated_on
         self._state = state
         self._description = description
-        self._software_stack = software_stack
         self._software_stack_id = software_stack_id
         self._project = project
         self._schedule = schedule
@@ -158,7 +147,6 @@ class VirtualDesktopSession(Model):
         self._is_launched_by_admin = is_launched_by_admin
         self._locked = locked
         self._tags = tags
-        self._logins = logins
         self._is_idle = is_idle
         self._failure_reason = failure_reason
 
@@ -448,31 +436,10 @@ class VirtualDesktopSession(Model):
         self._description = description
 
     @property
-    def software_stack(self) -> VirtualDesktopSoftwareStack:
-        """Gets the software_stack of this VirtualDesktopSession.
-
-
-        :return: The software_stack of this VirtualDesktopSession.
-        :rtype: VirtualDesktopSoftwareStack
-        """
-        return self._software_stack
-
-    @software_stack.setter
-    def software_stack(self, software_stack: VirtualDesktopSoftwareStack):
-        """Sets the software_stack of this VirtualDesktopSession.
-
-
-        :param software_stack: The software_stack of this VirtualDesktopSession.
-        :type software_stack: VirtualDesktopSoftwareStack
-        """
-
-        self._software_stack = software_stack
-
-    @property
     def software_stack_id(self) -> str:
         """Gets the software_stack_id of this VirtualDesktopSession.
 
-        Software stack configuration  # noqa: E501
+        Software stack identifier  # noqa: E501
 
         :return: The software_stack_id of this VirtualDesktopSession.
         :rtype: str
@@ -483,7 +450,7 @@ class VirtualDesktopSession(Model):
     def software_stack_id(self, software_stack_id: str):
         """Sets the software_stack_id of this VirtualDesktopSession.
 
-        Software stack configuration  # noqa: E501
+        Software stack identifier  # noqa: E501
 
         :param software_stack_id: The software_stack_id of this VirtualDesktopSession.
         :type software_stack_id: str
@@ -672,29 +639,6 @@ class VirtualDesktopSession(Model):
             raise ValueError("Invalid value for `tags`, number of items must be less than or equal to `50`")  # noqa: E501
 
         self._tags = tags
-
-    @property
-    def logins(self) -> List[str]:
-        """Gets the logins of this VirtualDesktopSession.
-
-        List of allowed logins  # noqa: E501
-
-        :return: The logins of this VirtualDesktopSession.
-        :rtype: List[str]
-        """
-        return self._logins
-
-    @logins.setter
-    def logins(self, logins: List[str]):
-        """Sets the logins of this VirtualDesktopSession.
-
-        List of allowed logins  # noqa: E501
-
-        :param logins: The logins of this VirtualDesktopSession.
-        :type logins: List[str]
-        """
-
-        self._logins = logins
 
     @property
     def is_idle(self) -> bool:

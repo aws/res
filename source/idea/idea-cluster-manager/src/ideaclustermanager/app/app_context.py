@@ -11,7 +11,7 @@
 from ideasdk.context import SocaContext, SocaContextOptions
 from ideasdk.auth import TokenService, ApiAuthorizationServiceBase
 from ideasdk.utils import GroupNameHelper
-from ideasdk.client.vdc_client import AbstractVirtualDesktopControllerClient
+from res.clients.api_client.res_api_client import ResApiClient
 
 from ideaclustermanager.app.authz.role_assignments_service import RoleAssignmentsService
 from ideaclustermanager.app.authz.roles_service import RolesService
@@ -21,7 +21,6 @@ from ideaclustermanager.app.snapshots.snapshots_service import SnapshotsService
 from ideaclustermanager.app.accounts.cognito_user_pool import CognitoUserPool
 from ideaclustermanager.app.accounts.ad_automation_agent import ADAutomationAgent
 from ideaclustermanager.app.email_templates.email_templates_service import EmailTemplatesService
-from ideaclustermanager.app.notifications.notifications_service import NotificationsService
 from ideaclustermanager.app.shared_filesystem.shared_filesystem_service import SharedFilesystemService
 
 from typing import Optional, Union
@@ -43,8 +42,7 @@ class ClusterManagerAppContext(SocaContext):
         self.accounts: Optional[AccountsService] = None
         self.ad_automation_agent: Optional[ADAutomationAgent] = None
         self.email_templates: Optional[EmailTemplatesService] = None
-        self.notifications: Optional[NotificationsService] = None
         self.group_name_helper: Optional[GroupNameHelper] = None
         self.snapshots: Optional[SnapshotsService] = None
-        self.vdc_client: Optional[AbstractVirtualDesktopControllerClient] = None
+        self.res_api_client: Optional[ResApiClient] = None
         self.shared_filesystem: Optional[SharedFilesystemService]

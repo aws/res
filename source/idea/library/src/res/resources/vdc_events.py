@@ -1,0 +1,8 @@
+#  Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+#  SPDX-License-Identifier: Apache-2.0
+
+
+class VDCEventType:
+    EC2_INSTANCE_STATE_CHANGED = "EC2_INSTANCE_STATE_CHANGED_EVENT"
+    SSM_COMMAND_STATUS = "SSM_COMMAND_STATUS_EVENT"
+    VALIDATE_SOFTWARE_STACK_CREATION = "VALIDATE_SOFTWARE_STACK_CREATION_EVENT"

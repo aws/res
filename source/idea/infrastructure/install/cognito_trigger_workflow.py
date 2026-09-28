@@ -27,6 +27,7 @@ from idea.infrastructure.install.policies import (
 from idea.infrastructure.install.stacks.cluster_stack import ClusterStack
 from idea.infrastructure.install.stacks.identity_stack import IdentityStack
 from idea.infrastructure.resources.lambda_functions.cognito_trigger_workflow_lambda import (
+    cognito_pre_signup_handler,
     cognito_trigger_workflow_post_auth_handler,
     cognito_trigger_workflow_uid_handler,
 )
@@ -50,11 +51,13 @@ class CognitoTriggerWorkflow(Construct):
         cluster_stack: ClusterStack,
         identity_stack: IdentityStack,
         params: Union[RESParameters, BIParameters],
+        shared_res_library_layer: aws_lambda.LayerVersion,
     ):
         super().__init__(scope, id)
         # Get existing resource
         cluster_name = params.get_str(CommonKey.CLUSTER_NAME)
         self.cluster_stack = cluster_stack
+        self.shared_res_library_layer = shared_res_library_layer
         cluster_settings = ClusterSettings(cluster_name, self)
         self.arn_builder = ArnBuilder(cluster_name, cluster_settings, parameters=params)
         self.params = params
@@ -96,9 +99,12 @@ class CognitoTriggerWorkflow(Construct):
             cluster_stack.cluster_settings.infrastructure_host_subnets,  # type: ignore
         )
 
+        pre_signup_lambda = self.create_pre_signup_lambda(cluster_name)
+
         self.add_lambdas_as_cognito_trigger(
             cluster_name,
             post_auth_lambda,
+            pre_signup_lambda,
             cluster_settings.user_pool_id,  # type: ignore
         )
 
@@ -255,6 +261,27 @@ class CognitoTriggerWorkflow(Construct):
 
         return uid_lambda
 
+    def create_pre_signup_lambda(
+        self,
+        cluster_name: str,
+    ) -> lambda_.Function:
+        """Create a Lambda that validates usernames during Cognito self-signup."""
+        cognito_pre_signup_lambda = lambda_.Function(
+            self,
+            f"pre-signup-{cognito_trigger_workflow_lambda_name}",
+            runtime=constants.RES_COMMON_LAMBDA_RUNTIME,
+            description="Validate username format during Cognito self-signup to prevent impersonation",  # type: ignore
+            timeout=Duration.seconds(5),  # type: ignore
+            handler=cognito_pre_signup_handler.handle_event,
+            parameters=self.params,
+            layers=[self.shared_res_library_layer],  # type: ignore
+            environment={
+                "CLUSTER_NAME": cluster_name,
+            },
+        )
+
+        return cognito_pre_signup_lambda
+
     def create_post_auth_lambda(
         self,
         cluster_name: str,
@@ -304,6 +331,7 @@ class CognitoTriggerWorkflow(Construct):
         self,
         cluster_name: str,
         post_auth_lambda: lambda_.Function,
+        pre_signup_lambda: lambda_.Function,
         user_pool_id: str,
     ) -> None:
         cognito_user_pool_arn = f"arn:{Aws.PARTITION}:cognito-idp:{Aws.REGION}:{Aws.ACCOUNT_ID}:userpool/{user_pool_id}"
@@ -317,6 +345,7 @@ class CognitoTriggerWorkflow(Construct):
                 "UserPoolId": user_pool_id,
                 "LambdaConfig": {
                     "PostAuthentication": post_auth_lambda.function_arn,
+                    "PreSignUp": pre_signup_lambda.function_arn,
                 },
                 "AdminCreateUserConfig": {
                     "InviteMessageTemplate": {
@@ -340,6 +369,12 @@ class CognitoTriggerWorkflow(Construct):
 
         post_auth_lambda.add_permission(
             "invoke-post-auth-permission",
+            principal=aws_iam.ServicePrincipal("cognito-idp.amazonaws.com"),
+            source_arn=cognito_user_pool_arn,
+        )
+
+        pre_signup_lambda.add_permission(
+            "invoke-pre-signup-permission",
             principal=aws_iam.ServicePrincipal("cognito-idp.amazonaws.com"),
             source_arn=cognito_user_pool_arn,
         )

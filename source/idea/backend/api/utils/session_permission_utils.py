@@ -107,3 +107,5 @@ def _validate_session_for_session_permission_request(session: Any) -> tuple[bool
             "Windows sessions do not support sessions permissions for OpenLDAP",
         )
     return True, ""
+
+

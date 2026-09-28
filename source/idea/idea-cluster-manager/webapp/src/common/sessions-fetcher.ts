@@ -1,4 +1,4 @@
-import { SocaDateRange, SocaFilter, ListSessionsResponse } from "../client/data-model";
+import { SocaDateRange, SocaFilter } from "../client/data-model";
 import { VirtualDesktopClient } from "../client";
 import { OnFlashbarChangeEvent } from "../App";
 import { ListSessionsResponseContent } from "../client/generated/api";

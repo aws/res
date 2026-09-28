@@ -1,8 +1,41 @@
-import json
-from typing import Any, Dict
+from typing import Any, Dict, List, Optional
 
-from ideadatamodel import VirtualDesktopSoftwareStack  # type: ignore
+import pytest
+
 from tests.integration.framework.utils.ec2_utils import get_latest_x86_amzn2023_ami_id
+
+
+def parametrize_software_stacks(
+    stacks: List[Any],
+    xfail_os: Optional[Dict[str, str]] = None,
+) -> List[Any]:
+    """
+    Build a pytest parametrize list from software stacks with optional xfail
+    markers for known-broken OS/instance combinations.
+
+    Args:
+        stacks: List of VirtualDesktopSoftwareStack objects.
+        xfail_os: Dict mapping base_os values to xfail reason strings.
+            Stacks matching these OSes are wrapped with pytest.mark.xfail(strict=False).
+
+    Returns:
+        List suitable for @pytest.mark.parametrize("software_stack", ..., indirect=True).
+    """
+    xfail_os = xfail_os or {}
+    params = []
+    for stack in stacks:
+        base_os = getattr(stack.base_os, "value", stack.base_os)
+        param = (stack, "project", "admin")
+        if base_os in xfail_os:
+            params.append(
+                pytest.param(
+                    param,
+                    marks=pytest.mark.xfail(reason=xfail_os[base_os], strict=False),
+                )
+            )
+        else:
+            params.append(pytest.param(param))
+    return params
 
 
 def get_software_stack_base_payload(region: str, **overrides: Any) -> Dict[str, Any]:
@@ -64,7 +97,7 @@ def get_session_permission_base_payload(**overrides: Any) -> Dict[str, Any]:
         "idea_session_base_os": "amzn2023",
         "idea_session_hibernation_enabled": True,
         "idea_session_type": "VIRTUAL",
-        "idea_session_created_on": "1735578106382",
+        "idea_session_created_on": "2024-12-30T18:21:46+00:00",
         "actor_type": "USER",
         "permission_profile": {"profile_id": "test-profile-123"},
     }
@@ -74,16 +107,3 @@ def get_session_permission_base_payload(**overrides: Any) -> Dict[str, Any]:
         base_payload.update(overrides)
 
     return base_payload
-
-
-def api_model_to_ideadatamodel(api_stack: Any) -> VirtualDesktopSoftwareStack:
-    """Convert API model VirtualDesktopSoftwareStack to ideadatamodel VirtualDesktopSoftwareStack"""
-
-    # Convert API model to dict, then to ideadatamodel
-    if hasattr(api_stack, "to_dict"):
-        stack_dict = api_stack.to_dict()
-    else:
-        # Fallback: convert to JSON and back to dict
-        stack_dict = json.loads(json.dumps(api_stack, default=str))
-
-    return VirtualDesktopSoftwareStack(**stack_dict)

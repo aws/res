@@ -17,16 +17,6 @@ aws:
   pricing_region: us-east-1
   region: "{{ aws_region }}"
 
-ses:
-  enabled: false
-  account_id: "{{aws_account_id}}"
-  region: "{{aws_region}}"
-  sender_email: "{{administrator_email}}"
-  # The maximum number of emails that Amazon SES can accept from your account each second.
-  # You can exceed this quota for short bursts, but not for sustained periods of time.
-  # For more information, see: https://docs.aws.amazon.com/ses/latest/DeveloperGuide/manage-sending-quotas.html
-  max_sending_rate: 1
-
 route53:
   private_hosted_zone_name: "{{cluster_name}}.{{aws_region}}.res"
 

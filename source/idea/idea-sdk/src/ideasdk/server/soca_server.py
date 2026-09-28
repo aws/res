@@ -28,6 +28,7 @@ from concurrent.futures import ThreadPoolExecutor, Future
 from threading import Thread, Event
 import pathlib
 import os
+import re
 import sanic
 from sanic.server import AsyncioServer, serve as create_server, HttpProtocol
 from sanic.server.protocols.websocket_protocol import WebSocketProtocol
@@ -52,6 +53,9 @@ DEFAULT_UNIX_SOCKET_FILE = '/run/idea.sock'
 DEFAULT_MAX_WORKERS = 16
 DEFAULT_GRACEFUL_SHUTDOWN_TIMEOUT = 10
 DEFAULT_ENABLE_AUDIT_LOGS = True
+
+# Suggested default chunk size for streaming file downloads over network-attached storage.
+DOWNLOAD_CHUNK_SIZE = 64 * 1024  # 64 KiB
 
 # these are never used to serve content but used to serve http content over Unix Domain Sockets
 DUMMY_HOSTNAME = 'localhost'
@@ -809,7 +813,7 @@ class SocaServer(SocaService):
 
         helper = FileSystemHelper(self._context, username=username)
         try:
-            helper.check_access(download_file, check_read=True, check_write=False)
+            file_obj = helper.safe_open_with_project_scope(download_file, 'rb')
         except Exception as e:
             if isinstance(e, exceptions.SocaException):
                 return sanic.response.json({
@@ -817,13 +821,38 @@ class SocaServer(SocaService):
                     'success': False
                 }, dumps=Utils.to_json)
             else:
+                self._logger.error(f'Unexpected error during file download for {username}: {e}', exc_info=True)
                 return sanic.response.json({
                     'error_code': errorcodes.GENERAL_ERROR,
                     'success': False
                 }, dumps=Utils.to_json)
 
         self._logger.info(f'{username} has downloaded the following file: {download_file}')
-        return await sanic.response.file(download_file, filename=os.path.basename(download_file))
+
+        # Sanitize filename for Content-Disposition header to prevent header injection
+        # via quotes or newlines in user-supplied path components.
+        filename = re.sub(r'[^\w.\-]', '_', os.path.basename(download_file))
+
+        # Stream from the verified fd. Do not use sanic.response.file()
+        # which re-resolves the path as root and would reopen the TOCTOU window.
+        try:
+            file_size = os.fstat(file_obj.fileno()).st_size
+            response = await http_request.respond(
+                content_type='application/octet-stream',
+                headers={
+                    'Content-Disposition': f'attachment; filename="{filename}"',
+                    'Content-Length': str(file_size),
+                }
+            )
+            loop = asyncio.get_running_loop()
+            while True:
+                chunk = await loop.run_in_executor(None, file_obj.read, DOWNLOAD_CHUNK_SIZE)
+                if not chunk:
+                    break
+                await response.send(chunk)
+            await response.eof()
+        finally:
+            file_obj.close()
 
     def _remove_unix_socket(self):
         if not self.options.enable_unix_socket:

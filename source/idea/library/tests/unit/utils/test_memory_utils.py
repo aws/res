@@ -252,3 +252,10 @@ class TestMemoryUtils:
         assert memory_utils.is_equal(0.5, "GiB", 512.0, "MiB") is True
         assert memory_utils.convert_to_mib(0.5, "GiB") == 512.0
         assert memory_utils.convert_to_mib(512.0, "MiB") == 512.0
+
+    def test_mib_to_gib(self):
+        """Test MiB to GiB conversion."""
+        assert memory_utils.mib_to_gib(32768) == 32.0
+        assert memory_utils.mib_to_gib(16384) == 16.0
+        assert memory_utils.mib_to_gib(1024) == 1.0
+        assert memory_utils.mib_to_gib(0) == 0.0

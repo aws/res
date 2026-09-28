@@ -50,6 +50,16 @@ class VirtualDesktopDcvHostScopedDownPolicy(ManagedPolicy):
                 actions=["s3:GetObject"],
                 resources=arn_builder.s3_public_host_modules,  # type: ignore
             ),
+            iam.PolicyStatement(
+                effect=iam.Effect.ALLOW,
+                actions=["s3:GetObject"],
+                resources=["*"],
+                conditions={
+                    "StringEquals": {
+                        "s3:ExistingObjectTag/res:EnvironmentName": arn_builder.cluster_name
+                    }
+                },
+            ),
             # Cluster settings DDB table permission to get host module URIs
             iam.PolicyStatement(
                 effect=iam.Effect.ALLOW,

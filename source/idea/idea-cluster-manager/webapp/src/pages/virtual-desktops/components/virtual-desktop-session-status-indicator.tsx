@@ -13,7 +13,7 @@
 
 import { StatusIndicator } from "@cloudscape-design/components";
 import React from "react";
-import { VirtualDesktopSessionState } from "../../../client/data-model";
+import { VirtualDesktopSessionState } from "../../../client/generated/api";
 
 export interface VirtualDesktopSessionStatusIndicatorProps {
     state: VirtualDesktopSessionState;

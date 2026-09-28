@@ -23,7 +23,16 @@ from ideaclustermanager.app.snapshots.apply_snapshot_merge_table.merge_table imp
 import ideaclustermanager.app.snapshots.helpers.db_utils as db_utils
 
 from ideadatamodel.snapshots.snapshot_model import TableName
-from ideadatamodel import errorcodes, exceptions
+
+from datamodel.models.backend.create_software_stack_request_content import (
+    CreateSoftwareStackRequestContent,
+)
+from datamodel.models.backend.delete_software_stack_request_content import (
+    DeleteSoftwareStackRequestContent,
+)
+from datamodel.models.backend.virtual_desktop_software_stack import (
+    VirtualDesktopSoftwareStack,
+)
 
 from ideasdk.context import SocaContext
 
@@ -71,17 +80,29 @@ class SoftwareStacksTableMerger(MergeTable):
                 stack_name = resolved_record[db_utils.SOFTWARE_STACK_DB_NAME_KEY]
 
                 if record_delta.action_performed == MergedRecordActionType.CREATE:
-                    software_stack = db_utils.convert_db_dict_to_software_stack_object(record_delta.resolved_record)
-                    software_stack = context.vdc_client.create_software_stack(software_stack)
-                    record_delta.resolved_record = db_utils.convert_software_stack_object_to_db_dict(software_stack)
+                    software_stack = VirtualDesktopSoftwareStack.from_ddb_dict(
+                        record_delta.resolved_record
+                    )
+                    db_utils.rebuild_software_stack_projects_from_db_dict(
+                        software_stack, record_delta.resolved_record
+                    )
+                    # Let the backend generate a fresh stack_id
+                    software_stack.stack_id = None
+                    response = context.res_api_client.create_software_stack(
+                        CreateSoftwareStackRequestContent(software_stack=software_stack)
+                    )
+                    record_delta.resolved_record = response.software_stack.to_ddb_dict()
                     record_deltas.append(record_delta)
-            except exceptions.SocaException as e:
-                if e.error_code == errorcodes.INVALID_PARAMS and e.message.startswith("Invalid software_stack.ami_id"):
-                    logger.debug(TABLE_NAME, stack_name, ApplyResourceStatus.SKIPPED, f"AMI ID or Systems Manager parameter of the software stack is not available in the current region: {str(e)}")
-                    continue
-                raise e
             except Exception as e:
-                if "is not a valid VirtualDesktopBaseOS" in str(e):
+                response_text = (
+                    e.response.text
+                    if hasattr(e, "response") and e.response is not None
+                    else ""
+                )
+                if "Invalid software_stack.ami_id" in response_text:
+                    logger.debug(TABLE_NAME, stack_name, ApplyResourceStatus.SKIPPED, f"AMI ID or Systems Manager parameter of the software stack is not available in the current region: {response_text}")
+                    continue
+                if "is not a valid VirtualDesktopBaseOS" in str(e) or "is not a valid VirtualDesktopBaseOS" in response_text:
                     logger.debug(TABLE_NAME, stack_name, ApplyResourceStatus.SKIPPED, f"{str(e)}. Base OS is no longer supported.")
                     continue
                 logger.error(TABLE_NAME, stack_name, ApplyResourceStatus.FAILED_APPLY, str(e))
@@ -103,8 +124,17 @@ class SoftwareStacksTableMerger(MergeTable):
                 # Currently we only add new software stacks instead of updating existing ones when applying a snapshot.
                 # Add this checking here for handling updated records in the future.
                 try:
-                    context.vdc_client.delete_software_stack(
-                        db_utils.convert_db_dict_to_software_stack_object(record_delta.resolved_record),
+                    stack_id = record_delta.resolved_record[
+                        db_utils.SOFTWARE_STACK_DB_STACK_ID_KEY
+                    ]
+                    base_os = record_delta.resolved_record[
+                        db_utils.SOFTWARE_STACK_DB_BASE_OS_KEY
+                    ]
+                    context.res_api_client.delete_software_stack(
+                        stack_id=stack_id,
+                        request_content=DeleteSoftwareStackRequestContent(
+                            base_os=base_os,
+                        ),
                     )
                 except Exception as e:
                     logger.error(TABLE_NAME, record_delta.resolved_record[db_utils.SOFTWARE_STACK_DB_NAME_KEY],
@@ -127,12 +157,25 @@ class SoftwareStacksTableMerger(MergeTable):
         SoftwareStacksTableMerger._resolve_project_ids(db_entry, project_id_mappings)
 
         stack_name = db_entry[db_utils.SOFTWARE_STACK_DB_NAME_KEY]
-        software_stacks_by_name = context.vdc_client.get_software_stacks_by_name(stack_name)
-        if software_stacks_by_name:
-            snapshot_software_stack = db_utils.convert_db_dict_to_software_stack_object(db_entry)
-            if any(existing_software_stack == snapshot_software_stack for existing_software_stack in software_stacks_by_name):
-                return db_entry, None
+        snapshot_software_stack = VirtualDesktopSoftwareStack.from_ddb_dict(db_entry)
+        db_utils.rebuild_software_stack_projects_from_db_dict(snapshot_software_stack, db_entry)
 
+        found_same_name = False
+        next_token = None
+        while True:
+            response = context.res_api_client.list_software_stacks(
+                software_stack_name=stack_name,
+                next_token=next_token,
+            )
+            for existing in (response.listing or []):
+                found_same_name = True
+                if db_utils.software_stacks_equal(existing, snapshot_software_stack):
+                    return db_entry, None
+            next_token = response.next_token
+            if not next_token:
+                break
+
+        if found_same_name:
             # If software stacks with the exact same name already exists, rename the stack name by appending the dedup ID.
             # This merger will add new software stacks instead of overriding the existing ones to resolve conflicts.
             stack_name = MergeTable.unique_resource_id_generator(stack_name, dedup_id)

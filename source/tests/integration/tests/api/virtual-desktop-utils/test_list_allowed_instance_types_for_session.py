@@ -9,6 +9,7 @@ using the RES framework ResClient for proper API interaction.
 """
 
 import logging
+from typing import Any
 
 import pytest
 
@@ -26,17 +27,30 @@ VirtualDesktopSession = get_backend_model_class(
 VirtualDesktopSoftwareStack = get_backend_model_class(
     "virtual_desktop_software_stack", "VirtualDesktopSoftwareStack"
 )
+VirtualDesktopArchitecture = get_backend_model_class(
+    "virtual_desktop_architecture", "VirtualDesktopArchitecture"
+)
+VirtualDesktopBaseOS = get_backend_model_class(
+    "virtual_desktop_base_os", "VirtualDesktopBaseOs"
+)
+VirtualDesktopGPU = get_backend_model_class("virtual_desktop_gpu", "VirtualDesktopGpu")
+ResMemory = get_backend_model_class("res_memory", "ResMemory")
+
+# Project still goes through the not-yet-migrated cluster-manager API, so it
+# stays ideadatamodel.
+from ideadatamodel import Project  # type: ignore
 
 # Import RES framework components
 from tests.integration.framework.client.api_client import ApiClient
 from tests.integration.framework.fixtures.fixture_request import FixtureRequest
+from tests.integration.framework.fixtures.project import project
 from tests.integration.framework.fixtures.res_environment import (
     ResEnvironment,
     res_environment,
 )
+from tests.integration.framework.fixtures.software_stack import software_stack
 from tests.integration.framework.fixtures.users import admin, inactive_user, non_admin
 from tests.integration.framework.model.client_auth import ClientAuth
-from tests.integration.framework.utils.ec2_utils import get_latest_x86_amzn2023_ami_id
 from tests.integration.framework.utils.lambda_utils import set_backend_lambda_test_mode
 
 logger = logging.getLogger(__name__)
@@ -46,6 +60,44 @@ class TestListAllowedInstanceTypesForSession:
     """Test suite for the list allowed instance types for session endpoint."""
 
     @pytest.mark.parametrize("admin_username", ["clusteradmin"])
+    @pytest.mark.parametrize(
+        "project",
+        [
+            (
+                Project(
+                    title="test-inst-types-for-sess",
+                    name="test-inst-types-for-sess",
+                    description="Project for instance types for session test",
+                    enable_budgets=False,
+                ),
+                ["home"],
+                ["RESAdministrators"],
+                ["clusteradmin"],
+                "admin",
+            )
+        ],
+        indirect=True,
+    )
+    @pytest.mark.parametrize(
+        "software_stack",
+        [
+            (
+                VirtualDesktopSoftwareStack(
+                    name="res-integ-test-instance-types-for-session",
+                    description="Stack for instance types for session test",
+                    base_os=VirtualDesktopBaseOS.AMZN2023,
+                    architecture=VirtualDesktopArchitecture.X86_64,
+                    min_storage=ResMemory(value=50, unit="gb"),
+                    min_ram=ResMemory(value=4, unit="gb"),
+                    gpu=VirtualDesktopGPU.NO_GPU,
+                    allowed_instance_types=["t3", "m6a"],
+                ),
+                "project",
+                "admin",
+            )
+        ],
+        indirect=True,
+    )
     def test_list_allowed_instance_types_for_session_returns_valid_response(
         self,
         request: FixtureRequest,
@@ -53,15 +105,14 @@ class TestListAllowedInstanceTypesForSession:
         res_environment: ResEnvironment,
         admin_username: str,
         admin: ClientAuth,
+        project: "Project",
+        software_stack: Any,
     ) -> None:
         """
         Test successful retrieval of allowed instance types for session.
         """
         try:
             api_client = ApiClient(res_environment, admin)
-
-            # Get latest AMI ID for the region
-            ami_id = get_latest_x86_amzn2023_ami_id(region)
 
             # Create a minimal session for testing
             session = {
@@ -70,17 +121,9 @@ class TestListAllowedInstanceTypesForSession:
                 "state": "STOPPED",
                 "type": "CONSOLE",
                 "owner": "testuser",
+                "base_os": software_stack.base_os.value,
                 "hibernation_enabled": False,
-                "software_stack": {
-                    "name": "test-stack",
-                    "base_os": "amzn2023",
-                    "architecture": "x86_64",
-                    "gpu": "NO_GPU",
-                    "ami_id": ami_id,
-                    "allowed_instance_types": ["t3"],
-                    "min_storage": {"value": 100, "unit": "gb"},
-                    "min_ram": {"value": 22, "unit": "gb"},
-                },
+                "software_stack_id": software_stack.stack_id,
             }
 
             # Create VirtualDesktopSession object
@@ -88,7 +131,7 @@ class TestListAllowedInstanceTypesForSession:
 
             # Create request content object
             request_content = ListAllowedInstanceTypesForSessionRequestContent(
-                session=session_obj
+                session=session_obj,
             )
 
             response = api_client.list_allowed_instance_types_for_session(
@@ -116,6 +159,44 @@ class TestListAllowedInstanceTypesForSession:
             pytest.fail(f"Unexpected API error: {str(e)}")
 
     @pytest.mark.parametrize("admin_username", ["clusteradmin"])
+    @pytest.mark.parametrize(
+        "project",
+        [
+            (
+                Project(
+                    title="test-inst-types-for-sess-gpu",
+                    name="test-inst-types-for-sess-gpu",
+                    description="Project for GPU instance types for session test",
+                    enable_budgets=False,
+                ),
+                ["home"],
+                ["RESAdministrators"],
+                ["clusteradmin"],
+                "admin",
+            )
+        ],
+        indirect=True,
+    )
+    @pytest.mark.parametrize(
+        "software_stack",
+        [
+            (
+                VirtualDesktopSoftwareStack(
+                    name="res-integ-test-instance-types-for-session-gpu",
+                    description="GPU stack for instance types for session test",
+                    base_os=VirtualDesktopBaseOS.AMZN2023,
+                    architecture=VirtualDesktopArchitecture.X86_64,
+                    min_storage=ResMemory(value=50, unit="gb"),
+                    min_ram=ResMemory(value=4, unit="gb"),
+                    gpu=VirtualDesktopGPU.NVIDIA,
+                    allowed_instance_types=["g4dn"],
+                ),
+                "project",
+                "admin",
+            )
+        ],
+        indirect=True,
+    )
     def test_list_allowed_instance_types_for_session_with_gpu_session_returns_valid_response(
         self,
         request: FixtureRequest,
@@ -123,15 +204,14 @@ class TestListAllowedInstanceTypesForSession:
         res_environment: ResEnvironment,
         admin_username: str,
         admin: ClientAuth,
+        project: "Project",
+        software_stack: Any,
     ) -> None:
         """
         Test successful retrieval of allowed instance types for GPU session.
         """
         try:
             api_client = ApiClient(res_environment, admin)
-
-            # Get latest AMI ID for the region
-            ami_id = get_latest_x86_amzn2023_ami_id(region)
 
             # Create a GPU session for testing
             session = {
@@ -140,17 +220,9 @@ class TestListAllowedInstanceTypesForSession:
                 "state": "STOPPED",
                 "type": "CONSOLE",
                 "owner": "testuser",
+                "base_os": software_stack.base_os.value,
                 "hibernation_enabled": False,
-                "software_stack": {
-                    "name": "test-gpu-stack",
-                    "base_os": "amzn2023",
-                    "architecture": "x86_64",
-                    "gpu": "NVIDIA",
-                    "ami_id": ami_id,
-                    "allowed_instance_types": ["g4dn"],
-                    "min_storage": {"value": 100, "unit": "gb"},
-                    "min_ram": {"value": 22, "unit": "gb"},
-                },
+                "software_stack_id": software_stack.stack_id,
             }
 
             # Create VirtualDesktopSession object
@@ -158,7 +230,7 @@ class TestListAllowedInstanceTypesForSession:
 
             # Create request content object
             request_content = ListAllowedInstanceTypesForSessionRequestContent(
-                session=session_obj
+                session=session_obj,
             )
 
             response = api_client.list_allowed_instance_types_for_session(
@@ -186,6 +258,44 @@ class TestListAllowedInstanceTypesForSession:
             pytest.fail(f"Unexpected API error: {str(e)}")
 
     @pytest.mark.parametrize("admin_username", ["clusteradmin"])
+    @pytest.mark.parametrize(
+        "project",
+        [
+            (
+                Project(
+                    title="test-inst-types-for-sess-hib",
+                    name="test-inst-types-for-sess-hib",
+                    description="Project for hibernation instance types test",
+                    enable_budgets=False,
+                ),
+                ["home"],
+                ["RESAdministrators"],
+                ["clusteradmin"],
+                "admin",
+            )
+        ],
+        indirect=True,
+    )
+    @pytest.mark.parametrize(
+        "software_stack",
+        [
+            (
+                VirtualDesktopSoftwareStack(
+                    name="res-integ-test-instance-types-for-session-hib",
+                    description="Stack for hibernation instance types test",
+                    base_os=VirtualDesktopBaseOS.AMZN2023,
+                    architecture=VirtualDesktopArchitecture.X86_64,
+                    min_storage=ResMemory(value=50, unit="gb"),
+                    min_ram=ResMemory(value=4, unit="gb"),
+                    gpu=VirtualDesktopGPU.NO_GPU,
+                    allowed_instance_types=["t3", "m6a"],
+                ),
+                "project",
+                "admin",
+            )
+        ],
+        indirect=True,
+    )
     def test_list_allowed_instance_types_for_session_with_hibernation_session_returns_valid_response(
         self,
         request: FixtureRequest,
@@ -193,15 +303,14 @@ class TestListAllowedInstanceTypesForSession:
         res_environment: ResEnvironment,
         admin_username: str,
         admin: ClientAuth,
+        project: "Project",
+        software_stack: Any,
     ) -> None:
         """
         Test successful retrieval of allowed instance types for hibernation-enabled session.
         """
         try:
             api_client = ApiClient(res_environment, admin)
-
-            # Get latest AMI ID for the region
-            ami_id = get_latest_x86_amzn2023_ami_id(region)
 
             # Create a hibernation-enabled session for testing
             session = {
@@ -210,17 +319,9 @@ class TestListAllowedInstanceTypesForSession:
                 "state": "STOPPED",
                 "type": "CONSOLE",
                 "owner": "testuser",
+                "base_os": software_stack.base_os.value,
                 "hibernation_enabled": True,
-                "software_stack": {
-                    "name": "test-hibernation-stack",
-                    "base_os": "amzn2023",
-                    "architecture": "x86_64",
-                    "gpu": "NO_GPU",
-                    "ami_id": ami_id,
-                    "allowed_instance_types": ["t3"],
-                    "min_storage": {"value": 100, "unit": "gb"},
-                    "min_ram": {"value": 22, "unit": "gb"},
-                },
+                "software_stack_id": software_stack.stack_id,
             }
 
             # Create VirtualDesktopSession object
@@ -228,7 +329,7 @@ class TestListAllowedInstanceTypesForSession:
 
             # Create request content object
             request_content = ListAllowedInstanceTypesForSessionRequestContent(
-                session=session_obj
+                session=session_obj,
             )
 
             response = api_client.list_allowed_instance_types_for_session(
@@ -255,76 +356,46 @@ class TestListAllowedInstanceTypesForSession:
         except Exception as e:
             pytest.fail(f"Unexpected API error: {str(e)}")
 
-    @pytest.mark.parametrize("admin_username", ["clusteradmin"])
-    def test_list_allowed_instance_types_for_session_without_software_stack_architecture_returns_valid_response(
-        self,
-        request: FixtureRequest,
-        region: str,
-        res_environment: ResEnvironment,
-        admin_username: str,
-        admin: ClientAuth,
-    ) -> None:
-        """
-        Test successful retrieval of allowed instance types for sessions without software stack architecture.
-        """
-        try:
-            api_client = ApiClient(res_environment, admin)
-
-            # Get latest AMI ID for the region
-            ami_id = get_latest_x86_amzn2023_ami_id(region)
-
-            # Create a session with software_stack missing architecture
-            session_without_architecture = {
-                "idea_session_id": "test-session-id",
-                "name": "test-session",
-                "state": "STOPPED",
-                "type": "CONSOLE",
-                "owner": "testuser",
-                "hibernation_enabled": False,
-                "software_stack": {
-                    "name": "test-stack",
-                    "base_os": "amzn2023",
-                    "gpu": "NO_GPU",
-                    "ami_id": ami_id,
-                    # Missing architecture
-                    "min_storage": {"value": 100, "unit": "gb"},
-                    "min_ram": {"value": 22, "unit": "gb"},
-                },
-            }
-
-            # Create VirtualDesktopSession object
-            session_obj = VirtualDesktopSession.from_dict(session_without_architecture)
-
-            # Create request content object
-            request_content = ListAllowedInstanceTypesForSessionRequestContent(
-                session=session_obj
-            )
-
-            response = api_client.list_allowed_instance_types_for_session(
-                request_content
-            )
-
-            # Verify we got a proper response content object
-            assert response is not None, "Response should not be None"
-            assert hasattr(
-                response, "listing"
-            ), "Response should have listing attribute"
-            assert isinstance(response.listing, list), "Listing should be a list"
-
-            # Verify each item in the listing is a valid instance type
-            for instance_type in response.listing:
-                assert isinstance(
-                    instance_type, (str, dict)
-                ), f"Instance type '{instance_type}' should be a string or dict"
-
-            logger.info(
-                f"Successfully retrieved {len(response.listing)} allowed instance types with missing software stack architecture"
-            )
-
-        except Exception as e:
-            pytest.fail(f"Unexpected API error: {str(e)}")
-
     @pytest.mark.parametrize("non_admin_username", ["user1"])
+    @pytest.mark.parametrize("admin_username", ["clusteradmin"])
+    @pytest.mark.parametrize(
+        "project",
+        [
+            (
+                Project(
+                    title="test-inst-types-sess-nonadm",
+                    name="test-inst-types-sess-nonadm",
+                    description="Project for non-admin instance types test",
+                    enable_budgets=False,
+                ),
+                ["home"],
+                ["RESAdministrators"],
+                ["clusteradmin", "user1"],
+                "admin",
+            )
+        ],
+        indirect=True,
+    )
+    @pytest.mark.parametrize(
+        "software_stack",
+        [
+            (
+                VirtualDesktopSoftwareStack(
+                    name="res-integ-test-instance-types-for-session-nonadmin",
+                    description="Stack for non-admin instance types test",
+                    base_os=VirtualDesktopBaseOS.AMZN2023,
+                    architecture=VirtualDesktopArchitecture.X86_64,
+                    min_storage=ResMemory(value=50, unit="gb"),
+                    min_ram=ResMemory(value=4, unit="gb"),
+                    gpu=VirtualDesktopGPU.NO_GPU,
+                    allowed_instance_types=["t3", "m6a"],
+                ),
+                "project",
+                "admin",
+            )
+        ],
+        indirect=True,
+    )
     def test_list_allowed_instance_types_for_session_with_non_admin_user_returns_valid_response(
         self,
         request: FixtureRequest,
@@ -332,15 +403,16 @@ class TestListAllowedInstanceTypesForSession:
         res_environment: ResEnvironment,
         non_admin_username: str,
         non_admin: ClientAuth,
+        admin_username: str,
+        admin: ClientAuth,
+        project: "Project",
+        software_stack: Any,
     ) -> None:
         """
         Test that non-admin users can successfully retrieve allowed instance types for session.
         """
         try:
             api_client = ApiClient(res_environment, non_admin)
-
-            # Get latest AMI ID for the region
-            ami_id = get_latest_x86_amzn2023_ami_id(region)
 
             # Create a minimal session for testing
             session = {
@@ -349,17 +421,9 @@ class TestListAllowedInstanceTypesForSession:
                 "state": "STOPPED",
                 "type": "CONSOLE",
                 "owner": "testuser",
+                "base_os": software_stack.base_os.value,
                 "hibernation_enabled": False,
-                "software_stack": {
-                    "name": "test-stack",
-                    "base_os": "amzn2023",
-                    "architecture": "x86_64",
-                    "gpu": "NO_GPU",
-                    "ami_id": ami_id,
-                    "allowed_instance_types": ["t3"],
-                    "min_storage": {"value": 100, "unit": "gb"},
-                    "min_ram": {"value": 22, "unit": "gb"},
-                },
+                "software_stack_id": software_stack.stack_id,
             }
 
             # Create VirtualDesktopSession object
@@ -367,7 +431,7 @@ class TestListAllowedInstanceTypesForSession:
 
             # Create request content object
             request_content = ListAllowedInstanceTypesForSessionRequestContent(
-                session=session_obj
+                session=session_obj,
             )
 
             response = api_client.list_allowed_instance_types_for_session(
@@ -405,20 +469,14 @@ class TestListAllowedInstanceTypesForSession:
             nonexistent_auth = ClientAuth(username="nonexistent_user_12345")
             api_client = ApiClient(res_environment, nonexistent_auth)
 
-            session = {
-                "idea_session_id": "test-session-id",
-                "name": "test-session",
-                "state": "STOPPED",
-                "type": "CONSOLE",
-                "owner": "testuser",
-            }
-
-            # Create VirtualDesktopSession object
-            session_obj = VirtualDesktopSession.from_dict(session)
-
-            # Create request content object
             request_content = ListAllowedInstanceTypesForSessionRequestContent(
-                session=session_obj
+                session=VirtualDesktopSession.from_dict(
+                    {
+                        "hibernation_enabled": False,
+                        "software_stack_id": "test-stack-id",
+                        "base_os": "amzn2023",
+                    }
+                ),
             )
 
             api_client.list_allowed_instance_types_for_session(request_content)
@@ -457,20 +515,14 @@ class TestListAllowedInstanceTypesForSession:
         try:
             api_client = ApiClient(res_environment, inactive_user)
 
-            session = {
-                "idea_session_id": "test-session-id",
-                "name": "test-session",
-                "state": "STOPPED",
-                "type": "CONSOLE",
-                "owner": "testuser",
-            }
-
-            # Create VirtualDesktopSession object
-            session_obj = VirtualDesktopSession.from_dict(session)
-
-            # Create request content object
             request_content = ListAllowedInstanceTypesForSessionRequestContent(
-                session=session_obj
+                session=VirtualDesktopSession.from_dict(
+                    {
+                        "hibernation_enabled": False,
+                        "software_stack_id": "test-stack-id",
+                        "base_os": "amzn2023",
+                    }
+                ),
             )
 
             api_client.list_allowed_instance_types_for_session(request_content)
@@ -507,20 +559,14 @@ class TestListAllowedInstanceTypesForSession:
             no_auth = ClientAuth(username="user1", auth_token=None)
             api_client = ApiClient(res_environment, no_auth)
 
-            session = {
-                "idea_session_id": "test-session-id",
-                "name": "test-session",
-                "state": "STOPPED",
-                "type": "CONSOLE",
-                "owner": "testuser",
-            }
-
-            # Create VirtualDesktopSession object
-            session_obj = VirtualDesktopSession.from_dict(session)
-
-            # Create request content object
             request_content = ListAllowedInstanceTypesForSessionRequestContent(
-                session=session_obj
+                session=VirtualDesktopSession.from_dict(
+                    {
+                        "hibernation_enabled": False,
+                        "software_stack_id": "test-stack-id",
+                        "base_os": "amzn2023",
+                    }
+                ),
             )
 
             api_client.list_allowed_instance_types_for_session(request_content)
@@ -563,20 +609,14 @@ class TestListAllowedInstanceTypesForSession:
         try:
             api_client = ApiClient(res_environment, admin)
 
-            session = {
-                "idea_session_id": "test-session-id",
-                "name": "test-session",
-                "state": "STOPPED",
-                "type": "CONSOLE",
-                "owner": "testuser",
-            }
-
-            # Create VirtualDesktopSession object
-            session_obj = VirtualDesktopSession.from_dict(session)
-
-            # Create request content object
             request_content = ListAllowedInstanceTypesForSessionRequestContent(
-                session=session_obj
+                session=VirtualDesktopSession.from_dict(
+                    {
+                        "hibernation_enabled": False,
+                        "software_stack_id": "test-stack-id",
+                        "base_os": "amzn2023",
+                    }
+                ),
             )
 
             api_client.list_allowed_instance_types_for_session(request_content)
@@ -673,10 +713,13 @@ class TestListAllowedInstanceTypesForSession:
                 # Missing hibernation_enabled
             }
 
-            session_obj = VirtualDesktopSession.from_dict(session_without_hibernation)
-
             request_content = ListAllowedInstanceTypesForSessionRequestContent(
-                session=session_obj
+                session=VirtualDesktopSession.from_dict(
+                    {
+                        "software_stack_id": "test-stack-id",
+                        "base_os": "amzn2023",
+                    }
+                ),
             )
 
             api_client.list_allowed_instance_types_for_session(request_content)
@@ -725,14 +768,14 @@ class TestListAllowedInstanceTypesForSession:
                 # Missing software_stack
             }
 
-            # Create VirtualDesktopSession object
-            session_obj = VirtualDesktopSession.from_dict(
-                session_without_software_stack
-            )
-
-            # Create request content object
+            # Create request content object without software_stack_id
             request_content = ListAllowedInstanceTypesForSessionRequestContent(
-                session=session_obj
+                session=VirtualDesktopSession.from_dict(
+                    {
+                        "hibernation_enabled": False,
+                        "base_os": "amzn2023",
+                    }
+                ),
             )
 
             api_client.list_allowed_instance_types_for_session(request_content)

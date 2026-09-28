@@ -3,14 +3,17 @@
 
 
 import unittest
+from decimal import Decimal
 from typing import Dict, Optional
 from unittest.mock import patch
 
 import pytest
 import res as res
 import res.exceptions as exceptions
+from res.resources import software_stacks
 from res.resources import software_stacks as stacks
 from res.utils import table_utils
+from res.utils.ec2_utils import VirtualDesktopGpu
 
 TEST_BASE_OS = "test_base_os"
 RANDOM_TEST_BASE_OS = "random_base_os"
@@ -450,7 +453,7 @@ class TestSoftwareStacks(unittest.TestCase):
             updated_stack[stacks.SOFTWARE_STACK_DB_CREATED_ON_KEY] == 9999999999
         )  # Original value preserved
 
-    @patch("res.resources.software_stacks.ec2_utils.get_instance_ram")
+    @patch("res.resources.software_stacks.ec2_utils.get_instance_ram_in_mib")
     def test_validate_min_ram_success(self, mock_get_ram):
         """Test validate_min_ram returns True when instance has enough RAM."""
         # Setup
@@ -459,7 +462,7 @@ class TestSoftwareStacks(unittest.TestCase):
             stacks.SOFTWARE_STACK_DB_MIN_RAM_UNIT_KEY: "GiB",
             stacks.SOFTWARE_STACK_DB_NAME_KEY: "test-stack",
         }
-        mock_get_ram.return_value = (16384.0, "MiB")  # 16 GiB
+        mock_get_ram.return_value = 16384.0  # 16 GiB
 
         # Test
         result = stacks.validate_min_ram("t3.xlarge", software_stack_ddb)
@@ -468,7 +471,7 @@ class TestSoftwareStacks(unittest.TestCase):
         assert result is True
         mock_get_ram.assert_called_once_with("t3.xlarge")
 
-    @patch("res.resources.software_stacks.ec2_utils.get_instance_ram")
+    @patch("res.resources.software_stacks.ec2_utils.get_instance_ram_in_mib")
     def test_validate_min_ram_insufficient_memory(self, mock_get_ram):
         """Test validate_min_ram returns False when instance has insufficient RAM."""
         # Setup
@@ -477,7 +480,7 @@ class TestSoftwareStacks(unittest.TestCase):
             stacks.SOFTWARE_STACK_DB_MIN_RAM_UNIT_KEY: "GiB",
             stacks.SOFTWARE_STACK_DB_NAME_KEY: "test-stack",
         }
-        mock_get_ram.return_value = (8192.0, "MiB")  # 8 GiB
+        mock_get_ram.return_value = 8192.0  # 8 GiB
 
         # Test
         result = stacks.validate_min_ram("t3.large", software_stack_ddb)
@@ -491,7 +494,7 @@ class TestSoftwareStacks(unittest.TestCase):
         result = stacks.validate_min_ram("t3.large", None)
         assert result is True
 
-    @patch("res.resources.software_stacks.ec2_utils.get_instance_ram")
+    @patch("res.resources.software_stacks.ec2_utils.get_instance_ram_in_mib")
     def test_validate_min_ram_no_min_ram_value(self, mock_get_ram):
         """Test validate_min_ram returns True when min_ram_value is None."""
         # Setup
@@ -499,7 +502,7 @@ class TestSoftwareStacks(unittest.TestCase):
             stacks.SOFTWARE_STACK_DB_MIN_RAM_VALUE_KEY: None,
             stacks.SOFTWARE_STACK_DB_MIN_RAM_UNIT_KEY: "GiB",
         }
-        mock_get_ram.return_value = (16384.0, "MiB")
+        mock_get_ram.return_value = 16384.0
 
         # Test
         result = stacks.validate_min_ram("t3.large", software_stack_ddb)
@@ -532,7 +535,7 @@ class TestSoftwareStacks(unittest.TestCase):
         mock_get_setting.assert_called_once_with("vdc.dcv_session.instance_types.allow")
         mock_get_allowed.assert_called_once_with(False, ["t3", "m5"])
 
-    @patch("res.resources.software_stacks.ec2_utils.get_instance_ram")
+    @patch("res.resources.software_stacks.ec2_utils.get_instance_ram_in_mib")
     @patch("res.resources.software_stacks.ec2_utils.describe_image_id")
     @patch(
         "res.resources.software_stacks.ec2_utils.get_valid_instance_types_by_allowed_list"
@@ -560,7 +563,7 @@ class TestSoftwareStacks(unittest.TestCase):
             "t3.large": INSTANCE_T3_LARGE,  # Supports both uefi and legacy-bios
             "m5.metal": INSTANCE_M5_METAL,  # Only supports legacy-bios
         }
-        mock_get_ram.return_value = (8192.0, "MiB")
+        mock_get_ram.return_value = 8192.0
 
         # Test
         result = stacks.get_valid_instance_types_by_software_stack(
@@ -574,7 +577,7 @@ class TestSoftwareStacks(unittest.TestCase):
         )  # m5.metal filtered (doesn't support uefi)
         mock_describe_image.assert_called_once_with("ami-windows")
 
-    @patch("res.resources.software_stacks.ec2_utils.get_instance_ram")
+    @patch("res.resources.software_stacks.ec2_utils.get_instance_ram_in_mib")
     @patch(
         "res.resources.software_stacks.ec2_utils.get_valid_instance_types_by_allowed_list"
     )
@@ -599,7 +602,7 @@ class TestSoftwareStacks(unittest.TestCase):
             "g4dn.xlarge": INSTANCE_G4DN_XLARGE,
             "g5.xlarge": INSTANCE_G5_XLARGE,
         }
-        mock_get_ram.return_value = (16384.0, "MiB")
+        mock_get_ram.return_value = 16384.0
 
         # Test
         result = stacks.get_valid_instance_types_by_software_stack(
@@ -610,7 +613,7 @@ class TestSoftwareStacks(unittest.TestCase):
         assert len(result) == 1
         assert result[0]["InstanceType"] == "g5.xlarge"  # g4dn should be filtered out
 
-    @patch("res.resources.software_stacks.ec2_utils.get_instance_ram")
+    @patch("res.resources.software_stacks.ec2_utils.get_instance_ram_in_mib")
     @patch(
         "res.resources.software_stacks.ec2_utils.get_valid_instance_types_by_allowed_list"
     )
@@ -635,7 +638,7 @@ class TestSoftwareStacks(unittest.TestCase):
             "t3.medium": INSTANCE_T3_MEDIUM,
             "t4g.medium": INSTANCE_T4G_MEDIUM,
         }
-        mock_get_ram.return_value = (4096.0, "MiB")
+        mock_get_ram.return_value = 4096.0
 
         # Test
         result = stacks.get_valid_instance_types_by_software_stack(
@@ -646,7 +649,7 @@ class TestSoftwareStacks(unittest.TestCase):
         assert len(result) == 1
         assert result[0]["InstanceType"] == "t4g.medium"  # Only ARM64 instance
 
-    @patch("res.resources.software_stacks.ec2_utils.get_instance_ram")
+    @patch("res.resources.software_stacks.ec2_utils.get_instance_ram_in_mib")
     @patch(
         "res.resources.software_stacks.ec2_utils.get_valid_instance_types_by_allowed_list"
     )
@@ -671,7 +674,7 @@ class TestSoftwareStacks(unittest.TestCase):
             "t3.xlarge": INSTANCE_T3_XLARGE,
             "g4dn.xlarge": INSTANCE_G4DN_XLARGE,
         }
-        mock_get_ram.return_value = (16384.0, "MiB")
+        mock_get_ram.return_value = 16384.0
 
         # Test
         result = stacks.get_valid_instance_types_by_software_stack(
@@ -682,7 +685,7 @@ class TestSoftwareStacks(unittest.TestCase):
         assert len(result) == 1
         assert result[0]["InstanceType"] == "g4dn.xlarge"  # Only GPU instance
 
-    @patch("res.resources.software_stacks.ec2_utils.get_instance_ram")
+    @patch("res.resources.software_stacks.ec2_utils.get_instance_ram_in_mib")
     @patch(
         "res.resources.software_stacks.ec2_utils.get_valid_instance_types_by_allowed_list"
     )
@@ -708,7 +711,7 @@ class TestSoftwareStacks(unittest.TestCase):
             "t3.xlarge": INSTANCE_T3_XLARGE,
         }
         # Return different RAM values for each instance
-        mock_get_ram.side_effect = [(2048.0, "MiB"), (16384.0, "MiB")]
+        mock_get_ram.side_effect = [2048.0, 16384.0]
 
         # Test
         result = stacks.get_valid_instance_types_by_software_stack(
@@ -719,7 +722,7 @@ class TestSoftwareStacks(unittest.TestCase):
         assert len(result) == 1
         assert result[0]["InstanceType"] == "t3.xlarge"  # Only instance with enough RAM
 
-    @patch("res.resources.software_stacks.ec2_utils.get_instance_ram")
+    @patch("res.resources.software_stacks.ec2_utils.get_instance_ram_in_mib")
     @patch(
         "res.resources.software_stacks.ec2_utils.get_valid_instance_types_by_allowed_list"
     )
@@ -744,7 +747,7 @@ class TestSoftwareStacks(unittest.TestCase):
             "t3.xlarge": INSTANCE_T3_XLARGE,
             "g4dn.xlarge": INSTANCE_G4DN_XLARGE,
         }
-        mock_get_ram.return_value = (16384.0, "MiB")
+        mock_get_ram.return_value = 16384.0
 
         # Test
         result = stacks.get_valid_instance_types_by_software_stack(
@@ -756,7 +759,7 @@ class TestSoftwareStacks(unittest.TestCase):
         assert result[0]["InstanceType"] == "t3.xlarge"  # GPU instance filtered out
 
     @patch("res.resources.software_stacks.ec2_utils.dedicated_hosts_supported")
-    @patch("res.resources.software_stacks.ec2_utils.get_instance_ram")
+    @patch("res.resources.software_stacks.ec2_utils.get_instance_ram_in_mib")
     @patch(
         "res.resources.software_stacks.ec2_utils.get_valid_instance_types_by_allowed_list"
     )
@@ -781,7 +784,7 @@ class TestSoftwareStacks(unittest.TestCase):
             "t3.large": INSTANCE_T3_LARGE,
             "m5.large": INSTANCE_M5_LARGE,
         }
-        mock_get_ram.return_value = (8192.0, "MiB")
+        mock_get_ram.return_value = 8192.0
         # t3.large doesn't support dedicated hosts, m5.large does
         mock_dedicated_hosts.side_effect = lambda instance: instance == "m5.large"
 
@@ -794,7 +797,7 @@ class TestSoftwareStacks(unittest.TestCase):
         assert len(result) == 1
         assert result[0]["InstanceType"] == "m5.large"  # Only dedicated host supported
 
-    @patch("res.resources.software_stacks.ec2_utils.get_instance_ram")
+    @patch("res.resources.software_stacks.ec2_utils.get_instance_ram_in_mib")
     @patch(
         "res.resources.software_stacks.ec2_utils.get_valid_instance_types_by_allowed_list"
     )
@@ -819,7 +822,7 @@ class TestSoftwareStacks(unittest.TestCase):
             "t3.xlarge": INSTANCE_T3_XLARGE,
             "g4dn.xlarge": INSTANCE_G4DN_XLARGE,
         }
-        mock_get_ram.return_value = (16384.0, "MiB")
+        mock_get_ram.return_value = 16384.0
 
         # Test - gpu parameter should override stack's NO_GPU setting
         result = stacks.get_valid_instance_types_by_software_stack(
@@ -868,3 +871,286 @@ class TestSoftwareStacks(unittest.TestCase):
         assert stacks.SOFTWARE_STACK_DB_PROJECTS_KEY in result[0]
         assert len(result[0][stacks.SOFTWARE_STACK_DB_PROJECTS_KEY]) == 1
         assert result[0][stacks.SOFTWARE_STACK_DB_PROJECTS_KEY][0] == TEST_PROJECT
+
+
+TEST_SESSION_ID = "ses-abc123"
+TEST_OWNER = "testuser"
+TEST_STACK_NAME = "my-new-stack"
+TEST_INSTANCE_ID = "i-1234567890abcdef0"
+
+TEST_SESSION = {
+    "owner": TEST_OWNER,
+    "idea_session_id": TEST_SESSION_ID,
+    "base_os": "amazonlinux2",
+    "state": "READY",
+    "server": {
+        "instance_type": "t3.medium",
+        "instance_id": TEST_INSTANCE_ID,
+    },
+    "software_stack_id": "ss-test-stack",
+    "project": {"project_id": "proj-123", "name": "test-project"},
+}
+
+
+class TestCreateSoftwareStackFromSession:
+
+    @pytest.fixture(autouse=True)
+    def mock_deps(self, monkeypatch):
+        monkeypatch.setattr(
+            "res.resources.software_stacks.ec2_utils.get_instance_ram_in_mib",
+            lambda it: 4096.0,
+        )
+        monkeypatch.setattr(
+            "res.resources.software_stacks.ec2_utils.get_gpu_manufacturer",
+            lambda it: VirtualDesktopGpu.NO_GPU,
+        )
+        monkeypatch.setattr(
+            "res.resources.software_stacks.get_software_stack",
+            lambda base_os, stack_id, **kwargs: {
+                "architecture": "x86_64",
+                "placement": None,
+                "allowed_instance_types": ["t3", "m5"],
+                "min_ram_value": Decimal("2"),
+                "min_ram_unit": "gb",
+            },
+        )
+
+    @patch("res.resources.sessions.get_session")
+    @patch("res.resources.software_stacks.create_software_stack")
+    @patch("res.resources.ssm_commands.send_ssm_command")
+    @patch("res.resources.sessions.update_session")
+    @patch(
+        "res.resources.software_stacks.cluster_settings.get_setting", return_value=None
+    )
+    def test_creates_stack_and_sends_cleanup(
+        self,
+        mock_cluster_settings,
+        mock_update,
+        mock_ssm,
+        mock_create_stack,
+        mock_get_session,
+    ):
+        mock_get_session.return_value = TEST_SESSION
+        mock_create_stack.return_value = {
+            "stack_id": "stack-1",
+            "name": TEST_STACK_NAME,
+        }
+
+        result = software_stacks.create_software_stack_from_session(
+            session_id=TEST_SESSION_ID,
+            owner=TEST_OWNER,
+            software_stack_dict={"name": TEST_STACK_NAME},
+        )
+
+        assert result["stack_id"] == "stack-1"
+        mock_create_stack.assert_called_once()
+        stack_arg = mock_create_stack.call_args[0][0]
+        assert stack_arg["name"] == TEST_STACK_NAME
+        assert stack_arg["base_os"] == "amazonlinux2"
+        assert stack_arg["architecture"] == "x86_64"
+        assert stack_arg["allowed_instance_types"] == ["t3", "m5"]
+        assert stack_arg["stack_id"]  # UUID generated
+        assert stack_arg["min_ram_value"] == Decimal("2")
+        assert stack_arg["min_ram_unit"] == "gb"
+        assert stack_arg["projects"] == ["proj-123"]
+
+        mock_ssm.assert_called_once()
+        ssm_args = mock_ssm.call_args[1]
+        assert ssm_args["instance_id"] == TEST_INSTANCE_ID
+        assert ssm_args["base_os"] == "amazonlinux2"
+        assert ssm_args["command_type"] == "DELETE_LOCK_FILES_LINUX_EXECUTION"
+
+        mock_update.assert_called_once()
+        updated_session = mock_update.call_args[0][0]
+        assert updated_session["locked"] is True
+        assert updated_session["server"]["locked"] is True
+        assert updated_session["state"] == "PROVISIONING"
+
+    @patch("res.resources.sessions.get_session")
+    @patch("res.resources.software_stacks.create_software_stack")
+    @patch("res.resources.ssm_commands.send_ssm_command")
+    @patch("res.resources.sessions.update_session")
+    @patch(
+        "res.resources.software_stacks.cluster_settings.get_setting", return_value=None
+    )
+    def test_sends_windows_cleanup_commands(
+        self,
+        mock_cluster_settings,
+        mock_update,
+        mock_ssm,
+        mock_create_stack,
+        mock_get_session,
+    ):
+        windows_session = {**TEST_SESSION, "base_os": "windows"}
+        mock_get_session.return_value = windows_session
+        mock_create_stack.return_value = {
+            "stack_id": "stack-1",
+            "name": TEST_STACK_NAME,
+        }
+
+        software_stacks.create_software_stack_from_session(
+            session_id=TEST_SESSION_ID,
+            owner=TEST_OWNER,
+            software_stack_dict={"name": TEST_STACK_NAME},
+        )
+
+        ssm_args = mock_ssm.call_args[1]
+        assert ssm_args["base_os"] == "windows"
+        assert "Remove-Item" in ssm_args["commands"][0]
+
+    @patch("res.resources.sessions.get_session")
+    @patch("res.resources.software_stacks.create_software_stack")
+    @patch("res.resources.ssm_commands.send_ssm_command")
+    @patch("res.resources.sessions.update_session")
+    def test_skips_ssm_when_no_instance_id(
+        self, mock_update, mock_ssm, mock_create_stack, mock_get_session
+    ):
+        session_no_instance = {
+            **TEST_SESSION,
+            "server": {"instance_type": "t3.medium", "instance_id": ""},
+        }
+        mock_get_session.return_value = session_no_instance
+        mock_create_stack.return_value = {
+            "stack_id": "stack-1",
+            "name": TEST_STACK_NAME,
+        }
+
+        software_stacks.create_software_stack_from_session(
+            session_id=TEST_SESSION_ID,
+            owner=TEST_OWNER,
+            software_stack_dict={"name": TEST_STACK_NAME},
+        )
+
+        mock_ssm.assert_not_called()
+
+
+class TestContinueSoftwareStackCreation:
+
+    @patch("res.resources.software_stacks.aws_utils.sqs_send_message")
+    @patch("res.resources.software_stacks.update_software_stack")
+    @patch("res.resources.software_stacks.ec2_utils.create_image")
+    @patch("res.resources.software_stacks.get_software_stack")
+    def test_creates_ami_updates_stack_and_publishes_event(
+        self, mock_get_stack, mock_create_image, mock_update_stack, mock_sqs
+    ):
+        """Happy path: creates AMI, updates stack with ami_id, publishes validate event."""
+        mock_get_stack.return_value = {
+            "base_os": "amazonlinux2",
+            "stack_id": "ss-1",
+            "name": "my-stack",
+            "description": "My stack description",
+        }
+        mock_create_image.return_value = {"ImageId": "ami-new123"}
+
+        software_stacks.continue_software_stack_creation(
+            software_stack_id="ss-1",
+            base_os="amazonlinux2",
+            instance_id="i-abc",
+            session_id="ses-1",
+            owner="user1",
+            events_queue_url="https://sqs.us-east-1.amazonaws.com/123/queue",
+        )
+
+        mock_create_image.assert_called_once_with(
+            instance_id="i-abc",
+            name="my-stack",
+            description="My stack description",
+        )
+        mock_update_stack.assert_called_once()
+        updated = mock_update_stack.call_args[1]["software_stack"]
+        assert updated["ami_id"] == "ami-new123"
+
+        mock_sqs.assert_called_once()
+        sqs_kwargs = mock_sqs.call_args[1]
+        assert (
+            sqs_kwargs["queue_url"] == "https://sqs.us-east-1.amazonaws.com/123/queue"
+        )
+        payload = sqs_kwargs["payload"]
+        assert payload["event_type"] == "VALIDATE_SOFTWARE_STACK_CREATION_EVENT"
+        assert payload["detail"]["software_stack_id"] == "ss-1"
+        assert payload["detail"]["instance_id"] == "i-abc"
+
+    @patch("res.resources.software_stacks.aws_utils.sqs_send_message")
+    @patch("res.resources.software_stacks.update_software_stack")
+    @patch("res.resources.software_stacks.ec2_utils.create_image")
+    @patch("res.resources.software_stacks.get_software_stack")
+    def test_returns_early_when_stack_not_found(
+        self, mock_get_stack, mock_create_image, mock_update_stack, mock_sqs
+    ):
+        """When software stack doesn't exist, logs error and returns without creating AMI."""
+        mock_get_stack.side_effect = exceptions.SoftwareStackNotFound(
+            "Software stack not found"
+        )
+
+        software_stacks.continue_software_stack_creation(
+            software_stack_id="ss-gone",
+            base_os="windows",
+            instance_id="i-abc",
+            session_id="ses-1",
+            owner="user1",
+            events_queue_url="https://sqs.us-east-1.amazonaws.com/123/queue",
+        )
+
+        mock_create_image.assert_not_called()
+        mock_update_stack.assert_not_called()
+        mock_sqs.assert_not_called()
+
+    @patch("res.resources.software_stacks.aws_utils.sqs_send_message")
+    @patch("res.resources.software_stacks.update_software_stack")
+    @patch("res.resources.software_stacks.ec2_utils.create_image")
+    @patch("res.resources.software_stacks.get_software_stack")
+    def test_uses_fallback_name_when_stack_has_no_name(
+        self, mock_get_stack, mock_create_image, mock_update_stack, mock_sqs
+    ):
+        """When stack name is empty, uses RES-IMAGE-NAME-{instance_id} fallback."""
+        mock_get_stack.return_value = {
+            "base_os": "windows",
+            "stack_id": "ss-2",
+            "name": "",
+            "description": "",
+        }
+        mock_create_image.return_value = {"ImageId": "ami-fallback"}
+
+        software_stacks.continue_software_stack_creation(
+            software_stack_id="ss-2",
+            base_os="windows",
+            instance_id="i-xyz",
+            session_id="ses-2",
+            owner="user2",
+            events_queue_url="https://sqs.us-east-1.amazonaws.com/123/queue",
+        )
+
+        mock_create_image.assert_called_once_with(
+            instance_id="i-xyz",
+            name="RES-IMAGE-NAME-i-xyz",
+            description="RES-IMAGE-DESCRIPTION-i-xyz",
+        )
+
+    @patch("res.resources.software_stacks.aws_utils.sqs_send_message")
+    @patch("res.resources.software_stacks.update_software_stack")
+    @patch("res.resources.software_stacks.ec2_utils.create_image")
+    @patch("res.resources.software_stacks.get_software_stack")
+    def test_skips_sqs_when_no_queue_url(
+        self, mock_get_stack, mock_create_image, mock_update_stack, mock_sqs
+    ):
+        """When events_queue_url is empty, skips publishing the validate event."""
+        mock_get_stack.return_value = {
+            "base_os": "amazonlinux2",
+            "stack_id": "ss-3",
+            "name": "stack-3",
+            "description": "desc",
+        }
+        mock_create_image.return_value = {"ImageId": "ami-no-queue"}
+
+        software_stacks.continue_software_stack_creation(
+            software_stack_id="ss-3",
+            base_os="amazonlinux2",
+            instance_id="i-nq",
+            session_id="ses-3",
+            owner="user3",
+            events_queue_url="",
+        )
+
+        mock_create_image.assert_called_once()
+        mock_update_stack.assert_called_once()
+        mock_sqs.assert_not_called()

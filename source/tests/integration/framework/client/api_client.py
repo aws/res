@@ -3,17 +3,17 @@
 
 import json
 import logging
+import time
 from typing import Any, Dict, List, Optional
 
 import pytest
 import requests
+from res.utils.model_utils import remove_none_values  # type: ignore
+from selenium import webdriver
 
 from tests.integration.framework.fixtures.res_environment import ResEnvironment
 from tests.integration.framework.model.client_auth import ClientAuth
-from tests.integration.framework.utils.model_utils import (
-    get_backend_model_class,
-    remove_none_values,
-)
+from tests.integration.framework.utils.model_utils import get_backend_model_class
 
 # Import backend model classes using the utility function
 ListAllowedInstanceTypesForSessionRequestContent = get_backend_model_class(
@@ -86,6 +86,20 @@ BatchRebootSessionRequestContent = get_backend_model_class(
 BatchRebootSessionResponseContent = get_backend_model_class(
     "batch_reboot_session_response_content", "BatchRebootSessionResponseContent"
 )
+BatchCreateSessionRequestContent = get_backend_model_class(
+    "batch_create_session_request_content", "BatchCreateSessionRequestContent"
+)
+BatchCreateSessionResponseContent = get_backend_model_class(
+    "batch_create_session_response_content", "BatchCreateSessionResponseContent"
+)
+BatchGetSessionScreenshotRequestContent = get_backend_model_class(
+    "batch_get_session_screenshot_request_content",
+    "BatchGetSessionScreenshotRequestContent",
+)
+BatchGetSessionScreenshotResponseContent = get_backend_model_class(
+    "batch_get_session_screenshot_response_content",
+    "BatchGetSessionScreenshotResponseContent",
+)
 CreatePermissionProfileRequestContent = get_backend_model_class(
     "create_permission_profile_request_content", "CreatePermissionProfileRequestContent"
 )
@@ -105,12 +119,6 @@ DeletePermissionProfileResponseContent = get_backend_model_class(
 )
 UpdatePermissionProfileRequestContent = get_backend_model_class(
     "update_permission_profile_request_content", "UpdatePermissionProfileRequestContent"
-)
-CreateSessionRequestContent = get_backend_model_class(
-    "create_session_request_content", "CreateSessionRequestContent"
-)
-CreateSessionResponseContent = get_backend_model_class(
-    "create_session_response_content", "CreateSessionResponseContent"
 )
 UpdatePermissionProfileResponseContent = get_backend_model_class(
     "update_permission_profile_response_content",
@@ -143,6 +151,14 @@ GetSessionConnectionRequestContent = get_backend_model_class(
 )
 GetSessionConnectionResponseContent = get_backend_model_class(
     "get_session_connection_response_content", "GetSessionConnectionResponseContent"
+)
+CreateSoftwareStackFromSessionRequestContent = get_backend_model_class(
+    "create_software_stack_from_session_request_content",
+    "CreateSoftwareStackFromSessionRequestContent",
+)
+CreateSoftwareStackFromSessionResponseContent = get_backend_model_class(
+    "create_software_stack_from_session_response_content",
+    "CreateSoftwareStackFromSessionResponseContent",
 )
 
 logger = logging.getLogger(__name__)
@@ -289,7 +305,7 @@ class ApiClient:
 
         return self._make_request(  # type: ignore
             "POST",
-            "/res/virtual-desktop-utils/allowed-instance-type",
+            "/res/virtual-desktop-utils/allowed-instance-types",
             request_content,
             ListAllowedInstanceTypesResponseContent,
         )
@@ -311,7 +327,7 @@ class ApiClient:
 
         return self._make_request(  # type: ignore
             "POST",
-            "/res/virtual-desktop-utils/allowed-instance-type-for-session",
+            "/res/virtual-desktop-utils/allowed-instance-types-for-session",
             request_content,
             ListAllowedInstanceTypesForSessionResponseContent,
         )
@@ -332,7 +348,7 @@ class ApiClient:
         logger.info(f"Creating permission profile...")
         return self._make_request(  # type: ignore
             "POST",
-            "/res/virtual-desktop/permission-profile",
+            "/res/virtual-desktop/permission-profiles",
             request_content,
             CreatePermissionProfileResponseContent,
         )
@@ -352,7 +368,7 @@ class ApiClient:
         logger.info(f"Deleting permission profile: {profile_id}...")
         return self._make_request(  # type: ignore
             "DELETE",
-            f"/res/virtual-desktop/permission-profile/{profile_id}",
+            f"/res/virtual-desktop/permission-profiles/{profile_id}",
             response_model_class=DeletePermissionProfileResponseContent,
         )
 
@@ -369,7 +385,7 @@ class ApiClient:
             ListPermissionProfilesResponseContent containing permission profiles
         """
         logger.info(f"Listing permission profiles (filter: {profile_id})...")
-        path = "/res/virtual-desktop-utils/permission-profile"
+        path = "/res/virtual-desktop-utils/permission-profiles"
         if profile_id:
             path += f"?profileId={profile_id}"
         return self._make_request(  # type: ignore
@@ -391,7 +407,7 @@ class ApiClient:
         logger.info(f"Getting permission profile: {profile_id}...")
         return self._make_request(  # type: ignore
             "GET",
-            f"/res/virtual-desktop-utils/permission-profile/{profile_id}",
+            f"/res/virtual-desktop-utils/permission-profiles/{profile_id}",
             response_model_class=GetPermissionProfileResponseContent,
         )
 
@@ -414,30 +430,9 @@ class ApiClient:
         logger.info(f"Updating permission profile: {profile_id}...")
         return self._make_request(  # type: ignore
             "PUT",
-            f"/res/virtual-desktop/permission-profile/{profile_id}",
+            f"/res/virtual-desktop/permission-profiles/{profile_id}",
             request_content,
             UpdatePermissionProfileResponseContent,
-        )
-
-    def create_session(
-        self, request_content: CreateSessionRequestContent  # type: ignore
-    ) -> CreateSessionResponseContent:  # type: ignore
-        """
-        Create a virtual desktop session
-
-        Args:
-            request_content: CreateSessionRequestContent object containing:
-                - session: Virtual desktop session to create
-
-        Returns:
-            CreateSessionResponseContent containing the created session information
-        """
-        logger.info(f"Creating session...")
-        return self._make_request(  # type: ignore
-            "POST",
-            "/res/virtual-desktop/session",
-            request_content,
-            CreateSessionResponseContent,
         )
 
     def create_software_stack(
@@ -456,7 +451,7 @@ class ApiClient:
         logger.info(f"Creating software stack...")
         return self._make_request(  # type: ignore
             "POST",
-            "/res/virtual-desktop/software-stack",
+            "/res/virtual-desktop/software-stacks",
             request_content,
             CreateSoftwareStackResponseContent,
         )
@@ -478,7 +473,7 @@ class ApiClient:
         logger.info(f"Deleting software stack: {stack_id}...")
         return self._make_request(  # type: ignore
             "DELETE",
-            f"/res/virtual-desktop/software-stack/{stack_id}",
+            f"/res/virtual-desktop/software-stacks/{stack_id}",
             request_content,
             DeleteSoftwareStackResponseContent,
         )
@@ -497,7 +492,7 @@ class ApiClient:
         logger.info(f"Getting software stack: {stack_id} with base_os: {base_os}...")
         return self._make_request(  # type: ignore
             "GET",
-            f"/res/virtual-desktop/software-stack/{stack_id}?baseOs={base_os}",
+            f"/res/virtual-desktop/software-stacks/{stack_id}?baseOs={base_os}",
             response_model_class=GetSoftwareStackResponseContent,
         )
 
@@ -521,7 +516,7 @@ class ApiClient:
         logger.info(
             f"Listing software stacks (project_id: {project_id}, base_os: {base_os}, name: {software_stack_name})..."
         )
-        path = "/res/virtual-desktop/software-stack"
+        path = "/res/virtual-desktop/software-stacks"
 
         # Build query parameters
         params = []
@@ -555,7 +550,7 @@ class ApiClient:
             ListSessionPermissionsResponseContent containing session permissions information
         """
         logger.info(f"Listing software stacks (res_session_id: {res_session_id})...")
-        path = "/res/virtual-desktop/session-permission"
+        path = "/res/virtual-desktop/session-permissions"
 
         # Build query parameters
         params = []
@@ -589,7 +584,7 @@ class ApiClient:
         logger.info("Updating session permissions...")
         return self._make_request(  # type: ignore
             "PUT",
-            "/res/virtual-desktop/session-permission",
+            "/res/virtual-desktop/session-permissions",
             request_content,
             response_model_class=UpdateSessionPermissionsResponseContent,
         )
@@ -611,7 +606,7 @@ class ApiClient:
         logger.info(f"Updating session: {session_id}...")
         return self._make_request(  # type: ignore
             "PUT",
-            f"/res/virtual-desktop/session/{session_id}",
+            f"/res/virtual-desktop/sessions/{session_id}",
             request_content,
             UpdateSessionResponseContent,
         )
@@ -669,7 +664,7 @@ class ApiClient:
         logger.info(f"Updating software stack: {stack_id}...")
         return self._make_request(  # type: ignore
             "PUT",
-            f"/res/virtual-desktop/software-stack/{stack_id}",
+            f"/res/virtual-desktop/software-stacks/{stack_id}",
             request_content,
             UpdateSoftwareStackResponseContent,
         )
@@ -699,7 +694,7 @@ class ApiClient:
         logger.info(
             f"Listing sessions (state: {state}, base_os: {base_os}, name: {session_name}, stack_id: {stack_id})..."
         )
-        path = "/res/virtual-desktop/session"
+        path = "/res/virtual-desktop/sessions"
 
         # Build query parameters
         params = []
@@ -737,7 +732,7 @@ class ApiClient:
             GetSessionResponseContent containing session details
         """
         logger.info(f"Getting session {res_session_id} for owner {owner}...")
-        path = f"/res/virtual-desktop/session/{res_session_id}?owner={owner}"
+        path = f"/res/virtual-desktop/sessions/{res_session_id}?owner={owner}"
 
         return self._make_request(  # type: ignore
             "GET", path, response_model_class=GetSessionResponseContent
@@ -769,6 +764,116 @@ class ApiClient:
             "/res/virtual-desktop/session-connections",
             request_content,
             GetSessionConnectionResponseContent,
+        )
+
+    def join_session(self, idea_session_id: str, idea_session_owner: str) -> Any:
+        """
+        Get connection info and open a headless Chrome browser to the DCV session.
+
+        Args:
+            idea_session_id: Session ID to connect to
+            idea_session_owner: Owner of the session
+
+        Returns:
+            WebDriver instance with an active DCV connection
+        """
+        MAX_WAIT = 60  # seconds
+        start_time = time.time()
+        request_content = GetSessionConnectionRequestContent(
+            connection={
+                "idea_session_id": idea_session_id,
+                "idea_session_owner": idea_session_owner,
+            }
+        )
+        while True:
+            try:
+                response = self.get_session_connection(request_content)
+                break
+            except Exception:
+                if time.time() - start_time > MAX_WAIT:
+                    raise
+                time.sleep(10)
+
+        assert response is not None and response.connection is not None
+        conn = response.connection
+        return ApiClient.connect_to_session(
+            endpoint=conn.endpoint,
+            web_url_path=conn.web_url_path,
+            access_token=conn.access_token,
+            idea_session_id=conn.idea_session_id,
+        )
+
+    @staticmethod
+    def connect_to_session(
+        endpoint: str,
+        web_url_path: str,
+        access_token: str,
+        idea_session_id: str,
+    ) -> Any:
+        """
+        Open a headless Chrome connection to a DCV session.
+        Returns the WebDriver instance with an active connection.
+        """
+        logger.info(f"joining session {idea_session_id}...")
+
+        options = webdriver.ChromeOptions()
+        options.binary_location = "/usr/local/bin/chromium-browser"
+        options.add_argument("--headless=new")
+        options.add_argument("--ignore-certificate-errors")
+        options.add_argument("--no-sandbox")
+        options.add_argument("--disable-dev-shm-usage")
+        options.add_argument("--disable-gpu")
+        options.add_argument("--window-size=1920,1080")
+        options.add_argument("--disable-software-rasterizer")
+        options.add_argument("--disable-extensions")
+        options.add_argument("--disable-infobars")
+        options.add_argument("--memory-pressure-off")
+        options.add_argument("--disable-background-networking")
+        options.add_argument("--disk-cache-size=1")
+        options.set_capability("goog:loggingPrefs", {"browser": "SEVERE"})
+
+        connection_url = (
+            f"{endpoint}{web_url_path}?authToken={access_token}#{idea_session_id}"
+        )
+        max_retries = 3
+
+        for attempt in range(max_retries):
+            driver = None
+            try:
+                driver = webdriver.Chrome(options=options)
+                driver.get(connection_url)
+                return driver
+            except Exception as e:
+                logger.warning(f"Chrome WebDriver attempt {attempt + 1} failed: {e}")
+                if driver:
+                    try:
+                        driver.quit()
+                    except Exception:
+                        pass
+                if attempt < max_retries - 1:
+                    time.sleep(2)
+
+        assert False, f"Failed to join session within {max_retries} attempts"
+
+    def batch_create_session(
+        self, request_content: BatchCreateSessionRequestContent  # type: ignore
+    ) -> BatchCreateSessionResponseContent:  # type: ignore
+        """
+        Batch create virtual desktop sessions
+
+        Args:
+            request_content: BatchCreateSessionRequestContent object containing:
+                - sessions: List of sessions to create
+
+        Returns:
+            BatchCreateSessionResponseContent containing successful and unsuccessful lists
+        """
+        logger.info("Batch creating sessions...")
+        return self._make_request(  # type: ignore
+            "POST",
+            "/res/virtual-desktop/sessions",
+            request_content,
+            BatchCreateSessionResponseContent,
         )
 
     def batch_stop_session(
@@ -853,6 +958,56 @@ class ApiClient:
             "/res/virtual-desktop/sessions/reboot",
             request_content,
             BatchRebootSessionResponseContent,
+        )
+
+    def batch_get_session_screenshot(
+        self, request_content: BatchGetSessionScreenshotRequestContent  # type: ignore
+    ) -> BatchGetSessionScreenshotResponseContent:  # type: ignore
+        """
+        Batch get virtual desktop session screenshots
+
+        Args:
+            request_content: BatchGetSessionScreenshotRequestContent object containing:
+                - screenshots: List of session screenshots to fetch (idea_session_id required)
+
+        Returns:
+            BatchGetSessionScreenshotResponseContent containing successful and unsuccessful lists
+        """
+        logger.info("Batch getting session screenshots...")
+        return self._make_request(  # type: ignore
+            "POST",
+            "/res/virtual-desktop/session-screenshots",
+            request_content,
+            BatchGetSessionScreenshotResponseContent,
+        )
+
+    def create_software_stack_from_session(
+        self, request_content: Any, raw: bool = False
+    ) -> CreateSoftwareStackFromSessionResponseContent:  # type: ignore
+        """
+        Create a software stack from an existing session
+
+        Args:
+            request_content: CreateSoftwareStackFromSessionRequestContent object,
+                or a raw dict when raw=True
+            raw: If True, send request_content as a raw dict bypassing client-side
+                 model validation.
+
+        Returns:
+            CreateSoftwareStackFromSessionResponseContent containing the created stack
+        """
+        logger.info("Creating software stack from session...")
+        if raw:
+            return self._make_raw_request(  # type: ignore[no-any-return]
+                "POST",
+                "/res/virtual-desktop/software-stacks/create-from-session",
+                request_content,
+            )
+        return self._make_request(  # type: ignore
+            "POST",
+            "/res/virtual-desktop/software-stacks/create-from-session",
+            request_content,
+            CreateSoftwareStackFromSessionResponseContent,
         )
 
     def close(self) -> None:

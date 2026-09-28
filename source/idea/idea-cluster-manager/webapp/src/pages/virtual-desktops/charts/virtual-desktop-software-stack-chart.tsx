@@ -17,12 +17,15 @@ import { VirtualDesktopSession } from "../../../client/generated/api";
 export interface VirtualDesktopSoftwareStackChartProps {
     loading: boolean
     sessions: VirtualDesktopSession[];
+    softwareStackNames?: { [stackId: string]: string };
 }
 
 class VirtualDesktopSoftwareStackChart extends VirtualDesktopBaseChart<VirtualDesktopSoftwareStackChartProps> {
     render() {
         const states = this.props.sessions.reduce((eax: {[key: string]: number}, item: any) => {
-            eax[item.software_stack.name] = (eax[item.software_stack.name] || 0) + 1;
+            const stackId = item.software_stack_id || 'Unknown';
+            const label = this.props.softwareStackNames?.[stackId] || stackId;
+            eax[label] = (eax[label] || 0) + 1;
             return eax;
         }, {})
  

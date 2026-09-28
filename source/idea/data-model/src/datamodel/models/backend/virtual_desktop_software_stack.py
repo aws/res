@@ -245,6 +245,8 @@ class VirtualDesktopSoftwareStack(Model):
         """
         if name is None:
             raise ValueError("Invalid value for `name`, must not be `None`")  # noqa: E501
+        if name is not None and len(name) < 1:
+            raise ValueError("Invalid value for `name`, length must be greater than or equal to `1`")  # noqa: E501
 
         self._name = name
 
@@ -339,6 +341,8 @@ class VirtualDesktopSoftwareStack(Model):
         """
         if ami_id is None:
             raise ValueError("Invalid value for `ami_id`, must not be `None`")  # noqa: E501
+        if ami_id is not None and len(ami_id) < 1:
+            raise ValueError("Invalid value for `ami_id`, length must be greater than or equal to `1`")  # noqa: E501
 
         self._ami_id = ami_id
 

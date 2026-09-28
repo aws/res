@@ -15,6 +15,8 @@ import shutil
 import os
 import re
 from typing import List
+import tarfile
+import gzip
 
 class ResInstallationScriptsPackageTool:
 
@@ -50,7 +52,6 @@ class ResInstallationScriptsPackageTool:
         return [
             "idea-bastion-host",
             "idea-cluster-manager",
-            "idea-virtual-desktop-controller",
             "idea-virtual-desktop",
             "idea-dcv-connection-gateway",
             "idea-sdk",
@@ -93,7 +94,58 @@ class ResInstallationScriptsPackageTool:
 
     def archive(self) -> None:
         idea.console.print('creating archive ...')
-        shutil.make_archive(self.output_dir, 'gztar', self.output_dir)
+        # Create deterministic tar archive by setting fixed timestamps
+        # Use a fixed timestamp (Unix epoch) for deterministic builds
+        fixed_timestamp = 0
+        
+        archive_path = f'{self.output_dir}.tar.gz'
+        
+        # Collect all paths and sort them for deterministic ordering
+        all_paths = []
+        for root, dirs, files in os.walk(self.output_dir):
+            # Sort directories and files for consistent ordering
+            dirs.sort()
+            files.sort()
+            
+            # Add all files (directories will be created automatically by tarfile)
+            for file_name in files:
+                file_path = os.path.join(root, file_name)
+                all_paths.append(file_path)
+        
+        # Sort all paths to ensure deterministic order
+        all_paths.sort()
+        
+        # Create tar file first, then compress with deterministic gzip
+        tar_path = f'{self.output_dir}.tar'
+        
+        with tarfile.open(tar_path, 'w') as tar:
+            for file_path in all_paths:
+                # Calculate the archive name (relative path within the tar)
+                arcname = os.path.relpath(file_path, self.output_dir)
+                
+                # Get tarinfo and set fixed timestamp
+                tarinfo = tar.gettarinfo(file_path, arcname)
+                tarinfo.mtime = fixed_timestamp
+                tarinfo.uid = 0
+                tarinfo.gid = 0
+                tarinfo.uname = 'root'
+                tarinfo.gname = 'root'
+                
+                # Add the file to the archive
+                if tarinfo.isfile():
+                    with open(file_path, 'rb') as f:
+                        tar.addfile(tarinfo, f)
+                else:
+                    # Handle directories, symlinks, etc.
+                    tar.addfile(tarinfo)
+        
+        # Compress with deterministic gzip (no timestamp in gzip header)
+        with open(tar_path, 'rb') as f_in:
+            with gzip.GzipFile(archive_path, 'wb', mtime=fixed_timestamp) as f_out:
+                f_out.write(f_in.read())
+        
+        # Remove the intermediate tar file
+        os.remove(tar_path)
 
     def package(self):
         idea.console.print_header_block(f'package RES ready AMI installation scripts')

@@ -35,8 +35,8 @@ def _build_request(
     return GetSessionConnectionRequestContent(
         **{
             "connection": {
-                "idea-session-id": idea_session_id,
-                "idea-session-owner": idea_session_owner,
+                "idea_session_id": idea_session_id,
+                "idea_session_owner": idea_session_owner,
             }
         }
     )
@@ -256,9 +256,6 @@ class TestGetSessionConnection:
             assert (
                 "does not have permission" in e.response.text
             ), f"Unexpected error message: {e.response.text}"
-            logger.info(
-                f"User without permission correctly received 401 error: {str(e)}"
-            )
 
     @pytest.mark.parametrize(
         "session_record",
@@ -297,7 +294,6 @@ class TestGetSessionConnection:
             assert (
                 "not ready for connection" in e.response.text
             ), f"Unexpected error message: {e.response.text}"
-            logger.info(f"Session not ready correctly received 400 error: {str(e)}")
 
     @pytest.mark.parametrize("admin_username", ["clusteradmin"])
     def test_get_session_connection_nonexistent_session(
@@ -321,7 +317,6 @@ class TestGetSessionConnection:
             assert (
                 "does not exist" in e.response.text
             ), f"Unexpected error for non-existent session: {e.response.text}"
-            logger.info(f"Non-existent session correctly received 400 error: {str(e)}")
 
     @pytest.mark.parametrize("admin_username", ["clusteradmin"])
     def test_get_session_connection_missing_connection(
@@ -356,16 +351,15 @@ class TestGetSessionConnection:
             request_content = GetSessionConnectionRequestContent(
                 **{
                     "connection": {
-                        "idea-session-owner": "clusteradmin",
+                        "idea_session_owner": "clusteradmin",
                     }
                 }
             )
             api_client.get_session_connection(request_content)
-            pytest.fail("Expected 400 error for missing idea-session-id")
+            pytest.fail("Expected 400 error for missing idea_session_id")
         except Exception as e:
             assert "400" in str(e), f"Expected 400 error, got: {str(e)}"
             assert hasattr(e, "response"), "Response should exist in the exception"
-            logger.info(f"Missing session ID correctly received 400 error: {str(e)}")
 
     @pytest.mark.parametrize("admin_username", ["clusteradmin"])
     def test_get_session_connection_missing_session_owner(
@@ -380,16 +374,15 @@ class TestGetSessionConnection:
             request_content = GetSessionConnectionRequestContent(
                 **{
                     "connection": {
-                        "idea-session-id": "test-session-123",
+                        "idea_session_id": "test-session-123",
                     }
                 }
             )
             api_client.get_session_connection(request_content)
-            pytest.fail("Expected 400 error for missing idea-session-owner")
+            pytest.fail("Expected 400 error for missing idea_session_owner")
         except Exception as e:
             assert "400" in str(e), f"Expected 400 error, got: {str(e)}"
             assert hasattr(e, "response"), "Response should exist in the exception"
-            logger.info(f"Missing session owner correctly received 400 error: {str(e)}")
 
     @pytest.mark.parametrize("admin_username", ["clusteradmin"])
     def test_get_session_connection_empty_session_id(
@@ -406,16 +399,19 @@ class TestGetSessionConnection:
             api_client.get_session_connection(
                 {
                     "connection": {
-                        "idea-session-id": "",
-                        "idea-session-owner": "clusteradmin",
+                        "idea_session_id": "",
+                        "idea_session_owner": "clusteradmin",
                     }
                 },
                 raw=True,
             )
-            pytest.fail("Expected 400 error for empty idea-session-id")
+            pytest.fail("Expected 400 error for empty idea_session_id")
         except Exception as e:
             assert "400" in str(e), f"Expected 400 error, got: {str(e)}"
-            logger.info(f"Empty session ID correctly received 400 error: {str(e)}")
+            assert hasattr(e, "response"), "Response should exist in the exception"
+            assert (
+                "should be non-empty" in e.response.text
+            ), f"Expected 'should be non-empty' in response, got: {e.response.text}"
 
     @pytest.mark.parametrize("admin_username", ["clusteradmin"])
     def test_get_session_connection_empty_session_owner(
@@ -432,16 +428,19 @@ class TestGetSessionConnection:
             api_client.get_session_connection(
                 {
                     "connection": {
-                        "idea-session-id": "test-session-123",
-                        "idea-session-owner": "",
+                        "idea_session_id": "test-session-123",
+                        "idea_session_owner": "",
                     }
                 },
                 raw=True,
             )
-            pytest.fail("Expected 400 error for empty idea-session-owner")
+            pytest.fail("Expected 400 error for empty idea_session_owner")
         except Exception as e:
             assert "400" in str(e), f"Expected 400 error, got: {str(e)}"
-            logger.info(f"Empty session owner correctly received 400 error: {str(e)}")
+            assert hasattr(e, "response"), "Response should exist in the exception"
+            assert (
+                "should be non-empty" in e.response.text
+            ), f"Expected 'should be non-empty' in response, got: {e.response.text}"
 
     def test_get_session_connection_with_nonexistent_user(
         self,
@@ -463,7 +462,6 @@ class TestGetSessionConnection:
             assert (
                 "User not found" in e.response.text
             ), f"Unexpected error for non-existent user: {e.response.text}"
-            logger.info(f"Non-existent user correctly received 401 error: {str(e)}")
 
     @pytest.mark.parametrize("inactive_username", ["user2"])
     def test_get_session_connection_with_inactive_user(
@@ -487,7 +485,6 @@ class TestGetSessionConnection:
             assert (
                 "Inactive user" in e.response.text
             ), f"Unexpected error for inactive user: {e.response.text}"
-            logger.info(f"Inactive user correctly received 401 error: {str(e)}")
 
     def test_get_session_connection_without_auth_token(
         self,
@@ -509,9 +506,6 @@ class TestGetSessionConnection:
             assert (
                 "No authorization token provided" in e.response.text
             ), f"Unexpected error for request without auth token: {e.response.text}"
-            logger.info(
-                f"Request without auth token correctly received 401 error: {str(e)}"
-            )
 
     def test_get_session_connection_with_invalid_auth_token_in_prod(
         self,
@@ -539,8 +533,5 @@ class TestGetSessionConnection:
             assert (
                 "Unable to retrieve username" in e.response.text
             ), f"Unexpected error for request with invalid auth token: {e.response.text}"
-            logger.info(
-                "Request with invalid auth token correctly received 'Unable to retrieve username' error"
-            )
         finally:
             set_backend_lambda_test_mode(region, environment_name, True)

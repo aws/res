@@ -137,11 +137,10 @@ class TestGetSession:
             )
         except Exception as e:
             assert "401" in str(e)
-            assert "Non admin user cannot get session info of other users" in str(
-                e.response.text  # type: ignore
-            )
-            logger.info(
-                f"Getting other user's session via non-admin user correctly received 401 error: {str(e)}"
+            assert hasattr(e, "response"), "Response should exist in the exception"
+            assert (
+                "Non admin user cannot get session info of other users"
+                in e.response.text
             )
 
     @pytest.mark.parametrize("admin_username", ["clusteradmin"])
@@ -164,7 +163,6 @@ class TestGetSession:
             assert (
                 "does not exist" in e.response.text
             ), f"Unexpected error for non-existent session: {str(e)}"
-            logger.info(f"Non-existent session correctly received 400 error: {str(e)}")
 
     @pytest.mark.parametrize("admin_username", ["clusteradmin"])
     def test_get_session_empty_required_property(
@@ -205,7 +203,6 @@ class TestGetSession:
             assert (
                 "User not found" in e.response.text
             ), f"Unexpected error for non-existent user: {str(e)}"
-            logger.info(f"Non-existent user correctly received 401 error: {str(e)}")
 
     @pytest.mark.parametrize("inactive_username", ["user2"])
     def test_get_session_with_inactive_user(
@@ -228,7 +225,6 @@ class TestGetSession:
             assert (
                 "Inactive user" in e.response.text
             ), f"Unexpected error for inactive user: {str(e)}"
-            logger.info(f"Inactive user correctly received 401 error: {str(e)}")
 
     def test_get_session_without_auth_token(
         self,
@@ -248,9 +244,6 @@ class TestGetSession:
             assert (
                 "No authorization token provided" in e.response.text
             ), f"Unexpected error for request without auth token: {str(e)}"
-            logger.info(
-                f"Request without auth token correctly received 401 error: {str(e)}"
-            )
 
     def test_get_session_with_invalid_auth_token_in_prod(
         self,
@@ -276,8 +269,5 @@ class TestGetSession:
             assert (
                 "Unable to retrieve username" in e.response.text
             ), f"Unexpected error for request with invalid auth token: {str(e)}"
-            logger.info(
-                "Request with invalid auth token correctly received 'Unable to retrieve username' error"
-            )
         finally:
             set_backend_lambda_test_mode(region, environment_name, True)

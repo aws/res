@@ -10,6 +10,7 @@ from res.utils import logging_utils
 
 from ideabootstrap import bootstrap_common
 from ideabootstrap.dcv import dcv
+from ideabootstrap.dcv.linux.x_server import ensure_xorg_config
 
 import tempfile
 import os
@@ -25,6 +26,10 @@ def run():
         logger.info(f"Instance Ready Lock File Already Exists: {LINUX_VDI_CONFIG_HOST_READY_LOCK}")
 
         update_session_host_info()
+
+        # Regenerate xorg.conf if GPU BusID changed (e.g., instance type changed
+        # across GPU families like g4dn -> g6). Must run before DCV session setup.
+        ensure_xorg_config()
 
         if dcv.configure_automatic_console_session():
             session_state = dcv.poll_dcv_session_ready()
@@ -75,6 +80,12 @@ def run():
     logger.info(f"Created instance ready lock file: {LINUX_VDI_CONFIG_HOST_READY_LOCK}")
 
     update_session_host_info()
+
+    # Regenerate xorg.conf if GPU BusID changed (e.g., instance type changed
+    # across GPU families like g4dn -> g6). Must run before DCV session setup.
+    # Also called on first boot as a defensive measure: the initial bootstrap
+    # may run x_server.configure() before the nvidia driver is fully loaded.
+    ensure_xorg_config()
 
     if dcv.configure_automatic_console_session():
         session_state = dcv.poll_dcv_session_ready()

@@ -34,8 +34,8 @@ class BatchStopSessionResponseContent(Model):
         }
 
         self.attribute_map = {
-            'successful_list': 'successfulList',
-            'unsuccessful_list': 'unsuccessfulList'
+            'successful_list': 'successful_list',
+            'unsuccessful_list': 'unsuccessful_list'
         }
 
         self._successful_list = successful_list

@@ -15,8 +15,7 @@ import React, { Component, RefObject } from "react";
 
 import { AppContext } from "../../common";
 import IdeaListView from "../../components/list-view";
-import { VirtualDesktopPermission } from "../../client/data-model";
-import { VirtualDesktopPermissionProfile } from "../../client/generated/api";
+import { VirtualDesktopPermission, VirtualDesktopPermissionProfile } from "../../client/generated/api";
 import { Constants } from "../../common/constants";
 import { IdeaSideNavigationProps } from "../../components/side-navigation";
 import { IdeaAppLayoutProps } from "../../components/app-layout";

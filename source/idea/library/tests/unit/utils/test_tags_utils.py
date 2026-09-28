@@ -36,3 +36,34 @@ def test_convert_tags_list_of_dict_to_tags_dict_empty_list():
     result = tags.convert_tags_list_of_dict_to_tags_dict([])
 
     assert result == {}
+
+
+def test_validate_user_tags_with_reserved_keys():
+    result = tags.validate_user_tags({"res:EnvironmentName": "test", "Name": "my-vdi"})
+    assert sorted(result) == ["Name", "res:EnvironmentName"]
+
+
+def test_validate_user_tags_multiple_reserved_keys():
+    result = tags.validate_user_tags(
+        {
+            "res:EnvironmentName": "test",
+            "res:ModuleId": "fake",
+            "Team": "Engineering",
+        }
+    )
+    assert sorted(result) == ["res:EnvironmentName", "res:ModuleId"]
+
+
+def test_validate_user_tags_no_reserved_keys():
+    result = tags.validate_user_tags({"Team": "Engineering", "Owner": "user1"})
+    assert result == []
+
+
+def test_validate_user_tags_empty_dict():
+    result = tags.validate_user_tags({})
+    assert result == []
+
+
+def test_validate_user_tags_name_key_alone():
+    result = tags.validate_user_tags({"Name": "my-instance", "Team": "Engineering"})
+    assert result == ["Name"]

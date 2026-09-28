@@ -31,7 +31,6 @@ from idea.infrastructure.install.policies import (
     AmazonSsmManagedInstanceCorePolicy,
     CloudWatchAgentServerPolicy,
     ClusterEndpointsPolicy,
-    Ec2StateEventTransformerPolicy,
     GetAlbListenerDefaultActionsPolicy,
     LambdaBasicExecutionPolicy,
     LogRetentionPolicy,
@@ -52,9 +51,6 @@ from idea.infrastructure.resources.lambda_functions.custom_resource.self_signed_
 )
 from idea.infrastructure.resources.lambda_functions.custom_resource.update_cluster_settings_lambda import (
     update_cluster_settings_handler,
-)
-from idea.infrastructure.resources.lambda_functions.ec2_state_event_transformation_lambda import (
-    ec2_state_event_transformation_handler,
 )
 from idea.infrastructure.resources.lambda_functions.solution_metrics_lambda import (
     solution_metrics_handler,
@@ -145,7 +141,6 @@ class ClusterStack(ResBaseConstruct):
         self.amazon_ssm_managed_instance_core_policy: Optional[iam.ManagedPolicy] = None
         self.cloud_watch_agent_server_policy: Optional[iam.ManagedPolicy] = None
         self.solution_metrics_lambda: Optional[lambda_.Function] = None
-        self.ec2_events_sns_topic: Optional[sns.SNSTopic] = None
 
         # build common policies
         self.build_policies()
@@ -177,7 +172,6 @@ class ClusterStack(ResBaseConstruct):
         self.build_private_hosted_zone()
 
         # ec2-notification module
-        self.build_ec2_notification_module()
 
         # cluster endpoints
         self.build_cluster_endpoints()
@@ -538,52 +532,6 @@ class ClusterStack(ResBaseConstruct):
         )
 
         return get_alb_listener_default_actions.get_att("default_actions")  # type: ignore
-
-    def build_ec2_notification_module(self) -> None:
-        self.ec2_events_sns_topic = sns.SNSTopic(
-            scope=self.nested_stack,
-            id_="ec2-state-change-sns-topic",
-            display_name=f"{self.cluster_name}-{self.module_id}-ec2-state-change-sns-topic",
-            topic_name=f"{self.module_id}-ec2-state-change-sns-topic",
-            master_key=self.cluster_settings.kms_sns_key_id,
-            parameters=self.parameters,
-        )
-
-        lambda_name = f"ec2-event-xformer"
-        ec2_state_event_transformation_lambda = lambda_.Function(
-            self.nested_stack,
-            lambda_name,
-            runtime=constants.RES_COMMON_LAMBDA_RUNTIME,
-            description="Manage self-signed certificates for RES environment infrastructure",  # type: ignore
-            timeout=cdk.Duration.seconds(180),  # type: ignore
-            handler=ec2_state_event_transformation_handler.handler,
-            environment={
-                "IDEA_EC2_STATE_SNS_TOPIC_ARN": self.ec2_events_sns_topic.topic_arn,
-                "IDEA_CLUSTER_NAME_TAG_KEY": constants.RES_TAG_ENVIRONMENT_NAME,
-                "IDEA_CLUSTER_NAME_TAG_VALUE": self.cluster_name,
-                "IDEA_TAG_PREFIX": constants.RES_TAG_PREFIX,
-            },
-            layers=[self.lambda_layer],  # type: ignore
-            initial_policy=Ec2StateEventTransformerPolicy.create_policy_statements(self.arn_builder),  # type: ignore
-            parameters=self.parameters,
-            log_retention_role=self.roles[constants.LOG_RETENTION_ROLE_NAME],  # type: ignore
-        )
-
-        ec2_monitoring_rule = events.Rule(
-            scope=self.nested_stack,
-            id="ec2-state-monitoring-rule",
-            enabled=True,
-            rule_name=f"{self.cluster_name}-{self.module_id}-ec2-state-monitoring-rule",
-            description="Event Rule to monitor state changes on EC2 Instances",
-            event_pattern=events.EventPattern(
-                source=["aws.ec2"],
-                detail_type=["EC2 Instance State-change Notification"],
-                region=[cdk.Aws.REGION],
-            ),
-        )
-        ec2_monitoring_rule.add_target(
-            events_targets.LambdaFunction(ec2_state_event_transformation_lambda)
-        )
 
     def build_cluster_endpoints(self) -> None:
         lambda_name = "cluster-endpoints"
@@ -958,13 +906,6 @@ class ClusterStack(ResBaseConstruct):
         )
         cluster_settings["load_balancers.internal_alb.https_listener_arn"] = (
             self.internal_alb_https_listener.attr_listener_arn  # type: ignore
-        )
-
-        cluster_settings["ec2.state_change_notifications_sns_topic_arn"] = (
-            self.ec2_events_sns_topic.topic_arn  # type: ignore
-        )
-        cluster_settings["ec2.state_change_notifications_sns_topic_name"] = (
-            self.ec2_events_sns_topic.topic_name  # type: ignore
         )
 
         cdk.CustomResource(

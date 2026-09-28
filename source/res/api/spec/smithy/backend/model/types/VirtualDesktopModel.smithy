@@ -174,6 +174,7 @@ structure Project {
     @documentation("Project identifier")
     @jsonName("project_id")
     @required
+    @length(min: 1)
     id: String
 
     @documentation("Project name")
@@ -283,6 +284,7 @@ structure VirtualDesktopSoftwareStack {
 
     @documentation("Human-readable name for the software stack")
     @required
+    @length(min: 1)
     name: String
 
     @documentation("Description of the software stack")
@@ -299,6 +301,7 @@ structure VirtualDesktopSoftwareStack {
     @documentation("Amazon Machine Image (AMI) ID")
     @jsonName("ami_id")
     @required
+    @length(min: 1)
     amiId: String
 
     @documentation("Reason for any failure in stack creation or update")
@@ -394,9 +397,17 @@ structure VirtualDesktopServer {
     @jsonName("instance_id")
     instanceId: String
 
+    @documentation("EC2 Fleet ID that launched VDI host")
+    @jsonName("fleet_id")
+    fleetId: String
+
     @documentation("EC2 instance type")
     @jsonName("instance_type")
     instanceType: String
+
+    @documentation("AMI ID the instance was launched from")
+    @jsonName("ami_id")
+    amiId: String
 
     @documentation("Private IP address")
     @jsonName("private_ip")
@@ -567,11 +578,7 @@ structure VirtualDesktopSession {
     @documentation("Session description")
     description: String
 
-    @documentation("Software stack configuration")
-    @jsonName("software_stack")
-    softwareStack: VirtualDesktopSoftwareStack
-
-    @documentation("Software stack configuration")
+    @documentation("Software stack identifier")
     @jsonName("software_stack_id")
     softwareStackId: String
 
@@ -601,9 +608,6 @@ structure VirtualDesktopSession {
 
     @documentation("Session tags")
     tags: TagList
-
-    @documentation("List of allowed logins")
-    logins: StringList
 
     @documentation("Whether the session is idle")
     @jsonName("is_idle")
@@ -650,6 +654,7 @@ list VirtualDesktopSessionScreenshotList {
 }
 
 @documentation("Id of the profile")
+@length(min: 1)
 string VirtualDesktopPermissionProfileId
 
 structure VirtualDesktopPermission {
@@ -785,7 +790,7 @@ structure VirtualDesktopSessionPermission {
 structure PermissionProfile {
     @required
     @jsonName("profile_id")
-    profileId: String
+    profileId: VirtualDesktopPermissionProfileId
 }
 
 @sensitive
@@ -794,13 +799,13 @@ string AccessToken
 @documentation("Virtual desktop session connection information")
 structure VirtualDesktopSessionConnection {
     @documentation("IDEA session identifier")
-    @jsonName("idea-session-id")
+    @jsonName("idea_session_id")
     @required
     @length(min: 1)
     ideaSessionId: String
 
     @documentation("IDEA session owner")
-    @jsonName("idea-session-owner")
+    @jsonName("idea_session_owner")
     @required
     @length(min: 1)
     ideaSessionOwner: String
@@ -809,14 +814,14 @@ structure VirtualDesktopSessionConnection {
     endpoint: String
 
     @documentation("Web URL path for the session")
-    @jsonName("web-url-path")
+    @jsonName("web_url_path")
     webUrlPath: String
 
     @documentation("Access token for the session connection")
-    @jsonName("access-token")
+    @jsonName("access_token")
     accessToken: AccessToken
 
     @documentation("Failure reason if connection could not be established")
-    @jsonName("failure-reason")
+    @jsonName("failure_reason")
     failureReason: String
 }

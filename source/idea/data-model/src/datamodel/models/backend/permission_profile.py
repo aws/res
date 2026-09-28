@@ -77,6 +77,7 @@ class PermissionProfile(Model):
     def profile_id(self) -> str:
         """Gets the profile_id of this PermissionProfile.
 
+        Id of the profile  # noqa: E501
 
         :return: The profile_id of this PermissionProfile.
         :rtype: str
@@ -87,11 +88,14 @@ class PermissionProfile(Model):
     def profile_id(self, profile_id: str):
         """Sets the profile_id of this PermissionProfile.
 
+        Id of the profile  # noqa: E501
 
         :param profile_id: The profile_id of this PermissionProfile.
         :type profile_id: str
         """
         if profile_id is None:
             raise ValueError("Invalid value for `profile_id`, must not be `None`")  # noqa: E501
+        if profile_id is not None and len(profile_id) < 1:
+            raise ValueError("Invalid value for `profile_id`, length must be greater than or equal to `1`")  # noqa: E501
 
         self._profile_id = profile_id

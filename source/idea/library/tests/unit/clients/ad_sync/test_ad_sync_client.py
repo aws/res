@@ -8,7 +8,6 @@ from unittest.mock import MagicMock, patch
 import boto3
 import pytest
 import res.exceptions as exceptions
-from moto import mock_aws
 from requests.models import Response
 from res.clients.ad_sync import ad_sync_client
 from res.constants import (
@@ -24,7 +23,6 @@ from res.resources.cluster_settings import CLUSTER_SETTINGS_TABLE_NAME
 from res.utils import table_utils, time_utils
 
 
-@mock_aws
 @pytest.mark.usefixtures("context")
 class TestADSyncClient(TestCase):
 
@@ -107,10 +105,13 @@ class TestADSyncClient(TestCase):
             )
 
     def tearDown(self) -> None:
-        self.ecs_client.delete_cluster(
-            cluster=f"{os.environ.get('environment_name')}-ad-sync-cluster"
-        )
-        os.unsetenv("AWS_DEFAULT_REGION")
+        cluster = f"{os.environ.get('environment_name')}-ad-sync-cluster"
+        tasks = self.ecs_client.list_tasks(
+            cluster=cluster, desiredStatus="RUNNING"
+        ).get("taskArns", [])
+        for task_arn in tasks:
+            self.ecs_client.stop_task(cluster=cluster, task=task_arn)
+        self.ecs_client.delete_cluster(cluster=cluster)
 
     @patch("python_dynamodb_lock.python_dynamodb_lock.DynamoDBLockClient.acquire_lock")
     def test_start_ad_sync_without_running_task(self, mock_lock) -> None:
@@ -215,7 +216,8 @@ class TestADSyncClient(TestCase):
 
         mock_lock.assert_called_once_with(partition_key=AD_SYNC_LOCK_KEY)
         tasks = self.ecs_client.list_tasks(
-            cluster=f"{os.environ.get('environment_name')}-ad-sync-cluster"
+            cluster=f"{os.environ.get('environment_name')}-ad-sync-cluster",
+            desiredStatus="RUNNING",
         )
         self.assertEqual(len(tasks["taskArns"]), 0)
 

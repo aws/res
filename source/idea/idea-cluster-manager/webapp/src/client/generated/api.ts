@@ -43,9 +43,35 @@ import { BASE_PATH, COLLECTION_FORMATS, BaseAPI, RequiredError, operationServerM
 export interface BadRequestExceptionResponseContent {
     'message'?: string;
 }
+export interface BatchCreateSessionFailure {
+    'session': VirtualDesktopSession;
+    'error_code': BatchOperationErrorCode;
+    /**
+     * Error message describing why the session failed to create
+     */
+    'message': string;
+}
+
+
+export interface BatchCreateSessionRequestContent {
+    /**
+     * List of sessions to create
+     */
+    'sessions': Array<VirtualDesktopSession>;
+}
+export interface BatchCreateSessionResponseContent {
+    /**
+     * List of sessions that were successfully created
+     */
+    'successful_list': Array<VirtualDesktopSession>;
+    /**
+     * List of sessions that failed to create
+     */
+    'unsuccessful_list': Array<BatchCreateSessionFailure>;
+}
 export interface BatchDeleteSessionFailure {
     'session': VirtualDesktopSession;
-    'error-code': BatchOperationErrorCode;
+    'error_code': BatchOperationErrorCode;
     /**
      * Error message describing why the session failed to delete
      */
@@ -63,11 +89,11 @@ export interface BatchDeleteSessionResponseContent {
     /**
      * List of sessions that were successfully deleted
      */
-    'successful-list': Array<VirtualDesktopSession>;
+    'successful_list': Array<VirtualDesktopSession>;
     /**
      * List of sessions that failed to delete
      */
-    'unsuccessful-list': Array<BatchDeleteSessionFailure>;
+    'unsuccessful_list': Array<BatchDeleteSessionFailure>;
 }
 export interface BatchGetSessionScreenshotFailure {
     'screenshot': VirtualDesktopSessionScreenshot;
@@ -112,7 +138,7 @@ export type BatchOperationErrorCode = typeof BatchOperationErrorCode[keyof typeo
 
 export interface BatchRebootSessionFailure {
     'session': VirtualDesktopSession;
-    'error-code': BatchOperationErrorCode;
+    'error_code': BatchOperationErrorCode;
     /**
      * Error message describing why the session failed to reboot
      */
@@ -130,15 +156,15 @@ export interface BatchRebootSessionResponseContent {
     /**
      * List of sessions that were successfully rebooted
      */
-    'successful-list': Array<VirtualDesktopSession>;
+    'successful_list': Array<VirtualDesktopSession>;
     /**
      * List of sessions that failed to reboot
      */
-    'unsuccessful-list': Array<BatchRebootSessionFailure>;
+    'unsuccessful_list': Array<BatchRebootSessionFailure>;
 }
 export interface BatchStartSessionFailure {
     'session': VirtualDesktopSession;
-    'error-code': BatchOperationErrorCode;
+    'error_code': BatchOperationErrorCode;
     /**
      * Error message describing why the session failed to start
      */
@@ -156,15 +182,15 @@ export interface BatchStartSessionResponseContent {
     /**
      * List of sessions that were successfully started
      */
-    'successful-list': Array<VirtualDesktopSession>;
+    'successful_list': Array<VirtualDesktopSession>;
     /**
      * List of sessions that failed to start
      */
-    'unsuccessful-list': Array<BatchStartSessionFailure>;
+    'unsuccessful_list': Array<BatchStartSessionFailure>;
 }
 export interface BatchStopSessionFailure {
     'session': VirtualDesktopSession;
-    'errorCode': BatchOperationErrorCode;
+    'error_code': BatchOperationErrorCode;
     /**
      * Error message describing why the session failed to stop
      */
@@ -182,11 +208,11 @@ export interface BatchStopSessionResponseContent {
     /**
      * List of sessions that were successfully stopped
      */
-    'successfulList': Array<VirtualDesktopSession>;
+    'successful_list': Array<VirtualDesktopSession>;
     /**
      * List of sessions that failed to stop
      */
-    'unsuccessfulList': Array<BatchStopSessionFailure>;
+    'unsuccessful_list': Array<BatchStopSessionFailure>;
 }
 /**
  * Budget information structure
@@ -202,12 +228,6 @@ export interface CreatePermissionProfileRequestContent {
 }
 export interface CreatePermissionProfileResponseContent {
     'profile': VirtualDesktopPermissionProfile;
-}
-export interface CreateSessionRequestContent {
-    'session': VirtualDesktopSession;
-}
-export interface CreateSessionResponseContent {
-    'session': VirtualDesktopSession;
 }
 export interface CreateSoftwareStackFromSessionRequestContent {
     'session': VirtualDesktopSession;
@@ -409,7 +429,7 @@ export interface ListSharedPermissionsResponseContent {
      */
     'listing'?: Array<VirtualDesktopSessionPermission>;
     /**
-     * Pagination token for next page
+     * Pagination token for next page from the primary table. Note: application-level pagination across enriched results is not yet implemented.
      */
     'nextToken'?: string;
 }
@@ -446,6 +466,9 @@ export interface NotFoundExceptionResponseContent {
     'message'?: string;
 }
 export interface PermissionProfile {
+    /**
+     * Id of the profile
+     */
     'profile_id': string;
 }
 /**
@@ -861,9 +884,17 @@ export interface VirtualDesktopServer {
      */
     'instance_id'?: string;
     /**
+     * EC2 Fleet ID that launched VDI host
+     */
+    'fleet_id'?: string;
+    /**
      * EC2 instance type
      */
     'instance_type'?: string;
+    /**
+     * AMI ID the instance was launched from
+     */
+    'ami_id'?: string;
     /**
      * Private IP address
      */
@@ -974,9 +1005,8 @@ export interface VirtualDesktopSession {
      * Session description
      */
     'description'?: string;
-    'software_stack'?: VirtualDesktopSoftwareStack;
     /**
-     * Software stack configuration
+     * Software stack identifier
      */
     'software_stack_id'?: string;
     'project'?: Project;
@@ -1006,10 +1036,6 @@ export interface VirtualDesktopSession {
      */
     'tags'?: Array<any>;
     /**
-     * List of allowed logins
-     */
-    'logins'?: Array<string>;
-    /**
      * Whether the session is idle
      */
     'is_idle'?: boolean;
@@ -1027,11 +1053,11 @@ export interface VirtualDesktopSessionConnection {
     /**
      * IDEA session identifier
      */
-    'idea-session-id': string;
+    'idea_session_id': string;
     /**
      * IDEA session owner
      */
-    'idea-session-owner': string;
+    'idea_session_owner': string;
     /**
      * Connection endpoint URL
      */
@@ -1039,15 +1065,15 @@ export interface VirtualDesktopSessionConnection {
     /**
      * Web URL path for the session
      */
-    'web-url-path'?: string;
+    'web_url_path'?: string;
     /**
      * Access token for the session connection
      */
-    'access-token'?: string;
+    'access_token'?: string;
     /**
      * Failure reason if connection could not be established
      */
-    'failure-reason'?: string;
+    'failure_reason'?: string;
 }
 export interface VirtualDesktopSessionPermission {
     'idea_session_id': string;
@@ -1229,6 +1255,45 @@ export interface VirtualDesktopWeekSchedule {
  */
 export const VirtualDesktopApiAxiosParamCreator = function (configuration?: Configuration) {
     return {
+        /**
+         * Batch Create Sessions
+         * @param {BatchCreateSessionRequestContent} batchCreateSessionRequestContent 
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        batchCreateSession: async (batchCreateSessionRequestContent: BatchCreateSessionRequestContent, options: RawAxiosRequestConfig = {}): Promise<RequestArgs> => {
+            // verify required parameter 'batchCreateSessionRequestContent' is not null or undefined
+            assertParamExists('batchCreateSession', 'batchCreateSessionRequestContent', batchCreateSessionRequestContent)
+            const localVarPath = `/res/virtual-desktop/sessions`;
+            // use dummy base URL string because the URL constructor only accepts absolute URLs.
+            const localVarUrlObj = new URL(localVarPath, DUMMY_BASE_URL);
+            let baseOptions;
+            if (configuration) {
+                baseOptions = configuration.baseOptions;
+            }
+
+            const localVarRequestOptions = { method: 'POST', ...baseOptions, ...options};
+            const localVarHeaderParameter = {} as any;
+            const localVarQueryParameter = {} as any;
+
+            // authentication smithy.api.httpBearerAuth required
+            // http bearer authentication required
+            await setBearerAuthToObject(localVarHeaderParameter, configuration)
+
+
+    
+            localVarHeaderParameter['Content-Type'] = 'application/json';
+
+            setSearchParams(localVarUrlObj, localVarQueryParameter);
+            let headersFromBaseOptions = baseOptions && baseOptions.headers ? baseOptions.headers : {};
+            localVarRequestOptions.headers = {...localVarHeaderParameter, ...headersFromBaseOptions, ...options.headers};
+            localVarRequestOptions.data = serializeDataIfNeeded(batchCreateSessionRequestContent, localVarRequestOptions, configuration)
+
+            return {
+                url: toPathString(localVarUrlObj),
+                options: localVarRequestOptions,
+            };
+        },
         /**
          * Batch Delete Sessions
          * @param {BatchDeleteSessionRequestContent} batchDeleteSessionRequestContent 
@@ -1433,7 +1498,7 @@ export const VirtualDesktopApiAxiosParamCreator = function (configuration?: Conf
         createPermissionProfile: async (createPermissionProfileRequestContent: CreatePermissionProfileRequestContent, options: RawAxiosRequestConfig = {}): Promise<RequestArgs> => {
             // verify required parameter 'createPermissionProfileRequestContent' is not null or undefined
             assertParamExists('createPermissionProfile', 'createPermissionProfileRequestContent', createPermissionProfileRequestContent)
-            const localVarPath = `/res/virtual-desktop/permission-profile`;
+            const localVarPath = `/res/virtual-desktop/permission-profiles`;
             // use dummy base URL string because the URL constructor only accepts absolute URLs.
             const localVarUrlObj = new URL(localVarPath, DUMMY_BASE_URL);
             let baseOptions;
@@ -1464,45 +1529,6 @@ export const VirtualDesktopApiAxiosParamCreator = function (configuration?: Conf
             };
         },
         /**
-         * Create Virtual Desktop Session 
-         * @param {CreateSessionRequestContent} createSessionRequestContent 
-         * @param {*} [options] Override http request option.
-         * @throws {RequiredError}
-         */
-        createSession: async (createSessionRequestContent: CreateSessionRequestContent, options: RawAxiosRequestConfig = {}): Promise<RequestArgs> => {
-            // verify required parameter 'createSessionRequestContent' is not null or undefined
-            assertParamExists('createSession', 'createSessionRequestContent', createSessionRequestContent)
-            const localVarPath = `/res/virtual-desktop/session`;
-            // use dummy base URL string because the URL constructor only accepts absolute URLs.
-            const localVarUrlObj = new URL(localVarPath, DUMMY_BASE_URL);
-            let baseOptions;
-            if (configuration) {
-                baseOptions = configuration.baseOptions;
-            }
-
-            const localVarRequestOptions = { method: 'POST', ...baseOptions, ...options};
-            const localVarHeaderParameter = {} as any;
-            const localVarQueryParameter = {} as any;
-
-            // authentication smithy.api.httpBearerAuth required
-            // http bearer authentication required
-            await setBearerAuthToObject(localVarHeaderParameter, configuration)
-
-
-    
-            localVarHeaderParameter['Content-Type'] = 'application/json';
-
-            setSearchParams(localVarUrlObj, localVarQueryParameter);
-            let headersFromBaseOptions = baseOptions && baseOptions.headers ? baseOptions.headers : {};
-            localVarRequestOptions.headers = {...localVarHeaderParameter, ...headersFromBaseOptions, ...options.headers};
-            localVarRequestOptions.data = serializeDataIfNeeded(createSessionRequestContent, localVarRequestOptions, configuration)
-
-            return {
-                url: toPathString(localVarUrlObj),
-                options: localVarRequestOptions,
-            };
-        },
-        /**
          * Create Software Stack
          * @param {CreateSoftwareStackRequestContent} createSoftwareStackRequestContent 
          * @param {*} [options] Override http request option.
@@ -1511,7 +1537,7 @@ export const VirtualDesktopApiAxiosParamCreator = function (configuration?: Conf
         createSoftwareStack: async (createSoftwareStackRequestContent: CreateSoftwareStackRequestContent, options: RawAxiosRequestConfig = {}): Promise<RequestArgs> => {
             // verify required parameter 'createSoftwareStackRequestContent' is not null or undefined
             assertParamExists('createSoftwareStack', 'createSoftwareStackRequestContent', createSoftwareStackRequestContent)
-            const localVarPath = `/res/virtual-desktop/software-stack`;
+            const localVarPath = `/res/virtual-desktop/software-stacks`;
             // use dummy base URL string because the URL constructor only accepts absolute URLs.
             const localVarUrlObj = new URL(localVarPath, DUMMY_BASE_URL);
             let baseOptions;
@@ -1550,7 +1576,7 @@ export const VirtualDesktopApiAxiosParamCreator = function (configuration?: Conf
         createSoftwareStackFromSession: async (createSoftwareStackFromSessionRequestContent: CreateSoftwareStackFromSessionRequestContent, options: RawAxiosRequestConfig = {}): Promise<RequestArgs> => {
             // verify required parameter 'createSoftwareStackFromSessionRequestContent' is not null or undefined
             assertParamExists('createSoftwareStackFromSession', 'createSoftwareStackFromSessionRequestContent', createSoftwareStackFromSessionRequestContent)
-            const localVarPath = `/res/virtual-desktop/software-stack/create-from-session`;
+            const localVarPath = `/res/virtual-desktop/software-stacks/create-from-session`;
             // use dummy base URL string because the URL constructor only accepts absolute URLs.
             const localVarUrlObj = new URL(localVarPath, DUMMY_BASE_URL);
             let baseOptions;
@@ -1582,15 +1608,15 @@ export const VirtualDesktopApiAxiosParamCreator = function (configuration?: Conf
         },
         /**
          * Delete Permission Profile
-         * @param {string} profileId 
+         * @param {string} profileId Id of the profile
          * @param {*} [options] Override http request option.
          * @throws {RequiredError}
          */
         deletePermissionProfile: async (profileId: string, options: RawAxiosRequestConfig = {}): Promise<RequestArgs> => {
             // verify required parameter 'profileId' is not null or undefined
             assertParamExists('deletePermissionProfile', 'profileId', profileId)
-            const localVarPath = `/res/virtual-desktop/permission-profile/{profileId}`
-                .replace(`{${"profileId"}}`, encodeURIComponent(String(profileId)));
+            const localVarPath = `/res/virtual-desktop/permission-profiles/{profile_id}`
+                .replace(`{${"profile_id"}}`, encodeURIComponent(String(profileId)));
             // use dummy base URL string because the URL constructor only accepts absolute URLs.
             const localVarUrlObj = new URL(localVarPath, DUMMY_BASE_URL);
             let baseOptions;
@@ -1629,8 +1655,8 @@ export const VirtualDesktopApiAxiosParamCreator = function (configuration?: Conf
             assertParamExists('deleteSoftwareStack', 'stackId', stackId)
             // verify required parameter 'deleteSoftwareStackRequestContent' is not null or undefined
             assertParamExists('deleteSoftwareStack', 'deleteSoftwareStackRequestContent', deleteSoftwareStackRequestContent)
-            const localVarPath = `/res/virtual-desktop/software-stack/{stackId}`
-                .replace(`{${"stackId"}}`, encodeURIComponent(String(stackId)));
+            const localVarPath = `/res/virtual-desktop/software-stacks/{stack_id}`
+                .replace(`{${"stack_id"}}`, encodeURIComponent(String(stackId)));
             // use dummy base URL string because the URL constructor only accepts absolute URLs.
             const localVarUrlObj = new URL(localVarPath, DUMMY_BASE_URL);
             let baseOptions;
@@ -1672,8 +1698,8 @@ export const VirtualDesktopApiAxiosParamCreator = function (configuration?: Conf
             assertParamExists('getSession', 'resSessionId', resSessionId)
             // verify required parameter 'owner' is not null or undefined
             assertParamExists('getSession', 'owner', owner)
-            const localVarPath = `/res/virtual-desktop/session/{resSessionId}`
-                .replace(`{${"resSessionId"}}`, encodeURIComponent(String(resSessionId)));
+            const localVarPath = `/res/virtual-desktop/sessions/{res_session_id}`
+                .replace(`{${"res_session_id"}}`, encodeURIComponent(String(resSessionId)));
             // use dummy base URL string because the URL constructor only accepts absolute URLs.
             const localVarUrlObj = new URL(localVarPath, DUMMY_BASE_URL);
             let baseOptions;
@@ -1755,8 +1781,8 @@ export const VirtualDesktopApiAxiosParamCreator = function (configuration?: Conf
             assertParamExists('getSoftwareStack', 'stackId', stackId)
             // verify required parameter 'baseOs' is not null or undefined
             assertParamExists('getSoftwareStack', 'baseOs', baseOs)
-            const localVarPath = `/res/virtual-desktop/software-stack/{stackId}`
-                .replace(`{${"stackId"}}`, encodeURIComponent(String(stackId)));
+            const localVarPath = `/res/virtual-desktop/software-stacks/{stack_id}`
+                .replace(`{${"stack_id"}}`, encodeURIComponent(String(stackId)));
             // use dummy base URL string because the URL constructor only accepts absolute URLs.
             const localVarUrlObj = new URL(localVarPath, DUMMY_BASE_URL);
             let baseOptions;
@@ -1797,7 +1823,7 @@ export const VirtualDesktopApiAxiosParamCreator = function (configuration?: Conf
         listSessionPermissions: async (resSessionId: string, nextToken?: string, options: RawAxiosRequestConfig = {}): Promise<RequestArgs> => {
             // verify required parameter 'resSessionId' is not null or undefined
             assertParamExists('listSessionPermissions', 'resSessionId', resSessionId)
-            const localVarPath = `/res/virtual-desktop/session-permission`;
+            const localVarPath = `/res/virtual-desktop/session-permissions`;
             // use dummy base URL string because the URL constructor only accepts absolute URLs.
             const localVarUrlObj = new URL(localVarPath, DUMMY_BASE_URL);
             let baseOptions;
@@ -1847,7 +1873,7 @@ export const VirtualDesktopApiAxiosParamCreator = function (configuration?: Conf
          * @throws {RequiredError}
          */
         listSessions: async (state?: string, baseOs?: string, sessionName?: string, stackId?: string, dateRangeKey?: string, after?: string, before?: string, nextToken?: string, owner?: string, options: RawAxiosRequestConfig = {}): Promise<RequestArgs> => {
-            const localVarPath = `/res/virtual-desktop/session`;
+            const localVarPath = `/res/virtual-desktop/sessions`;
             // use dummy base URL string because the URL constructor only accepts absolute URLs.
             const localVarUrlObj = new URL(localVarPath, DUMMY_BASE_URL);
             let baseOptions;
@@ -1993,7 +2019,7 @@ export const VirtualDesktopApiAxiosParamCreator = function (configuration?: Conf
          * @throws {RequiredError}
          */
         listSoftwareStacks: async (projectId?: string, baseOs?: string, softwareStackName?: string, nextToken?: string, options: RawAxiosRequestConfig = {}): Promise<RequestArgs> => {
-            const localVarPath = `/res/virtual-desktop/software-stack`;
+            const localVarPath = `/res/virtual-desktop/software-stacks`;
             // use dummy base URL string because the URL constructor only accepts absolute URLs.
             const localVarUrlObj = new URL(localVarPath, DUMMY_BASE_URL);
             let baseOptions;
@@ -2038,7 +2064,7 @@ export const VirtualDesktopApiAxiosParamCreator = function (configuration?: Conf
         },
         /**
          * Update Permission Profile
-         * @param {string} profileId 
+         * @param {string} profileId Id of the profile
          * @param {UpdatePermissionProfileRequestContent} updatePermissionProfileRequestContent 
          * @param {*} [options] Override http request option.
          * @throws {RequiredError}
@@ -2048,8 +2074,8 @@ export const VirtualDesktopApiAxiosParamCreator = function (configuration?: Conf
             assertParamExists('updatePermissionProfile', 'profileId', profileId)
             // verify required parameter 'updatePermissionProfileRequestContent' is not null or undefined
             assertParamExists('updatePermissionProfile', 'updatePermissionProfileRequestContent', updatePermissionProfileRequestContent)
-            const localVarPath = `/res/virtual-desktop/permission-profile/{profileId}`
-                .replace(`{${"profileId"}}`, encodeURIComponent(String(profileId)));
+            const localVarPath = `/res/virtual-desktop/permission-profiles/{profile_id}`
+                .replace(`{${"profile_id"}}`, encodeURIComponent(String(profileId)));
             // use dummy base URL string because the URL constructor only accepts absolute URLs.
             const localVarUrlObj = new URL(localVarPath, DUMMY_BASE_URL);
             let baseOptions;
@@ -2091,8 +2117,8 @@ export const VirtualDesktopApiAxiosParamCreator = function (configuration?: Conf
             assertParamExists('updateSession', 'resSessionId', resSessionId)
             // verify required parameter 'updateSessionRequestContent' is not null or undefined
             assertParamExists('updateSession', 'updateSessionRequestContent', updateSessionRequestContent)
-            const localVarPath = `/res/virtual-desktop/session/{resSessionId}`
-                .replace(`{${"resSessionId"}}`, encodeURIComponent(String(resSessionId)));
+            const localVarPath = `/res/virtual-desktop/sessions/{res_session_id}`
+                .replace(`{${"res_session_id"}}`, encodeURIComponent(String(resSessionId)));
             // use dummy base URL string because the URL constructor only accepts absolute URLs.
             const localVarUrlObj = new URL(localVarPath, DUMMY_BASE_URL);
             let baseOptions;
@@ -2129,7 +2155,7 @@ export const VirtualDesktopApiAxiosParamCreator = function (configuration?: Conf
          * @throws {RequiredError}
          */
         updateSessionPermissions: async (updateSessionPermissionsRequestContent?: UpdateSessionPermissionsRequestContent, options: RawAxiosRequestConfig = {}): Promise<RequestArgs> => {
-            const localVarPath = `/res/virtual-desktop/session-permission`;
+            const localVarPath = `/res/virtual-desktop/session-permissions`;
             // use dummy base URL string because the URL constructor only accepts absolute URLs.
             const localVarUrlObj = new URL(localVarPath, DUMMY_BASE_URL);
             let baseOptions;
@@ -2171,8 +2197,8 @@ export const VirtualDesktopApiAxiosParamCreator = function (configuration?: Conf
             assertParamExists('updateSoftwareStack', 'stackId', stackId)
             // verify required parameter 'updateSoftwareStackRequestContent' is not null or undefined
             assertParamExists('updateSoftwareStack', 'updateSoftwareStackRequestContent', updateSoftwareStackRequestContent)
-            const localVarPath = `/res/virtual-desktop/software-stack/{stackId}`
-                .replace(`{${"stackId"}}`, encodeURIComponent(String(stackId)));
+            const localVarPath = `/res/virtual-desktop/software-stacks/{stack_id}`
+                .replace(`{${"stack_id"}}`, encodeURIComponent(String(stackId)));
             // use dummy base URL string because the URL constructor only accepts absolute URLs.
             const localVarUrlObj = new URL(localVarPath, DUMMY_BASE_URL);
             let baseOptions;
@@ -2211,6 +2237,18 @@ export const VirtualDesktopApiAxiosParamCreator = function (configuration?: Conf
 export const VirtualDesktopApiFp = function(configuration?: Configuration) {
     const localVarAxiosParamCreator = VirtualDesktopApiAxiosParamCreator(configuration)
     return {
+        /**
+         * Batch Create Sessions
+         * @param {BatchCreateSessionRequestContent} batchCreateSessionRequestContent 
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        async batchCreateSession(batchCreateSessionRequestContent: BatchCreateSessionRequestContent, options?: RawAxiosRequestConfig): Promise<(axios?: AxiosInstance, basePath?: string) => AxiosPromise<BatchCreateSessionResponseContent>> {
+            const localVarAxiosArgs = await localVarAxiosParamCreator.batchCreateSession(batchCreateSessionRequestContent, options);
+            const localVarOperationServerIndex = configuration?.serverIndex ?? 0;
+            const localVarOperationServerBasePath = operationServerMap['VirtualDesktopApi.batchCreateSession']?.[localVarOperationServerIndex]?.url;
+            return (axios, basePath) => createRequestFunction(localVarAxiosArgs, globalAxios, BASE_PATH, configuration)(axios, localVarOperationServerBasePath || basePath);
+        },
         /**
          * Batch Delete Sessions
          * @param {BatchDeleteSessionRequestContent} batchDeleteSessionRequestContent 
@@ -2284,18 +2322,6 @@ export const VirtualDesktopApiFp = function(configuration?: Configuration) {
             return (axios, basePath) => createRequestFunction(localVarAxiosArgs, globalAxios, BASE_PATH, configuration)(axios, localVarOperationServerBasePath || basePath);
         },
         /**
-         * Create Virtual Desktop Session 
-         * @param {CreateSessionRequestContent} createSessionRequestContent 
-         * @param {*} [options] Override http request option.
-         * @throws {RequiredError}
-         */
-        async createSession(createSessionRequestContent: CreateSessionRequestContent, options?: RawAxiosRequestConfig): Promise<(axios?: AxiosInstance, basePath?: string) => AxiosPromise<CreateSessionResponseContent>> {
-            const localVarAxiosArgs = await localVarAxiosParamCreator.createSession(createSessionRequestContent, options);
-            const localVarOperationServerIndex = configuration?.serverIndex ?? 0;
-            const localVarOperationServerBasePath = operationServerMap['VirtualDesktopApi.createSession']?.[localVarOperationServerIndex]?.url;
-            return (axios, basePath) => createRequestFunction(localVarAxiosArgs, globalAxios, BASE_PATH, configuration)(axios, localVarOperationServerBasePath || basePath);
-        },
-        /**
          * Create Software Stack
          * @param {CreateSoftwareStackRequestContent} createSoftwareStackRequestContent 
          * @param {*} [options] Override http request option.
@@ -2321,7 +2347,7 @@ export const VirtualDesktopApiFp = function(configuration?: Configuration) {
         },
         /**
          * Delete Permission Profile
-         * @param {string} profileId 
+         * @param {string} profileId Id of the profile
          * @param {*} [options] Override http request option.
          * @throws {RequiredError}
          */
@@ -2451,7 +2477,7 @@ export const VirtualDesktopApiFp = function(configuration?: Configuration) {
         },
         /**
          * Update Permission Profile
-         * @param {string} profileId 
+         * @param {string} profileId Id of the profile
          * @param {UpdatePermissionProfileRequestContent} updatePermissionProfileRequestContent 
          * @param {*} [options] Override http request option.
          * @throws {RequiredError}
@@ -2510,6 +2536,15 @@ export const VirtualDesktopApiFactory = function (configuration?: Configuration,
     const localVarFp = VirtualDesktopApiFp(configuration)
     return {
         /**
+         * Batch Create Sessions
+         * @param {VirtualDesktopApiBatchCreateSessionRequest} requestParameters Request parameters.
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        batchCreateSession(requestParameters: VirtualDesktopApiBatchCreateSessionRequest, options?: RawAxiosRequestConfig): AxiosPromise<BatchCreateSessionResponseContent> {
+            return localVarFp.batchCreateSession(requestParameters.batchCreateSessionRequestContent, options).then((request) => request(axios, basePath));
+        },
+        /**
          * Batch Delete Sessions
          * @param {VirtualDesktopApiBatchDeleteSessionRequest} requestParameters Request parameters.
          * @param {*} [options] Override http request option.
@@ -2562,15 +2597,6 @@ export const VirtualDesktopApiFactory = function (configuration?: Configuration,
          */
         createPermissionProfile(requestParameters: VirtualDesktopApiCreatePermissionProfileRequest, options?: RawAxiosRequestConfig): AxiosPromise<CreatePermissionProfileResponseContent> {
             return localVarFp.createPermissionProfile(requestParameters.createPermissionProfileRequestContent, options).then((request) => request(axios, basePath));
-        },
-        /**
-         * Create Virtual Desktop Session 
-         * @param {VirtualDesktopApiCreateSessionRequest} requestParameters Request parameters.
-         * @param {*} [options] Override http request option.
-         * @throws {RequiredError}
-         */
-        createSession(requestParameters: VirtualDesktopApiCreateSessionRequest, options?: RawAxiosRequestConfig): AxiosPromise<CreateSessionResponseContent> {
-            return localVarFp.createSession(requestParameters.createSessionRequestContent, options).then((request) => request(axios, basePath));
         },
         /**
          * Create Software Stack
@@ -2715,6 +2741,14 @@ export const VirtualDesktopApiFactory = function (configuration?: Configuration,
  */
 export interface VirtualDesktopApiInterface {
     /**
+     * Batch Create Sessions
+     * @param {VirtualDesktopApiBatchCreateSessionRequest} requestParameters Request parameters.
+     * @param {*} [options] Override http request option.
+     * @throws {RequiredError}
+     */
+    batchCreateSession(requestParameters: VirtualDesktopApiBatchCreateSessionRequest, options?: RawAxiosRequestConfig): AxiosPromise<BatchCreateSessionResponseContent>;
+
+    /**
      * Batch Delete Sessions
      * @param {VirtualDesktopApiBatchDeleteSessionRequest} requestParameters Request parameters.
      * @param {*} [options] Override http request option.
@@ -2761,14 +2795,6 @@ export interface VirtualDesktopApiInterface {
      * @throws {RequiredError}
      */
     createPermissionProfile(requestParameters: VirtualDesktopApiCreatePermissionProfileRequest, options?: RawAxiosRequestConfig): AxiosPromise<CreatePermissionProfileResponseContent>;
-
-    /**
-     * Create Virtual Desktop Session 
-     * @param {VirtualDesktopApiCreateSessionRequest} requestParameters Request parameters.
-     * @param {*} [options] Override http request option.
-     * @throws {RequiredError}
-     */
-    createSession(requestParameters: VirtualDesktopApiCreateSessionRequest, options?: RawAxiosRequestConfig): AxiosPromise<CreateSessionResponseContent>;
 
     /**
      * Create Software Stack
@@ -2893,6 +2919,13 @@ export interface VirtualDesktopApiInterface {
 }
 
 /**
+ * Request parameters for batchCreateSession operation in VirtualDesktopApi.
+ */
+export interface VirtualDesktopApiBatchCreateSessionRequest {
+    readonly batchCreateSessionRequestContent: BatchCreateSessionRequestContent
+}
+
+/**
  * Request parameters for batchDeleteSession operation in VirtualDesktopApi.
  */
 export interface VirtualDesktopApiBatchDeleteSessionRequest {
@@ -2935,13 +2968,6 @@ export interface VirtualDesktopApiCreatePermissionProfileRequest {
 }
 
 /**
- * Request parameters for createSession operation in VirtualDesktopApi.
- */
-export interface VirtualDesktopApiCreateSessionRequest {
-    readonly createSessionRequestContent: CreateSessionRequestContent
-}
-
-/**
  * Request parameters for createSoftwareStack operation in VirtualDesktopApi.
  */
 export interface VirtualDesktopApiCreateSoftwareStackRequest {
@@ -2959,6 +2985,9 @@ export interface VirtualDesktopApiCreateSoftwareStackFromSessionRequest {
  * Request parameters for deletePermissionProfile operation in VirtualDesktopApi.
  */
 export interface VirtualDesktopApiDeletePermissionProfileRequest {
+    /**
+     * Id of the profile
+     */
     readonly profileId: string
 }
 
@@ -3147,6 +3176,9 @@ export interface VirtualDesktopApiListSoftwareStacksRequest {
  * Request parameters for updatePermissionProfile operation in VirtualDesktopApi.
  */
 export interface VirtualDesktopApiUpdatePermissionProfileRequest {
+    /**
+     * Id of the profile
+     */
     readonly profileId: string
 
     readonly updatePermissionProfileRequestContent: UpdatePermissionProfileRequestContent
@@ -3184,6 +3216,16 @@ export interface VirtualDesktopApiUpdateSoftwareStackRequest {
  * VirtualDesktopApi - object-oriented interface
  */
 export class VirtualDesktopApi extends BaseAPI implements VirtualDesktopApiInterface {
+    /**
+     * Batch Create Sessions
+     * @param {VirtualDesktopApiBatchCreateSessionRequest} requestParameters Request parameters.
+     * @param {*} [options] Override http request option.
+     * @throws {RequiredError}
+     */
+    public batchCreateSession(requestParameters: VirtualDesktopApiBatchCreateSessionRequest, options?: RawAxiosRequestConfig) {
+        return VirtualDesktopApiFp(this.configuration).batchCreateSession(requestParameters.batchCreateSessionRequestContent, options).then((request) => request(this.axios, this.basePath));
+    }
+
     /**
      * Batch Delete Sessions
      * @param {VirtualDesktopApiBatchDeleteSessionRequest} requestParameters Request parameters.
@@ -3242,16 +3284,6 @@ export class VirtualDesktopApi extends BaseAPI implements VirtualDesktopApiInter
      */
     public createPermissionProfile(requestParameters: VirtualDesktopApiCreatePermissionProfileRequest, options?: RawAxiosRequestConfig) {
         return VirtualDesktopApiFp(this.configuration).createPermissionProfile(requestParameters.createPermissionProfileRequestContent, options).then((request) => request(this.axios, this.basePath));
-    }
-
-    /**
-     * Create Virtual Desktop Session 
-     * @param {VirtualDesktopApiCreateSessionRequest} requestParameters Request parameters.
-     * @param {*} [options] Override http request option.
-     * @throws {RequiredError}
-     */
-    public createSession(requestParameters: VirtualDesktopApiCreateSessionRequest, options?: RawAxiosRequestConfig) {
-        return VirtualDesktopApiFp(this.configuration).createSession(requestParameters.createSessionRequestContent, options).then((request) => request(this.axios, this.basePath));
     }
 
     /**
@@ -3421,8 +3453,8 @@ export const VirtualDesktopUtilsApiAxiosParamCreator = function (configuration?:
         getPermissionProfile: async (profileId: string, options: RawAxiosRequestConfig = {}): Promise<RequestArgs> => {
             // verify required parameter 'profileId' is not null or undefined
             assertParamExists('getPermissionProfile', 'profileId', profileId)
-            const localVarPath = `/res/virtual-desktop-utils/permission-profile/{profileId}`
-                .replace(`{${"profileId"}}`, encodeURIComponent(String(profileId)));
+            const localVarPath = `/res/virtual-desktop-utils/permission-profiles/{profile_id}`
+                .replace(`{${"profile_id"}}`, encodeURIComponent(String(profileId)));
             // use dummy base URL string because the URL constructor only accepts absolute URLs.
             const localVarUrlObj = new URL(localVarPath, DUMMY_BASE_URL);
             let baseOptions;
@@ -3456,7 +3488,7 @@ export const VirtualDesktopUtilsApiAxiosParamCreator = function (configuration?:
          * @throws {RequiredError}
          */
         listAllowedInstanceTypes: async (listAllowedInstanceTypesRequestContent?: ListAllowedInstanceTypesRequestContent, options: RawAxiosRequestConfig = {}): Promise<RequestArgs> => {
-            const localVarPath = `/res/virtual-desktop-utils/allowed-instance-type`;
+            const localVarPath = `/res/virtual-desktop-utils/allowed-instance-types`;
             // use dummy base URL string because the URL constructor only accepts absolute URLs.
             const localVarUrlObj = new URL(localVarPath, DUMMY_BASE_URL);
             let baseOptions;
@@ -3495,7 +3527,7 @@ export const VirtualDesktopUtilsApiAxiosParamCreator = function (configuration?:
         listAllowedInstanceTypesForSession: async (listAllowedInstanceTypesForSessionRequestContent: ListAllowedInstanceTypesForSessionRequestContent, options: RawAxiosRequestConfig = {}): Promise<RequestArgs> => {
             // verify required parameter 'listAllowedInstanceTypesForSessionRequestContent' is not null or undefined
             assertParamExists('listAllowedInstanceTypesForSession', 'listAllowedInstanceTypesForSessionRequestContent', listAllowedInstanceTypesForSessionRequestContent)
-            const localVarPath = `/res/virtual-desktop-utils/allowed-instance-type-for-session`;
+            const localVarPath = `/res/virtual-desktop-utils/allowed-instance-types-for-session`;
             // use dummy base URL string because the URL constructor only accepts absolute URLs.
             const localVarUrlObj = new URL(localVarPath, DUMMY_BASE_URL);
             let baseOptions;
@@ -3533,7 +3565,7 @@ export const VirtualDesktopUtilsApiAxiosParamCreator = function (configuration?:
          * @throws {RequiredError}
          */
         listPermissionProfiles: async (profileId?: string, nextToken?: string, options: RawAxiosRequestConfig = {}): Promise<RequestArgs> => {
-            const localVarPath = `/res/virtual-desktop-utils/permission-profile`;
+            const localVarPath = `/res/virtual-desktop-utils/permission-profiles`;
             // use dummy base URL string because the URL constructor only accepts absolute URLs.
             const localVarUrlObj = new URL(localVarPath, DUMMY_BASE_URL);
             let baseOptions;

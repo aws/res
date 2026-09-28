@@ -1207,3 +1207,171 @@ class ClusterSettingsTableMergerSSOConfigureTest(unittest.TestCase):
         )
 
         assert success
+
+    def test_configure_sso_skipped_when_oidc_settings_missing_from_snapshot(self):
+        """When SSO is enabled with OIDC provider type but oidc_client_id is missing,
+        SSO configuration should be skipped gracefully instead of failing."""
+        table_data = [
+            {"key": "identity-provider.cognito.sso_enabled", "value": True},
+            {
+                "key": "identity-provider.cognito.sso_idp_provider_name",
+                "value": "Federate",
+            },
+            {"key": "identity-provider.cognito.sso_idp_provider_type", "value": "OIDC"},
+            {
+                "key": "identity-provider.cognito.sso_idp_provider_email_attribute",
+                "value": "email",
+            },
+            # oidc_client_id is None/missing — this is the bug scenario
+            {"key": "identity-provider.cognito.sso_oidc_client_id", "value": None},
+        ]
+
+        configure_sso_calls = []
+
+        def mock_configure_sso(request):
+            configure_sso_calls.append(request)
+
+        self.monkeypatch.setattr(
+            self.context.accounts, "configure_sso", mock_configure_sso
+        )
+
+        merger = ClusterSettingsTableMerger()
+        record_deltas, success = merger.merge(
+            self.context,
+            table_data,
+            DUMMY_DEDUP_ID,
+            {},
+            ApplySnapshotObservabilityHelper(
+                self.context.logger("cluster_settings_table_merger")
+            ),
+        )
+
+        # Should succeed (skip gracefully) and NOT call configure_sso
+        assert success
+        assert len(configure_sso_calls) == 0
+
+    def test_configure_sso_skipped_when_saml_settings_missing_from_snapshot(self):
+        """When SSO is enabled with SAML provider type but saml_metadata_url is missing,
+        SSO configuration should be skipped gracefully instead of failing."""
+        table_data = [
+            {"key": "identity-provider.cognito.sso_enabled", "value": True},
+            {
+                "key": "identity-provider.cognito.sso_idp_provider_name",
+                "value": "MySAMLProvider",
+            },
+            {"key": "identity-provider.cognito.sso_idp_provider_type", "value": "SAML"},
+            {
+                "key": "identity-provider.cognito.sso_idp_provider_email_attribute",
+                "value": "email",
+            },
+            # saml_metadata_url is None/missing — this is the bug scenario
+            {"key": "identity-provider.cognito.sso_saml_metadata_url", "value": None},
+        ]
+
+        configure_sso_calls = []
+
+        def mock_configure_sso(request):
+            configure_sso_calls.append(request)
+
+        self.monkeypatch.setattr(
+            self.context.accounts, "configure_sso", mock_configure_sso
+        )
+
+        merger = ClusterSettingsTableMerger()
+        record_deltas, success = merger.merge(
+            self.context,
+            table_data,
+            DUMMY_DEDUP_ID,
+            {},
+            ApplySnapshotObservabilityHelper(
+                self.context.logger("cluster_settings_table_merger")
+            ),
+        )
+
+        # Should succeed (skip gracefully) and NOT call configure_sso
+        assert success
+        assert len(configure_sso_calls) == 0
+
+    def test_configure_sso_skipped_when_oidc_key_not_in_snapshot(self):
+        """When SSO is enabled with OIDC provider type but oidc_client_id key
+        is entirely absent from the snapshot data, SSO should be skipped."""
+        table_data = [
+            {"key": "identity-provider.cognito.sso_enabled", "value": True},
+            {
+                "key": "identity-provider.cognito.sso_idp_provider_name",
+                "value": "Federate",
+            },
+            {"key": "identity-provider.cognito.sso_idp_provider_type", "value": "OIDC"},
+            {
+                "key": "identity-provider.cognito.sso_idp_provider_email_attribute",
+                "value": "email",
+            },
+            # No oidc_client_id key at all in the snapshot
+        ]
+
+        configure_sso_calls = []
+
+        def mock_configure_sso(request):
+            configure_sso_calls.append(request)
+
+        self.monkeypatch.setattr(
+            self.context.accounts, "configure_sso", mock_configure_sso
+        )
+
+        merger = ClusterSettingsTableMerger()
+        record_deltas, success = merger.merge(
+            self.context,
+            table_data,
+            DUMMY_DEDUP_ID,
+            {},
+            ApplySnapshotObservabilityHelper(
+                self.context.logger("cluster_settings_table_merger")
+            ),
+        )
+
+        # Should succeed (skip gracefully) and NOT call configure_sso
+        assert success
+        assert len(configure_sso_calls) == 0
+
+    def test_configure_sso_skipped_when_unknown_provider_type(self):
+        """When SSO is enabled with an unrecognized provider type,
+        SSO configuration should be skipped gracefully instead of failing."""
+        table_data = [
+            {"key": "identity-provider.cognito.sso_enabled", "value": True},
+            {
+                "key": "identity-provider.cognito.sso_idp_provider_name",
+                "value": "CustomIdP",
+            },
+            {
+                "key": "identity-provider.cognito.sso_idp_provider_type",
+                "value": "CUSTOM",
+            },
+            {
+                "key": "identity-provider.cognito.sso_idp_provider_email_attribute",
+                "value": "email",
+            },
+        ]
+
+        configure_sso_calls = []
+
+        def mock_configure_sso(request):
+            configure_sso_calls.append(request)
+
+        self.monkeypatch.setattr(
+            self.context.accounts, "configure_sso", mock_configure_sso
+        )
+
+        merger = ClusterSettingsTableMerger()
+        record_deltas, success = merger.merge(
+            self.context,
+            table_data,
+            DUMMY_DEDUP_ID,
+            {},
+            ApplySnapshotObservabilityHelper(
+                self.context.logger("cluster_settings_table_merger")
+            ),
+        )
+
+        # Should succeed (skip gracefully) and NOT call configure_sso
+        assert success
+        assert len(configure_sso_calls) == 0

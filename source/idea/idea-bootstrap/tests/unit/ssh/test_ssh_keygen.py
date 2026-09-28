@@ -3,6 +3,8 @@
 
 import tempfile
 from unittest.mock import Mock, call
+
+import ideabootstrap.dcv.constants as dcv_constants
 import pytest
 from ideabootstrap.ssh import constants, ssh_keygen
 from res.resources import cluster_settings
@@ -10,13 +12,22 @@ from res.resources import cluster_settings
 
 @pytest.mark.parametrize(
     "base_os, content_exists",
-    [("rhel8", False), ("ubuntu2204", True), ("ubuntu2404", True), ("invalid_os", False)],
+    [
+        ("rhel8", False),
+        ("ubuntu2204", True),
+        ("ubuntu2404", True),
+        ("invalid_os", False),
+    ],
 )
 def test_ssh_keygen(monkeypatch, base_os, content_exists) -> None:
 
     mock_run = Mock()
     expected_calls = [
-        call(["su", "-", "user1", "-c", "exit"], check=True),
+        call(
+            ["su", "-", "user1", "-c", "exit"],
+            check=True,
+            timeout=dcv_constants.SUBPROCESS_TIMEOUT_SEC,
+        ),
     ]
     monkeypatch.setenv("RES_BASE_OS", base_os)
     monkeypatch.setenv("IDEA_SESSION_OWNER", "user1")

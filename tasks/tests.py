@@ -121,26 +121,6 @@ def cluster_manager(c, keywords=None, params=None, capture_output=False, cov_rep
 
 
 @task(iterable=['params'])
-def virtual_desktop_controller(c, keywords=None, params=None, capture_output=False, cov_report=None):
-    # type: (Context, str, List[str], bool, str) -> None
-    """
-    run virtual desktop controller unit tests
-    """
-    exit_code = _run_unit_tests(
-        c=c,
-        component_name='virtual-desktop-controller',
-        component_src=idea.props.virtual_desktop_src,
-        component_tests_src=idea.props.virtual_desktop_tests_src,
-        package_name='ideavirtualdesktopcontroller',
-        params=params,
-        capture_output=capture_output,
-        keywords=keywords,
-        cov_report=cov_report
-    )
-    raise SystemExit(exit_code)
-
-
-@task(iterable=['params'])
 def administrator(c, keywords=None, params=None, capture_output=False, cov_report=None):
     # type: (Context, str, List[str], bool, str) -> None
     """
@@ -288,7 +268,6 @@ def run_all(c, keywords=None, params=None, capture_output=False, cov_report=None
         sdk,
         administrator,
         cluster_manager,
-        virtual_desktop_controller,
         pipeline,
         infrastructure,
         library,

@@ -84,8 +84,7 @@ def mock_not_called(sessions):
     assert False
 
 
-def test_validate_stop_session_called():
-    monkeypatch = pytest.MonkeyPatch()
+def test_validate_stop_session_called(monkeypatch):
     monkeypatch.setattr(
         user_sessions, "get_session_by_instance_id", mock_get_session_by_instance_id
     )
@@ -95,8 +94,7 @@ def test_validate_stop_session_called():
     handle_vdi_auto_stop(INSTANCE_ID, "Stop")
 
 
-def test_validate_terminate_session_called():
-    monkeypatch = pytest.MonkeyPatch()
+def test_validate_terminate_session_called(monkeypatch):
     monkeypatch.setattr(
         user_sessions, "get_session_by_instance_id", mock_get_session_by_instance_id
     )

@@ -38,6 +38,8 @@ class ProjectSerializer(BaseSerializer):
         Returns:
             Customized data dictionary
         """
+        tags = data.get("tags") or []
+        data["tags"] = {tag.get("key"): tag.get("value") for tag in tags if tag.get("key")}
         return data
         
     def _customize_from_ddb(self, data: Dict[str, Any]) -> Dict[str, Any]:
@@ -50,6 +52,8 @@ class ProjectSerializer(BaseSerializer):
         Returns:
             Customized data dictionary
         """
+        tags = data.get("tags") or {}
+        data["tags"] = [{"key": k, "value": v} for k, v in tags.items()]
         return data
 
 

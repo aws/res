@@ -42,9 +42,6 @@ class TestContext:
         self.admin_username = admin_username
         self.admin_password = admin_password
         self.module_ids = module_ids
-        self.non_admin_username = None
-        self.non_admin_password = None
-
         self.debug = debug
         self.extra_params = extra_params if extra_params else {}
         self.filter_test_case_ids = test_case_ids if Utils.is_not_empty(test_case_ids) else None
@@ -56,8 +53,6 @@ class TestContext:
             aws_profile=aws_profile,
             module_set=module_set
         )
-        self.virtual_desktop_controller_active_module_id = self.cluster_config.get_module_id(constants.MODULE_VIRTUAL_DESKTOP_CONTROLLER)
-
         self.cluster_endpoint = self.cluster_config.get_cluster_external_endpoint()
 
         self.idea_context = SocaCliContext()
@@ -73,12 +68,8 @@ class TestContext:
                                                  verify_ssl=False
                                              ))
         self.admin_auth_expires_on: Optional[arrow.arrow] = None
-        self.non_admin_auth_expires_on: Optional[arrow.arrow] = None
         self.admin_auth: Optional[AuthResult] = None
-        self.non_admin_auth: Optional[AuthResult] = None
         self.initialize_admin_auth()
-        if self.set_non_admin_user_account(extra_params):
-            self.initialize_non_admin_auth()
         self.module_ids = module_ids
 
         # test clients map module_id => SocaClient
@@ -108,21 +99,6 @@ class TestContext:
                                                                                  timeout=timeout))
         self.clients[module_id] = client
         return client
-
-    def set_non_admin_user_account(self, extra_params) -> bool:
-        if self.virtual_desktop_controller_active_module_id in self.module_ids:
-            if 'test_username' in extra_params and 'test_password' in extra_params:
-                if Utils.is_not_empty(extra_params.get('test_username')) and Utils.is_not_empty(extra_params.get('test_password')):
-                    self.non_admin_username = extra_params.get('test_username')
-                    self.non_admin_password = extra_params.get('test_password')
-                    return True
-                else:
-                    raise exceptions.general_exception(f'Invalid \'test_username\' or \'test_password\' value. Required parameter to execute {self.virtual_desktop_controller_active_module_id} tests')
-            else:
-                raise exceptions.general_exception(f'Missing Parameter \'test_username\' or \'test_password\'. Required parameter to execute {self.virtual_desktop_controller_active_module_id} tests.')
-
-    def get_virtual_desktop_controller_client(self, timeout: Optional[int] = 10) -> SocaClient:
-        return self.get_client(constants.MODULE_VIRTUAL_DESKTOP_CONTROLLER, timeout)
 
     def get_scheduler_client(self) -> SocaClient:
         return self.get_client(constants.MODULE_SCHEDULER)
@@ -160,34 +136,6 @@ class TestContext:
         self.admin_auth = admin_auth
         self.admin_auth_expires_on = arrow.get().shift(seconds=admin_auth.expires_in)
 
-    def initialize_non_admin_auth(self):
-        if self.non_admin_auth is None:
-            self.idea_context.info('Initializing Non-Admin Authentication ...')
-            result = self._admin_http_client.invoke_alt('Auth.InitiateAuth', InitiateAuthRequest(
-                auth_flow='USER_PASSWORD_AUTH',
-                cognito_username=self.non_admin_username,
-                password=self.non_admin_password
-            ), result_as=InitiateAuthResult)
-            non_admin_auth = result.auth
-            if Utils.is_empty(non_admin_auth.access_token):
-                raise exceptions.general_exception('access_token not found')
-            if Utils.is_empty(non_admin_auth.refresh_token):
-                raise exceptions.general_exception('refresh_token not found')
-        else:
-            self.idea_context.info('Renewing Non-Admin Authentication Access Token ...')
-            result = self._admin_http_client.invoke_alt('Auth.InitiateAuth', InitiateAuthRequest(
-                auth_flow='REFRESH_TOKEN_AUTH',
-                cognito_username=self.non_admin_username,
-                refresh_token=self.non_admin_auth.refresh_token
-            ), result_as=InitiateAuthResult)
-
-            non_admin_auth = result.auth
-            if Utils.is_empty(non_admin_auth.access_token):
-                raise exceptions.general_exception('access_token not found')
-
-        self.non_admin_auth = non_admin_auth
-        self.non_admin_auth_expires_on = arrow.get().shift(seconds=non_admin_auth.expires_in)
-
     def get_admin_access_token(self) -> str:
         if self.admin_auth is None:
             raise exceptions.general_exception('admin authentication not initialized')
@@ -195,14 +143,6 @@ class TestContext:
             return self.admin_auth.access_token
         self.initialize_admin_auth()
         return self.admin_auth.access_token
-
-    def get_non_admin_access_token(self):
-        if self.non_admin_auth is None:
-            raise exceptions.general_exception('non admin authentication not initialized')
-        if self.non_admin_auth_expires_on > arrow.get().shift(minutes=15):
-            return self.non_admin_auth.access_token
-        self.initialize_non_admin_auth()
-        return self.non_admin_auth.access_token
 
     def begin_test_case(self, test_case_id: str):
         self.idea_context.print(f'{test_case_id}   [STARTED]')

@@ -139,6 +139,8 @@ class Project(Model):
         """
         if project_id is None:
             raise ValueError("Invalid value for `project_id`, must not be `None`")  # noqa: E501
+        if project_id is not None and len(project_id) < 1:
+            raise ValueError("Invalid value for `project_id`, length must be greater than or equal to `1`")  # noqa: E501
 
         self._project_id = project_id
 

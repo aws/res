@@ -18,7 +18,9 @@ sys.path.insert(0, backend_path)
 from api import exceptions as api_exceptions
 from res import exceptions as res_exceptions  # type: ignore
 from api.utils import session_utils
-from api.utils.session_permission_utils import _validate_actors_for_session_permission_requests
+from api.utils.session_permission_utils import (
+    _validate_actors_for_session_permission_requests,
+)
 from res.exceptions import SoftwareStackNotFound
 from res.resources import sessions as res_sessions
 from res.resources import software_stacks
@@ -109,14 +111,16 @@ class TestValidateOwnerForCreate:
         assert "not authorized to create sessions for others" in message
 
 
-class TestValidateCreateSessionRequest:
+class TestPrivateValidateCreateSessionRequest:
     
     @patch("api.utils.session_utils.validate_create_session_request")
-    def test_validate_create_session_admin_succeed(self, mock_validate):
+    @patch("api.utils.session_utils.accounts.is_active_admin")
+    def test_validate_create_session_admin_succeed(self, mock_is_admin, mock_validate):
         """Test that admin-launched sessions skip user-specific validation."""
+        mock_is_admin.return_value = True
         mock_session = Mock()
         mock_session.owner = None
-        mock_session.is_launched_by_admin = True
+        mock_session.name = "test-session"
         mock_validate.return_value = (mock_session, True)
         
         result_session, is_valid = session_utils._validate_create_session_request(mock_session, "testuser")
@@ -126,11 +130,13 @@ class TestValidateCreateSessionRequest:
         mock_validate.assert_called_once_with(mock_session)
 
     @patch("api.utils.session_utils._validate_owner_for_create")
-    def test_validate_create_session_request_invalid_owner_returns_fails(self, mock_validate_owner):
+    @patch("api.utils.session_utils.accounts.is_active_admin")
+    def test_validate_create_session_request_invalid_owner_returns_fails(self, mock_is_admin, mock_validate_owner):
         """Test that invalid owner validation fails the request."""
+        mock_is_admin.return_value = False
         mock_session = Mock()
         mock_session.owner = "testuser"
-        mock_session.is_launched_by_admin = False
+        mock_session.name = "test-session"
         mock_session.failure_reason = None
         mock_validate_owner.return_value = ("User not authorized", False)
         
@@ -139,68 +145,66 @@ class TestValidateCreateSessionRequest:
         assert is_valid is False
         assert "User not authorized" in result_session.failure_reason
 
-    @patch("api.utils.session_utils.accounts.get_user")
+    @patch("api.utils.session_utils._validate_user_identity_for_create")
     @patch("api.utils.session_utils._validate_owner_for_create")
-    @patch("api.utils.session_utils.constants")
-    def test_validate_create_session_request_cognito_user_without_uid_fails(self, mock_constants, mock_validate_owner, mock_get_user):
+    @patch("api.utils.session_utils.accounts.is_active_admin")
+    def test_validate_create_session_request_cognito_user_without_uid_fails(self, mock_is_admin, mock_validate_owner, mock_validate_identity):
         """Test that Cognito user without UID fails validation."""
-        mock_constants.COGNITO_USER_IDP_TYPE = "cognito"
+        mock_is_admin.return_value = False
         mock_session = Mock()
         mock_session.owner = "testuser"
-        mock_session.is_launched_by_admin = False
+        mock_session.name = "test-session"
+        mock_session.failure_reason = "The system was unable to create an ID for you."
         mock_validate_owner.return_value = ("", True)
-        mock_get_user.return_value = {"uid": None, "identity_source": "cognito"}
+        mock_validate_identity.return_value = (mock_session, False)
         
         result_session, is_valid = session_utils._validate_create_session_request(mock_session, "testuser")
         
         assert is_valid is False
         assert "unable to create an ID" in result_session.failure_reason
 
-    @patch("api.utils.session_utils.accounts.get_user")
+    @patch("api.utils.session_utils._validate_user_identity_for_create")
     @patch("api.utils.session_utils._validate_owner_for_create")
-    @patch("api.utils.session_utils.constants")
-    def test__validate_create_session_request_cognito_user_non_linux_session_fails(self, mock_constants, mock_validate_owner, mock_get_user):
+    @patch("api.utils.session_utils.accounts.is_active_admin")
+    def test__validate_create_session_request_cognito_user_non_linux_session_fails(self, mock_is_admin, mock_validate_owner, mock_validate_identity):
         """Test that Cognito user cannot create non-Linux sessions."""
-        mock_constants.SSO_USER_IDP_TYPE = "sso"
-        mock_constants.SUPPORTED_LINUX_OS = ["linux"]
+        mock_is_admin.return_value = False
         mock_session = Mock()
         mock_session.owner = "testuser"
-        mock_session.is_launched_by_admin = False
+        mock_session.name = "test-session"
         mock_session.base_os = "windows"
+        mock_session.failure_reason = "Cognito users are not allowed to create non-Linux sessions."
         mock_validate_owner.return_value = ("", True)
-        mock_get_user.return_value = {"uid": "123", "identity_source": "cognito"}
+        mock_validate_identity.return_value = (mock_session, False)
         
         result_session, is_valid = session_utils._validate_create_session_request(mock_session, "testuser")
         
         assert is_valid is False
         assert "not allowed to create non-Linux sessions" in result_session.failure_reason
 
-    @patch("api.utils.session_utils.validate_create_session_request")
-    @patch("api.utils.session_utils.cluster_settings.get_setting")
-    @patch("api.utils.session_utils.res_projects._get_project_by_id")
+    @patch("api.utils.session_utils.res_projects.get_allowed_sessions_per_user")
     @patch("api.utils.session_utils.res_sessions.get_current_project_session_count_for_user")
-    @patch("api.utils.session_utils.accounts.get_user")
+    @patch("api.utils.session_utils._validate_user_identity_for_create")
     @patch("api.utils.session_utils._validate_owner_for_create")
-    @patch("api.utils.session_utils.constants")
-    def test__validate_create_session_request_session_count_exceeded_fails(self, mock_constants, mock_validate_owner, mock_get_user, 
-                                          mock_get_count, mock_get_project, mock_get_setting, mock_validate):
+    @patch("api.utils.session_utils.accounts.is_active_admin")
+    def test__validate_create_session_request_session_count_exceeded_fails(self, mock_is_admin, mock_validate_owner, mock_validate_identity,
+                                          mock_get_count, mock_get_allowed):
         """Test that exceeding session count limit fails validation."""
-        mock_constants.SSO_USER_IDP_TYPE = "sso"
-        mock_constants.SUPPORTED_LINUX_OS = ["linux"]
+        mock_is_admin.return_value = False
         mock_session = Mock()
         mock_session.owner = "testuser"
-        mock_session.is_launched_by_admin = False
+        mock_session.name = "test-session"
         mock_session.base_os = "linux"
         mock_session.project.project_id = "proj-123"
         mock_validate_owner.return_value = ("", True)
-        mock_get_user.return_value = {"uid": "123", "identity_source": "sso"}
+        mock_validate_identity.return_value = (mock_session, True)
         mock_get_count.return_value = 5
-        mock_get_project.return_value = {"allowed_sessions_per_user": 5}
+        mock_get_allowed.return_value = 5
         
         result_session, is_valid = session_utils._validate_create_session_request(mock_session, "testuser")
         
         assert is_valid is False
-        assert "exceeded the allowed number of sessions" in result_session.failure_reason
+        assert "reached the allowed number of sessions" in result_session.failure_reason
 
 class TestValidateCreateSessionRequest:
     """Test validate_create_session_request function"""
@@ -324,9 +328,13 @@ class TestValidateCreateSessionRequest:
         assert is_valid is False
         assert "hibernation_enabled" in result_session.failure_reason
 
+    @patch("api.utils.session_utils.cluster_settings.get_setting")
     @patch("api.utils.session_utils.res_projects.get_user_projects")
-    def test_validate_create_session_request_user_not_in_project_fails(self, mock_get_projects):
+    def test_validate_create_session_request_user_not_in_project_fails(self, mock_get_projects, mock_get_setting):
         """Test that user not belonging to project fails validation."""
+        mock_get_setting.side_effect = lambda key: {
+            "vdc.dcv_session.smart_retry.enabled": False,
+        }.get(key)
         mock_session = Mock()
         mock_session.software_stack_id = "stack-123"
         mock_session.base_os = "linux"
@@ -334,16 +342,20 @@ class TestValidateCreateSessionRequest:
         mock_session.owner = "testuser"
         mock_session.server.instance_profile_arn = None
         mock_get_projects.return_value = [{"project_id": "proj-456"}]
-        
+
         result_session, is_valid = session_utils.validate_create_session_request(mock_session)
-        
+
         assert is_valid is False
         assert "does not belong in the selected project" in result_session.failure_reason
 
+    @patch("api.utils.session_utils.cluster_settings.get_setting")
     @patch("api.utils.session_utils.software_stacks.get_software_stack")
     @patch("api.utils.session_utils.res_projects.get_user_projects")
-    def test_validate_create_session_request_invalid_software_stack_fails(self, mock_get_projects, mock_get_stack):
+    def test_validate_create_session_request_invalid_software_stack_fails(self, mock_get_projects, mock_get_stack, mock_get_setting):
         """Test that invalid software stack fails validation."""
+        mock_get_setting.side_effect = lambda key: {
+            "vdc.dcv_session.smart_retry.enabled": False,
+        }.get(key)
         mock_session = Mock()
         mock_session.software_stack_id = "stack-123"
         mock_session.base_os = "linux"
@@ -352,11 +364,11 @@ class TestValidateCreateSessionRequest:
         mock_session.server.instance_profile_arn = None
         mock_get_projects.return_value = [{"project_id": "proj-123"}]
         mock_get_stack.side_effect = SoftwareStackNotFound("Stack not found")
-        
+
         result_session, is_valid = session_utils.validate_create_session_request(mock_session)
-        
+
         assert is_valid is False
-        assert "Invalid session.software_stack.stack_id" in result_session.failure_reason
+        assert "Invalid session.software_stack_id" in result_session.failure_reason
 
 class TestValidateUpdateSessionRequest:
     """Test validate_update_session_request function"""
@@ -373,10 +385,8 @@ class TestValidateUpdateSessionRequest:
             res_sessions.SESSION_DB_SERVER_KEY: {"instance_type": "m5.xlarge"},
             res_sessions.SESSION_DB_RANGE_KEY: "session-123",
             res_sessions.SESSION_DB_STATE_KEY: "STOPPED",
-            res_sessions.SESSION_DB_STACK_KEY: {
-                res_sessions.SESSION_DB_BASE_OS_KEY: "linux",
-                software_stacks.SOFTWARE_STACK_DB_RANGE_KEY: "stack-123"
-            }
+            res_sessions.SESSION_DB_BASE_OS_KEY: "linux",
+            res_sessions.SESSION_DB_SOFTWARE_STACK_ID_KEY: "stack-123",
         }
         
         with pytest.raises(api_exceptions.BadRequestException) as exc_info:
@@ -396,10 +406,8 @@ class TestValidateUpdateSessionRequest:
             res_sessions.SESSION_DB_HIBERNATION_KEY: False,
             res_sessions.SESSION_DB_SERVER_KEY: {"instance_type": "m5.large"},
             res_sessions.SESSION_DB_STATE_KEY: "STOPPED",
-            res_sessions.SESSION_DB_STACK_KEY: {
-                res_sessions.SESSION_DB_BASE_OS_KEY: "linux",
-                software_stacks.SOFTWARE_STACK_DB_RANGE_KEY: "stack-123"
-            }
+            res_sessions.SESSION_DB_BASE_OS_KEY: "linux",
+            res_sessions.SESSION_DB_SOFTWARE_STACK_ID_KEY: "stack-123",
         }
         
         mock_get_stack.return_value = {
@@ -421,10 +429,8 @@ class TestValidateUpdateSessionRequest:
         old_session_dict = {
             res_sessions.SESSION_DB_HIBERNATION_KEY: False,
             res_sessions.SESSION_DB_SERVER_KEY: {"instance_type": "m5.large"},
-            res_sessions.SESSION_DB_STACK_KEY: {
-                res_sessions.SESSION_DB_BASE_OS_KEY: "linux",
-                software_stacks.SOFTWARE_STACK_DB_RANGE_KEY: "nonexistent-stack"
-            }
+            res_sessions.SESSION_DB_BASE_OS_KEY: "linux",
+            res_sessions.SESSION_DB_SOFTWARE_STACK_ID_KEY: "nonexistent-stack",
         }
         
         mock_get_stack.side_effect = res_exceptions.SoftwareStackNotFound()
@@ -486,3 +492,5 @@ class TestValidateActorsForSessionPermissionRequests:
         assert is_valid is False
         assert "invalid characters" in message
         assert "not unique" not in message
+
+

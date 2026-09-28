@@ -493,6 +493,16 @@ class ResBaseStack(ResBaseConstruct):
                         actions=["ec2:DescribeSecurityGroups"],
                         resources=["*"],
                     ),
+                    iam.PolicyStatement(
+                        actions=[
+                            "dynamodb:Scan",
+                            "dynamodb:UpdateItem",
+                        ],
+                        sid="SoftwareStackTablePermissions",
+                        resources=[
+                            f"arn:{cdk.Aws.PARTITION}:dynamodb:{cdk.Aws.REGION}:{cdk.Aws.ACCOUNT_ID}:table/{self.cluster_name}.vdc.controller.software-stacks",
+                        ],
+                    ),
                 ],
             )
         )

@@ -68,14 +68,43 @@ def jwt_error(request: pytest.FixtureRequest) -> Optional[str]:
 def test_get_ddb_user_name() -> None:
     assert proxy_handler.get_ddb_user_name("clusteradmin", None) == "clusteradmin"
     assert proxy_handler.get_ddb_user_name("clusteradmin", "saml") == "clusteradmin"
-    assert proxy_handler.get_ddb_user_name("test1@example.com", None) == "test1"
-    assert proxy_handler.get_ddb_user_name("test_1@example.com", None) == "test_1"
     assert (
         proxy_handler.get_ddb_user_name("saml_admin_1@example.com", "saml") == "admin_1"
     )
     assert (
         proxy_handler.get_ddb_user_name("saml_admin_1@example.com", "SAML") == "admin_1"
     )
+
+
+def test_get_ddb_user_name_rejects_native_user_with_idp_prefix() -> None:
+    """A native Cognito user who signs up as 'saml_clusteradmin' must not
+    resolve to 'clusteradmin' when idp_name='saml' is configured."""
+    with pytest.raises(Exception, match="Invalid IdP username"):
+        proxy_handler.get_ddb_user_name("saml_clusteradmin", "saml")
+    with pytest.raises(Exception, match="Invalid IdP username"):
+        proxy_handler.get_ddb_user_name("saml_admin", "saml")
+    with pytest.raises(Exception, match="Invalid IdP username"):
+        proxy_handler.get_ddb_user_name("saml_admin", "SAML")
+
+
+def test_get_ddb_user_name_rejects_at_sign_without_idp() -> None:
+    """Reject usernames containing '@' when no IdP is configured to prevent
+    admin impersonation via username truncation (e.g. 'clusteradmin@!')."""
+    with pytest.raises(Exception, match="Invalid Cognito username"):
+        proxy_handler.get_ddb_user_name("clusteradmin@!", None)
+    with pytest.raises(Exception, match="Invalid Cognito username"):
+        proxy_handler.get_ddb_user_name("test1@example.com", None)
+    with pytest.raises(Exception, match="Invalid Cognito username"):
+        proxy_handler.get_ddb_user_name("test_1@example.com", None)
+
+
+def test_get_ddb_user_name_rejects_at_sign_with_idp_but_no_prefix() -> None:
+    """Reject usernames with '@' that don't have the IdP prefix.
+    This is the attack vector: 'clusteradmin@!2' with idp='saml' configured."""
+    with pytest.raises(Exception, match="Invalid Cognito username"):
+        proxy_handler.get_ddb_user_name("clusteradmin@!2", "saml")
+    with pytest.raises(Exception, match="Invalid Cognito username"):
+        proxy_handler.get_ddb_user_name("admin@example.com", "saml")
 
 
 def test_is_any_group_admin(mock_user_and_groups: None) -> None:

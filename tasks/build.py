@@ -17,9 +17,6 @@ from invoke import Context, task
 import tasks.idea as idea
 import tasks.requirements
 from tasks.apispec import cluster_manager as apispec_cluster_manager
-from tasks.apispec import (
-    virtual_desktop_controller as apispec_virtual_desktop_controller,
-)
 from tasks.tools.build_tool import BuildTool
 
 
@@ -88,18 +85,6 @@ def dcv_connection_gateway(c):
     shutil.copytree(idea.props.dcv_connection_gateway_dir, os.path.join(tool.output_dir, 'resources'), ignore=shutil.ignore_patterns("src"))
 
 
-@task
-def virtual_desktop_controller(c):
-    # type: (Context) -> None
-    """
-    build virtual desktop controller
-    """
-    tool = BuildTool(c, 'idea-virtual-desktop-controller')
-    tool.build()
-    apispec_virtual_desktop_controller(c, output_file=os.path.join(tool.output_dir, 'resources', 'api', 'openapi.yml'))
-
-
-
 
 @task
 def library(c):
@@ -166,8 +151,6 @@ def build_all(c):
     cluster_manager(c)
 
     dcv_connection_gateway(c)
-
-    virtual_desktop_controller(c)
 
     library(c)
 

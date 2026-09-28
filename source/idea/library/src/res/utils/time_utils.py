@@ -1,7 +1,30 @@
 #  Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 #  SPDX-License-Identifier: Apache-2.0
 
+from datetime import datetime
+from zoneinfo import ZoneInfo
+
 import arrow
+
+
+def to_utc_datetime_from_iso_format(time_str: str) -> datetime:
+    """
+    Convert ISO-8601 formatted string to a UTC-aware datetime.
+    :return: UTC-aware datetime.
+    """
+    if time_str[-1] == "Z" or time_str[-1] == "z":
+        time_str = time_str[:-1]
+        if not time_str.endswith("+00:00"):
+            time_str += "+00:00"
+    return datetime.fromisoformat(time_str)
+
+
+def to_datetime_in_timezone(time_str: str, time_zone_str: str) -> datetime:
+    """
+    Convert ISO-8601 formatted string in UTC to a datetime in the given time zone.
+    :return: datetime in the given time zone.
+    """
+    return to_utc_datetime_from_iso_format(time_str).astimezone(ZoneInfo(time_zone_str))
 
 
 def current_time_ms() -> int:

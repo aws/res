@@ -46,12 +46,6 @@ class ClusterManagerPolicy(Policy):
         )
 
         policy_statements = [
-            # SQS SendMessage to VDC controller
-            iam.PolicyStatement(
-                effect=iam.Effect.ALLOW,
-                actions=["sqs:SendMessage"],
-                resources=[arn_builder.get_sqs_arn("vdc-controller")],
-            ),
             # EC2, Budgets, EFS, FSx permissions
             iam.PolicyStatement(
                 effect=iam.Effect.ALLOW,
@@ -83,12 +77,6 @@ class ClusterManagerPolicy(Policy):
                     arn_builder.get_arn("ec2", "network-interface/*"),
                     arn_builder.get_arn("ec2", "volume/*"),
                 ],
-            ),
-            # SES permissions
-            iam.PolicyStatement(
-                effect=iam.Effect.ALLOW,
-                actions=["ses:SendEmail"],
-                resources=[arn_builder.get_arn("ses", "identity/*")],
             ),
             # S3 permissions
             iam.PolicyStatement(
@@ -287,7 +275,6 @@ class ClusterManagerPolicy(Policy):
                     "sqs:ReceiveMessage",
                 ],
                 resources=[
-                    arn_builder.get_sqs_arn("cluster-manager-notifications.fifo"),
                     arn_builder.get_sqs_arn("ad-automation.fifo"),
                 ],
             ),

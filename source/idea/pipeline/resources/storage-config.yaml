@@ -1,0 +1,48 @@
+# Storage systems provisioned by TestingInfraStack for integration tests.
+# Each entry defines a storage resource; the stack creates a nested CloudFormation
+# template for each one and writes the resource identifier to an SSM parameter.
+#
+# Template URLs are resolved from CDK context variables (see cdk.json).
+
+SharedStorage:
+  - Name: integ-test-efs
+    StorageType: Efs
+    EfsSettings:
+      ThroughputMode: elastic
+
+  - Name: integ-test-lustre
+    StorageType: FsxLustre
+    FsxLustreSettings:
+      StorageCapacity: 1200
+
+  - Name: integ-test-ontap
+    StorageType: FsxOntap
+    FsxOntapSettings:
+      StorageCapacity: 1024
+      ThroughputCapacity: 384
+      JoinAD: true
+
+  - Name: integ-test-s3-rw-1
+    StorageType: S3
+    S3Settings:
+      AccessMode: read-write
+
+  - Name: integ-test-s3-rw-2
+    StorageType: S3
+    S3Settings:
+      AccessMode: read-write
+
+  - Name: integ-test-s3-rw-3
+    StorageType: S3
+    S3Settings:
+      AccessMode: read-write
+
+  - Name: integ-test-s3-ro-1
+    StorageType: S3
+    S3Settings:
+      AccessMode: read-only
+
+  - Name: integ-test-s3-ro-2
+    StorageType: S3
+    S3Settings:
+      AccessMode: read-only

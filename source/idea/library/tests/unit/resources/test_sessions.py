@@ -360,7 +360,7 @@ class TestSessions(unittest.TestCase):
         mock_list_paginated.assert_called_once()
         call_args = mock_list_paginated.call_args
         assert call_args.kwargs.get("filter_expression") == Attr(
-            "software_stack.stack_id"
+            "software_stack_id"
         ).eq("stack123")
 
     @patch("res.resources.accounts.is_active_admin")
@@ -486,45 +486,40 @@ class TestSessions(unittest.TestCase):
         call_args = mock_list_for_user.call_args
         assert call_args.kwargs.get("filter_expression") == Attr("owner").eq("user2")
 
-    @patch("res.resources.cluster_settings.get_setting")
-    def test_get_session_logins_both_enabled(self, mock_get_setting):
-        """Test get_session_logins returns both SSO and Cognito when both enabled."""
-        mock_get_setting.side_effect = [True, True]
+    @patch("res.resources.accounts.is_active_admin")
+    @patch("res.resources.sessions.list_sessions_paginated")
+    @patch("res.resources.projects.list_user_manage_sessions_projects")
+    def test_list_sessions_admin_override_takes_admin_path(
+        self, mock_list_projects, mock_list_paginated, mock_is_admin
+    ):
+        """is_app_client=True must use the admin (paginated, no project filter) path
+        even when user is not an active admin (e.g. service-token caller's client_id).
+        """
+        mock_is_admin.return_value = False
+        mock_list_paginated.return_value = ([], None)
 
-        result = sessions.get_session_logins()
+        sessions.list_sessions(user="cm-client-id", is_app_client=True)
 
-        assert len(result) == 2
-        assert "SSO" in result
-        assert "Native user" in result
+        # is_active_admin must not be consulted when override is True
+        mock_is_admin.assert_not_called()
+        mock_list_projects.assert_not_called()
+        mock_list_paginated.assert_called_once()
 
-    @patch("res.resources.cluster_settings.get_setting")
-    def test_get_session_logins_only_sso(self, mock_get_setting):
-        """Test get_session_logins returns only SSO when Cognito disabled."""
-        mock_get_setting.side_effect = [True, False]
+    @patch("res.resources.accounts.is_active_admin")
+    @patch("res.resources.sessions.list_sessions_for_user")
+    @patch("res.resources.projects.list_user_manage_sessions_projects")
+    def test_list_sessions_admin_override_default_false_preserves_user_path(
+        self, mock_list_projects, mock_list_for_user, mock_is_admin
+    ):
+        """Default is_app_client=False must preserve the existing non-admin path."""
+        mock_is_admin.return_value = False
+        mock_list_projects.return_value = []
+        mock_list_for_user.return_value = ([], None)
 
-        result = sessions.get_session_logins()
+        sessions.list_sessions(user="user1")
 
-        assert len(result) == 1
-        assert "SSO" in result
-
-    @patch("res.resources.cluster_settings.get_setting")
-    def test_get_session_logins_only_cognito(self, mock_get_setting):
-        """Test get_session_logins returns only Cognito when SSO disabled."""
-        mock_get_setting.side_effect = [False, True]
-
-        result = sessions.get_session_logins()
-
-        assert len(result) == 1
-        assert "Native user" in result
-
-    @patch("res.resources.cluster_settings.get_setting")
-    def test_get_session_logins_none_enabled(self, mock_get_setting):
-        """Test get_session_logins returns empty list when both disabled."""
-        mock_get_setting.side_effect = [False, False]
-
-        result = sessions.get_session_logins()
-
-        assert len(result) == 0
+        mock_is_admin.assert_called_once_with("user1")
+        mock_list_for_user.assert_called_once()
 
     def test_get_sessions_by_dcv_session_ids_returns_matching(self):
         result = sessions.get_sessions_by_dcv_session_ids(["dcv-aaa", "dcv-bbb"])
@@ -788,76 +783,19 @@ class TestUpdateSession:
 
 class TestUpdateSessionState(unittest.TestCase):
     @patch("res.resources.sessions.table_utils.update_item")
-    @patch("res.resources.sessions.get_session")
-    def test_no_publish_uses_table_utils(self, mock_get_session, mock_update_item):
-        """publish_event=False (default): direct DDB update, no get_session, no event publish."""
+    def test_update_session_state(self, mock_update_item):
+        """update_session_state performs a direct DDB update."""
         mock_update_item.return_value = {sessions.SESSION_DB_STATE_KEY: "READY"}
 
         result = sessions.update_session_state(
             owner=TEST_OWNER, session_id=TEST_SESSION_ID, state="READY"
         )
 
-        mock_get_session.assert_not_called()
         mock_update_item.assert_called_once()
         kwargs = mock_update_item.call_args.kwargs
         assert kwargs["item"][sessions.SESSION_DB_STATE_KEY] == "READY"
         assert sessions.SESSION_DB_UPDATED_ON_KEY in kwargs["item"]
         assert result == {sessions.SESSION_DB_STATE_KEY: "READY"}
-
-    @patch("res.resources.sessions._update_session_record")
-    @patch("res.resources.sessions.get_session")
-    def test_publish_event_fetches_old_and_publishes(
-        self, mock_get_session, mock_update_record
-    ):
-        """publish_event=True: fetch old session, merge state, call _update_session_record with publish."""
-        old_session = {
-            sessions.SESSION_DB_HASH_KEY: TEST_OWNER,
-            sessions.SESSION_DB_RANGE_KEY: TEST_SESSION_ID,
-            sessions.SESSION_DB_STATE_KEY: "CREATING",
-        }
-        mock_get_session.return_value = old_session
-        mock_update_record.return_value = {
-            **old_session,
-            sessions.SESSION_DB_STATE_KEY: "READY",
-        }
-
-        result = sessions.update_session_state(
-            owner=TEST_OWNER,
-            session_id=TEST_SESSION_ID,
-            state="READY",
-            publish_event=True,
-        )
-
-        mock_get_session.assert_called_once_with(
-            owner=TEST_OWNER, session_id=TEST_SESSION_ID
-        )
-        mock_update_record.assert_called_once()
-        call_kwargs = mock_update_record.call_args.kwargs
-        # First positional is the new_session dict
-        new_session_arg = mock_update_record.call_args.args[0]
-        assert new_session_arg[sessions.SESSION_DB_STATE_KEY] == "READY"
-        # old_session preserved (unchanged) for diff in event publish
-        assert call_kwargs["old_session"] is old_session
-        assert call_kwargs["publish_event"] is True
-        assert result[sessions.SESSION_DB_STATE_KEY] == "READY"
-
-    @patch("res.resources.sessions._update_session_record")
-    @patch("res.resources.sessions.get_session")
-    def test_publish_event_propagates_get_session_failure(
-        self, mock_get_session, mock_update_record
-    ):
-        """publish_event=True: if get_session raises, the error propagates and no update happens."""
-        mock_get_session.side_effect = exceptions.UserSessionNotFound("not found")
-
-        with pytest.raises(exceptions.UserSessionNotFound):
-            sessions.update_session_state(
-                owner=TEST_OWNER,
-                session_id=TEST_SESSION_ID,
-                state="READY",
-                publish_event=True,
-            )
-
-        mock_update_record.assert_not_called()
 
 
 class TestGetSessionConnection(unittest.TestCase):
@@ -882,11 +820,11 @@ class TestGetSessionConnection(unittest.TestCase):
 
         result = sessions.get_session_connection("session-1", "user1", "user1")
 
-        assert result["idea-session-id"] == "session-1"
-        assert result["idea-session-owner"] == "user1"
+        assert result["idea_session_id"] == "session-1"
+        assert result["idea_session_owner"] == "user1"
         assert result["endpoint"] == "https://custom.example.com"
-        assert result["web-url-path"] == "/"
-        assert result["access-token"] == "test-token"
+        assert result["web_url_path"] == "/"
+        assert result["access_token"] == "test-token"
 
     @patch("res.resources.sessions.cluster_settings.get_setting")
     @patch(
@@ -1011,4 +949,105 @@ class TestGetSessionConnection(unittest.TestCase):
         mock_get_connection.assert_called_once_with(
             session_id="session-1", username="shared_user"
         )
-        assert result["idea-session-owner"] == "owner_user"
+        assert result["idea_session_owner"] == "owner_user"
+
+
+class TestGetSessionsByOwnerAndIds(unittest.TestCase):
+
+    @patch("res.resources.sessions.get_aws_provider")
+    @patch("res.resources.sessions.table_utils.resolve_table_name")
+    def test_empty_input_returns_empty(self, mock_resolve, mock_boto):
+        result = sessions.get_sessions_by_owner_and_ids([])
+        assert result == {}
+        mock_boto.assert_not_called()
+
+    @patch("res.resources.sessions.get_aws_provider")
+    @patch("res.resources.sessions.table_utils.resolve_table_name")
+    def test_single_batch_returns_items(self, mock_resolve, mock_boto):
+        mock_resolve.return_value = "env.vdc.controller.user-sessions"
+        mock_client = mock_boto.return_value.dynamodb_table.return_value.meta.client
+        mock_client.batch_get_item.return_value = {
+            "Responses": {
+                "env.vdc.controller.user-sessions": [
+                    {"owner": "alice", "idea_session_id": "ses-1", "name": "Desktop1"},
+                    {"owner": "bob", "idea_session_id": "ses-2", "name": "Desktop2"},
+                ]
+            },
+            "UnprocessedKeys": {},
+        }
+
+        result = sessions.get_sessions_by_owner_and_ids(
+            [
+                ("alice", "ses-1"),
+                ("bob", "ses-2"),
+            ]
+        )
+
+        assert len(result) == 2
+        assert result["ses-1"]["name"] == "Desktop1"
+        assert result["ses-2"]["name"] == "Desktop2"
+        mock_client.batch_get_item.assert_called_once()
+
+    @patch("res.resources.sessions.get_aws_provider")
+    @patch("res.resources.sessions.table_utils.resolve_table_name")
+    def test_batching_over_100_items(self, mock_resolve, mock_boto):
+        mock_resolve.return_value = "env.vdc.controller.user-sessions"
+        mock_client = mock_boto.return_value.dynamodb_table.return_value.meta.client
+
+        pairs = [(f"owner-{i}", f"ses-{i}") for i in range(150)]
+
+        def batch_get_side_effect(**kwargs):
+            keys = kwargs["RequestItems"]["env.vdc.controller.user-sessions"]["Keys"]
+            items = [
+                {"owner": k["owner"], "idea_session_id": k["idea_session_id"]}
+                for k in keys
+            ]
+            return {
+                "Responses": {"env.vdc.controller.user-sessions": items},
+                "UnprocessedKeys": {},
+            }
+
+        mock_client.batch_get_item.side_effect = batch_get_side_effect
+
+        result = sessions.get_sessions_by_owner_and_ids(pairs)
+
+        assert len(result) == 150
+        assert mock_client.batch_get_item.call_count == 2
+
+    @patch("res.resources.sessions.get_aws_provider")
+    @patch("res.resources.sessions.table_utils.resolve_table_name")
+    def test_unprocessed_keys_are_retried(self, mock_resolve, mock_boto):
+        mock_resolve.return_value = "env.vdc.controller.user-sessions"
+        mock_client = mock_boto.return_value.dynamodb_table.return_value.meta.client
+
+        unprocessed = {"Keys": [{"owner": "bob", "idea_session_id": "ses-2"}]}
+        mock_client.batch_get_item.side_effect = [
+            {
+                "Responses": {
+                    "env.vdc.controller.user-sessions": [
+                        {"owner": "alice", "idea_session_id": "ses-1", "name": "D1"},
+                    ]
+                },
+                "UnprocessedKeys": {"env.vdc.controller.user-sessions": unprocessed},
+            },
+            {
+                "Responses": {
+                    "env.vdc.controller.user-sessions": [
+                        {"owner": "bob", "idea_session_id": "ses-2", "name": "D2"},
+                    ]
+                },
+                "UnprocessedKeys": {},
+            },
+        ]
+
+        result = sessions.get_sessions_by_owner_and_ids(
+            [
+                ("alice", "ses-1"),
+                ("bob", "ses-2"),
+            ]
+        )
+
+        assert len(result) == 2
+        assert result["ses-1"]["name"] == "D1"
+        assert result["ses-2"]["name"] == "D2"
+        assert mock_client.batch_get_item.call_count == 2

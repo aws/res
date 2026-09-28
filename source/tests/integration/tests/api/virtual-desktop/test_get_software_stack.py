@@ -9,10 +9,14 @@ using the RES framework ResClient for proper API interaction.
 """
 
 import logging
+from typing import Any
 
 import pytest
+from res.clients.api_client.res_api_client import ResApiClient  # type: ignore
 
-from ideadatamodel import Project, VirtualDesktopSoftwareStack  # type: ignore
+# Project still goes through the not-yet-migrated cluster-manager API, so it
+# stays ideadatamodel.
+from ideadatamodel import Project  # type: ignore
 
 # Import RES framework components
 from tests.integration.framework.client.api_client import (
@@ -24,6 +28,7 @@ from tests.integration.framework.client.api_client import (
 )
 from tests.integration.framework.fixtures.fixture_request import FixtureRequest
 from tests.integration.framework.fixtures.project import project
+from tests.integration.framework.fixtures.res_api_client import res_api_client
 from tests.integration.framework.fixtures.res_environment import (
     ResEnvironment,
     res_environment,
@@ -75,7 +80,7 @@ class TestGetSoftwareStack:
         admin_username: str,
         admin: ClientAuth,
         project: Project,
-        software_stack: VirtualDesktopSoftwareStack,
+        software_stack: Any,
     ) -> None:
         """
         Test successful retrieval of a specific software stack as admin.
@@ -134,10 +139,6 @@ class TestGetSoftwareStack:
                 or "not found" in response_content.lower()
             ), f"Expected error message, got: {response_content}"
 
-            logger.info(
-                "Non-existent software stack correctly received BadRequestException"
-            )
-
     @pytest.mark.parametrize("admin_username", ["clusteradmin"])
     def test_get_software_stack_with_empty_base_os_returns_error(
         self,
@@ -163,7 +164,6 @@ class TestGetSoftwareStack:
                 "Supported base operating systems for virtual desktops"
                 in response_content
             ), f"Expected base OS validation error, got: {response_content}"
-            logger.info("Empty base_os correctly received error")
 
     @pytest.mark.parametrize("admin_username", ["clusteradmin"])
     def test_get_software_stack_with_null_base_os_returns_error(
@@ -187,10 +187,9 @@ class TestGetSoftwareStack:
             assert any(
                 code in str(e) for code in ["400", "404", "422"]
             ), f"Expected validation error, got: {str(e)}"
-            logger.info("Null base_os correctly received error")
 
     @pytest.mark.parametrize("non_admin_username", ["user1"])
-    def test_get_software_stack_non_admin_returns_oauth_problem(
+    def test_get_software_stack_non_admin_nonexistent_stack_returns_bad_request(
         self,
         request: FixtureRequest,
         region: str,
@@ -199,24 +198,67 @@ class TestGetSoftwareStack:
         non_admin: ClientAuth,
     ) -> None:
         """
-        Test that non-admin users get OAuthProblem when trying to get software stack.
+        Test that non-admin users get BadRequestException for non-existent software stack.
         """
         try:
             api_client = ApiClient(res_environment, non_admin)
             api_client.get_software_stack(stack_id="any-stack-id", base_os="amzn2023")
-            pytest.fail("Expected OAuth error for non-admin user")
+            pytest.fail("Expected 400 error for non-existent software stack")
         except Exception as e:
-            # OAuthProblem raises 401 Unauthorized
-            assert "401" in str(e), f"Expected 401 error, got: {str(e)}"
+            assert "400" in str(e), f"Expected 400 error, got: {str(e)}"
             assert hasattr(e, "response"), "Response should exist in the exception"
-            assert e.response is not None, "Response should not be None"
-            response_content = e.response.text
-            assert (
-                "Test Message" in response_content
-                or "unauthorized" in response_content.lower()
-                or "permission" in response_content.lower()
-            ), f"Expected authorization error message, got: {response_content}"
-            logger.info("Non-admin user correctly received 401 Unauthorized error")
+
+    @pytest.mark.parametrize("admin_username", ["clusteradmin"])
+    @pytest.mark.parametrize("non_admin_username", ["user1"])
+    @pytest.mark.parametrize(
+        "project",
+        [
+            (
+                Project(
+                    title="test-get-stack-nonadmin-project",
+                    name="test-get-stack-nonadmin-project",
+                    description="Test project for non-admin get software stack",
+                    enable_budgets=False,
+                ),
+                ["home"],
+                [],
+                ["user1"],
+                "admin",
+            )
+        ],
+        indirect=True,
+    )
+    @pytest.mark.parametrize(
+        "software_stack",
+        [(AL2023_SOFTWARE_STACK, "project", "admin")],
+        indirect=True,
+    )
+    def test_get_software_stack_non_admin_with_shared_project_returns_valid_response(
+        self,
+        request: FixtureRequest,
+        region: str,
+        res_environment: ResEnvironment,
+        admin_username: str,
+        non_admin_username: str,
+        admin: ClientAuth,
+        non_admin: ClientAuth,
+        project: Project,
+        software_stack: Any,
+    ) -> None:
+        """
+        Test that non-admin users can get a software stack that belongs to one of their projects.
+        """
+        api_client = ApiClient(res_environment, non_admin)
+
+        response: GetSoftwareStackResponseContent = api_client.get_software_stack(
+            stack_id=software_stack.stack_id, base_os=software_stack.base_os.value
+        )
+
+        assert response is not None, "Response should not be None"
+        assert (
+            response.software_stack is not None
+        ), "Response must contain 'software_stack' field"
+        assert response.software_stack.stack_id == software_stack.stack_id
 
     def test_get_software_stack_with_nonexistent_user_returns_user_not_found_error(
         self, res_environment: ResEnvironment
@@ -230,18 +272,11 @@ class TestGetSoftwareStack:
             api_client.get_software_stack(stack_id="any-stack-id", base_os="amzn2023")
             pytest.fail("Expected 'User not found' error for non-existent user")
         except Exception as e:
-            if "401" in str(e):
-                assert hasattr(e, "response"), "Response should exist in the exception"
-                assert e.response is not None, "Response should not be None"
-
-                response_content = e.response.text
-                if "User not found" in response_content:
-                    logger.info(
-                        "Non-existent user correctly received 'User not found' error"
-                    )
-                    return
-
-            pytest.fail(f"Unexpected error for non-existent user: {str(e)}")
+            assert "401" in str(e), f"Expected 401 error, got: {str(e)}"
+            assert hasattr(e, "response"), "Response should exist in the exception"
+            assert (
+                "User not found" in e.response.text
+            ), f"Expected 'User not found' in response, got: {e.response.text}"
 
     @pytest.mark.parametrize("inactive_username", ["user2"])
     def test_get_software_stack_with_inactive_user_returns_inactive_user_error(
@@ -260,18 +295,11 @@ class TestGetSoftwareStack:
             api_client.get_software_stack(stack_id="any-stack-id", base_os="amzn2023")
             pytest.fail("Expected 'Inactive user' error for inactive user")
         except Exception as e:
-            if "401" in str(e):
-                assert hasattr(e, "response"), "Response should exist in the exception"
-                assert e.response is not None, "Response should not be None"
-
-                response_content = e.response.text
-                if "Inactive user" in response_content:
-                    logger.info(
-                        "Inactive user correctly received 'Inactive user' error"
-                    )
-                    return
-
-            pytest.fail(f"Unexpected error for inactive user: {str(e)}")
+            assert "401" in str(e), f"Expected 401 error, got: {str(e)}"
+            assert hasattr(e, "response"), "Response should exist in the exception"
+            assert (
+                "Inactive user" in e.response.text
+            ), f"Expected 'Inactive user' in response, got: {e.response.text}"
 
     def test_get_software_stack_without_auth_token_returns_no_authorization_token_provided_error(
         self,
@@ -290,18 +318,11 @@ class TestGetSoftwareStack:
                 "Expected 'No authorization token provided' error for request without auth token"
             )
         except Exception as e:
-            if "401" in str(e):
-                assert hasattr(e, "response"), "Response should exist in the exception"
-                assert e.response is not None, "Response should not be None"
-
-                response_content = e.response.text
-                if "No authorization token provided" in response_content:
-                    logger.info(
-                        "Request without auth token correctly received 'No authorization token provided' error"
-                    )
-                    return
-
-            pytest.fail(f"Unexpected error for request without auth token: {str(e)}")
+            assert "401" in str(e), f"Expected 401 error, got: {str(e)}"
+            assert hasattr(e, "response"), "Response should exist in the exception"
+            assert (
+                "No authorization token provided" in e.response.text
+            ), f"Expected 'No authorization token provided' in response, got: {e.response.text}"
 
     @pytest.mark.parametrize("admin_username", ["clusteradmin"])
     def test_get_software_stack_in_prod_with_invalid_auth_token_returns_unable_to_retrieve_username_error(
@@ -323,19 +344,62 @@ class TestGetSoftwareStack:
                 "Expected 'Unable to retrieve username' error for request with invalid auth token"
             )
         except Exception as e:
-            if "401" in str(e):
-                assert hasattr(e, "response"), "Response should exist in the exception"
-                assert e.response is not None, "Response should not be None"
-
-                response_content = e.response.text
-                if "Unable to retrieve username" in response_content:
-                    logger.info(
-                        "Request with invalid auth token correctly received 'Unable to retrieve username' error"
-                    )
-                    return
-
-            pytest.fail(
-                f"Unexpected error for request with invalid auth token: {str(e)}"
-            )
+            assert "401" in str(e), f"Expected 401 error, got: {str(e)}"
+            assert hasattr(e, "response"), "Response should exist in the exception"
+            assert (
+                "Unable to retrieve username" in e.response.text
+            ), f"Expected 'Unable to retrieve username' in response, got: {e.response.text}"
         finally:
             set_backend_lambda_test_mode(region, environment_name, True)
+
+    @pytest.mark.parametrize("admin_username", ["clusteradmin"])
+    @pytest.mark.parametrize(
+        "project",
+        [
+            (
+                Project(
+                    title="test-get-stack-svc-tok-project",
+                    name="test-get-stack-svc-tok-project",
+                    description="Test project for service-token get software stack",
+                    enable_budgets=False,
+                ),
+                ["home"],
+                [],
+                [],
+                "admin",
+            )
+        ],
+        indirect=True,
+    )
+    @pytest.mark.parametrize(
+        "software_stack",
+        [(AL2023_SOFTWARE_STACK, "project", "admin")],
+        indirect=True,
+    )
+    def test_get_software_stack_with_service_token(
+        self,
+        request: FixtureRequest,
+        region: str,
+        res_environment: ResEnvironment,
+        admin_username: str,
+        admin: ClientAuth,
+        project: Project,
+        software_stack: Any,
+        res_api_client: ResApiClient,
+    ) -> None:
+        """Service-token caller gets a software stack."""
+        try:
+            response = res_api_client.get_software_stack(
+                stack_id=software_stack.stack_id,
+                base_os=software_stack.base_os.value,
+            )
+            assert response is not None
+            assert response.software_stack is not None
+            assert response.software_stack.stack_id == software_stack.stack_id
+            logger.info(
+                f"Service-token caller successfully retrieved software stack {software_stack.stack_id}"
+            )
+        except Exception as e:
+            pytest.fail(
+                f"Unexpected API error for service-token get_software_stack: {str(e)}"
+            )

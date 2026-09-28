@@ -4,7 +4,7 @@ $version: "2.0"
 
 namespace res
 
-@http(method: "GET", uri: "/res/virtual-desktop/session")
+@http(method: "GET", uri: "/res/virtual-desktop/sessions")
 @paginated
 @readonly
 @tags(["virtual-desktop"])

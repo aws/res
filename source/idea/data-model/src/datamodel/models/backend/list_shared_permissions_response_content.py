@@ -191,7 +191,7 @@ class ListSharedPermissionsResponseContent(Model):
     def next_token(self) -> str:
         """Gets the next_token of this ListSharedPermissionsResponseContent.
 
-        Pagination token for next page  # noqa: E501
+        Pagination token for next page from the primary table. Note: application-level pagination across enriched results is not yet implemented.  # noqa: E501
 
         :return: The next_token of this ListSharedPermissionsResponseContent.
         :rtype: str
@@ -202,7 +202,7 @@ class ListSharedPermissionsResponseContent(Model):
     def next_token(self, next_token: str):
         """Sets the next_token of this ListSharedPermissionsResponseContent.
 
-        Pagination token for next page  # noqa: E501
+        Pagination token for next page from the primary table. Note: application-level pagination across enriched results is not yet implemented.  # noqa: E501
 
         :param next_token: The next_token of this ListSharedPermissionsResponseContent.
         :type next_token: str

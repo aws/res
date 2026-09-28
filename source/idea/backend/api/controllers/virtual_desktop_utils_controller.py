@@ -10,6 +10,7 @@ import res.exceptions as exceptions  # type: ignore
 from res.utils import ec2_utils
 
 from api import exceptions as api_exceptions
+from api.auth import check_app_client_token
 from datamodel.models.get_permission_profile_response_content import (
     GetPermissionProfileResponseContent,
 )  # noqa: E501
@@ -31,6 +32,9 @@ from datamodel.models.list_permission_profiles_response_content import (
 from datamodel.models.virtual_desktop_permission_profile import (
     VirtualDesktopPermissionProfile,
 )  # noqa: E501
+from datamodel.models.virtual_desktop_software_stack import (
+    VirtualDesktopSoftwareStack,
+)  # noqa: E501
 from api.utils import (
     software_stack_utils,
 )  # noqa: E501
@@ -50,7 +54,8 @@ def get_permission_profile(profile_id, user=None, token_info=None):  # noqa: E50
     :type token_info: dict
     :rtype: Union[GetPermissionProfileResponseContent, Tuple[GetPermissionProfileResponseContent, int], Tuple[GetPermissionProfileResponseContent, int, Dict[str, str]]
     """
-    if not accounts.is_active_admin(user):
+    is_app_client = check_app_client_token(token_info, "get_permission_profile")
+    if not is_app_client and not accounts.is_active_admin(user):
         raise OAuthProblem("Unauthorized user")
 
     try:
@@ -118,25 +123,30 @@ def list_allowed_instance_types_for_session(
     request = ListAllowedInstanceTypesForSessionRequestContent.from_dict(body)
     session = request.session
 
-    if session.hibernation_enabled is None or not session.software_stack:
+    if session.hibernation_enabled is None or not session.software_stack_id:
         missing = []
         if session.hibernation_enabled is None:
             missing.append("'hibernation_enabled'")
-        if not session.software_stack:
-            missing.append("'software_stack'")
+        if not session.software_stack_id:
+            missing.append("'software_stack_id'")
         raise api_exceptions.BadRequestException(
             message=f"Invalid request: {', '.join(missing)} is a required property"
         )
-    
-    software_stack_utils.set_software_stack_architecture(session.software_stack)
+
+    software_stack_dict = software_stacks.get_software_stack(
+        base_os=session.base_os, stack_id=session.software_stack_id
+    )
+    software_stack = VirtualDesktopSoftwareStack.from_ddb_dict(software_stack_dict)
+
+    software_stack_utils.set_software_stack_architecture(software_stack)
 
     allowed_instance_types_dict = ec2_utils.get_valid_instance_types_by_allowed_list(
-        session.hibernation_enabled, session.software_stack.allowed_instance_types or []
+        session.hibernation_enabled, software_stack.allowed_instance_types or []
     )
     allowed_instance_types = []
     for instance_type_name, instance_info in allowed_instance_types_dict.items():
         if software_stacks.validate_min_ram(
-            instance_type_name, session.software_stack.to_ddb_dict()
+            instance_type_name, software_stack.to_ddb_dict()
         ):
             allowed_instance_types.append(instance_info)
 

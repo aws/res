@@ -16,10 +16,12 @@ Test Cases for AccountsService
 from typing import Optional
 
 import pytest
+from datamodel.models.backend.virtual_desktop_session import VirtualDesktopSession
 from ideaclustermanager import AppContext
 from ideaclustermanager.app.accounts.auth_utils import AuthUtils
 from ideasdk.utils import Utils
 from ideatestutils import IdeaTestProps
+from res.constants import COGNITO_USERNAME_ERROR_MESSAGE
 from res.resources import accounts
 
 from ideadatamodel import (
@@ -250,6 +252,25 @@ def test_accounts_disable_user_return_normally_for_disabled_user(
         )
     except Exception as e:
         print("failed to disable user {e}")
+
+
+def test_accounts_disable_user_deletes_sessions(context: AppContext, monkeypatch):
+    """
+    disable user should call batch_delete_session for the user's sessions
+    """
+    monkeypatch.setattr(accounts, "get_user", lambda x: {"enabled": True})
+
+    # Set up mock sessions for the user
+    test_session = VirtualDesktopSession(idea_session_id="s1", owner="xyz")
+    context.res_api_client.sessions = [test_session]
+
+    context.accounts.disable_user(username="xyz")
+
+    # Verify sessions were deleted
+    assert len(context.res_api_client.sessions) == 0
+    assert context.res_api_client.last_batch_delete_request is not None
+    assert len(context.res_api_client.last_batch_delete_request.sessions) == 1
+    assert context.res_api_client.last_batch_delete_request.sessions[0].force is True
 
 
 def test_accounts_modify_user(context: AppContext, monkeypatch):
@@ -706,7 +727,7 @@ def test_accounts_sign_up_user_invalid_email(
             SignUpUserRequest(email=invalid_email, password="validPassword!234")
         )
     assert exc_info.value.error_code == errorcodes.INVALID_PARAMS
-    assert constants.COGNITO_USERNAME_ERROR_MESSAGE in exc_info.value.message
+    assert COGNITO_USERNAME_ERROR_MESSAGE in exc_info.value.message
 
 
 def test_accounts_sign_up_user_invalid_password(context: AppContext, monkeypatch):

@@ -2,26 +2,95 @@
 #  SPDX-License-Identifier: Apache-2.0
 
 import tempfile
-from unittest.mock import Mock
+from unittest.mock import Mock, call
+
 from ideabootstrap.dcv import constants
 from ideabootstrap.dcv.linux import dcv_host
 
 
-def test_configure_storage_root(monkeypatch) -> None:
-    monkeypatch.setenv("IDEA_SESSION_OWNER", "test-user")
-    mock_makedirs = Mock()
-    mock_chown = Mock()
-    mock_pwd = Mock()
-    mock_pwd.return_value = Mock(pw_uid=1000, pw_gid=1000)
+def _storage_root_mocks(monkeypatch, storage_root_exists: bool, owners: dict) -> Mock:
+    """Common monkeypatching for _configure_storage_root tests.
 
-    monkeypatch.setattr("os.path.exists", lambda x: False)
-    monkeypatch.setattr("os.makedirs", mock_makedirs)
+    owners maps path -> uid returned by os.stat; paths created by makedirs
+    during the run default to root (uid 0) unless present in owners.
+    """
+    monkeypatch.setenv("IDEA_SESSION_OWNER", "test-user")
+    mock_chown = Mock()
+    mock_pwd = Mock(return_value=Mock(pw_uid=1000, pw_gid=1000))
+
+    def _exists(path: str) -> bool:
+        if path == "/home/test-user/storage-root":
+            return storage_root_exists
+        return True
+
+    def _stat(path: str):
+        return Mock(st_uid=owners.get(path, 0))
+
+    monkeypatch.setattr("os.path.islink", lambda x: False)
+    monkeypatch.setattr("os.path.exists", _exists)
+    monkeypatch.setattr("os.makedirs", Mock())
+    monkeypatch.setattr("os.stat", _stat)
     monkeypatch.setattr("os.chown", mock_chown)
     monkeypatch.setattr("pwd.getpwnam", mock_pwd)
+    return mock_chown
+
+
+def test_configure_storage_root_fresh_create(monkeypatch) -> None:
+    # Nothing exists yet: makedirs creates home + storage-root as root, so both
+    # must be chowned to the session owner.
+    mock_chown = _storage_root_mocks(monkeypatch, storage_root_exists=False, owners={})
 
     dcv_host._configure_storage_root()
 
-    mock_makedirs.assert_called_once_with("/home/test-user/storage-root", exist_ok=True)
+    mock_chown.assert_has_calls(
+        [
+            call("/home/test-user", 1000, 1000),
+            call("/home/test-user/storage-root", 1000, 1000),
+        ]
+    )
+
+
+def test_configure_storage_root_healthy_existing(monkeypatch) -> None:
+    # Home and storage-root both exist and are correctly owned (the normal
+    # steady state on the shared NFS): nothing should be chowned.
+    mock_chown = _storage_root_mocks(
+        monkeypatch,
+        storage_root_exists=True,
+        owners={"/home/test-user": 1000, "/home/test-user/storage-root": 1000},
+    )
+
+    dcv_host._configure_storage_root()
+
+    mock_chown.assert_not_called()
+
+
+def test_configure_storage_root_repairs_root_owned_home(monkeypatch) -> None:
+    # Regression: a prior session (or an unmounted-/home race) left the home
+    # dir root-owned on the shared NFS. pam_mkhomedir skips existing dirs, so
+    # the bootstrap must self-heal the ownership even when storage-root
+    # already exists and the create path is not taken.
+    mock_chown = _storage_root_mocks(
+        monkeypatch,
+        storage_root_exists=True,
+        owners={"/home/test-user": 0, "/home/test-user/storage-root": 1000},
+    )
+
+    dcv_host._configure_storage_root()
+
+    mock_chown.assert_called_once_with("/home/test-user", 1000, 1000)
+
+
+def test_configure_storage_root_repairs_root_owned_storage_root(monkeypatch) -> None:
+    # The storage-root itself was left root-owned by a prior buggy run: it
+    # must be repaired even though it already exists.
+    mock_chown = _storage_root_mocks(
+        monkeypatch,
+        storage_root_exists=True,
+        owners={"/home/test-user": 1000, "/home/test-user/storage-root": 0},
+    )
+
+    dcv_host._configure_storage_root()
+
     mock_chown.assert_called_once_with("/home/test-user/storage-root", 1000, 1000)
 
 
@@ -50,7 +119,10 @@ def test_configure_dcv_conf(monkeypatch) -> None:
 
     assert "idle-timeout = 3600" in content
     assert "idle-timeout-warning = 300" in content
-    assert 'auth-token-verifier = "internal-alb.example.com/externalAuth/ses-test-123"' in content
+    assert (
+        'auth-token-verifier = "internal-alb.example.com/externalAuth/ses-test-123"'
+        in content
+    )
 
 
 def test_configure_dcv_conf_missing_session_id(monkeypatch) -> None:

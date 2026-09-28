@@ -12,8 +12,6 @@
  */
 
 import {
-    GetSessionScreenshotRequest,
-    GetSessionScreenshotResponse,
     GetModuleInfoRequest,
     GetModuleInfoResult,
 } from "./data-model";
@@ -35,8 +33,8 @@ import {
     ListSessionsResponseContent,
     VirtualDesktopApiGetSessionRequest,
     GetSessionResponseContent,
-    CreateSessionRequestContent,
-    CreateSessionResponseContent,
+    BatchCreateSessionRequestContent,
+    BatchCreateSessionResponseContent,
     UpdateSessionResponseContent,
 	UpdateSessionRequestContent,
     BatchStopSessionRequestContent,
@@ -49,6 +47,8 @@ import {
     BatchStartSessionResponseContent,
     GetSessionConnectionRequestContent,
     GetSessionConnectionResponseContent,
+    BatchGetSessionScreenshotRequestContent,
+    BatchGetSessionScreenshotResponseContent,
 } from "./generated/api";
 import { Configuration } from "./generated/configuration";
 
@@ -146,33 +146,18 @@ class VirtualDesktopClient extends IdeaBaseClient<VirtualDesktopClientProps> {
 
     async listSharedPermissions(request: VirtualDesktopApiListSharedPermissionsRequest): Promise<ListSharedPermissionsResponseContent> {
         try {
+            const response = await this.generatedClient.listSharedPermissions({
+                nextToken: request.nextToken,
+                username: request.username,
+                sessionName: request.sessionName,
+                state: request.state,
+                baseOs: request.baseOs,
+                dateRangeKey: request.dateRangeKey,
+                after: request.after,
+                before: request.before,
+            });
 
-            let allPermissions: VirtualDesktopSessionPermission[] = [];
-            let nextToken = request.nextToken;
-            let lastResponse;
-
-            do {
-                const response = await this.generatedClient.listSharedPermissions({
-                    username: request.username,
-                    sessionName: request.sessionName,
-                    state: request.state,
-                    baseOs: request.baseOs,
-                    dateRangeKey: request.dateRangeKey,
-                    after: request.after,
-                    before: request.before,
-                    nextToken: nextToken,
-                });
-
-                lastResponse = response;
-                allPermissions.push(...(response.data.listing || []));
-                nextToken = response.data.nextToken;
-            } while (nextToken);
-
-            return {
-                ...lastResponse.data,
-                listing: allPermissions,
-                nextToken: undefined
-            };
+            return response.data;
         } catch (error) {
             console.warn('Failed to list shared permissions, returning empty response:', error);
             return {
@@ -234,10 +219,10 @@ class VirtualDesktopClient extends IdeaBaseClient<VirtualDesktopClientProps> {
         return response.data;
     }
 
-    async createSession(request: CreateSessionRequestContent): Promise<CreateSessionResponseContent> {
+    async batchCreateSession(request: BatchCreateSessionRequestContent): Promise<BatchCreateSessionResponseContent> {
         try {
-            const response = await this.generatedClient.createSession({
-                createSessionRequestContent: request
+            const response = await this.generatedClient.batchCreateSession({
+                batchCreateSessionRequestContent: request
             });
 
             return response.data;
@@ -282,12 +267,15 @@ class VirtualDesktopClient extends IdeaBaseClient<VirtualDesktopClientProps> {
         return response.data;
     }
 
-    getModuleInfo(): Promise<GetModuleInfoRequest> {
-        return this.apiInvoker.invoke_alt<GetModuleInfoRequest, GetModuleInfoResult>("App.GetModuleInfo", {});
+    async batchGetSessionScreenshot(req: BatchGetSessionScreenshotRequestContent): Promise<BatchGetSessionScreenshotResponseContent> {
+        const response = await this.generatedClient.batchGetSessionScreenshot({
+            batchGetSessionScreenshotRequestContent: req
+        });
+        return response.data;
     }
 
-    getSessionScreenshot(req: GetSessionScreenshotRequest): Promise<GetSessionScreenshotResponse> {
-        return this.apiInvoker.invoke_alt<GetSessionScreenshotRequest, GetSessionScreenshotResponse>("VirtualDesktop.GetSessionScreenshot", req);
+    getModuleInfo(): Promise<GetModuleInfoRequest> {
+        return this.apiInvoker.invoke_alt<GetModuleInfoRequest, GetModuleInfoResult>("App.GetModuleInfo", {});
     }
 
     async getSessionConnection(req: GetSessionConnectionRequestContent): Promise<GetSessionConnectionResponseContent> {

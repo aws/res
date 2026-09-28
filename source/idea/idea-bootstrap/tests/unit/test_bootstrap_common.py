@@ -65,6 +65,10 @@ def test_update_session_host_info(monkeypatch):
         "res.utils.instance_metadata_utils.get_private_dns_name",
         lambda: "ip-10-0-1-5.ec2.internal",
     )
+    monkeypatch.setattr(
+        "res.utils.instance_metadata_utils.get_private_ip",
+        lambda: "10.0.1.5",
+    )
 
     mock_session = {
         sessions.SESSION_DB_HASH_KEY: "test_owner",
@@ -90,6 +94,7 @@ def test_update_session_host_info(monkeypatch):
 
     server = updated_session[sessions.SESSION_DB_SERVER_KEY]
     assert server[sessions.SESSION_DB_PRIVATE_DNS_NAME_KEY] == "ip-10-0-1-5.ec2.internal"
+    assert server[sessions.SESSION_DB_PRIVATE_IP_KEY] == "10.0.1.5"
     assert server["instance_id"] == "i-123"
     assert updated_session[sessions.SESSION_DB_DCV_SESSION_ID_KEY] == "console"
 
@@ -123,6 +128,10 @@ def test_update_session_host_info_get_session_fails(monkeypatch):
         "res.utils.instance_metadata_utils.get_private_dns_name",
         lambda: "ip-10-0-1-5.ec2.internal",
     )
+    monkeypatch.setattr(
+        "res.utils.instance_metadata_utils.get_private_ip",
+        lambda: "10.0.1.5",
+    )
 
     def mock_get_session(owner, session_id):
         raise Exception("DDB unavailable")
@@ -148,6 +157,10 @@ def test_update_session_host_info_update_session_fails(monkeypatch):
     monkeypatch.setattr(
         "res.utils.instance_metadata_utils.get_private_dns_name",
         lambda: "ip-10-0-1-5.ec2.internal",
+    )
+    monkeypatch.setattr(
+        "res.utils.instance_metadata_utils.get_private_ip",
+        lambda: "10.0.1.5",
     )
 
     monkeypatch.setattr(
@@ -179,6 +192,10 @@ def test_update_session_host_info_missing_env_vars(monkeypatch):
         "res.utils.instance_metadata_utils.get_private_dns_name",
         lambda: "ip-10-0-1-5.ec2.internal",
     )
+    monkeypatch.setattr(
+        "res.utils.instance_metadata_utils.get_private_ip",
+        lambda: "10.0.1.5",
+    )
 
     mock_get_session = MagicMock(side_effect=Exception("None args"))
     monkeypatch.setattr("res.resources.sessions.get_session", mock_get_session)
@@ -205,7 +222,6 @@ def test_update_session_state(monkeypatch):
         owner="test_owner",
         session_id="test_session_id",
         state="CREATING",
-        publish_event=True,
     )
 
 
