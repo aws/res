@@ -4,7 +4,7 @@ $version: "2.0"
 
 namespace res
 
-@http(method: "PUT", uri: "/res/virtual-desktop/permission-profile/{profileId}")
+@http(method: "PUT", uri: "/res/virtual-desktop/permission-profiles/{profile_id}")
 @tags(["virtual-desktop"])
 @documentation("Update Permission Profile")
 operation UpdatePermissionProfile {
@@ -21,8 +21,8 @@ operation UpdatePermissionProfile {
 structure UpdatePermissionProfileRequest {
     @required
     @httpLabel
-    @jsonName("profile_id")
-    profileId: String
+    @suppress(["CamelCase"])
+    profile_id: res.virtualdesktop#VirtualDesktopPermissionProfileId
 
     @required
     @documentation("Update virtual desktop permission profile request")

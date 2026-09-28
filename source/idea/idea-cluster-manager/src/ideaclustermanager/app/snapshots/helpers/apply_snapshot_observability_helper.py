@@ -11,7 +11,7 @@
 
 from enum import Enum
 from logging import Logger
-from typing import Optional
+from typing import Optional, Union
 
 
 class ApplyResourceStatus(Enum):
@@ -32,7 +32,7 @@ class ApplySnapshotObservabilityHelper:
     def __init__(self, logger: Logger):
         self.logger = logger
 
-    def info(self, table_name: str, resource_id: str, status: Optional[ApplyResourceStatus] = None, reason: Optional[str] = None) -> None:
+    def info(self, table_name: Union[str, Enum], resource_id: str, status: Optional[ApplyResourceStatus] = None, reason: Optional[str] = None) -> None:
         """
         Log message at INFO level
         :param table_name: Name of the table to merge
@@ -43,7 +43,7 @@ class ApplySnapshotObservabilityHelper:
         """
         self.logger.info(self.message(table_name, resource_id, status, reason))
 
-    def warning(self, table_name: str, resource_id: str, status: Optional[ApplyResourceStatus] = None, reason: Optional[str] = None) -> None:
+    def warning(self, table_name: Union[str, Enum], resource_id: str, status: Optional[ApplyResourceStatus] = None, reason: Optional[str] = None) -> None:
         """
         Log message at WARN level
         :param table_name: Name of the table to merge
@@ -54,7 +54,7 @@ class ApplySnapshotObservabilityHelper:
         """
         self.logger.warning(self.message(table_name, resource_id, status, reason))
 
-    def error(self, table_name: str, resource_id: str, status: Optional[ApplyResourceStatus] = None, reason: Optional[str] = None) -> None:
+    def error(self, table_name: Union[str, Enum], resource_id: str, status: Optional[ApplyResourceStatus] = None, reason: Optional[str] = None) -> None:
         """
         Log message at ERROR level
         :param table_name: Name of the table to merge
@@ -65,7 +65,7 @@ class ApplySnapshotObservabilityHelper:
         """
         self.logger.error(self.message(table_name, resource_id, status, reason))
 
-    def debug(self, table_name: str, resource_id: str, status: Optional[ApplyResourceStatus] = None, reason: Optional[str] = None) -> None:
+    def debug(self, table_name: Union[str, Enum], resource_id: str, status: Optional[ApplyResourceStatus] = None, reason: Optional[str] = None) -> None:
         """
         Log message at DEBUG level
         :param table_name: Name of the table to merge
@@ -77,7 +77,7 @@ class ApplySnapshotObservabilityHelper:
         self.logger.debug(self.message(table_name, resource_id, status, reason))
 
     @staticmethod
-    def message(table_name: str, resource_id: str, status: Optional[ApplyResourceStatus] = None, reason: Optional[str] = None) -> str:
+    def message(table_name: Union[str, Enum], resource_id: str, status: Optional[ApplyResourceStatus] = None, reason: Optional[str] = None) -> str:
         """
         Construct the log message
         :param table_name: Name of the table to merge
@@ -86,7 +86,8 @@ class ApplySnapshotObservabilityHelper:
         :param reason: Reason for the status
         :return: the constructed message
         """
-        message = f"{table_name}/{resource_id}"
+        table_display = table_name.value if isinstance(table_name, Enum) else table_name
+        message = f"{table_display}/{resource_id}"
         if status:
             message = f"{message} {status.name}"
         if reason:

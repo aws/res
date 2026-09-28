@@ -7,6 +7,7 @@ from aws_cdk import aws_iam as iam
 
 from idea.infrastructure.install.constructs.iam import Policy
 from idea.infrastructure.install.infra_utils.arn_builder import ArnBuilder
+from idea.infrastructure.install.policies.active_directory_policy import ActiveDirectoryPolicy
 
 
 class BackendLambdaPolicy(Policy):
@@ -51,6 +52,28 @@ class BackendLambdaPolicy(Policy):
                 ],
             ),
             iam.PolicyStatement(
+                actions=["ec2:CreateFleet", "ec2:CreateLaunchTemplate"],
+                resources=[arn_builder.get_arn("ec2", "*")],
+            ),
+            iam.PolicyStatement(
+                actions=["ec2:DeleteFleets"],
+                resources=[arn_builder.get_arn("ec2", "fleet/*")],
+                conditions={
+                    "StringEquals": {
+                        "aws:ResourceTag/res:EnvironmentName": arn_builder.cluster_name,
+                    }
+                },
+            ),
+            iam.PolicyStatement(
+                actions=["ec2:DeleteLaunchTemplate"],
+                resources=[arn_builder.get_arn("ec2", "launch-template/*")],
+                conditions={
+                    "StringEquals": {
+                        "aws:ResourceTag/res:EnvironmentName": arn_builder.cluster_name,
+                    }
+                },
+            ),
+            iam.PolicyStatement(
                 actions=[
                     "ec2:DescribeInstances",
                     "ec2:DescribeInstanceStatus",
@@ -68,6 +91,9 @@ class BackendLambdaPolicy(Policy):
                     arn_builder.get_arn("ec2", "instance/*"),
                     arn_builder.get_arn(
                         "ssm", "document/AWS-RunShellScript", account_id=""
+                    ),
+                    arn_builder.get_arn(
+                        "ssm", "document/AWS-RunPowerShellScript", account_id=""
                     ),
                 ],
             ),
@@ -90,6 +116,9 @@ class BackendLambdaPolicy(Policy):
                     ),
                     arn_builder.get_iam_role_arn(
                         f"{arn_builder.cluster_name}-vdc-host-scoped-down-role"
+                    ),
+                    arn_builder.get_iam_role_arn(
+                        f"{arn_builder.cluster_name}-vdc-ssm-commands-sns-topic-role"
                     ),
                     arn_builder.get_vdi_iam_role_arn("*"),
                 ],
@@ -134,7 +163,11 @@ class BackendLambdaPolicy(Policy):
                 conditions={
                     "StringEquals": {
                         "secretsmanager:ResourceTag/res:EnvironmentName": arn_builder.cluster_name,
-                        "secretsmanager:ResourceTag/res:ModuleName": "virtual-desktop-controller",
+                        "secretsmanager:ResourceTag/res:ModuleName": [
+                            "virtual-desktop-controller",
+                            "directoryservice",
+                            "cluster-manager",
+                        ],
                     }
                 },
             ),
@@ -162,10 +195,17 @@ class BackendLambdaPolicy(Policy):
                 conditions={
                     "StringEquals": {
                         "aws:ResourceTag/res:EnvironmentName": arn_builder.cluster_name,
-                        "aws:ResourceTag/res:ModuleName": "virtual-desktop-controller",
+                        "aws:ResourceTag/res:ModuleName": [
+                            "virtual-desktop-controller",
+                            "directoryservice",
+                        ],
                     }
                 },
             ),
         ]
+
+        policy_statements.extend(
+            ActiveDirectoryPolicy.create_policy_statements(arn_builder)
+        )
 
         return policy_statements

@@ -59,7 +59,7 @@ structure ListSharedPermissionsResponse with [res.common#ResListingPayload] {
     @documentation("List of shared permissions")
     listing: SharedPermissionsList
 
-    @documentation("Pagination token for next page")
+    @documentation("Pagination token for next page from the primary table. Note: application-level pagination across enriched results is not yet implemented.")
     nextToken: String
 }
 

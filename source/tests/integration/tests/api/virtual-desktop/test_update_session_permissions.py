@@ -9,9 +9,10 @@ using the RES framework ResClient for proper API interaction.
 """
 
 import logging
-from typing import Any, Dict
+from typing import Any, Dict, List
 
 import pytest
+from res.resources import sessions  # type: ignore
 
 from tests.integration.framework.client.api_client import (
     ApiClient,
@@ -23,6 +24,7 @@ from tests.integration.framework.fixtures.res_environment import (
     ResEnvironment,
     res_environment,
 )
+from tests.integration.framework.fixtures.session_record import session_record
 from tests.integration.framework.fixtures.users import admin, inactive_user, non_admin
 from tests.integration.framework.model.client_auth import ClientAuth
 from tests.integration.framework.utils.virtual_desktop import (
@@ -33,6 +35,130 @@ logger = logging.getLogger(__name__)
 
 
 class TestUpdateSessionPermissions:
+
+    # ==================== 200 Golden Path Tests ====================
+
+    @pytest.mark.parametrize(
+        "session_record",
+        [
+            [
+                {
+                    "session_id": "test-update-perm-admin-session",
+                    sessions.SESSION_DB_HASH_KEY: "clusteradmin",
+                    "base_os": "amzn2023",
+                }
+            ]
+        ],
+        indirect=True,
+    )
+    @pytest.mark.parametrize("admin_username", ["clusteradmin"])
+    def test_update_session_permissions_create_with_admin_user(
+        self,
+        request: FixtureRequest,
+        res_environment: ResEnvironment,
+        session_record: List[Dict[str, Any]],
+        admin_username: str,
+        admin: ClientAuth,
+    ) -> None:
+        record = session_record[0]
+        api_client = ApiClient(res_environment, admin)
+
+        permission = get_session_permission_base_payload(
+            idea_session_id=record[sessions.SESSION_DB_RANGE_KEY],
+            idea_session_owner=record[sessions.SESSION_DB_HASH_KEY],
+            actor_name="testactor-admin-create",
+        )
+        request_content = UpdateSessionPermissionsRequestContent(
+            create=[permission], update=[], delete=[]
+        )
+
+        response: UpdateSessionPermissionsResponseContent = (
+            api_client.update_session_permissions(request_content)
+        )
+
+        try:
+            assert response is not None
+            assert response.permissions is not None
+            assert isinstance(response.permissions, list)
+            assert len(response.permissions) == 1
+            assert (
+                response.permissions[0].idea_session_id
+                == record[sessions.SESSION_DB_RANGE_KEY]
+            )
+            assert response.permissions[0].actor_name == "testactor-admin-create"
+        finally:
+            # Cleanup: delete the created permission
+            delete_permission = get_session_permission_base_payload(
+                idea_session_id=record[sessions.SESSION_DB_RANGE_KEY],
+                idea_session_owner=record[sessions.SESSION_DB_HASH_KEY],
+                actor_name="testactor-admin-create",
+            )
+            cleanup_request = UpdateSessionPermissionsRequestContent(
+                create=[], update=[], delete=[delete_permission]
+            )
+            api_client.update_session_permissions(cleanup_request)
+
+    @pytest.mark.parametrize(
+        "session_record",
+        [
+            [
+                {
+                    "session_id": "test-update-perm-user1-session",
+                    sessions.SESSION_DB_HASH_KEY: "user1",
+                    "base_os": "amzn2023",
+                }
+            ]
+        ],
+        indirect=True,
+    )
+    @pytest.mark.parametrize("non_admin_username", ["user1"])
+    def test_update_session_permissions_create_with_non_admin_user_own_session(
+        self,
+        request: FixtureRequest,
+        res_environment: ResEnvironment,
+        session_record: List[Dict[str, Any]],
+        non_admin_username: str,
+        non_admin: ClientAuth,
+    ) -> None:
+        record = session_record[0]
+        api_client = ApiClient(res_environment, non_admin)
+
+        permission = get_session_permission_base_payload(
+            idea_session_id=record[sessions.SESSION_DB_RANGE_KEY],
+            idea_session_owner=record[sessions.SESSION_DB_HASH_KEY],
+            actor_name="testactor-nonadmin-create",
+        )
+        request_content = UpdateSessionPermissionsRequestContent(
+            create=[permission], update=[], delete=[]
+        )
+
+        response: UpdateSessionPermissionsResponseContent = (
+            api_client.update_session_permissions(request_content)
+        )
+
+        try:
+            assert response is not None
+            assert response.permissions is not None
+            assert isinstance(response.permissions, list)
+            assert len(response.permissions) == 1
+            assert (
+                response.permissions[0].idea_session_id
+                == record[sessions.SESSION_DB_RANGE_KEY]
+            )
+            assert response.permissions[0].actor_name == "testactor-nonadmin-create"
+        finally:
+            # Cleanup: delete the created permission
+            delete_permission = get_session_permission_base_payload(
+                idea_session_id=record[sessions.SESSION_DB_RANGE_KEY],
+                idea_session_owner=record[sessions.SESSION_DB_HASH_KEY],
+                actor_name="testactor-nonadmin-create",
+            )
+            cleanup_request = UpdateSessionPermissionsRequestContent(
+                create=[], update=[], delete=[delete_permission]
+            )
+            api_client.update_session_permissions(cleanup_request)
+
+    # ==================== 4xx Error Tests ====================
 
     @pytest.mark.parametrize("admin_username", ["clusteradmin"])
     def test_update_session_permissions_empty_payload(
@@ -112,7 +238,7 @@ class TestUpdateSessionPermissions:
         except Exception as e:
             assert "400" in str(e), f"Expected 400 error, got: {str(e)}"
             assert hasattr(e, "response"), "Response should exist in the exception"
-            assert "Invalid request" in e.response.text, f"Unexpected error: {str(e)}"
+            assert "Invalid session" in e.response.text, f"Unexpected error: {str(e)}"
 
     @pytest.mark.parametrize("non_admin_username", ["user1"])
     def test_update_session_permissions_with_non_admin_user_not_own_session(
@@ -252,3 +378,79 @@ class TestUpdateSessionPermissions:
             ), f"Unexpected error for request with invalid auth token: {str(e)}"
         finally:
             set_backend_lambda_test_mode(res_environment.region, environment_name, True)
+
+    # ==================== Shell Metacharacter Injection Tests ====================
+
+    @pytest.mark.dev
+    @pytest.mark.parametrize(
+        "session_record",
+        [
+            [
+                {
+                    "session_id": "test-metachar-session",
+                    sessions.SESSION_DB_HASH_KEY: "clusteradmin",
+                    "base_os": "amzn2023",
+                }
+            ]
+        ],
+        indirect=True,
+    )
+    @pytest.mark.parametrize("admin_username", ["clusteradmin"])
+    @pytest.mark.parametrize(
+        "malicious_actor_name",
+        [
+            ";rm -rf /",
+            "$(whoami)",
+            "`id`",
+            "user1 && echo pwned",
+            "user1 | cat /etc/passwd",
+            "user1 > /tmp/pwned",
+            "user1\nnewcommand",
+        ],
+        ids=[
+            "semicolon",
+            "dollar_paren",
+            "backtick",
+            "double_ampersand",
+            "pipe",
+            "redirect",
+            "newline",
+        ],
+    )
+    def test_share_session_rejects_shell_metachar_in_actor_name(
+        self,
+        request: FixtureRequest,
+        res_environment: ResEnvironment,
+        session_record: List[Dict[str, Any]],
+        admin_username: str,
+        admin: ClientAuth,
+        malicious_actor_name: str,
+    ) -> None:
+        """
+        Verify that the API rejects actor_name values containing shell
+        metacharacters before they reach the host via SSM commands.
+        The actor_name flows into SSM commands that set DCV permissions,
+        so the backend must validate server-side.
+        """
+        record = session_record[0]
+        api_client = ApiClient(res_environment, admin)
+
+        permission = get_session_permission_base_payload(
+            idea_session_id=record[sessions.SESSION_DB_RANGE_KEY],
+            idea_session_owner=record[sessions.SESSION_DB_HASH_KEY],
+            actor_name=malicious_actor_name,
+        )
+
+        request_content = UpdateSessionPermissionsRequestContent(
+            create=[permission], update=[], delete=[]
+        )
+
+        try:
+            api_client.update_session_permissions(request_content)
+            pytest.fail(f"Expected 400 error for actor_name: '{malicious_actor_name}'")
+        except Exception as e:
+            assert "400" in str(e), f"Expected 400 error, got: {str(e)}"
+            assert hasattr(e, "response"), "Response should exist in the exception"
+            assert (
+                "Invalid request. No session permission modified." in e.response.text
+            ), f"Expected rejection message, got: {e.response.text}"

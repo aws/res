@@ -114,9 +114,6 @@ class TestListSharedPermissions:
         except Exception as e:
             assert "401" in str(e)
             assert "Non admin user cannot list shared permissions of other users" in str(e.response.text)  # type: ignore
-            logger.info(
-                f"Listing other user's shared permissions via non-admin user correctly received 401 error: {str(e)}"
-            )
 
     @pytest.mark.parametrize("inactive_username", ["user2"])
     def test_list_shared_permissions_with_inactive_user(
@@ -136,7 +133,6 @@ class TestListSharedPermissions:
             assert (
                 "Inactive user" in e.response.text
             ), f"Unexpected error for inactive user: {str(e)}"
-            logger.info(f"Inactive user correctly received 401 error: {str(e)}")
 
     def test_list_shared_permissions_with_nonexistent_user(
         self,
@@ -154,7 +150,6 @@ class TestListSharedPermissions:
             assert (
                 "User not found" in e.response.text
             ), f"Unexpected error for non-existent user: {str(e)}"
-            logger.info(f"Non-existent user correctly received 401 error: {str(e)}")
 
     def test_list_shared_permissions_without_auth_token(
         self,
@@ -172,9 +167,6 @@ class TestListSharedPermissions:
             assert (
                 "No authorization token provided" in e.response.text
             ), f"Unexpected error for request without auth token: {str(e)}"
-            logger.info(
-                f"Request without auth token correctly received 401 error: {str(e)}"
-            )
 
     def test_list_shared_permissions_with_invalid_auth_token_in_prod(
         self,
@@ -199,8 +191,5 @@ class TestListSharedPermissions:
             assert (
                 "Unable to retrieve username" in e.response.text
             ), f"Unexpected error for request with invalid auth token: {str(e)}"
-            logger.info(
-                "Request with invalid auth token correctly received 'Unable to retrieve username' error"
-            )
         finally:
             set_backend_lambda_test_mode(region, environment_name, True)

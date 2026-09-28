@@ -23,12 +23,14 @@ import {
     SocaUserInputParamMetadata,
     User,
     VDIPermissions,
-    VirtualDesktopGPU,
+} from "../client/data-model";
+import {
+    VirtualDesktopGpu,
     VirtualDesktopPlacement,
     VirtualDesktopSchedule,
     VirtualDesktopScheduleType,
     VirtualDesktopSessionType,
-} from "../client/data-model";
+} from "../client/generated/api";
 import {IdeaFormFieldRegistry} from "../components/form-field";
 import {v4 as uuid} from "uuid";
 import {DateRangePickerProps} from "@cloudscape-design/components";
@@ -395,7 +397,7 @@ class Utils {
         return true;
     }
 
-    static getFormattedGPUManufacturer(gpu?: VirtualDesktopGPU): string {
+    static getFormattedGPUManufacturer(gpu?: VirtualDesktopGpu): string {
         if (gpu == null || gpu === "NO_GPU") {
             return "N/A";
         }

@@ -25,27 +25,44 @@ def get_access_token_using_client_credentials(
 ) -> str:
     """
     Gets access token using client credentials
-    :param client_id:
-    :param client_secret:
-    :param client_credentials_scope:
-    :returns successful and unsuccessul list of stopped sessions
+    :param client_id: Cognito app client ID
+    :param client_secret: Cognito app client secret
+    :param client_credentials_scope: space-delimited scope string
+    :return: access token string
     """
     if not client_id or not client_secret or not client_credentials_scope:
-        return ""
+        raise exceptions.UnauthorizedAccess(
+            "client_id, client_secret, and scope are required"
+        )
+
     access_token_url = oauth2_access_token_url()
     basic_auth = auth_utils.encode_basic_auth(client_id, client_secret)
-    scope = client_credentials_scope
 
-    response = requests.post(
-        url=access_token_url,
-        headers={
-            "Content-Type": "application/x-www-form-urlencoded",
-            "Authorization": f"Basic {basic_auth}",
-        },
-        data={"grant_type": "client_credentials", "scope": scope},
-    )
-    result = response.json()
-    return result.get("access_token")
+    try:
+        response = requests.post(
+            url=access_token_url,
+            headers={
+                "Content-Type": "application/x-www-form-urlencoded",
+                "Authorization": f"Basic {basic_auth}",
+            },
+            data={
+                "grant_type": "client_credentials",
+                "scope": client_credentials_scope,
+            },
+        )
+        response.raise_for_status()
+        result = response.json()
+    except (requests.RequestException, ValueError) as e:
+        raise exceptions.UnauthorizedAccess(
+            f"Failed to retrieve access token from Cognito: {e}"
+        )
+
+    access_token = result.get("access_token")
+    if not access_token:
+        raise exceptions.UnauthorizedAccess(
+            f"Cognito did not return an access_token: {result}"
+        )
+    return access_token
 
 
 def decode_token(token: str, verify_exp: Optional[bool] = True) -> Dict:

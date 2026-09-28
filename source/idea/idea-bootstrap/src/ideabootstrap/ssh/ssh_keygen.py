@@ -4,6 +4,7 @@
 import os
 import subprocess
 
+import ideabootstrap.dcv.constants as dcv_constants
 import ideabootstrap.ssh.constants as constants
 from ideabootstrap.bootstrap_common import file_content_exists
 from res.utils import logging_utils
@@ -58,7 +59,13 @@ def configure() -> None:
             logger.error(f"Unsupported OS: {base_os}")
             return
 
-        subprocess.run(["su", "-", username, "-c", "exit"], check=True)
+        # Intentionally traverses PAM (triggers pam_mkhomedir/ssh_keygen). Bound
+        # it: a blocked PAM module would otherwise hang bootstrap forever.
+        subprocess.run(
+            ["su", "-", username, "-c", "exit"],
+            check=True,
+            timeout=dcv_constants.SUBPROCESS_TIMEOUT_SEC,
+        )
 
         logger.info(f"PAM module triggered for user {username}")
     except Exception as e:

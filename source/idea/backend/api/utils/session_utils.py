@@ -1,22 +1,20 @@
 #  Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 #  SPDX-License-Identifier: Apache-2.0
 
-import jwt
 import os
-import random
-import time
 from enum import Enum
 from typing import Any, Dict, List, Optional, Tuple, Union
 from uuid import uuid4
 
-import botocore.exceptions
 from res import exceptions as res_exceptions  # type: ignore
 from api import exceptions as api_exceptions
-from res.utils.ec2_utils import dedicated_hosts_supported, get_gpu_manufacturer, get_instance_ram, get_systems_manager_parameter, get_valid_instance_types_by_allowed_list
+from res.utils.ec2_utils import dedicated_hosts_supported, get_gpu_manufacturer, get_instance_ram_in_mib, get_valid_instance_types_by_allowed_list
+from res.utils.memory_utils import mib_to_gb, mib_to_gib
 from datamodel.models.backend.batch_stop_session_failure import BatchStopSessionFailure
 from datamodel.models.backend.batch_delete_session_failure import BatchDeleteSessionFailure
 from datamodel.models.backend.batch_start_session_failure import BatchStartSessionFailure
 from datamodel.models.backend.batch_reboot_session_failure import BatchRebootSessionFailure
+from datamodel.models.backend.batch_create_session_failure import BatchCreateSessionFailure
 from datamodel.models.backend.batch_operation_error_code import BatchOperationErrorCode
 from datamodel.models.project import Project
 from datamodel.models.res_memory import ResMemory
@@ -28,14 +26,11 @@ from datamodel.models.virtual_desktop_session_type import VirtualDesktopSessionT
 from datamodel.models.virtual_desktop_session_state import VirtualDesktopSessionState
 from datamodel.models.virtual_desktop_software_stack import VirtualDesktopSoftwareStack
 from datamodel.models.virtual_desktop_tenancy import VirtualDesktopTenancy
-from datamodel.serializers.virtual_desktop_session_serializer import virtualdesktopsession_serializer
-from datamodel.models.virtual_desktop_week_schedule import VirtualDesktopWeekSchedule
 from res import constants
 from res.clients.aws.aws_provider import AwsClientProvider
 from res.clients.aws.base import AWSClientProviderOptions
 from res.resources.vdi_management import get_active_counts_for_sessions
 from res.exceptions import SoftwareStackNotFound
-from res.resources.sessions import ScriptOSType, ScriptEventType
 from res.resources import (
     accounts,
     cluster_settings,
@@ -45,11 +40,9 @@ from res.resources import (
     sessions as res_sessions,
     software_stacks,
 )
-from res.utils import logging_utils, ec2_utils, script_utils, iam_utils, cluster_settings_utils
-from res.resources import budget_utils
+from res.utils import logging_utils, ec2_utils, iam_utils
 from res.utils import tags as res_tags
-from res.utils import gpu_utils
-from res.utils.bootstrap_userdata_builder import BootstrapUserDataBuilder
+from res.resources import budget_utils
 from res.constants import SESSION_NAME_REGEX, SESSION_NAME_ERROR_MESSAGE
 from res.utils import string_utils
 
@@ -84,12 +77,8 @@ def validate_update_session_request(
             f"Not allowed to change Instance type for session: {old_session_dict[res_sessions.SESSION_DB_RANGE_KEY]} because hibernation is enabled"
         )
 
-    base_os = old_session_dict[res_sessions.SESSION_DB_STACK_KEY][
-        res_sessions.SESSION_DB_BASE_OS_KEY
-    ]
-    software_stack_id = old_session_dict[res_sessions.SESSION_DB_STACK_KEY][
-        software_stacks.SOFTWARE_STACK_DB_RANGE_KEY
-    ]
+    base_os = old_session_dict[res_sessions.SESSION_DB_BASE_OS_KEY]
+    software_stack_id = old_session_dict.get(res_sessions.SESSION_DB_SOFTWARE_STACK_ID_KEY)
     try:
         software_stack_dict = software_stacks.get_software_stack(
             base_os, software_stack_id
@@ -110,12 +99,12 @@ def validate_update_session_request(
             f"Invalid session instance type {session.server.instance_type}.  Not allowed for current configuration."
         )
 
-def _validate_create_session_request(session: VirtualDesktopSession, user: str) -> Tuple[VirtualDesktopSession, bool]:
-    if not session.owner: 
-        session.owner = user   
-    if accounts.is_active_admin(user):
-        return validate_create_session_request(session)            
-    
+def _validate_create_session_request(session: VirtualDesktopSession, user: str, pending_count: int = 0, is_app_client: bool = False) -> Tuple[VirtualDesktopSession, bool]:
+    if not session.owner:
+        session.owner = user
+    if is_app_client or accounts.is_active_admin(user):
+        return validate_create_session_request(session)
+
     # Session name sanitization
     if session.name and not string_utils.validate_input(session.name, SESSION_NAME_REGEX):
         session.failure_reason = SESSION_NAME_ERROR_MESSAGE
@@ -134,8 +123,8 @@ def _validate_create_session_request(session: VirtualDesktopSession, user: str) 
     session_count_for_user = res_sessions.get_current_project_session_count_for_user(session.owner, session.project.project_id)
     allowed_sessions_per_user = res_projects.get_allowed_sessions_per_user(session.project.project_id)
 
-    if session_count_for_user >= allowed_sessions_per_user:
-        session.failure_reason = f'User {session.owner} has exceeded the allowed number of sessions: {session_count_for_user}. Please contact the Project Administrators if you need to create more sessions.'
+    if session_count_for_user + pending_count >= allowed_sessions_per_user:
+        session.failure_reason = f'User {session.owner} has reached the allowed number of sessions ({allowed_sessions_per_user}). Please contact the Project Administrators if you need to create more sessions.'
         return session, False
 
     return validate_create_session_request(session)
@@ -196,8 +185,20 @@ def validate_create_session_request(session: VirtualDesktopSession) -> Tuple[Vir
     if not session.server or not session.server.root_volume_size:
         session.failure_reason = 'missing session.server.root_volume_size'
         return session, False
-    
-    if not session.server or not session.server.instance_type:
+
+    smart_retry_enabled = bool(
+        cluster_settings.get_setting("vdc.dcv_session.smart_retry.enabled")
+    )
+    if smart_retry_enabled:
+        if session.server and (
+            session.server.instance_type or session.server.subnet_id
+        ):
+            session.failure_reason = (
+                "session.server.instance_type and session.server.subnet_id must not "
+                "be set when Smart Retry is enabled."
+            )
+            return session, False
+    elif not session.server or not session.server.instance_type:
         session.failure_reason = 'missing session.server.instance_type'
         return session, False
 
@@ -205,14 +206,25 @@ def validate_create_session_request(session: VirtualDesktopSession) -> Tuple[Vir
         session.failure_reason = f'Invalid session.server.instance_profile_arn {session.server.instance_profile_arn}. External instance_profile_arn not allowed.'
         return session, False
 
+    tags = getattr(session, 'tags', None)
+    if tags and isinstance(tags, list):
+        user_tags = res_tags.convert_tags_list_of_dict_to_tags_dict(tags)
+        reserved_keys = res_tags.validate_user_tags(user_tags)
+        if reserved_keys:
+            session.failure_reason = "Custom tags cannot use the 'res:' prefix or the reserved key 'Name'."
+            return session, False
+
     is_user_part_of_project = False
     
     user_projects = res_projects.get_user_projects(username=session.owner)
     
     for project in user_projects:
         if project and project.get("project_id") == session.project.project_id:
+            if project.get("enabled") is False:
+                session.failure_reason = f'Project {session.project.project_id} is disabled. Session creation is not allowed.'
+                return session, False
             is_user_part_of_project = True
-            session.project = Project.from_dict(project)
+            session.project = Project.from_ddb_dict(project)
             break
 
     if not is_user_part_of_project:
@@ -223,7 +235,7 @@ def validate_create_session_request(session: VirtualDesktopSession) -> Tuple[Vir
         software_stack_dict = software_stacks.get_software_stack(stack_id=session.software_stack_id, base_os=session.base_os, get_project_details=True)
         software_stack = VirtualDesktopSoftwareStack.from_ddb_dict(software_stack_dict)
     except SoftwareStackNotFound:
-        session.failure_reason = f'Invalid session.software_stack.stack_id: {session.software_stack_id} and/or session.software_stack.base_os: {session.base_os}'
+        session.failure_reason = f'Invalid session.software_stack_id: {session.software_stack_id} and/or session.base_os: {session.base_os}'
         return session, False
 
     if software_stack.enabled is False:
@@ -253,15 +265,15 @@ def validate_create_session_request(session: VirtualDesktopSession) -> Tuple[Vir
     else:
         logger.info("VDI Project budgets are disabled (vdc.controller.enforce_project_budgets). Not checking budgets.")
 
-    session.software_stack = software_stack
-
-    valid_instance_types_dict = get_valid_instance_types_by_allowed_list( 
-        hibernation_support=session.hibernation_enabled,
-        allowed_instance_types=session.software_stack.allowed_instance_types,
-    )
-    if session.server.instance_type not in valid_instance_types_dict.keys():
-        session.failure_reason = f'Invalid session.server.instance_type: {session.server.instance_type}. Not allowed for current configuration'
-        return session, False
+    # When smart retry is enabled, skip the instance type check as user does not select instance type
+    if not smart_retry_enabled:
+        valid_instance_types_dict = get_valid_instance_types_by_allowed_list(
+            hibernation_support=session.hibernation_enabled,
+            allowed_instance_types=software_stack.allowed_instance_types,
+        )
+        if session.server.instance_type not in valid_instance_types_dict.keys():
+            session.failure_reason = f'Invalid session.server.instance_type: {session.server.instance_type}. Not allowed for current configuration'
+            return session, False
 
     session, is_valid = validate_attempt_subnets(session)
     
@@ -272,37 +284,57 @@ def validate_create_session_request(session: VirtualDesktopSession) -> Tuple[Vir
         if session.base_os == VirtualDesktopBaseOs.UBUNTU2404.value:
             session.failure_reason = f'OS {session.base_os} does not support Instance Hibernation.'
             return session, False
-        elif session.base_os == VirtualDesktopBaseOs.WINDOWS.value:
-            ram_mib, _ = get_instance_ram(session.server.instance_type)
-            ram_gib = ram_mib / 1024
+        elif session.base_os == VirtualDesktopBaseOs.WINDOWS.value and not smart_retry_enabled:
+            ram_gib = mib_to_gib(get_instance_ram_in_mib(session.server.instance_type))
             if ram_gib > constants.DEFAULT_HIBERNATION_RAM_LIMIT_WINDOWS:
                 session.failure_reason = f'OS {session.base_os} does not support Instance Hibernation for instances with RAM greater than {constants.DEFAULT_HIBERNATION_RAM_LIMIT_WINDOWS}GiB.'
                 return session, False
 
-    # // https://docs.aws.amazon.com/dcv/latest/adminguide/servers.html - AMD GPU, Windows support Console sessions only
-    if session.type is VirtualDesktopSessionType.VIRTUAL and session.base_os == VirtualDesktopBaseOs.WINDOWS.value:
-        session.failure_reason = f'{session.base_os} does not support Virtual Sessions'
+    if session.type is VirtualDesktopSessionType.VIRTUAL:
+        session.failure_reason = f'Virtual Sessions are not supported'
         return session, False
 
-    gpu_manufacturer = get_gpu_manufacturer(session.server.instance_type)
-    if session.type is VirtualDesktopSessionType.VIRTUAL and gpu_manufacturer is VirtualDesktopGpu.AMD:
-        session.failure_reason = f'Instance type: {session.server.instance_type} with GPU {gpu_manufacturer} does not support Virtual Sessions'
-        return session, False
-
-    if session.software_stack.placement and session.software_stack.placement.tenancy == VirtualDesktopTenancy.HOST and not dedicated_hosts_supported(session.server.instance_type):
-        session.failure_reason = f'Instance type: {session.server.instance_type} does not support Dedicated Hosts tenancy'
-        return session, False
+    if not smart_retry_enabled:
+        if software_stack.placement and software_stack.placement.tenancy == VirtualDesktopTenancy.HOST and not dedicated_hosts_supported(session.server.instance_type):
+            session.failure_reason = f'Instance type: {session.server.instance_type} does not support Dedicated Hosts tenancy'
+            return session, False
 
     max_root_volume_size = cluster_settings.get_setting("vdc.dcv_session.max_root_volume_memory")
     if session.server.root_volume_size.value > max_root_volume_size:
         session.failure_reason = f'root volume size: {session.server.root_volume_size} is greater than maximum allowed root volume size: {max_root_volume_size} GB.'
         return session, False
-    
+
     min_root_volume = software_stack.min_storage
     if session.hibernation_enabled:
-        ram_mib, _ = get_instance_ram(session.server.instance_type)
-        ram_gb = ram_mib * (1024 ** 2) / (1000 ** 3)
-        min_root_volume = ResMemory(value=software_stack.min_storage.value + ram_gb, unit=software_stack.min_storage.unit)
+        if smart_retry_enabled:
+            # Under Smart Retry with lowest-price allocation, EC2 will pick the
+            # cheapest hibernation-capable type in the allow-list first. Require
+            # the root volume to hold at least that type's RAM.
+            valid_instance_types = get_valid_instance_types_by_allowed_list(
+                hibernation_support=True,
+                allowed_instance_types=software_stack.allowed_instance_types,
+            )
+            if not valid_instance_types:
+                session.failure_reason = f'No hibernation-capable instance type in software stack {session.software_stack_id} allowed_instance_types.'
+                return session, False
+            min_ram_gb = min(
+                mib_to_gb(get_instance_ram_in_mib(instance_type))
+                for instance_type in valid_instance_types
+            )
+            min_root_volume = ResMemory(
+                value=software_stack.min_storage.value + min_ram_gb,
+                unit=software_stack.min_storage.unit,
+            )
+            if session.server.root_volume_size.value < min_root_volume.value:
+                session.failure_reason = f'root volume size: {session.server.root_volume_size.value} is less than the minimum required root volume size: {min_root_volume.value} for the smallest hibernation-capable instance type in software stack.'
+                return session, False
+            return session, True
+
+        ram_gb = mib_to_gb(get_instance_ram_in_mib(session.server.instance_type))
+        min_root_volume = ResMemory(
+            value=software_stack.min_storage.value + ram_gb,
+            unit=software_stack.min_storage.unit,
+        )
 
     if session.server.root_volume_size.value < min_root_volume.value:
         session.failure_reason = f'root volume size: {session.server.root_volume_size.value} is less than the minimum required root volume size: {min_root_volume.value} when hibernation is {"enabled" if session.hibernation_enabled else "disabled"}.'
@@ -316,12 +348,8 @@ def complete_create_session_request(session: VirtualDesktopSession, user: str) -
     if not session.name:
         session.name = str(uuid4())
 
-    gpu_manufacturer = get_gpu_manufacturer(session.server.instance_type if session.server else None)
     if not session.type:
-        if session.base_os is VirtualDesktopBaseOs.WINDOWS or gpu_manufacturer is VirtualDesktopGpu.AMD:
-            session.type = VirtualDesktopSessionType.CONSOLE
-        else:
-            session.type = VirtualDesktopSessionType[cluster_settings.get_setting('vdc.dcv_session.default_dcv_session_type')]
+        session.type = VirtualDesktopSessionType.CONSOLE
 
     if not session.server:
         session.server = VirtualDesktopServer()
@@ -334,7 +362,7 @@ def complete_create_session_request(session: VirtualDesktopSession, user: str) -
     else:
         session.server.instance_profile_arn = iam_utils.build_vdi_instance_profile_arn(session.project.name)
 
-    if session.server.key_pair_name:
+    if not session.server.key_pair_name:
         session.server.key_pair_name = cluster_settings.get_setting('cluster.network.ssh_key_pair')
 
     if not session.server.security_groups:
@@ -385,6 +413,15 @@ def validate_attempt_subnets(session: VirtualDesktopSession):
     
     attempt_subnets = []
     if session.server and session.server.subnet_id:
+        
+        allowed_subnets = set(configured_vdi_subnets or []) | set(cluster_private_subnets or [])
+        if session.server.subnet_id not in allowed_subnets:
+            allowed_list = ', '.join(sorted(allowed_subnets))
+            session.failure_reason = (
+                f'The provided subnet ({session.server.subnet_id}) is not authorized for this environment. '
+                f'Valid subnets: {allowed_list}'
+            )
+            return session, False
         attempt_subnets.append(session.server.subnet_id)
     elif configured_vdi_subnets:
         logger.debug(f"Found configured VDI subnets: {', '.join(configured_vdi_subnets)}")
@@ -395,281 +432,19 @@ def validate_attempt_subnets(session: VirtualDesktopSession):
 
     if not attempt_subnets:
         session.failure_reason = f'No subnets available for deployment'
-        return session, False, attempt_subnets
-
-    session.attempt_subnets = attempt_subnets
+        return session, False
 
     return session, True
 
 
-def _create_session(session: VirtualDesktopSession) -> VirtualDesktopSession: 
-    try:
-        default_schedule = res_schedules.get_default_schedules()
-        if default_schedule:
-            for day, day_schedule in default_schedule.items():
-                default_schedule[day] = {
-                    **day_schedule,
-                    'idea_session_id': session.idea_session_id,
-                    'idea_session_owner': session.owner,
-                }
-            session.schedule = default_schedule
-        
-        host_provisioning_response = build_user_data_and_provision_dcv_host_for_session(session)
-        instances = host_provisioning_response.get('Instances', [])
-        session.server.instance_id = instances[0].get('InstanceId', None)
-
-    except Exception as e:
-        logger.error(f"Failed to provision host for session: {session.failure_reason}")
-        session.failure_reason = f'{e}'
-        return session
-
-    session.state = VirtualDesktopSessionState.PROVISIONING
-    db_entry = res_sessions.create_session(session.to_ddb_dict())
-    return VirtualDesktopSession.from_ddb_dict(db_entry)
-
-
-def _has_fsx_lustre_file_systems() -> bool:
-    """Check if any FSx Lustre file systems are onboarded."""
-    entries = cluster_settings_utils.get_config_entries(
-        query=r"shared-storage\..+\.fsx_lustre\..+"
-    )
-    return len(entries) > 0
-
-
-def _build_userdata(session: VirtualDesktopSession):
-    project_dict = session.project.to_dict() 
-
-    gpu_family = "NONE"
-    if gpu_utils.is_nvidia_gpu(session.server.instance_type):
-        gpu_family = "NVIDIA"
-    elif gpu_utils.is_amd_gpu(session.server.instance_type):
-        gpu_family = "AMD"
-
-    rerun_on_reboot = script_utils._retrieve_rerun_on_reboot(project_dict, ScriptOSType.LINUX)
-    on_vdi_start_script_commands = script_utils._retrieve_scripts_as_commands(project_dict, ScriptOSType.LINUX, ScriptEventType.ON_VDI_START)
-    on_vdi_configured_script_commands = script_utils._retrieve_scripts_as_commands(project_dict, ScriptOSType.LINUX, ScriptEventType.ON_VDI_CONFIGURED)
-
-    on_vdi_start_script_store = script_utils._store_commands_as_linux_script(on_vdi_start_script_commands, ScriptEventType.ON_VDI_START.value)
-    on_vdi_configured_script_store = script_utils._store_commands_as_linux_script(on_vdi_configured_script_commands, ScriptEventType.ON_VDI_CONFIGURED.value)
-
-    lock_file = "/root/bootstrap/semaphore/custom_script.lock"
-    instance_ready_lock_file = "/root/bootstrap/semaphore/instance_ready.lock"
-    custom_script_check = [f"if [[ ! -f {lock_file} ]]; then"]
-    if rerun_on_reboot:
-        custom_script_check = [f"if [[ ! -f {lock_file} || -f {instance_ready_lock_file} ]]; then"]
-
-    custom_script_commands = custom_script_check + [
-        *on_vdi_start_script_store,
-        *on_vdi_configured_script_store,
-        f'/bin/bash scripts/virtual-desktop-host/linux/export_launch_script_env.sh -p {session.project.project_id} -o {session.owner} -n {session.project.name} -e {cluster_settings.get_setting("cluster.cluster_name")} -c {ScriptEventType.ON_VDI_CONFIGURED.value}.sh -s {ScriptEventType.ON_VDI_START.value}.sh -r {rerun_on_reboot}',
-        'source /etc/launch_script_environment',
-        f'/bin/bash scripts/virtual-desktop-host/linux/{ScriptEventType.ON_VDI_START.value}.sh',
-        f"echo $(date +%s) > {lock_file}",
-        "fi"
-    ]
-
-    custome_broker_api_url = cluster_settings.get_setting("vdc.custom_credential_broker_api_gateway_url")
-    region = cluster_settings.get_setting("cluster.aws.region")
-    jwt_token = "DefaultValue"
-
-    try:
-        secret_value = cluster_settings.get_secret("vdc.custom_credential_broker_secret_name")
-        current_time = int(time.time())
-        payload = {
-            "region": region,
-            "project_name": session.project.name,
-            "session_owner": session.owner,
-            "session_id": session.idea_session_id,
-            "iat": current_time,
-            "exp": current_time + 31536000,
-            "role_arn": cluster_settings.get_setting("vdc.dcv_host_role_arn"),
-            "role_session_name": f"{session.owner}-{session.idea_session_id}"
-        }
-        jwt_token = jwt.encode(payload, secret_value, algorithm="HS256")
-    except Exception as e:
-        logger.info(f"Error retriving secret from secret manager {str(e)}")
-
-    session_type_name = session.type.name
-
-    # Check if FSx Lustre file systems are onboarded
-    enable_lustre = 'true' if _has_fsx_lustre_file_systems() else 'false'
-
-    install_commands = custom_script_commands + [
-        f'/bin/bash scripts/virtual-desktop-host/linux/install.sh -m {constants.MODULE_ID_VIRTUAL_DESKTOP_APP} -g {gpu_family} -u {custome_broker_api_url} -t {jwt_token} -p false -e {cluster_settings.get_setting("cluster.cluster_name")} -n {session.project.name} -o {session.owner} -d {session_type_name} -i {session.idea_session_id} -a {region} -h {session.hibernation_enabled or False} -l {enable_lustre}'
-    ]
-
-    if session.base_os == VirtualDesktopBaseOs.WINDOWS:
-        install_commands = _build_windows_install_commands(session, project_dict, jwt_token, custome_broker_api_url)
-
-    https_proxy = cluster_settings.get_setting('cluster.network.https_proxy')
-    no_proxy = cluster_settings.get_setting('cluster.network.no_proxy')
-    proxy_config = {}
-    if https_proxy:
-        proxy_config = {
-            'http_proxy': https_proxy,
-            'https_proxy': https_proxy,
-            'no_proxy': no_proxy
-        }
-
-    user_data_builder = BootstrapUserDataBuilder(
-        base_os=session.base_os.value,
-        aws_region=cluster_settings.get_setting('cluster.aws.region'),
-        bootstrap_package_uri=cluster_settings.get_setting('cluster.installation_scripts_uri'),
-        install_commands=install_commands,
-        proxy_config=proxy_config,
-    )
-
-    user_data = user_data_builder.build()
-    return user_data
-
-
-def _build_windows_install_commands(session: VirtualDesktopSession, project_dict: dict, jwt_token: str, broker_api_url: str) -> List[str]:
-    """Build Windows-specific install commands for VDI bootstrap."""
-    change_directory_command = ['cd \"scripts\\virtual-desktop-host\\windows\"']
-    on_vdi_start_script_commands = script_utils._retrieve_scripts_as_commands(project_dict, ScriptOSType.WINDOWS, ScriptEventType.ON_VDI_START)
-    on_vdi_configured_script_commands = script_utils._retrieve_scripts_as_commands(project_dict, ScriptOSType.WINDOWS, ScriptEventType.ON_VDI_CONFIGURED)
-    on_vdi_start_script_store = script_utils._store_commands_as_windows_script(on_vdi_start_script_commands, ScriptEventType.ON_VDI_START.value)
-    on_vdi_configured_script_store = script_utils._store_commands_as_windows_script(on_vdi_configured_script_commands, ScriptEventType.ON_VDI_CONFIGURED.value)
-    export_env_variables_commands = ['Import-Module .\\ExportLaunchScriptEnv.ps1',
-                                        f'Export-EnvironmentVariables -ProjectId "{session.project.project_id}" -OwnerId "{session.owner}" -EnvName "{cluster_settings.get_setting("cluster.cluster_name")}" -ProjectName "{session.project.name}" -OnVDIStartCommands "{ScriptEventType.ON_VDI_START.value}.ps1" -OnVDIConfigureCommands "{ScriptEventType.ON_VDI_CONFIGURED.value}.ps1"']
-    on_vdi_start_script_commands = ['& .\\$env:ON_VDI_START_COMMANDS']
-    return change_directory_command + export_env_variables_commands + on_vdi_start_script_store + on_vdi_configured_script_store + on_vdi_start_script_commands + [
-        'Import-Module .\\Install.ps1',
-        f'Install-WindowsEC2Instance -ConfigureForRESVDI -AWSRegion "{cluster_settings.get_setting("cluster.aws.region")}" -ENVName "{cluster_settings.get_setting("cluster.cluster_name")}" -ModuleID "{constants.MODULE_ID_VIRTUAL_DESKTOP_APP}" -ProjectName {session.project.name} -SessionOwner "{session.owner}" -SessionId "{session.idea_session_id}" -BootstrapToken "{jwt_token}" -CustomBrokerApi "{broker_api_url}" -OnVDIConfiguredCommands "{ScriptEventType.ON_VDI_CONFIGURED.value}.ps1"'
-    ]
-
-
-def build_user_data_and_provision_dcv_host_for_session(session: VirtualDesktopSession) -> dict:
-    
-    tags = {
-        "Name": f'{cluster_settings.get_setting("cluster.cluster_name")}-{session.name}-{session.owner}',
-        constants.RES_TAG_NODE_TYPE: constants.NODE_TYPE_DCV_HOST,
-        constants.RES_TAG_ENVIRONMENT_NAME: cluster_settings.get_setting("cluster.cluster_name"),
-        constants.RES_TAG_MODULE_ID: constants.MODULE_ID_VDC,
-        constants.RES_TAG_MODULE_NAME: constants.MODULE_NAME_VDC,
-        constants.RES_TAG_MODULE_VERSION: _module_version,
-        constants.RES_TAG_BACKUP_PLAN: f'{cluster_settings.get_setting("cluster.cluster_name")}-{constants.MODULE_ID_VDC}',
-        constants.RES_TAG_PROJECT: session.project.name,
-        constants.RES_TAG_DCV_SESSION_ID: 'TBD'
-    }
-
-    project_tags = getattr(session.project, 'tags', None)
-    if project_tags:
-        for tag in project_tags:
-            tags[tag.get("key")] = tag.get("value")
-
-    custom_tags = cluster_settings.get_setting('global-settings.custom_tags')
-    custom_tags_dict = res_tags.convert_custom_tags_to_key_value_pairs(custom_tags)
-    session_tags = res_tags.convert_tags_list_of_dict_to_tags_dict(getattr(session, 'tags', []) or [])
-    tags = {**custom_tags_dict, **tags, **session_tags}
-
-    aws_tags = [{'Key': key, 'Value': value} for key, value in tags.items()]
-    metadata_http_tokens = cluster_settings.get_setting('vdc.dcv_session.metadata_http_tokens')
-    kms_key_id = cluster_settings.get_setting('cluster.ebs.kms_key_id') or 'alias/aws/ebs'
-    logger.info(f"kms_key_id: {kms_key_id}")
-    
-    attempt_subnets = attempt_subnets = session.attempt_subnets
-    
-    subnet_autoretry_method = cluster_settings.get_setting('vdc.dcv_session.network.subnet_autoretry')
-    randomize_subnet_method = cluster_settings.get_setting('vdc.dcv_session.network.randomize_subnets')
-    
-    if randomize_subnet_method:
-        random.shuffle(attempt_subnets)
-        logger.debug(f"Applying randomize to subnet list due to configuration.")
-
-    placement = {"Tenancy": session.software_stack.placement.tenancy if session.software_stack.placement else VirtualDesktopTenancy.DEFAULT}
-    if placement["Tenancy"] == VirtualDesktopTenancy.HOST:
-        placement["Affinity"] = session.software_stack.placement.affinity
-        if session.software_stack.placement.host_id:
-            placement["HostId"] = session.software_stack.placement.host_id
-        else:
-            placement["HostResourceGroupArn"] = session.software_stack.placement.host_resource_group_arn
-
-    logger.debug(f"Deployment Attempt Ready - Retry: {subnet_autoretry_method} Attempt_Subnets({len(attempt_subnets)}): {', '.join(attempt_subnets)}")
-
-    return _provision_ec2_instance(session, attempt_subnets, subnet_autoretry_method, aws_tags, metadata_http_tokens, kms_key_id, placement)
-
-
-def _provision_ec2_instance(session: VirtualDesktopSession, attempt_subnets: List[str], subnet_autoretry: bool, aws_tags: list, metadata_http_tokens: str, kms_key_id: str, placement: dict) -> dict:
-    """Attempt to launch an EC2 instance, retrying across subnets if configured."""
-    _deployment_loop = 0
-    _attempt_provision = True
-
-    while _attempt_provision:
-        _deployment_loop += 1
-        _subnet_to_try = attempt_subnets.pop(0)
-        _remaining_subnet_count = len(attempt_subnets)
-
-        logger.info(f"Deployment attempt #{_deployment_loop} subnet_id: {_subnet_to_try} Remaining Subnets: {_remaining_subnet_count}")
-        _attempt_provision = _remaining_subnet_count > 0
-
-        ami_id = session.software_stack.ami_id
-        if ami_id and ami_id.startswith("arn:"):
-            ami_id = f'resolve:ssm:{get_systems_manager_parameter(ami_id).get("Name", "")}'
-
-        response = None
-
-        logger.info(f"Session data before build userdata: {session}")
-        user_data = _build_userdata(session)
-        
-        try:
-            run_instances_params = {
-                'UserData': user_data,
-                'ImageId': ami_id,
-                'InstanceType': session.server.instance_type,
-                'TagSpecifications': [{'ResourceType': 'instance', 'Tags': aws_tags}],
-                'MaxCount': 1,
-                'MinCount': 1,
-                'NetworkInterfaces': [{
-                    'DeviceIndex': 0,
-                    'AssociatePublicIpAddress': False,
-                    'SubnetId': _subnet_to_try,
-                    'Groups': session.server.security_groups
-                }],
-                'IamInstanceProfile': {'Arn': session.server.instance_profile_arn},
-                'BlockDeviceMappings': [{
-                    'DeviceName': ec2_utils.get_ec2_block_device_name(session.base_os),
-                    'Ebs': {
-                        'DeleteOnTermination': True,
-                        'VolumeSize': int(session.server.root_volume_size.value),
-                        'Encrypted': constants.DEFAULT_VOLUME_ENCRYPTION_VDI,
-                        'KmsKeyId': kms_key_id,
-                        'VolumeType': constants.DEFAULT_VOLUME_TYPE_VDI,
-                    }
-                }],
-                'HibernationOptions': {'Configured': session.hibernation_enabled or False},
-                'MetadataOptions': {'HttpTokens': metadata_http_tokens, 'HttpEndpoint': 'enabled'},
-                'Placement': placement,
-            }
-            
-            if session.server.key_pair_name:
-                logger.info(f"key pair name {session.server.key_pair_name}")
-                run_instances_params['KeyName'] = session.server.key_pair_name
-            
-            response = ec2_client.run_instances(**run_instances_params)
-        except Exception as err:
-            logger.warning(f"Encountered Deployment Exception: {err} / Response: {response}")
-            logger.debug(f"Remaining subnets {len(attempt_subnets)}: {attempt_subnets}")
-            if subnet_autoretry and _attempt_provision:
-                logger.debug(f"Continue with next attempt with remaining subnets..")
-                continue
-            else:
-                logger.warning(f"Exhausted all deployment attempts. Cannot continue with this request.")
-                raise err
-
-        if response:
-            logger.debug(f"Returning response: {response}")
-            return response
-
-
-def validate_batch_stop_sessions(sessions, user):
+def validate_batch_stop_sessions(sessions, user, is_app_client=False):
     """
     Validate and authorize sessions for batch stop.
     Returns (validated_sessions_list, unsuccessful_list) where unsuccessful_list is a list of BatchStopSessionFailure.
     """
     validated_sessions_list = []
     unsuccessful_list = []
-    is_admin = accounts.is_active_admin(user)
+    is_admin = is_app_client or accounts.is_active_admin(user)
 
     for session in sessions:
         if not session.idea_session_id:
@@ -781,7 +556,7 @@ def validate_batch_reboot_sessions(sessions, user):
     return validated_sessions_list, unsuccessful_list
 
 
-def validate_batch_delete_sessions(sessions, user):
+def validate_batch_delete_sessions(sessions, user, is_app_client=False):
     """
     Validate and authorize sessions for batch delete.
     Looks up each session in DDB to verify ownership and project rather than trusting client-provided values.
@@ -790,7 +565,7 @@ def validate_batch_delete_sessions(sessions, user):
     """
     validated_sessions_list = []
     unsuccessful_list = []
-    is_admin = accounts.is_active_admin(user)
+    is_admin = is_app_client or accounts.is_active_admin(user)
 
     for session in sessions:
         if not session.idea_session_id or not session.owner:
@@ -881,7 +656,7 @@ def validate_batch_delete_sessions(sessions, user):
     return validated_sessions_list, unsuccessful_list
 
 
-def validate_batch_start_sessions(sessions, user):
+def validate_batch_start_sessions(sessions, user, is_app_client=False):
     """
     Validate and authorize sessions for batch start.
     Looks up each session in DDB to verify existence and ownership rather than trusting client-provided values.
@@ -889,7 +664,7 @@ def validate_batch_start_sessions(sessions, user):
     """
     validated_sessions_list = []
     unsuccessful_list = []
-    is_admin = accounts.is_active_admin(user)
+    is_admin = is_app_client or accounts.is_active_admin(user)
 
     for session in sessions:
         if not session.idea_session_id or not session.owner:
@@ -931,5 +706,41 @@ def validate_batch_start_sessions(sessions, user):
             continue
 
         validated_sessions_list.append(VirtualDesktopSession.from_ddb_dict(ddb_session))
+
+    return validated_sessions_list, unsuccessful_list
+
+
+def validate_batch_create_sessions(sessions, user, is_app_client=False):
+    """
+    Validate sessions for batch create.
+    Tracks how many sessions per (owner, project) have already been validated in this batch
+    to prevent bypassing the per-user session limit with a single large request.
+    Returns (validated_sessions_list, unsuccessful_list) where unsuccessful_list is a list of BatchCreateSessionFailure.
+    """
+    validated_sessions_list = []
+    unsuccessful_list = []
+    batch_counts: Dict[Tuple[str, str], int] = {}
+
+    for session in sessions:
+
+        if not session.owner:
+            session.owner = user
+
+        project_id = session.project.project_id if session.project else None
+        key = (session.owner, project_id) if project_id else None
+        pending = batch_counts.get(key, 0) if key else 0
+
+        session, is_valid = _validate_create_session_request(session, user, pending_count=pending, is_app_client=is_app_client)
+        if not is_valid:
+            unsuccessful_list.append(BatchCreateSessionFailure(
+                session=session,
+                error_code=BatchOperationErrorCode.BADREQUESTEXCEPTION,
+                message=session.failure_reason,
+            ))
+            continue
+
+        if key:
+            batch_counts[key] = pending + 1
+        validated_sessions_list.append(session)
 
     return validated_sessions_list, unsuccessful_list

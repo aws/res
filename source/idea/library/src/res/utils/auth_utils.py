@@ -3,11 +3,12 @@
 
 
 import base64
+import re
 import typing
 
 import validators
 from password_generator import PasswordGenerator
-from res.constants import USERS_TABLE_NAME
+from res.constants import COGNITO_USERNAME_REGEX, USERS_TABLE_NAME
 from res.resources import cluster_settings
 from res.utils import table_utils
 
@@ -78,6 +79,66 @@ def is_user_active(user: dict) -> bool:
     return user.get("is_active", False)
 
 
+def validate_native_cognito_username(username: str) -> str:
+    """
+    Validate that a native Cognito username is well-formed.
+
+    Native Cognito usernames must match the RES username regex and never
+    contain '@'. Usernames with '@' in the non-IdP flow could be used for
+    impersonation via truncation (e.g. "clusteradmin@!" resolving to
+    "clusteradmin").
+
+    This is the single source of truth for native Cognito username validation.
+    It is called by auth_utils.get_ddb_user_name(),
+    proxy_handler.get_ddb_user_name(), and the Cognito Pre-Signup trigger.
+
+    Args:
+        username: The raw username from the Cognito token or signup request.
+
+    Returns:
+        The validated username (unchanged).
+
+    Raises:
+        Exception: If the username does not match the allowed pattern.
+    """
+    if not re.match(COGNITO_USERNAME_REGEX, username):
+        raise Exception(
+            f"Invalid Cognito username: '{username}'. "
+            f"Username must start with a lowercase letter and contain only "
+            f"lowercase letters, numbers, hyphens, and underscores (max 32 chars)."
+        )
+    return username
+
+
+def extract_idp_email(
+    username: str, idp_name: typing.Union[str, None]
+) -> typing.Optional[str]:
+    """
+    Extract the email from an IdP-prefixed Cognito username.
+
+    Returns the email portion if the username carries the IdP prefix,
+    or None if it should be treated as a native Cognito user.
+
+    Raises if the prefix matches but the remainder is not in email format
+    (prevents a native user like 'saml_clusteradmin' from resolving to
+    'clusteradmin' via prefix stripping).
+    """
+    if not idp_name:
+        return None
+
+    identity_provider_prefix = (idp_name + "_").lower()
+    if not username.startswith(identity_provider_prefix):
+        return None
+
+    email = username.replace(identity_provider_prefix, "", 1)
+    if "@" not in email:
+        raise Exception(
+            f"Invalid IdP username: '{username}'. "
+            f"Expected email format after '{idp_name}_' prefix."
+        )
+    return email
+
+
 def get_ddb_user_name(username: str, idp_name: typing.Union[str, None]) -> str:
     """
     For a user with
@@ -87,14 +148,9 @@ def get_ddb_user_name(username: str, idp_name: typing.Union[str, None]) -> str:
     This method gets the identity-provider-name prefix from database and removes that from the username
     to get the user name back.
     """
-    if not idp_name:
-        # IdP is not set up, treat the user as Cognito native user
-        return username.split("@")[0]
-
-    identity_provider_prefix = (idp_name + "_").lower()
-    email = username
-    if username.startswith(identity_provider_prefix):
-        email = username.replace(identity_provider_prefix, "", 1)
+    email = extract_idp_email(username, idp_name)
+    if email is None:
+        return validate_native_cognito_username(username)
 
     users = table_utils.query(
         table_name=USERS_TABLE_NAME,
@@ -104,7 +160,11 @@ def get_ddb_user_name(username: str, idp_name: typing.Union[str, None]) -> str:
     if len(users) > 1:
         raise Exception(f"Multiple users found with email {email}")
 
-    username = users[0]["username"] if users else email.split("@")[0]
+    if not users:
+        raise Exception(
+            "No user found for the provided token. " "Cannot resolve username."
+        )
+    username = users[0]["username"]
     return username
 
 

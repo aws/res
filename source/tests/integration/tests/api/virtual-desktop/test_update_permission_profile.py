@@ -356,3 +356,25 @@ class TestUpdatePermissionProfile:
             ), f"Unexpected error for request with invalid auth token: {str(e)}"
         finally:
             set_backend_lambda_test_mode(region, environment_name, True)
+
+    @pytest.mark.parametrize("admin_username", ["clusteradmin"])
+    def test_update_permission_profile_with_empty_profile_id_in_body(
+        self,
+        request: FixtureRequest,
+        region: str,
+        res_environment: ResEnvironment,
+        admin_username: str,
+        admin: ClientAuth,
+    ) -> None:
+        """Verify that an empty profile_id in the profile body is rejected by @length(min: 1) validation."""
+        try:
+            api_client = ApiClient(res_environment, admin)
+            payload = get_permission_profile_base_payload("")
+            request_content = UpdatePermissionProfileRequestContent(**payload)
+            api_client.update_permission_profile("some-profile-id", request_content)
+            pytest.fail("Expected 400 error for empty profile_id in body")
+        except Exception as e:
+            assert "400" in str(e)
+            assert hasattr(e, "response")
+            assert e.response.status_code == 400
+            assert "should be non-empty" in e.response.text

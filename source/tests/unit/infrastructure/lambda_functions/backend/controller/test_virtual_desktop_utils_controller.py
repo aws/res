@@ -3,7 +3,7 @@
 
 import os
 import sys
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 import pytest
 
@@ -94,18 +94,24 @@ class TestVirtualDesktopUtilsController:
             "t3.small": {"InstanceType": "t3.small", "MemoryInfo": {"SizeInMiB": 2048}}
         }
         mock_ec2_utils.get_valid_instance_types_by_allowed_list.return_value = mock_instance_types_dict
-
-        # Mock validate_min_ram to return True for both instances
         mock_software_stacks.validate_min_ram.side_effect = [True, True]
+        mock_software_stacks.get_software_stack.return_value = {
+            "stack_id": "stack-123",
+            "base_os": "amzn2023",
+            "allowed_instance_types": ["t3.micro", "t3.small"],
+            "min_ram_value": 2.0,
+            "min_ram_unit": "gb",
+            "min_storage_value": 20,
+            "min_storage_unit": "gb",
+            "gpu": "NO_GPU",
+        }
 
         # Create request body
         body = {
             "session": {
                 "hibernation_enabled": True,
-                "software_stack": {
-                    "allowed_instance_types": ["t3.micro", "t3.small"],
-                    "min_ram": {"value": 2.0, "unit": "GiB"}
-                }
+                "software_stack_id": "stack-123",
+                "base_os": "amzn2023",
             }
         }
 
@@ -116,8 +122,8 @@ class TestVirtualDesktopUtilsController:
         assert isinstance(result, ListAllowedInstanceTypesForSessionResponseContent)
         assert len(result.listing) == 2
         mock_stack_utils.set_software_stack_architecture.assert_called_once()
-        mock_ec2_utils.get_valid_instance_types_by_allowed_list.assert_called_once_with(
-            True, ["t3.micro", "t3.small"]
+        mock_software_stacks.get_software_stack.assert_called_once_with(
+            base_os="amzn2023", stack_id="stack-123"
         )
 
     @patch("api.controllers.virtual_desktop_utils_controller.software_stack_utils")
@@ -132,18 +138,24 @@ class TestVirtualDesktopUtilsController:
             "t3.large": {"InstanceType": "t3.large", "MemoryInfo": {"SizeInMiB": 8192}}  # OK
         }
         mock_ec2_utils.get_valid_instance_types_by_allowed_list.return_value = mock_instance_types_dict
-
-        # Mock validate_min_ram to return False for small instances, True for large
         mock_software_stacks.validate_min_ram.side_effect = [False, False, True]
+        mock_software_stacks.get_software_stack.return_value = {
+            "stack_id": "stack-456",
+            "base_os": "amzn2023",
+            "allowed_instance_types": ["t3.nano", "t3.small", "t3.large"],
+            "min_ram_value": 4.0,
+            "min_ram_unit": "gb",
+            "min_storage_value": 20,
+            "min_storage_unit": "gb",
+            "gpu": "NO_GPU",
+        }
 
         # Create request body
         body = {
             "session": {
                 "hibernation_enabled": False,
-                "software_stack": {
-                    "allowed_instance_types": ["t3.nano", "t3.small", "t3.large"],
-                    "min_ram": {"value": 4.0, "unit": "GiB"}
-                }
+                "software_stack_id": "stack-456",
+                "base_os": "amzn2023",
             }
         }
 
@@ -155,36 +167,6 @@ class TestVirtualDesktopUtilsController:
         assert len(result.listing) == 1  # Only t3.large should pass RAM validation
         assert result.listing[0]["InstanceType"] == "t3.large"
         mock_stack_utils.set_software_stack_architecture.assert_called_once()
-
-    def test_list_allowed_instance_types_for_session_missing_hibernation_enabled(self):
-        """Test that missing hibernation_enabled returns BadRequestException."""
-        body = {
-            "session": {
-                "software_stack": {"allowed_instance_types": ["t3.micro"]}
-            }
-        }
-        with pytest.raises(BadRequestException) as exc_info:
-            virtual_desktop_utils_controller.list_allowed_instance_types_for_session(body=body)
-        assert "hibernation_enabled" in str(exc_info.value.message)
-
-    def test_list_allowed_instance_types_for_session_missing_software_stack(self):
-        """Test that missing software_stack returns BadRequestException."""
-        body = {
-            "session": {
-                "hibernation_enabled": True
-            }
-        }
-        with pytest.raises(BadRequestException) as exc_info:
-            virtual_desktop_utils_controller.list_allowed_instance_types_for_session(body=body)
-        assert "software_stack" in str(exc_info.value.message)
-
-    def test_list_allowed_instance_types_for_session_missing_both(self):
-        """Test that missing both fields returns BadRequestException listing both."""
-        body = {"session": {}}
-        with pytest.raises(BadRequestException) as exc_info:
-            virtual_desktop_utils_controller.list_allowed_instance_types_for_session(body=body)
-        assert "hibernation_enabled" in str(exc_info.value.message)
-        assert "software_stack" in str(exc_info.value.message)
 
     @patch("api.controllers.virtual_desktop_utils_controller.software_stacks")
     def test_list_allowed_instance_types_hibernation_support_propagated(self, mock_software_stacks):
@@ -312,3 +294,34 @@ class TestVirtualDesktopUtilsController:
             virtual_desktop_utils_controller.get_permission_profile('test-profile')
 
         assert str(exc_info.value) == "401: Unauthorized user"
+
+    @patch("api.controllers.virtual_desktop_utils_controller.check_app_client_token")
+    @patch("api.controllers.virtual_desktop_utils_controller.accounts.is_active_admin")
+    @patch("api.controllers.virtual_desktop_utils_controller.permission_profiles")
+    @patch(
+        "api.controllers.virtual_desktop_utils_controller.VirtualDesktopPermissionProfile.from_ddb_dict"
+    )
+    def test_get_permission_profile_service_token_skips_admin_check(
+        self,
+        mock_from_ddb_dict,
+        mock_permission_profiles,
+        mock_is_active_admin,
+        mock_check_app_client_token,
+    ):
+        """Service-token caller bypasses the admin check on get_permission_profile."""
+        mock_check_app_client_token.return_value = True
+        mock_permission_profiles.get_permission_profile.return_value = {
+            "profile_id": "pp-1"
+        }
+        mock_from_ddb_dict.return_value = Mock()
+
+        token_info = {"uid": "cm-client", "scope": ["env-vdc/read"]}
+        virtual_desktop_utils_controller.get_permission_profile(
+            "pp-1", user="cm-client", token_info=token_info
+        )
+
+        mock_check_app_client_token.assert_called_once_with(
+            token_info, "get_permission_profile"
+        )
+        mock_is_active_admin.assert_not_called()
+        mock_permission_profiles.get_permission_profile.assert_called_once_with("pp-1")

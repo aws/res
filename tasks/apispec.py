@@ -89,27 +89,6 @@ def cluster_manager(_, output_file=None, server_url=None):
 
 
 @task
-def virtual_desktop_controller(_, output_file=None, server_url=None):
-    # type: (Context, str, str) -> None
-    """
-    virtual desktop controller api spec
-    """
-    from ideadatamodel import OPEN_API_SPEC_ENTRIES_VIRTUAL_DESKTOP
-
-    spec_entries = OPEN_API_SPEC_ENTRIES_VIRTUAL_DESKTOP
-
-    api_doc_file = os.path.join(idea.props.virtual_desktop_project_dir, 'resources', 'api', 'api_doc.yml')
-
-    _build_output(
-        module=constants.MODULE_VIRTUAL_DESKTOP_CONTROLLER,
-        api_doc_file=api_doc_file,
-        spec_entries=spec_entries,
-        server_url=server_url,
-        output_file=output_file
-    )
-
-
-@task
 def scheduler(_, output_file=None, server_url=None):
     # type: (Context, str, str) -> None
     """
@@ -138,9 +117,6 @@ def build_all(c, target_dir=None):
     """
     idea.console.info('building api spec for cluster-manager ...')
     cluster_manager(c, output_file=f'{os.path.join(target_dir, "cluster-manager.openapi.yml")}' if target_dir else None)
-
-    idea.console.info('building api spec for virtual-desktop-controller ...')
-    virtual_desktop_controller(c, output_file=f'{os.path.join(target_dir, "virtual-desktop-controller.openapi.yml")}' if target_dir else None)
 
     idea.console.info('building api spec for scheduler ...')
     scheduler(c, output_file=f'{os.path.join(target_dir, "scheduler.openapi.yml")}' if target_dir else None)

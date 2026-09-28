@@ -13,8 +13,11 @@ import logging
 import pytest
 
 # Import RES framework components
+from res.clients.api_client.res_api_client import ResApiClient  # type: ignore
+
 from tests.integration.framework.client.api_client import ApiClient
 from tests.integration.framework.fixtures.fixture_request import FixtureRequest
+from tests.integration.framework.fixtures.res_api_client import res_api_client
 from tests.integration.framework.fixtures.res_environment import (
     ResEnvironment,
     res_environment,
@@ -72,10 +75,6 @@ class TestListSessions:
             assert response.listing is not None, "Response must contain 'listing' field"
             assert isinstance(response.listing, list), "Listing should be a list"
 
-            logger.info(
-                f"Non-admin user successfully retrieved their own sessions: {len(response.listing)} items"
-            )
-
         except Exception as e:
             pytest.fail(
                 f"Unexpected API error for non-admin user accessing own sessions: {str(e)}"
@@ -100,7 +99,6 @@ class TestListSessions:
             assert (
                 "Inactive user" in e.response.text
             ), f"Unexpected error for inactive user: {str(e)}"
-            logger.info(f"Inactive user correctly received 401 error: {str(e)}")
 
     def test_list_sessions_with_nonexistent_user(
         self,
@@ -118,7 +116,6 @@ class TestListSessions:
             assert (
                 "User not found" in e.response.text
             ), f"Unexpected error for non-existent user: {str(e)}"
-            logger.info(f"Non-existent user correctly received 401 error: {str(e)}")
 
     def test_list_sessions_without_auth_token(
         self,
@@ -136,9 +133,6 @@ class TestListSessions:
             assert (
                 "No authorization token provided" in e.response.text
             ), f"Unexpected error for request without auth token: {str(e)}"
-            logger.info(
-                f"Request without auth token correctly received 401 error: {str(e)}"
-            )
 
     def test_list_sessions_with_invalid_auth_token_in_prod(
         self,
@@ -163,9 +157,6 @@ class TestListSessions:
             assert (
                 "Unable to retrieve username" in e.response.text
             ), f"Unexpected error for request with invalid auth token: {str(e)}"
-            logger.info(
-                "Request with invalid auth token correctly received 'Unable to retrieve username' error"
-            )
         finally:
             set_backend_lambda_test_mode(region, environment_name, True)
 
@@ -206,4 +197,32 @@ class TestListSessions:
         except Exception as e:
             pytest.fail(
                 f"Unexpected API error when admin lists sessions by owner: {str(e)}"
+            )
+
+    def test_list_sessions_with_service_token(
+        self,
+        request: FixtureRequest,
+        region: str,
+        res_environment: ResEnvironment,
+        res_api_client: ResApiClient,
+    ) -> None:
+        """
+        ResApiClient (service-token caller) hits list_sessions through the
+        ALB. The backend should call enforce_scope and pass skip_user_authz
+        downstream, so the response succeeds regardless of the (non-existent)
+        username — the JWT carries cluster-manager's client_id, not a real user.
+        """
+        try:
+            response = res_api_client.list_sessions()
+
+            assert response is not None, "Response should not be None"
+            assert response.listing is not None, "Response must contain 'listing' field"
+            assert isinstance(response.listing, list), "Listing should be a list"
+
+            logger.info(
+                f"Service-token caller successfully retrieved {len(response.listing)} sessions"
+            )
+        except Exception as e:
+            pytest.fail(
+                f"Unexpected API error for service-token list_sessions: {str(e)}"
             )

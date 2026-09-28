@@ -1,12 +1,23 @@
 #  Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 #  SPDX-License-Identifier: Apache-2.0
 
+import json
 import logging
+import os
+import uuid
 from typing import Any, Dict, List, Optional, Tuple
 
 import res.exceptions as exceptions  # type: ignore
-from res.resources import cluster_settings, projects  # type: ignore
+from res.constants import ENVIRONMENT_NAME_KEY, MODULE_ID_VDC
+from res.resources import (  # type: ignore
+    cluster_settings,
+    projects,
+    sessions,
+    ssm_commands,
+)
+from res.resources.vdc_events import VDCEventType  # type: ignore
 from res.utils import (  # type: ignore
+    aws_utils,
     ec2_utils,
     logging_utils,
     memory_utils,
@@ -58,6 +69,75 @@ BASE_OS = [
 ]
 ARCHITECTURE = ["x86_64", "arm64"]
 
+# CreateSoftwareStackFromSession constants
+TEMP_AMI_ID = "TEMP_IMAGE_ID"
+SSM_LOG_SUFFIX_LINUX_CLEANUP = "clean-up"
+SSM_LOG_SUFFIX_WINDOWS_CLEANUP = "enable-userdata"
+
+
+def _get_linux_cleanup_commands() -> list:
+    """Build Linux cleanup commands, including AD unjoin if AD join is enabled."""
+    commands = [
+        "export PATH=$PATH:/usr/local/bin:/opt/idea/python/latest/bin",
+        "rm -f /root/bootstrap/semaphore/*",
+        "rm -f /root/bootstrap/reboot_required.txt",
+        "rm -f /etc/supervisord.d/virtual-desktop-app.ini",
+        "supervisorctl reread",
+        "supervisorctl update",
+    ]
+    disable_ad_join = cluster_settings.get_setting("directoryservice.disable_ad_join")
+    if disable_ad_join == "false":
+        domain_name = cluster_settings.get_setting("directoryservice.name")
+        if domain_name:
+            commands.append(f"realm leave {domain_name}")
+    # Remove stale keytab after realm leave so new VDI gets a fresh one after AD join
+    commands.append("rm -f /etc/krb5.keytab")
+    return commands
+
+
+def _get_windows_cleanup_commands() -> list:
+    """Build Windows cleanup commands, including AD unjoin."""
+    commands = [
+        r'Get-ChildItem -Path "C:\IDEA\Semaphore\*" -File | Remove-Item -Force',
+        "schtasks /delete /tn VDIAppRestartNotification /f",
+    ]
+    ad_short_name = cluster_settings.get_setting("directoryservice.ad_short_name")
+    credentials_secret_arn = cluster_settings.get_setting(
+        "directoryservice.service_account_credentials_secret_arn"
+    )
+    if ad_short_name and credentials_secret_arn:
+        try:
+            credentials_json = aws_utils.get_secret_string(credentials_secret_arn)
+        except Exception:
+            logger.warning(
+                "Failed to retrieve AD service account credentials, skipping AD unjoin"
+            )
+            credentials_json = None
+        if credentials_json:
+            credentials = json.loads(credentials_json)
+            username = list(credentials.keys())[0]
+            password = list(credentials.values())[0]
+            commands.extend(
+                [
+                    f'$username = "{ad_short_name}\\{username}"',
+                    f'$password = ConvertTo-SecureString "{password}" -AsPlainText -Force',
+                    "$credential = New-Object System.Management.Automation.PSCredential($username, $password)",
+                    "Remove-Computer -UnjoinDomainCredential $credential -Force",
+                ]
+            )
+    # Enable user data on next boot (supports both EC2Launch v2 and legacy)
+    commands.extend(
+        [
+            'if (Test-Path "C:\\Program Files\\Amazon\\EC2Launch\\EC2Launch.exe") {',
+            '    & "C:\\Program Files\\Amazon\\EC2Launch\\EC2Launch.exe" reset --clean',
+            "} else {",
+            '    & "C:\\ProgramData\\Amazon\\EC2-Windows\\Launch\\Scripts\\InitializeInstance.ps1" -Schedule',
+            "}",
+        ]
+    )
+    return commands
+
+
 logger = logging_utils.get_logger(SOFTWARE_STACK_TABLE_NAME)
 
 
@@ -95,7 +175,7 @@ def create_software_stack(software_stack: Dict[str, Any]) -> Dict[str, Any]:
         software_stack.get(SOFTWARE_STACK_DB_VERSION_KEY) or 1
     )
 
-    table_utils.create_item(
+    created_software_stack = table_utils.create_item(
         table_name=SOFTWARE_STACK_TABLE_NAME,
         item=software_stack,
         attribute_names_to_check=[SOFTWARE_STACK_DB_RANGE_KEY],
@@ -105,9 +185,18 @@ def create_software_stack(software_stack: Dict[str, Any]) -> Dict[str, Any]:
         f"Created software stack {SOFTWARE_STACK_DB_HASH_KEY}: {base_os}, {SOFTWARE_STACK_DB_RANGE_KEY}: {stack_id} successfully"
     )
 
-    return get_software_stack(
-        base_os=base_os, stack_id=stack_id, get_project_details=True
-    )
+    # Enrich project details in-memory. Avoids an eventually-consistent
+    # DDB read that can raise SoftwareStackNotFound immediately after write.
+    if (
+        SOFTWARE_STACK_DB_PROJECTS_KEY in created_software_stack
+        and created_software_stack[SOFTWARE_STACK_DB_PROJECTS_KEY]
+    ):
+        created_software_stack[SOFTWARE_STACK_DB_PROJECTS_KEY] = [
+            projects.get_project(project_id)
+            for project_id in created_software_stack[SOFTWARE_STACK_DB_PROJECTS_KEY]
+        ]
+
+    return created_software_stack
 
 
 def get_software_stack_by_name(software_stack_name: str):
@@ -177,7 +266,7 @@ def update_software_stack_allowed_instance_types(
     global_allowed_instance_types: List[str],
 ) -> None:
     """
-    Update all existing software stack's allowed insatnce types when global allowed list is changed
+    Update all existing software stack's allowed instance types when global allowed list is changed
     :param global_allowed_instance_types: new global_allowed_instance_types to be used for updating
     """
     if not global_allowed_instance_types:
@@ -459,15 +548,164 @@ def validate_min_ram(
 ) -> bool:
     """Validate minimum RAM requirements"""
     if software_stack:
-        ram_value, ram_unit = ec2_utils.get_instance_ram(instance_type_name)
+        ram_mib = ec2_utils.get_instance_ram_in_mib(instance_type_name)
         if memory_utils.is_greater_than(
             software_stack[SOFTWARE_STACK_DB_MIN_RAM_VALUE_KEY],
             software_stack[SOFTWARE_STACK_DB_MIN_RAM_UNIT_KEY],
-            ram_value,
-            ram_unit,
+            ram_mib,
+            "MiB",
         ):
             logger.debug(
-                f"Software stack ({software_stack[SOFTWARE_STACK_DB_NAME_KEY]}) restrictions on RAM ({software_stack[SOFTWARE_STACK_DB_MIN_RAM_VALUE_KEY]} {software_stack[SOFTWARE_STACK_DB_MIN_RAM_UNIT_KEY]}): Instance {instance_type_name} lacks enough ({ram_value} {ram_unit}). Skipped."
+                f"Software stack ({software_stack[SOFTWARE_STACK_DB_NAME_KEY]}) restrictions on RAM ({software_stack[SOFTWARE_STACK_DB_MIN_RAM_VALUE_KEY]} {software_stack[SOFTWARE_STACK_DB_MIN_RAM_UNIT_KEY]}): Instance {instance_type_name} lacks enough ({ram_mib} MiB). Skipped."
             )
             return False
     return True
+
+
+def create_software_stack_from_session(
+    session_id: str,
+    owner: str,
+    software_stack_dict: Dict[str, Any],
+) -> Dict[str, Any]:
+    """Create a new software stack from an existing session's configuration.
+
+    Takes a partial software stack dict (with name, description, min_storage, projects
+    from the frontend) and enriches it with the session's OS, architecture, GPU,
+    placement, and instance types. Then creates the stack, sends SSM cleanup, and
+    locks the session.
+    OS, architecture, GPU, placement, project, and instance types, then
+    sends an SSM cleanup command to the VDI and locks the session.
+
+    Returns the created software stack dict.
+    """
+    session = sessions.get_session(owner=owner, session_id=session_id)
+
+    instance_type = session.get("server", {}).get("instance_type", "")
+    base_os = session.get("base_os", "")
+    instance_id = session.get("server", {}).get("instance_id", "")
+    stack_id = session.get("software_stack_id", "")
+    session_software_stack = (
+        get_software_stack(base_os=base_os, stack_id=stack_id)
+        if stack_id and base_os
+        else {}
+    )
+
+    gpu = ec2_utils.get_gpu_manufacturer(instance_type)
+
+    project = session.get("project", {})
+    project_ids = (
+        [project.get("project_id")] if project and project.get("project_id") else []
+    )
+
+    # Enrich the provided software stack dict with session-derived fields
+    software_stack_dict["stack_id"] = str(uuid.uuid4())
+    software_stack_dict["base_os"] = base_os
+    software_stack_dict["ami_id"] = TEMP_AMI_ID
+    software_stack_dict["architecture"] = session_software_stack.get("architecture", "")
+    software_stack_dict["gpu"] = gpu.value if hasattr(gpu, "value") else str(gpu)
+    software_stack_dict["placement"] = session_software_stack.get("placement")
+    software_stack_dict["projects"] = project_ids
+    # Preserve the source stack's min_ram constraint
+    software_stack_dict["min_ram_value"] = session_software_stack.get(
+        SOFTWARE_STACK_DB_MIN_RAM_VALUE_KEY
+    )
+    software_stack_dict["min_ram_unit"] = session_software_stack.get(
+        SOFTWARE_STACK_DB_MIN_RAM_UNIT_KEY
+    )
+    software_stack_dict["allowed_instance_types"] = session_software_stack.get(
+        "allowed_instance_types", []
+    )
+
+    software_stack_dict["enabled"] = False
+
+    created_stack = create_software_stack(software_stack_dict)
+
+    # Send SSM cleanup command to the VDI
+    if instance_id:
+        cluster_name = os.environ.get(ENVIRONMENT_NAME_KEY, "")
+
+        if base_os == "windows":
+            commands = _get_windows_cleanup_commands()
+            command_type = "WINDOWS_ENABLE_USERDATA_EXECUTION"
+            log_suffix = SSM_LOG_SUFFIX_WINDOWS_CLEANUP
+        else:
+            commands = _get_linux_cleanup_commands()
+            command_type = "DELETE_LOCK_FILES_LINUX_EXECUTION"
+            log_suffix = SSM_LOG_SUFFIX_LINUX_CLEANUP
+
+        ssm_commands.send_ssm_command(
+            instance_id=instance_id,
+            commands=commands,
+            base_os=base_os,
+            command_type=command_type,
+            additional_payload={
+                "idea_session_id": session_id,
+                "idea_session_owner": owner,
+                "instance_id": instance_id,
+                "software_stack_id": created_stack.get("stack_id", ""),
+            },
+            cloud_watch_log_group=f"/{cluster_name}/{MODULE_ID_VDC}/dcv-session/{session_id}/{log_suffix}",
+            output_s3_key_prefix=f"/{cluster_name}/{MODULE_ID_VDC}/dcv-session/{session_id}/{log_suffix}",
+        )
+
+    # Lock the session and set state to PROVISIONING so RES re-creates the DCV session after reboot
+    session["locked"] = True
+    server = session.get("server", {})
+    server["locked"] = True
+    session["server"] = server
+    session["state"] = "PROVISIONING"
+    sessions.update_session(session)
+
+    return created_stack
+
+
+def continue_software_stack_creation(
+    software_stack_id: str,
+    base_os: str,
+    instance_id: str,
+    session_id: str,
+    owner: str,
+    events_queue_url: str,
+) -> None:
+    """Create AMI from instance and publish validate event.
+
+    Called after the SSM cleanup command (enable userdata / delete lock files) succeeds.
+    Creates an AMI from the instance, updates the software stack with the AMI ID,
+    then publishes a validate event to poll until the AMI becomes available.
+    """
+    try:
+        stack = get_software_stack(stack_id=software_stack_id, base_os=base_os)
+    except exceptions.SoftwareStackNotFound:
+        logger.error(f"Software stack not found: {software_stack_id}")
+        return
+
+    stack_name = stack.get("name") or f"RES-IMAGE-NAME-{instance_id}"
+    stack_description = (
+        stack.get("description") or f"RES-IMAGE-DESCRIPTION-{instance_id}"
+    )
+
+    ec2_response = ec2_utils.create_image(
+        instance_id=instance_id,
+        name=stack_name,
+        description=stack_description,
+    )
+    ami_id = ec2_response.get("ImageId", "")
+
+    update_software_stack(software_stack={**stack, "ami_id": ami_id})
+    logger.info(f"Created AMI {ami_id} for stack {software_stack_id}")
+
+    # Publish validate event to poll until AMI is available
+    if events_queue_url:
+        aws_utils.sqs_send_message(
+            payload={
+                "event_type": VDCEventType.VALIDATE_SOFTWARE_STACK_CREATION,
+                "detail": {
+                    "software_stack_id": software_stack_id,
+                    "base_os": base_os,
+                    "idea_session_id": session_id,
+                    "idea_session_owner": owner,
+                    "instance_id": instance_id,
+                },
+            },
+            queue_url=events_queue_url,
+        )

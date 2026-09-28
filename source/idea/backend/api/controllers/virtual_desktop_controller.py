@@ -9,6 +9,10 @@ import os
 from res import exceptions as res_exceptions  # type: ignore
 
 from api import exceptions as api_exceptions
+from api.auth import check_app_client_token
+from datamodel.models.batch_create_session_failure import BatchCreateSessionFailure  # noqa: E501
+from datamodel.models.batch_create_session_request_content import BatchCreateSessionRequestContent  # noqa: E501
+from datamodel.models.batch_create_session_response_content import BatchCreateSessionResponseContent  # noqa: E501
 from datamodel.models.backend.batch_delete_session_request_content import BatchDeleteSessionRequestContent  # noqa: E501
 from datamodel.models.backend.batch_delete_session_response_content import BatchDeleteSessionResponseContent  # noqa: E501
 from datamodel.models.backend.batch_delete_session_failure import BatchDeleteSessionFailure  # noqa: E501
@@ -96,12 +100,6 @@ from datamodel.models.create_permission_profile_request_content import (
 from datamodel.models.create_permission_profile_response_content import (
     CreatePermissionProfileResponseContent,
 )  # noqa: E501
-from datamodel.models.create_session_request_content import (
-    CreateSessionRequestContent,
-)  # noqa: E501
-from datamodel.models.create_session_response_content import (
-    CreateSessionResponseContent,
-)  # noqa: E501
 from datamodel.models.get_session_connection_request_content import GetSessionConnectionRequestContent  # noqa: E501
 from datamodel.models.get_session_connection_response_content import GetSessionConnectionResponseContent  # noqa: E501
 from datamodel.models.virtual_desktop_session_connection import VirtualDesktopSessionConnection  # noqa: E501
@@ -119,6 +117,7 @@ from datamodel.models.virtual_desktop_session import VirtualDesktopSession
 
 from api.utils.software_stack_utils import (
     validate_software_stack_fields,
+    ami_name_exists,
 )
 from api.utils.virtual_desktop_controller_utils import (
     validate_date_range_filter,
@@ -127,10 +126,13 @@ from api.utils.session_permission_utils import (
     validate_update_session_permission_request,
     UPDATE_SESSION_PERMISSION_INVALID_REQUEST_ERROR_MESSAGE,
 )
+from res.resources.session_permissions import enrich_and_filter_permissions_with_session_data
 from res.resources import (
     accounts,
+    ad_automation,
     software_stacks,
     permission_profiles,
+    projects as res_projects,
     session_permissions as res_session_permissions,
     sessions as res_sessions,
     vdi_management,
@@ -143,6 +145,77 @@ from res.utils import logging_utils
 from api.utils import session_utils
 
 logger = logging_utils.get_logger(__name__)
+
+
+def batch_create_session(body, user=None, token_info=None):  # noqa: E501
+    """batch_create_session
+
+    Batch Create Sessions # noqa: E501
+
+    :param batch_create_session_request_content:
+    :type batch_create_session_request_content: dict | bytes
+
+    :param user: The authenticated user information
+    :type user: str
+    :param token_info: The token information from authentication
+    :type token_info: dict
+    :rtype: Union[BatchCreateSessionResponseContent, Tuple[BatchCreateSessionResponseContent, int], Tuple[BatchCreateSessionResponseContent, int, Dict[str, str]]
+    """
+    is_app_client = check_app_client_token(token_info, "batch_create_session")
+
+    request = BatchCreateSessionRequestContent.from_dict(body)
+    validated_sessions_list, unsuccessful_list = (
+        session_utils.validate_batch_create_sessions(request.sessions, user, is_app_client=is_app_client)
+    )
+
+    dry_run_enabled = os.environ.get("DRY_RUN_ENABLED", "false").lower() == "true"
+    if dry_run_enabled:
+        logger.info(
+            f"DRY RUN MODE ENABLED - Batch Create Session count: {len(validated_sessions_list)}"
+        )
+        return BatchCreateSessionResponseContent(
+            successful_list=validated_sessions_list, unsuccessful_list=unsuccessful_list
+        )
+
+    successful_list = []
+    for session in validated_sessions_list:
+        try:
+            session = session_utils.complete_create_session_request(session, user)
+            session_ddb = vdi_management.create_virtual_desktop(session.to_ddb_dict())
+            session = VirtualDesktopSession.from_ddb_dict(session_ddb)
+
+            if not session.failure_reason:
+                logger.info(
+                    f"session created for user: {session.owner} with session name: {session.name} and idea_session_id: {session.idea_session_id}"
+                )
+                successful_list.append(session)
+            else:
+                failure_code = session_ddb.get("failure_code", res_exceptions.FAILURE_CODE_INTERNAL_SERVICE)
+                error_code = (
+                    BatchOperationErrorCode.BADREQUESTEXCEPTION
+                    if failure_code == res_exceptions.FAILURE_CODE_BAD_REQUEST
+                    else BatchOperationErrorCode.INTERNALSERVICEEXCEPTION
+                )
+                unsuccessful_list.append(
+                    BatchCreateSessionFailure(
+                        session=session,
+                        error_code=error_code,
+                        message=session.failure_reason,
+                    )
+                )
+        except Exception as e:
+            logger.error(f"Unexpected error creating session: {e}", exc_info=True)
+            unsuccessful_list.append(
+                BatchCreateSessionFailure(
+                    session=session,
+                    error_code=BatchOperationErrorCode.INTERNALSERVICEEXCEPTION,
+                    message=str(e),
+                )
+            )
+
+    return BatchCreateSessionResponseContent(
+        successful_list=successful_list, unsuccessful_list=unsuccessful_list
+    )
 
 
 def batch_reboot_session(body, user=None, token_info=None):  # noqa: E501
@@ -202,9 +275,12 @@ def batch_delete_session(body, user=None, token_info=None):  # noqa: E501
     :type token_info: dict
     :rtype: Union[BatchDeleteSessionResponseContent, Tuple[BatchDeleteSessionResponseContent, int], Tuple[BatchDeleteSessionResponseContent, int, Dict[str, str]]
     """
+    is_app_client = check_app_client_token(token_info, "batch_delete_session")
 
     request = BatchDeleteSessionRequestContent.from_dict(body)
-    validated_sessions_list, unsuccessful_list = session_utils.validate_batch_delete_sessions(request.sessions, user)
+    validated_sessions_list, unsuccessful_list = session_utils.validate_batch_delete_sessions(
+        request.sessions, user, is_app_client=is_app_client
+    )
 
     if not validated_sessions_list:
         return BatchDeleteSessionResponseContent(successful_list=[], unsuccessful_list=unsuccessful_list)
@@ -249,8 +325,12 @@ def batch_start_session(body, user=None, token_info=None):  # noqa: E501
     :rtype: Union[BatchStartSessionResponseContent, Tuple[BatchStartSessionResponseContent, int], Tuple[BatchStartSessionResponseContent, int, Dict[str, str]]
     """
 
+    is_app_client = check_app_client_token(token_info, "batch_start_session")
+
     request = BatchStartSessionRequestContent.from_dict(body)
-    validated_sessions_list, unsuccessful_list = session_utils.validate_batch_start_sessions(request.sessions, user)
+    validated_sessions_list, unsuccessful_list = session_utils.validate_batch_start_sessions(
+        request.sessions, user, is_app_client=is_app_client
+    )
 
     if not validated_sessions_list:
         return BatchStartSessionResponseContent(successful_list=[], unsuccessful_list=unsuccessful_list)
@@ -337,9 +417,12 @@ def batch_stop_session(body, user=None, token_info=None):  # noqa: E501
     :type token_info: dict
     :rtype: Union[BatchStopSessionResponseContent, Tuple[BatchStopSessionResponseContent, int], Tuple[BatchStopSessionResponseContent, int, Dict[str, str]]
     """
+    is_app_client = check_app_client_token(token_info, "batch_stop_session")
 
     request = BatchStopSessionRequestContent.from_dict(body)
-    validated_sessions_list, unsuccessful_list = session_utils.validate_batch_stop_sessions(request.sessions, user)
+    validated_sessions_list, unsuccessful_list = session_utils.validate_batch_stop_sessions(
+        request.sessions, user, is_app_client=is_app_client
+    )
 
     if not validated_sessions_list:
         return BatchStopSessionResponseContent(successful_list=[], unsuccessful_list=unsuccessful_list)
@@ -369,52 +452,6 @@ def batch_stop_session(body, user=None, token_info=None):  # noqa: E501
     return BatchStopSessionResponseContent(successful_list=successful, unsuccessful_list=unsuccessful_list)
 
 
-def create_session(body, user=None, token_info=None):  # noqa: E501
-    """create_session
-
-    Create Session # noqa: E501
-
-    :param create_session_request_content:
-    :type create_session_request_content: dict | bytes
-
-    :param user: The authenticated user information
-    :type user: str
-    :param token_info: The token information from authentication
-    :type token_info: dict
-    :rtype: Union[CreateSessionResponseContent, Tuple[CreateSessionResponseContent, int], Tuple[CreateSessionResponseContent, int, Dict[str, str]]
-    """
-    logger.info(f'Received create session request from user: {user}')
-
-    request = CreateSessionRequestContent.from_dict(body)
-    session = request.session
-
-    dry_run_enabled = os.environ.get('DRY_RUN_ENABLED', 'false').lower() == 'true'
-    if dry_run_enabled:
-        logger.info(f'DRY RUN MODE ENABLED - Session Request Object: {session}')
-        return {"session": session}
-
-    session.logins = res_sessions.get_session_logins()
-    session, is_valid = session_utils._validate_create_session_request(session, user)
-
-    if not is_valid:
-        raise api_exceptions.BadRequestException(
-            message=f"Invalid params: {session.failure_reason}"
-        )
-
-    session = session_utils.complete_create_session_request(session, user)
-    session = session_utils._create_session(session)
-
-    if not session.failure_reason:
-        logger.info(f'session request created for user: {session.owner} with session name: {session.name} and idea_session_id: {session.idea_session_id}:{session.name}' + ('' if session.owner == user else f' by: {user}'))
-        return CreateSessionResponseContent(
-            session=session
-        )
-    else:
-        raise api_exceptions.BadRequestException(
-            message=f"Error creating sessions: {session.failure_reason}"
-        )
-
-
 def create_software_stack_from_session(body, user=None, token_info=None):  # noqa: E501
     """create_software_stack_from_session
 
@@ -429,7 +466,70 @@ def create_software_stack_from_session(body, user=None, token_info=None):  # noq
     :type token_info: dict
     :rtype: Union[CreateSoftwareStackFromSessionResponseContent, Tuple[CreateSoftwareStackFromSessionResponseContent, int], Tuple[CreateSoftwareStackFromSessionResponseContent, int, Dict[str, str]]
     """
-    raise NotImplementedError("create_software_stack_from_session is not yet implemented")
+    if not accounts.is_active_admin(user):
+        raise OAuthProblem("Unauthorized user")
+
+    request = CreateSoftwareStackFromSessionRequestContent.from_dict(body)
+    session = request.session
+    software_stack = request.software_stack
+
+    if not session.owner:
+        raise api_exceptions.BadRequestException(message="session.owner is required")
+    if not session.idea_session_id:
+        raise api_exceptions.BadRequestException(message="session.idea_session_id is required")
+
+    # Validate session exists
+    try:
+        existing_session = res_sessions.get_session(
+            owner=session.owner, session_id=session.idea_session_id
+        )
+    except res_exceptions.UserSessionNotFound:
+        raise api_exceptions.BadRequestException(
+            message=f"Session {session.idea_session_id} not found for owner {session.owner}"
+        )
+
+    # Validate session is in READY state
+    session_state = existing_session.get("state")
+    if session_state != VirtualDesktopSessionState.READY:
+        raise api_exceptions.BadRequestException(
+            message=f"Session must be in READY state to create a software stack. Current state: {session_state}"
+        )
+
+    dry_run_enabled = os.environ.get('DRY_RUN_ENABLED', 'false').lower() == 'true'
+
+    # Validate software stack fields
+    validated_stack, is_valid = validate_software_stack_fields(software_stack)
+    if not is_valid:
+        raise api_exceptions.BadRequestException(
+            message=f"Invalid software stack: {validated_stack.failure_reason}"
+        )
+
+    # Check AMI name uniqueness (AMI will be created from the session's instance)
+    if ami_name_exists(software_stack.name):
+        raise api_exceptions.BadRequestException(
+            message="ami with the same name exists in this account"
+        )
+
+    if dry_run_enabled:
+        logger.info(f'DRY RUN MODE ENABLED - CreateSoftwareStackFromSession for session {session.idea_session_id}')
+        return CreateSoftwareStackFromSessionResponseContent(
+            software_stack=software_stack
+        )
+
+    # Clear stale AD automation record so the VDI gets a fresh OTP on rejoin after reboot
+    instance_id = existing_session.get("server", {}).get("instance_id", "")
+    if instance_id:
+        ad_automation.remove_ad_authorization([instance_id])
+
+    created_stack = software_stacks.create_software_stack_from_session(
+        session_id=session.idea_session_id,
+        owner=session.owner,
+        software_stack_dict=software_stack.to_ddb_dict(),
+    )
+
+    return CreateSoftwareStackFromSessionResponseContent(
+        software_stack=VirtualDesktopSoftwareStack.from_ddb_dict(created_stack)
+    )
 
 
 def create_software_stack(body, user=None, token_info=None):  # noqa: E501
@@ -446,8 +546,8 @@ def create_software_stack(body, user=None, token_info=None):  # noqa: E501
     :type token_info: dict
     :rtype: Union[CreateSoftwareStackResponseContent, Tuple[CreateSoftwareStackResponseContent, int], Tuple[CreateSoftwareStackResponseContent, int, Dict[str, str]]
     """
-
-    if not accounts.is_active_admin(user):
+    is_app_client = check_app_client_token(token_info, "create_software_stack")
+    if not is_app_client and not accounts.is_active_admin(user):
         raise OAuthProblem("Unauthorized user")
 
     request = CreateSoftwareStackRequestContent.from_dict(body)
@@ -486,8 +586,8 @@ def delete_software_stack(stack_id, body, user=None, token_info=None):  # noqa: 
     :type token_info: dict
     :rtype: Union[DeleteSoftwareStackResponseContent, Tuple[DeleteSoftwareStackResponseContent, int], Tuple[DeleteSoftwareStackResponseContent, int, Dict[str, str]]
     """
-
-    if not accounts.is_active_admin(user):
+    is_app_client = check_app_client_token(token_info, "delete_software_stack")
+    if not is_app_client and not accounts.is_active_admin(user):
         raise OAuthProblem("Unauthorized user")
 
     try:
@@ -526,7 +626,8 @@ def list_software_stacks(
     :type token_info: dict
     :rtype: Union[ListSoftwareStacksResponseContent, Tuple[ListSoftwareStacksResponseContent, int], Tuple[ListSoftwareStacksResponseContent, int, Dict[str, str]]
     """
-    is_admin = accounts.is_active_admin(user)
+    is_app_client = check_app_client_token(token_info, "list_software_stacks")
+    is_admin = is_app_client or accounts.is_active_admin(user)
 
     if not is_admin and not project_id:
         raise api_exceptions.BadRequestException(message="project_id is required field")
@@ -560,8 +661,8 @@ def update_software_stack(body, stack_id, user=None, token_info=None):  # noqa: 
     :type token_info: dict
     :rtype: Union[UpdateSoftwareStackResponseContent, Tuple[UpdateSoftwareStackResponseContent, int], Tuple[UpdateSoftwareStackResponseContent, int, Dict[str, str]]
     """
-
-    if not accounts.is_active_admin(user):
+    is_app_client = check_app_client_token(token_info, "update_software_stack")
+    if not is_app_client and not accounts.is_active_admin(user):
         raise OAuthProblem("Unauthorized user")
 
     request = UpdateSoftwareStackRequestContent.from_dict(body)
@@ -608,8 +709,7 @@ def get_software_stack(stack_id, base_os, user=None, token_info=None):  # noqa: 
     :type token_info: dict
     :rtype: Union[GetSoftwareStackResponseContent, Tuple[GetSoftwareStackResponseContent, int], Tuple[GetSoftwareStackResponseContent, int, Dict[str, str]]
     """
-    if not accounts.is_active_admin(user):
-        raise OAuthProblem("Unauthorized user")
+    is_app_client = check_app_client_token(token_info, "get_software_stack")
 
     try:
         stack = software_stacks.get_software_stack(
@@ -617,6 +717,15 @@ def get_software_stack(stack_id, base_os, user=None, token_info=None):  # noqa: 
         )
     except res_exceptions.SoftwareStackNotFound as e:
         raise api_exceptions.BadRequestException(str(e))
+
+    if not is_app_client and not accounts.is_active_admin(user):
+        user_projects = res_projects.get_user_projects(username=user)
+        user_project_ids = {p.get("project_id") for p in user_projects}
+        stack_project_ids = {p.get("project_id") for p in stack.get("projects", [])}
+        if not user_project_ids & stack_project_ids:
+            raise api_exceptions.BadRequestException(
+                f"Software stack {stack_id} not found"
+            )
 
     stack_obj = VirtualDesktopSoftwareStack.from_ddb_dict(stack)
 
@@ -637,7 +746,8 @@ def create_permission_profile(body, user=None, token_info=None):  # noqa: E501
     :type token_info: dict
     :rtype: Union[CreatePermissionProfileResponseContent, Tuple[CreatePermissionProfileResponseContent, int], Tuple[CreatePermissionProfileResponseContent, int, Dict[str, str]]
     """
-    if not accounts.is_active_admin(user):
+    is_app_client = check_app_client_token(token_info, "create_permission_profile")
+    if not is_app_client and not accounts.is_active_admin(user):
         raise OAuthProblem("Unauthorized user")
 
     request = CreatePermissionProfileRequestContent.from_dict(body)
@@ -722,7 +832,8 @@ def delete_permission_profile(profile_id, user=None, token_info=None):  # noqa: 
     :type token_info: dict
     :rtype: Union[DeletePermissionProfileResponseContent, Tuple[DeletePermissionProfileResponseContent, int], Tuple[DeletePermissionProfileResponseContent, int, Dict[str, str]]
     """
-    if not accounts.is_active_admin(user):
+    is_app_client = check_app_client_token(token_info, "delete_permission_profile")
+    if not is_app_client and not accounts.is_active_admin(user):
         raise OAuthProblem("Unauthorized user")
 
     try:
@@ -791,8 +902,6 @@ def list_shared_permissions(
 
     Get a list of shared permissions # noqa: E501
 
-    :param next_token: Pagination token for next page
-    :type next_token: str
     :param username: Username of the shared permissions
     :type username: str
     :param state: Filter by state
@@ -824,25 +933,27 @@ def list_shared_permissions(
 
     validate_date_range_filter(date_range_key, after, before)
 
-    permissions, response_next_token = res_session_permissions.list_session_permissions(
+    page_permissions, response_next_token = res_session_permissions.list_session_permissions(
         username=username,
-        state=state,
-        base_os=base_os,
-        session_name=session_name,
         date_range_key=date_range_key,
         after=after,
         before=before,
         next_token=next_token,
     )
 
+    enriched_permissions = enrich_and_filter_permissions_with_session_data(
+        page_permissions,
+        state=state,
+        base_os=base_os,
+        session_name=session_name,
+    )
+
     permissions = [
         VirtualDesktopSessionPermission.from_ddb_dict(permission)
-        for permission in permissions
+        for permission in enriched_permissions
     ]
 
-    return ListSharedPermissionsResponseContent(
-        listing=permissions, next_token=response_next_token
-    )
+    return ListSharedPermissionsResponseContent(listing=permissions, next_token=response_next_token)
 
 
 def update_session_permissions(body=None, user=None, token_info=None):  # noqa: E501
@@ -859,12 +970,14 @@ def update_session_permissions(body=None, user=None, token_info=None):  # noqa: 
     :type token_info: dict
     :rtype: Union[UpdateSessionPermissionsResponseContent, Tuple[UpdateSessionPermissionsResponseContent, int], Tuple[UpdateSessionPermissionsResponseContent, int, Dict[str, str]]
     """
+    is_app_client = check_app_client_token(token_info, "update_session_permissions")
+
     request = UpdateSessionPermissionsRequestContent.from_dict(body)
     request.create = request.create if request.create is not None else []
     request.update = request.update if request.update is not None else []
     request.delete = request.delete if request.delete is not None else []
 
-    if not accounts.is_active_admin(user):
+    if not is_app_client and not accounts.is_active_admin(user):
         for permission in request.create + request.delete + request.update:
             if user != permission.idea_session_owner:
                 raise api_exceptions.BadRequestException(
@@ -874,8 +987,15 @@ def update_session_permissions(body=None, user=None, token_info=None):  # noqa: 
     is_valid, request = validate_update_session_permission_request(request)
 
     if not is_valid:
+        failure_reasons = [
+            p.failure_reason
+            for p in request.create + request.update + request.delete
+            if p.failure_reason
+        ]
         raise api_exceptions.BadRequestException(
-            message=UPDATE_SESSION_PERMISSION_INVALID_REQUEST_ERROR_MESSAGE
+            message="; ".join(failure_reasons)
+            if failure_reasons
+            else UPDATE_SESSION_PERMISSION_INVALID_REQUEST_ERROR_MESSAGE
         )
 
     for permission in request.create:
@@ -959,6 +1079,8 @@ def list_sessions(
     :type token_info: dict
     :rtype: Union[ListSessionsResponseContent, Tuple[ListSessionsResponseContent, int], Tuple[ListSessionsResponseContent, int, Dict[str, str]]
     """
+    is_app_client = check_app_client_token(token_info, "list_sessions")
+
     validate_date_range_filter(date_range_key, after, before)
 
     sessions, response_next_token = res_sessions.list_sessions(
@@ -972,6 +1094,7 @@ def list_sessions(
         before=before,
         next_token=next_token,
         owner=owner,
+        is_app_client=is_app_client,
     )
 
     sessions = [VirtualDesktopSession.from_ddb_dict(session) for session in sessions]
@@ -1108,6 +1231,11 @@ def update_session(body, res_session_id, user=None, token_info=None):  # noqa: E
 
     request = UpdateSessionRequestContent.from_dict(body)
     session = request.session
+
+    if not session or not session.owner or not session.idea_session_id:
+        raise api_exceptions.BadRequestException(
+            message="Session owner and idea_session_id are required in the request body."
+        )
 
     if not accounts.is_active_admin(user) and user != session.owner:
         raise OAuthProblem(

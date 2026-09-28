@@ -13,23 +13,12 @@ import logging
 
 import pytest
 
-from ideadatamodel import (  # type: ignore
-    CreateSessionRequest,
-    CreateSoftwareStackRequest,
-    ListSessionsRequest,
-    Project,
-    SocaMemory,
-    SocaMemoryUnit,
-    VirtualDesktopArchitecture,
-    VirtualDesktopBaseOS,
-    VirtualDesktopGPU,
-    VirtualDesktopServer,
-    VirtualDesktopSession,
-    VirtualDesktopSoftwareStack,
+from ideadatamodel import Project  # type: ignore
+from tests.integration.framework.client.api_client import (
+    ApiClient,
+    BatchCreateSessionRequestContent,
+    CreateSoftwareStackRequestContent,
 )
-from tests.integration.framework.client.api_client import ApiClient
-from tests.integration.framework.client.res_client import ResClient
-from tests.integration.framework.fixtures.fixture_request import FixtureRequest
 from tests.integration.framework.fixtures.project import project
 from tests.integration.framework.fixtures.res_environment import (
     ResEnvironment,
@@ -38,6 +27,18 @@ from tests.integration.framework.fixtures.res_environment import (
 from tests.integration.framework.fixtures.users import admin
 from tests.integration.framework.model.client_auth import ClientAuth
 from tests.integration.framework.utils.ec2_utils import get_latest_x86_amzn2023_ami_id
+from tests.integration.framework.utils.model_utils import get_backend_model_class
+
+VirtualDesktopSession_ = get_backend_model_class(
+    "virtual_desktop_session", "VirtualDesktopSession"
+)
+VirtualDesktopBaseOs = get_backend_model_class(
+    "virtual_desktop_base_os", "VirtualDesktopBaseOs"
+)
+VirtualDesktopGpu = get_backend_model_class("virtual_desktop_gpu", "VirtualDesktopGpu")
+VirtualDesktopArchitecture = get_backend_model_class(
+    "virtual_desktop_architecture", "VirtualDesktopArchitecture"
+)
 
 logger = logging.getLogger(__name__)
 
@@ -66,35 +67,35 @@ class TestListSessionsCustom:
     )
     def test_substring_vulnerability(
         self,
-        request: FixtureRequest,
         res_environment: ResEnvironment,
         region: str,
         admin: ClientAuth,
         project: Project,
     ) -> None:
 
-        api_invoker_type = request.config.getoption("--api-invoker-type")
-        clusteradmin_client = ResClient(
-            res_environment, ClientAuth(username="clusteradmin"), api_invoker_type
-        )
-
         ami_id = get_latest_x86_amzn2023_ami_id(region)
 
-        software_stack = VirtualDesktopSoftwareStack(
-            name="Software-Stack-res-string-verification",
-            description="Software-Stack for res string verification",
-            base_os=VirtualDesktopBaseOS.AMAZON_LINUX2023,
-            architecture=VirtualDesktopArchitecture.X86_64,
-            gpu=VirtualDesktopGPU.NO_GPU,
-            min_storage=SocaMemory(value=50, unit=SocaMemoryUnit.GB),
-            min_ram=SocaMemory(value=4, unit=SocaMemoryUnit.GB),
-            allowed_instance_types=["t3.medium", "t3.large"],
-            projects=[project],
-            ami_id=ami_id,
+        clusteradmin_api_client = ApiClient(
+            res_environment, ClientAuth(username="clusteradmin")
         )
 
-        response_stack = clusteradmin_client.create_software_stack(
-            CreateSoftwareStackRequest(software_stack=software_stack)
+        software_stack_request = CreateSoftwareStackRequestContent(
+            software_stack={
+                "name": "Software-Stack-res-string-verification",
+                "description": "Software-Stack for res string verification",
+                "base_os": VirtualDesktopBaseOs.AMZN2023,
+                "architecture": VirtualDesktopArchitecture.X86_64,
+                "gpu": VirtualDesktopGpu.NO_GPU,
+                "min_storage": {"value": 50, "unit": "gb"},
+                "min_ram": {"value": 4, "unit": "gb"},
+                "allowed_instance_types": ["t3.medium", "t3.large"],
+                "projects": [{"project_id": project.project_id}],
+                "ami_id": ami_id,
+            }
+        )
+
+        response_stack = clusteradmin_api_client.create_software_stack(
+            software_stack_request
         )
 
         admin1_username = "admin1"
@@ -103,30 +104,29 @@ class TestListSessionsCustom:
         test_user_client = ApiClient(
             res_environment, ClientAuth(username=test_username)
         )
-        admin1_client = ResClient(
-            res_environment, ClientAuth(username=admin1_username), api_invoker_type
-        )
 
         admin1_api_client = ApiClient(
             res_environment, ClientAuth(username=admin1_username)
         )
 
-        admin1_client.create_session(
-            CreateSessionRequest(
-                session=VirtualDesktopSession(
-                    name="VirtualDesktop-res-string-verification",
-                    description="RES username string verification session",
-                    hibernation_enabled=False,
-                    owner=admin1_username,
-                    project=project,
-                    software_stack=response_stack.software_stack,
-                    base_os=VirtualDesktopBaseOS.AMAZON_LINUX2023,
-                    server=VirtualDesktopServer(
-                        instance_type="t3.medium",
-                        root_volume_size=SocaMemory(value=50, unit=SocaMemoryUnit.GB),
-                    ),
-                )
-            )
+        session = VirtualDesktopSession_.from_dict(
+            {
+                "name": "VirtualDesktop-res-string-verification",
+                "description": "RES username string verification session",
+                "hibernation_enabled": False,
+                "owner": admin1_username,
+                "base_os": VirtualDesktopBaseOs.AMZN2023,
+                "software_stack_id": response_stack.software_stack.stack_id,  # type: ignore[attr-defined]
+                "project": {"project_id": project.project_id},
+                "server": {
+                    "instance_type": "t3.medium",
+                    "root_volume_size": {"value": 50, "unit": "gb"},
+                },
+            }
+        )
+
+        admin1_api_client.batch_create_session(
+            BatchCreateSessionRequestContent(sessions=[session])
         )
 
         admin1_sessions = admin1_api_client.list_sessions()

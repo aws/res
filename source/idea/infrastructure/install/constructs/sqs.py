@@ -3,6 +3,7 @@
 
 from typing import Any, Dict, Optional, Union
 
+import aws_cdk as cdk
 import constructs
 from aws_cdk import aws_iam as iam
 from aws_cdk import aws_kms as kms
@@ -32,6 +33,7 @@ class SQSQueue(ResBaseConstruct, sqs.Queue):
         encryption: Optional[sqs.QueueEncryption] = None,
         encryption_master_key: Optional[str] = None,
         fifo: Optional[bool] = None,
+        visibility_timeout: Optional[cdk.Duration] = None,
     ):
         self.scope = scope
         self.cluster_name = parameters.get_str(CommonKey.CLUSTER_NAME)
@@ -64,6 +66,7 @@ class SQSQueue(ResBaseConstruct, sqs.Queue):
             encryption_master_key=encryption_master_key_,  # type: ignore
             fifo=fifo,  # type: ignore
             queue_name=ResBaseConstruct.build_resource_name(id + ".fifo" if fifo else id, self.cluster_name),  # type: ignore
+            visibility_timeout=visibility_timeout,  # type: ignore
         )
 
         if encrypt_at_rest:

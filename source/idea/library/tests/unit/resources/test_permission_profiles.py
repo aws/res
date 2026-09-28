@@ -124,14 +124,16 @@ class TestPermissionProfiles(unittest.TestCase):
             "builtin"
         )
 
-    @patch("res.resources.permission_profiles.events_client")
+    @patch(
+        "res.resources.permission_profiles._enforce_permissions_for_affected_sessions"
+    )
     @patch(
         "res.resources.permission_profiles._propagate_globally_disabled_desktop_permissions"
     )
     def test_permission_profiles_update_profile_should_pass(
         self,
         mock_propagate_globally_disabled_desktop_permissions,
-        mock_events_client,
+        mock_enforce_permissions_for_affected_sessions,
     ):
         """
         update permission profile success
@@ -147,7 +149,7 @@ class TestPermissionProfiles(unittest.TestCase):
             permission_profile=updated_data
         )
 
-        mock_events_client.publish_update_event.assert_called_once()
+        mock_enforce_permissions_for_affected_sessions.assert_called_once()
         mock_propagate_globally_disabled_desktop_permissions.assert_called_once()
 
         assert updated_permission_profile is not None
@@ -273,18 +275,18 @@ class TestPermissionProfiles(unittest.TestCase):
             profiles.delete_permission_profile(profile_id=None)
         assert "Profile ID required" in str(exc_info.value)
 
+    @patch("res.resources.session_permissions.enforce_permissions_for_session")
     @patch("res.resources.permission_profiles.sessions")
     @patch("res.resources.permission_profiles.update_permission_profile")
     @patch("res.resources.permission_profiles.list_permission_profiles_paginated")
     @patch("res.resources.permission_profiles.cluster_settings")
-    @patch("res.resources.permission_profiles.events_client")
     def test_propagate_globally_disabled_desktop_permissions_admin_profile(
         self,
-        mock_events_client,
         mock_cluster_settings,
         mock_list_permission_profiles_paginated,
         mock_update_permission_profile,
         mock_sessions,
+        mock_enforce_permissions,
     ):
         """Test propagation of globally disabled permissions for admin profile updates."""
         # Setup mocks
@@ -330,24 +332,25 @@ class TestPermissionProfiles(unittest.TestCase):
         mock_list_permission_profiles_paginated.assert_called()
         mock_update_permission_profile.assert_called_once()
 
-        # Verify sessions were listed and events published
+        # Verify sessions were listed and enforce was invoked
         mock_sessions.list_sessions_paginated.assert_called()
-        mock_events_client.publish_enforce_session_permissions_event.assert_called_once_with(
-            "session-1", "user1"
+        mock_enforce_permissions.assert_called_once_with(
+            idea_session_id="session-1",
+            idea_session_owner="user1",
         )
 
+    @patch("res.resources.session_permissions.enforce_permissions_for_session")
     @patch("res.resources.permission_profiles.sessions")
     @patch("res.resources.permission_profiles.update_permission_profile")
     @patch("res.resources.permission_profiles.list_permission_profiles_paginated")
     @patch("res.resources.permission_profiles.cluster_settings")
-    @patch("res.resources.permission_profiles.events_client")
     def test_propagate_globally_disabled_desktop_permissions_non_admin_profile(
         self,
-        mock_events_client,
         mock_cluster_settings,
         mock_list_permission_profiles_paginated,
         mock_update_permission_profile,
         mock_sessions,
+        mock_enforce_permissions,
     ):
         """Test that propagation is skipped for non-admin profile updates and admin profiles are not updated."""
         # Setup mocks
@@ -373,20 +376,20 @@ class TestPermissionProfiles(unittest.TestCase):
         mock_list_permission_profiles_paginated.assert_not_called()
         mock_update_permission_profile.assert_not_called()
         mock_sessions.list_sessions_paginated.assert_not_called()
-        mock_events_client.publish_enforce_session_permissions_event.assert_not_called()
+        mock_enforce_permissions.assert_not_called()
 
+    @patch("res.resources.session_permissions.enforce_permissions_for_session")
     @patch("res.resources.permission_profiles.sessions")
     @patch("res.resources.permission_profiles.update_permission_profile")
     @patch("res.resources.permission_profiles.list_permission_profiles_paginated")
     @patch("res.resources.permission_profiles.cluster_settings")
-    @patch("res.resources.permission_profiles.events_client")
     def test_propagate_globally_disabled_desktop_permissions_pagination(
         self,
-        mock_events_client,
         mock_cluster_settings,
         mock_list_permission_profiles_paginated,
         mock_update_permission_profile,
         mock_sessions,
+        mock_enforce_permissions,
     ):
         """Test that propagation handles pagination correctly."""
         # Setup mocks
@@ -416,3 +419,127 @@ class TestPermissionProfiles(unittest.TestCase):
         # Verify pagination was handled - should be called twice each
         assert mock_list_permission_profiles_paginated.call_count == 2
         assert mock_sessions.list_sessions_paginated.call_count == 2
+
+
+class TestEnforcePermissionsForAffectedSessions(unittest.TestCase):
+
+    @patch("res.resources.permission_profiles.res_session_permissions")
+    @patch("res.resources.permission_profiles.table_utils")
+    def test_permission_flag_changed_enforces_for_affected_sessions(
+        self, mock_table_utils, mock_session_permissions
+    ):
+        """When a boolean permission flag changes, enforce permissions for affected sessions."""
+        old_profile = {"profile_id": "p1", "clipboard_copy": True, "title": "T"}
+        new_profile = {"profile_id": "p1", "clipboard_copy": False, "title": "T"}
+
+        mock_table_utils.construct_filter_expression.return_value = "filter"
+        mock_session_permissions.list_session_permissions_paginated.return_value = (
+            [{"idea_session_id": "s1", "idea_session_owner": "user1"}],
+            None,
+        )
+        mock_session_permissions.SESSION_PERMISSION_DB_HASH_KEY = "idea_session_id"
+        mock_session_permissions.SESSION_PERMISSION_DB_SESSION_OWNER_KEY = (
+            "idea_session_owner"
+        )
+
+        profiles._enforce_permissions_for_affected_sessions(old_profile, new_profile)
+
+        mock_session_permissions.enforce_permissions_for_session.assert_called_once_with(
+            idea_session_id="s1", idea_session_owner="user1"
+        )
+
+    @patch("res.resources.permission_profiles.res_session_permissions")
+    @patch("res.resources.permission_profiles.table_utils")
+    def test_no_permission_change_skips_enforcement(
+        self, mock_table_utils, mock_session_permissions
+    ):
+        """When no boolean field changed, early return without querying sessions."""
+        old_profile = {"profile_id": "p1", "clipboard_copy": True, "title": "Old"}
+        new_profile = {"profile_id": "p1", "clipboard_copy": True, "title": "New"}
+
+        profiles._enforce_permissions_for_affected_sessions(old_profile, new_profile)
+
+        mock_table_utils.construct_filter_expression.assert_not_called()
+        mock_session_permissions.list_session_permissions_paginated.assert_not_called()
+        mock_session_permissions.enforce_permissions_for_session.assert_not_called()
+
+    @patch("res.resources.permission_profiles.res_session_permissions")
+    @patch("res.resources.permission_profiles.table_utils")
+    def test_pagination_accumulates_all_sessions(
+        self, mock_table_utils, mock_session_permissions
+    ):
+        """Multiple pages of session permissions are accumulated correctly."""
+        old_profile = {"profile_id": "p1", "file_transfer": False}
+        new_profile = {"profile_id": "p1", "file_transfer": True}
+
+        mock_table_utils.construct_filter_expression.return_value = "filter"
+        mock_session_permissions.SESSION_PERMISSION_DB_HASH_KEY = "idea_session_id"
+        mock_session_permissions.SESSION_PERMISSION_DB_SESSION_OWNER_KEY = (
+            "idea_session_owner"
+        )
+        mock_session_permissions.list_session_permissions_paginated.side_effect = [
+            ([{"idea_session_id": "s1", "idea_session_owner": "u1"}], "token"),
+            ([{"idea_session_id": "s2", "idea_session_owner": "u2"}], None),
+        ]
+
+        profiles._enforce_permissions_for_affected_sessions(old_profile, new_profile)
+
+        assert mock_session_permissions.enforce_permissions_for_session.call_count == 2
+
+    @patch("res.resources.permission_profiles.res_session_permissions")
+    @patch("res.resources.permission_profiles.table_utils")
+    def test_one_session_failure_does_not_block_others(
+        self, mock_table_utils, mock_session_permissions
+    ):
+        """If enforcement fails for one session, the others still get enforced."""
+        old_profile = {"profile_id": "p1", "clipboard_paste": True}
+        new_profile = {"profile_id": "p1", "clipboard_paste": False}
+
+        mock_table_utils.construct_filter_expression.return_value = "filter"
+        mock_session_permissions.SESSION_PERMISSION_DB_HASH_KEY = "idea_session_id"
+        mock_session_permissions.SESSION_PERMISSION_DB_SESSION_OWNER_KEY = (
+            "idea_session_owner"
+        )
+        mock_session_permissions.list_session_permissions_paginated.return_value = (
+            [
+                {"idea_session_id": "s1", "idea_session_owner": "u1"},
+                {"idea_session_id": "s2", "idea_session_owner": "u2"},
+            ],
+            None,
+        )
+        mock_session_permissions.enforce_permissions_for_session.side_effect = [
+            RuntimeError("boom"),
+            None,
+        ]
+
+        profiles._enforce_permissions_for_affected_sessions(old_profile, new_profile)
+
+        assert mock_session_permissions.enforce_permissions_for_session.call_count == 2
+
+    @patch("res.resources.permission_profiles.res_session_permissions")
+    @patch("res.resources.permission_profiles.table_utils")
+    def test_duplicate_sessions_enforced_only_once(
+        self, mock_table_utils, mock_session_permissions
+    ):
+        """Same session appearing in multiple permission records is enforced only once."""
+        old_profile = {"profile_id": "p1", "audio": False}
+        new_profile = {"profile_id": "p1", "audio": True}
+
+        mock_table_utils.construct_filter_expression.return_value = "filter"
+        mock_session_permissions.SESSION_PERMISSION_DB_HASH_KEY = "idea_session_id"
+        mock_session_permissions.SESSION_PERMISSION_DB_SESSION_OWNER_KEY = (
+            "idea_session_owner"
+        )
+        mock_session_permissions.list_session_permissions_paginated.return_value = (
+            [
+                {"idea_session_id": "s1", "idea_session_owner": "u1"},
+                {"idea_session_id": "s1", "idea_session_owner": "u1"},
+            ],
+            None,
+        )
+
+        profiles._enforce_permissions_for_affected_sessions(old_profile, new_profile)
+
+        mock_session_permissions.enforce_permissions_for_session.assert_called_once_with(
+            idea_session_id="s1", idea_session_owner="u1"
+        )

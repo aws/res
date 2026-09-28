@@ -163,6 +163,10 @@ class SocaDevelopmentProps:
         return os.path.join(self.project_root_dir, 'source', 'tests', 'integration', 'tests', 'api')
 
     @property
+    def integration_tests_dir(self) -> str:
+        return os.path.join(self.project_root_dir, 'source', 'tests', 'integration', 'tests')
+
+    @property
     def deployment_ecr_dir(self) -> str:
         return os.path.join(self.project_deployment_dir, 'ecr')
 
@@ -253,18 +257,6 @@ class SocaDevelopmentProps:
     @property
     def bootstrap_tests_src(self) -> str:
         return os.path.join(self.bootstrap_project_dir, 'tests')
-
-    @property
-    def virtual_desktop_project_dir(self) -> str:
-        return os.path.join(self.project_source_dir, 'idea-virtual-desktop-controller')
-
-    @property
-    def virtual_desktop_src(self) -> str:
-        return os.path.join(self.virtual_desktop_project_dir, 'src')
-
-    @property
-    def virtual_desktop_tests_src(self) -> str:
-        return os.path.join(self.project_unit_tests_dir, 'idea-virtual-desktop-controller')
 
     @property
     def cluster_manager_project_dir(self) -> str:
@@ -546,13 +538,10 @@ class SocaDevelopmentUtils:
     def get_supported_modules() -> Optional[Set[str]]:
         return {
             'cluster-manager',
-            'virtual-desktop-controller'
         }
 
     @staticmethod
     def get_module_name(token: str) -> Optional[str]:
-        if token in ('virtual-desktop', 'virtual-desktop-controller', 'vdc', 'vdi'):
-            return 'virtual-desktop-controller'
         if token in ('cluster-manager', 'cm'):
             return 'cluster-manager'
         if token in ('admin', 'administrator'):

@@ -7,6 +7,7 @@ from unittest import TestCase
 from unittest.mock import MagicMock
 
 import boto3
+import botocore.exceptions
 import pytest
 from moto import mock_aws
 from res.constants import ENVIRONMENT_NAME_TAG_KEY, INSTANCE_NODE_TYPE_TAG_KEY
@@ -45,6 +46,16 @@ class TestDeletionCleanupResourcesLambda(TestCase):
         self.monkeypatch.setattr(
             handler,
             "_terminate_ec2_instances",
+            MagicMock(return_value=None),
+        )
+        self.monkeypatch.setattr(
+            handler,
+            "_delete_fleets",
+            MagicMock(return_value=None),
+        )
+        self.monkeypatch.setattr(
+            handler,
+            "_delete_leftover_launch_templates",
             MagicMock(return_value=None),
         )
         self.monkeypatch.setattr(
@@ -243,3 +254,278 @@ class TestDeletionCleanupResourcesLambda(TestCase):
             ]
         )
         assert network_interfaces == [DUMMY_ARN_1]
+
+    def test_delete_fleets_with_fleet_ids(self):
+        mock_ec2_client = MagicMock()
+        mock_paginator = MagicMock()
+        mock_paginator.paginate.return_value = iter(
+            [
+                {
+                    "Fleets": [
+                        {"FleetId": "fleet-1", "FleetState": "active"},
+                        {"FleetId": "fleet-2", "FleetState": "active"},
+                    ]
+                }
+            ]
+        )
+        mock_ec2_client.get_paginator.return_value = mock_paginator
+        mock_ec2_client.delete_fleets.return_value = {
+            "SuccessfulFleetDeletions": [
+                {"FleetId": "fleet-1"},
+                {"FleetId": "fleet-2"},
+            ],
+            "UnsuccessfulFleetDeletions": [],
+        }
+        mock_aws_provider = MagicMock()
+        mock_aws_provider.ec2.return_value = mock_ec2_client
+
+        self.monkeypatch.setattr(
+            handler, "AwsClientProvider", MagicMock(return_value=mock_aws_provider)
+        )
+
+        handler._delete_fleets()
+        mock_ec2_client.delete_fleets.assert_called_once_with(
+            FleetIds=["fleet-1", "fleet-2"], TerminateInstances=True
+        )
+
+    def test_delete_fleets_skips_already_terminated(self):
+        mock_ec2_client = MagicMock()
+        mock_paginator = MagicMock()
+        mock_paginator.paginate.return_value = iter(
+            [
+                {
+                    "Fleets": [
+                        {"FleetId": "fleet-1", "FleetState": "active"},
+                        {"FleetId": "fleet-2", "FleetState": "deleted_terminating"},
+                        {"FleetId": "fleet-3", "FleetState": "deleted_running"},
+                        {"FleetId": "fleet-4", "FleetState": "deleted"},
+                    ]
+                }
+            ]
+        )
+        mock_ec2_client.get_paginator.return_value = mock_paginator
+        mock_ec2_client.delete_fleets.return_value = {
+            "SuccessfulFleetDeletions": [{"FleetId": "fleet-1"}],
+            "UnsuccessfulFleetDeletions": [],
+        }
+        mock_aws_provider = MagicMock()
+        mock_aws_provider.ec2.return_value = mock_ec2_client
+
+        self.monkeypatch.setattr(
+            handler, "AwsClientProvider", MagicMock(return_value=mock_aws_provider)
+        )
+
+        handler._delete_fleets()
+        mock_ec2_client.delete_fleets.assert_called_once_with(
+            FleetIds=["fleet-1"], TerminateInstances=True
+        )
+
+    def test_delete_fleets_no_fleets_found(self):
+        mock_ec2_client = MagicMock()
+        mock_paginator = MagicMock()
+        mock_paginator.paginate.return_value = iter([{"Fleets": []}])
+        mock_ec2_client.get_paginator.return_value = mock_paginator
+        mock_aws_provider = MagicMock()
+        mock_aws_provider.ec2.return_value = mock_ec2_client
+
+        self.monkeypatch.setattr(
+            handler, "AwsClientProvider", MagicMock(return_value=mock_aws_provider)
+        )
+
+        handler._delete_fleets()
+        mock_ec2_client.delete_fleets.assert_not_called()
+
+    def test_delete_fleets_raises_on_real_failure(self):
+        mock_ec2_client = MagicMock()
+        mock_paginator = MagicMock()
+        mock_paginator.paginate.return_value = iter(
+            [{"Fleets": [{"FleetId": "fleet-1", "FleetState": "active"}]}]
+        )
+        mock_ec2_client.get_paginator.return_value = mock_paginator
+        mock_ec2_client.delete_fleets.return_value = {
+            "SuccessfulFleetDeletions": [],
+            "UnsuccessfulFleetDeletions": [
+                {"FleetId": "fleet-1", "Error": {"Code": "UnauthorizedOperation"}}
+            ],
+        }
+        mock_aws_provider = MagicMock()
+        mock_aws_provider.ec2.return_value = mock_ec2_client
+
+        self.monkeypatch.setattr(
+            handler, "AwsClientProvider", MagicMock(return_value=mock_aws_provider)
+        )
+
+        with pytest.raises(Exception, match="Failed to delete fleets"):
+            handler._delete_fleets()
+
+    def test_delete_fleets_tolerates_already_deleted(self):
+        mock_ec2_client = MagicMock()
+        mock_paginator = MagicMock()
+        mock_paginator.paginate.return_value = iter(
+            [{"Fleets": [{"FleetId": "fleet-1", "FleetState": "active"}]}]
+        )
+        mock_ec2_client.get_paginator.return_value = mock_paginator
+        mock_ec2_client.delete_fleets.return_value = {
+            "SuccessfulFleetDeletions": [],
+            "UnsuccessfulFleetDeletions": [
+                {"FleetId": "fleet-1", "Error": {"Code": "fleetIdDoesNotExist"}}
+            ],
+        }
+        mock_aws_provider = MagicMock()
+        mock_aws_provider.ec2.return_value = mock_ec2_client
+
+        self.monkeypatch.setattr(
+            handler, "AwsClientProvider", MagicMock(return_value=mock_aws_provider)
+        )
+
+        handler._delete_fleets()
+
+    def test_delete_fleets_batches_over_25(self):
+        mock_ec2_client = MagicMock()
+        mock_paginator = MagicMock()
+        mock_paginator.paginate.return_value = iter(
+            [
+                {
+                    "Fleets": [
+                        {"FleetId": f"fleet-{i}", "FleetState": "active"}
+                        for i in range(30)
+                    ]
+                }
+            ]
+        )
+        mock_ec2_client.get_paginator.return_value = mock_paginator
+        mock_ec2_client.delete_fleets.return_value = {
+            "SuccessfulFleetDeletions": [],
+            "UnsuccessfulFleetDeletions": [],
+        }
+        mock_aws_provider = MagicMock()
+        mock_aws_provider.ec2.return_value = mock_ec2_client
+
+        self.monkeypatch.setattr(
+            handler, "AwsClientProvider", MagicMock(return_value=mock_aws_provider)
+        )
+
+        handler._delete_fleets()
+        assert mock_ec2_client.delete_fleets.call_count == 2
+        first_call = mock_ec2_client.delete_fleets.call_args_list[0]
+        second_call = mock_ec2_client.delete_fleets.call_args_list[1]
+        assert len(first_call.kwargs["FleetIds"]) == 25
+        assert len(second_call.kwargs["FleetIds"]) == 5
+
+    def test_delete_leftover_launch_templates(self):
+        mock_ec2_client = MagicMock()
+        mock_paginator = MagicMock()
+        mock_paginator.paginate.return_value = iter(
+            [
+                {
+                    "LaunchTemplates": [
+                        {"LaunchTemplateId": "lt-111"},
+                        {"LaunchTemplateId": "lt-222"},
+                    ]
+                }
+            ]
+        )
+        mock_ec2_client.get_paginator.return_value = mock_paginator
+        mock_ec2_client.delete_launch_template.return_value = {}
+        mock_aws_provider = MagicMock()
+        mock_aws_provider.ec2.return_value = mock_ec2_client
+
+        self.monkeypatch.setattr(
+            handler, "AwsClientProvider", MagicMock(return_value=mock_aws_provider)
+        )
+
+        handler._delete_leftover_launch_templates()
+        assert mock_ec2_client.delete_launch_template.call_count == 2
+        mock_ec2_client.delete_launch_template.assert_any_call(
+            LaunchTemplateId="lt-111"
+        )
+        mock_ec2_client.delete_launch_template.assert_any_call(
+            LaunchTemplateId="lt-222"
+        )
+
+    def test_delete_leftover_launch_templates_none_found(self):
+        mock_ec2_client = MagicMock()
+        mock_paginator = MagicMock()
+        mock_paginator.paginate.return_value = iter([{"LaunchTemplates": []}])
+        mock_ec2_client.get_paginator.return_value = mock_paginator
+        mock_aws_provider = MagicMock()
+        mock_aws_provider.ec2.return_value = mock_ec2_client
+
+        self.monkeypatch.setattr(
+            handler, "AwsClientProvider", MagicMock(return_value=mock_aws_provider)
+        )
+
+        handler._delete_leftover_launch_templates()
+        mock_ec2_client.delete_launch_template.assert_not_called()
+
+    def test_delete_leftover_launch_templates_raises_on_failure(self):
+        mock_ec2_client = MagicMock()
+        mock_paginator = MagicMock()
+        mock_paginator.paginate.return_value = iter(
+            [
+                {
+                    "LaunchTemplates": [
+                        {"LaunchTemplateId": "lt-111"},
+                        {"LaunchTemplateId": "lt-222"},
+                    ]
+                }
+            ]
+        )
+        mock_ec2_client.get_paginator.return_value = mock_paginator
+        mock_ec2_client.delete_launch_template.side_effect = [
+            {},
+            botocore.exceptions.ClientError(
+                {
+                    "Error": {
+                        "Code": "UnauthorizedOperation",
+                        "Message": "Access denied",
+                    }
+                },
+                "DeleteLaunchTemplate",
+            ),
+        ]
+        mock_aws_provider = MagicMock()
+        mock_aws_provider.ec2.return_value = mock_ec2_client
+
+        self.monkeypatch.setattr(
+            handler, "AwsClientProvider", MagicMock(return_value=mock_aws_provider)
+        )
+
+        with pytest.raises(Exception, match="Failed to delete launch template lt-222"):
+            handler._delete_leftover_launch_templates()
+
+    def test_delete_leftover_launch_templates_tolerates_already_deleted(self):
+        mock_ec2_client = MagicMock()
+        mock_paginator = MagicMock()
+        mock_paginator.paginate.return_value = iter(
+            [
+                {
+                    "LaunchTemplates": [
+                        {"LaunchTemplateId": "lt-111"},
+                        {"LaunchTemplateId": "lt-222"},
+                    ]
+                }
+            ]
+        )
+        mock_ec2_client.get_paginator.return_value = mock_paginator
+        mock_ec2_client.delete_launch_template.side_effect = [
+            {},
+            botocore.exceptions.ClientError(
+                {
+                    "Error": {
+                        "Code": "InvalidLaunchTemplateId.NotFound",
+                        "Message": "Launch template not found",
+                    }
+                },
+                "DeleteLaunchTemplate",
+            ),
+        ]
+        mock_aws_provider = MagicMock()
+        mock_aws_provider.ec2.return_value = mock_ec2_client
+
+        self.monkeypatch.setattr(
+            handler, "AwsClientProvider", MagicMock(return_value=mock_aws_provider)
+        )
+
+        handler._delete_leftover_launch_templates()
+        assert mock_ec2_client.delete_launch_template.call_count == 2

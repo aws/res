@@ -4,7 +4,7 @@ $version: "2.0"
 
 namespace res
 
-@http(method: "GET", uri: "/res/virtual-desktop-utils/permission-profile")
+@http(method: "GET", uri: "/res/virtual-desktop-utils/permission-profiles")
 @paginated
 @readonly
 @tags(["virtual-desktop-utils"])

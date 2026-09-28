@@ -14,6 +14,9 @@ from res.resources.dynamodb import dynamodb_stream_subscription  # type: ignore
 from res.resources.dynamodb.dynamodb_stream_subscriber import (  # type: ignore
     IDynamoDBStreamSubscriber,
 )
+from res.resources.software_stacks import (  # type: ignore
+    update_software_stack_allowed_instance_types,
+)
 
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
@@ -60,8 +63,29 @@ class ADConfigEventSubscriber(IDynamoDBStreamSubscriber):  # type: ignore
             logger.error(str(e))
 
 
+class GlobalAllowedInstanceTypesEventSubscriber(IDynamoDBStreamSubscriber):  # type: ignore
+    def on_create(self, entry: Dict[str, Any]) -> None:
+        pass
+
+    def on_update(self, old_entry: Dict[str, Any], new_entry: Dict[str, Any]) -> None:
+        update_software_stack_allowed_instance_types(new_entry.get("value"))
+
+    def on_delete(self, entry: Dict[str, Any]) -> None:
+        pass
+
+    def is_entry_monitored(self, entry: Dict[str, Any]) -> bool:
+        return entry["key"] == constants.GLOBAL_ALLOWED_INSTANCE_TYPES_KEY  # type: ignore[no-any-return]
+
+    @property
+    def subscriber_name(self) -> Optional[str]:
+        return "global_allowed_instance_types"
+
+
 def handle(event: Dict[str, Any], _context: Dict[str, Any]) -> None:
-    subscribers = [ADConfigEventSubscriber()]
+    subscribers = [
+        ADConfigEventSubscriber(),
+        GlobalAllowedInstanceTypesEventSubscriber(),
+    ]
 
     for rec in event["Records"]:
         record_data = json.loads(

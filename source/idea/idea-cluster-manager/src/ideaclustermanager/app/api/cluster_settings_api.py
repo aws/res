@@ -29,7 +29,7 @@ from ideasdk.config.cluster_config import ClusterConfig
 from ideasdk.utils import Utils
 
 import res.constants as res_constants
-from res.resources import directory_service_settings
+from res.resources import cognito_settings, directory_service_settings
 
 from threading import RLock
 
@@ -134,13 +134,8 @@ class ClusterSettingsAPI(BaseAPI):
             self.config.put(f'{module_id}.{setting}', settings[setting])
 
         if module_id == res_constants.MODULE_ID_IDENTITY_PROVIDER:
-            enable_self_sign_up = settings.get("cognito.enable_self_sign_up")
-            if enable_self_sign_up is not None:
-                if enable_self_sign_up:
-                    self._toggle_cognito_self_signup(True)
-                else:
-                    self._toggle_cognito_self_signup(False)
-                    
+            cognito_settings.update_settings(settings)
+
         context.success(UpdateModuleSettingsResult())
 
     def describe_instance_types(self, context: ApiInvocationContext):
@@ -177,34 +172,6 @@ class ClusterSettingsAPI(BaseAPI):
         default_allowed_sessions_per_user_per_project = self.config.db.get_config_entry("vdc.dcv_session.default_allowed_sessions_per_user_per_project")
 
         context.success(GetDefaultAllowedSessionsPerUserPerProjectResult(default_allowed_sessions_per_user_per_project=Utils.get_value_as_int("value", allowed_sessions_per_user_per_project, 0)))
-
-    def _toggle_cognito_self_signup(self, enable: bool):
-        """
-        Toggle self-signup on Cognito User Pool.
-        :param enable: True to enable self-signup, False to disable
-        """
-        user_pool_id = self.context.config().get_string('identity-provider.cognito.user_pool_id', required=True)
-
-        try:
-            client = self.context.aws().cognito_idp()
-            pool = client.describe_user_pool(UserPoolId=user_pool_id)['UserPool']
-            pool['AdminCreateUserConfig'] = {
-                **(pool.get('AdminCreateUserConfig') or {}),
-                'AllowAdminCreateUserOnly': not enable,
-            }
-            if enable:
-                pool['AutoVerifiedAttributes'] = ['email']
-                pool['VerificationMessageTemplate'] = {
-                    'DefaultEmailOption': 'CONFIRM_WITH_CODE',
-                    'EmailSubject': 'Verify your email for RES',
-                }
-            client.update_user_pool(
-                UserPoolId=user_pool_id,
-                **{k: pool[k] for k in res_constants.COGNITO_UPDATE_USER_POOL_ARGUMENTS if k in pool},
-            )
-            self.logger.info(f"Successfully toggled Cognito self-signup to {'ON' if enable else 'OFF'} for user pool: {user_pool_id}")
-        except Exception as e:
-            self.logger.error(f"Failed to toggle Cognito self-signup for user pool {user_pool_id}: {e}")
 
     def update_quic(self, context: ApiInvocationContext):
         request = context.get_request_payload_as(UpdateQuicConfigRequest)

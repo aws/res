@@ -58,7 +58,6 @@ class TestVirtualDesktopSessionSerializer:
             "tuesday_schedule": {"schedule_type": "NO_SCHEDULE", "day_of_week": "None"},
             "session_tags": None,
             "session_type": "CONSOLE",
-            "software_stack": {},
         }
 
         result = self.serializer.from_ddb_dict(input_data)
@@ -80,7 +79,6 @@ class TestVirtualDesktopSessionSerializer:
             "idea_session_id": "session-123",
             "session_tags": {},
             "session_type": "CONSOLE",
-            "software_stack": {},
         }
 
         result = self.serializer.from_ddb_dict(input_data)
@@ -99,7 +97,6 @@ class TestVirtualDesktopSessionSerializer:
             "idea_session_id": "session-123",
             "session_tags": None,
             "session_type": "CONSOLE",
-            "software_stack": {},
         }
 
         result = self.serializer.from_ddb_dict(input_data)
@@ -116,7 +113,6 @@ class TestVirtualDesktopSessionSerializer:
             "idea_session_id": "session-123",
             "session_type": "CONSOLE",
             "session_tags": None,
-            "software_stack": {},
         }
 
         result = self.serializer._customize_from_ddb(input_data)

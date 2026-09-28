@@ -185,19 +185,20 @@ class TestSoftwareStackUtils:
     @patch('res.utils.table_utils.get_item')
     def test_validate_software_stack_fields_success(self, mock_get_item, mock_validate_placement, mock_set_arch, mock_get_by_name):
         """Test validate_software_stack_fields returns True for valid stack."""
-        
+
         stack_name="test-stack"
         # Setup
         software_stack = VirtualDesktopSoftwareStack(
             name=stack_name,
+            ami_id="ami-12345678",
             projects=[Project(project_id="proj-123")]
         )
         mock_get_by_name.return_value = None  # No existing stack
         mock_validate_placement.return_value = True
         mock_get_item.return_value = {"project_id": "proj-123"}  # Project exists
-        
+
         result_stack, is_valid = software_stack_utils.validate_software_stack_fields(software_stack)
-        
+
         assert is_valid is True
         assert result_stack == software_stack
         mock_get_by_name.assert_called_once_with(stack_name)
@@ -308,3 +309,25 @@ class TestSoftwareStackUtils:
         # Assertions
         assert is_valid is False
         assert "Invalid software_stack.project.project_id: proj-invalid" in result_stack.failure_reason
+
+
+class TestAmiNameExists:
+
+    @patch('api.utils.software_stack_utils.AwsClientProvider')
+    def test_returns_true_when_ami_exists(self, mock_provider):
+        mock_ec2 = MagicMock()
+        mock_ec2.describe_images.return_value = {"Images": [{"ImageId": "ami-123"}]}
+        mock_provider.return_value.ec2.return_value = mock_ec2
+
+        assert software_stack_utils.ami_name_exists("my-stack") is True
+        mock_ec2.describe_images.assert_called_once_with(
+            Filters=[{"Name": "name", "Values": ["my-stack"]}]
+        )
+
+    @patch('api.utils.software_stack_utils.AwsClientProvider')
+    def test_returns_false_when_no_ami(self, mock_provider):
+        mock_ec2 = MagicMock()
+        mock_ec2.describe_images.return_value = {"Images": []}
+        mock_provider.return_value.ec2.return_value = mock_ec2
+
+        assert software_stack_utils.ami_name_exists("new-stack") is False

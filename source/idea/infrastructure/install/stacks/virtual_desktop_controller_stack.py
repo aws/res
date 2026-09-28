@@ -18,6 +18,7 @@ from aws_cdk import aws_events_targets as events_targets
 from aws_cdk import aws_iam
 from aws_cdk import aws_kms as kms
 from aws_cdk import aws_lambda
+from aws_cdk import aws_lambda_event_sources as lambda_event_sources
 from aws_cdk import aws_logs as logs
 from aws_cdk import aws_s3 as s3
 from aws_cdk import aws_secretsmanager
@@ -26,6 +27,7 @@ from aws_cdk import aws_sns_subscriptions as sns_subscription
 from aws_cdk import aws_sqs as sqs
 from aws_cdk.aws_events import Schedule
 from res.constants import OLD_CUSTOM_TAG_KEYS  # type: ignore
+from res.resources.vdc_events import VDCEventType  # type: ignore
 from res.utils.bootstrap_userdata_builder import (  # type: ignore
     BootstrapUserDataBuilder,
 )
@@ -49,15 +51,15 @@ from idea.infrastructure.install.parameters.internet_proxy import InternetProxyK
 from idea.infrastructure.install.parameters.parameters import RESParameters
 from idea.infrastructure.install.policies import (
     AddToUserpoolClientScopesPolicy,
-    ControllerScheduledEventTransformerLambdaPolicy,
     ControllerSSMCommandPassRolePolicy,
     CustomCredentialBrokerPolicy,
     S3MountBaseBucketReadOnlyPolicy,
     S3MountBaseBucketReadWritePolicy,
     VdcControllerSqsKmsKeyPolicy,
+    VdcEventsQueueLambdaPolicy,
+    VdcScheduledEventLambdaPolicy,
     VdiHelperPolicy,
     VirtualDesktopConnectionGatewayPolicy,
-    VirtualDesktopControllerPolicy,
     VirtualDesktopDcvHostScopedDownPolicy,
     VirtualDesktopDcvPolicy,
 )
@@ -66,11 +68,14 @@ from idea.infrastructure.install.stacks.identity_stack import IdentityStack
 from idea.infrastructure.resources.lambda_functions.custom_resource.add_to_user_pool_client_scopes_lambda import (
     add_to_user_pool_client_scopes_handler,
 )
-from idea.infrastructure.resources.lambda_functions.scheduled_event_transformer_lambda import (
-    scheduled_event_transformer_handler,
-)
 from idea.infrastructure.resources.lambda_functions_with_utils.custom_credential_broker_lambda import (
     custom_credential_broker_handler,
+)
+from idea.infrastructure.resources.lambda_functions_with_utils.vdc_events_queue_lambda import (
+    vdc_events_queue_handler,
+)
+from idea.infrastructure.resources.lambda_functions_with_utils.vdc_scheduled_event_lambda import (
+    vdc_scheduled_event_handler,
 )
 from idea.infrastructure.resources.lambda_functions_with_utils.vdi_helper_lambda import (
     handler as vdi_helper_handler,
@@ -125,12 +130,18 @@ class VirtualDesktopControllerStack(ResBaseConstruct):
         cdk.Tags.of(self.nested_stack).add(
             constants.RES_TAG_MODULE_NAME,
             constants.MODULE_NAME_VDC_CONTROLLER,
-            exclude_resource_types=["AWS::Events::Rule"],
+            exclude_resource_types=[
+                "AWS::Events::Rule",
+                "AWS::Lambda::EventSourceMapping",
+            ],
         )
         cdk.Tags.of(self.nested_stack).add(
             constants.RES_TAG_MODULE_ID,
             constants.MODULE_ID_VDC_CONTROLLER,
-            exclude_resource_types=["AWS::Events::Rule"],
+            exclude_resource_types=[
+                "AWS::Events::Rule",
+                "AWS::Lambda::EventSourceMapping",
+            ],
         )
 
         self.has_iam_prefix_condition = InfraUtils.get_iam_prefix_condition(
@@ -239,17 +250,11 @@ class VirtualDesktopControllerStack(ResBaseConstruct):
         )
         self.dcv_host_role_scoped_down: Optional[iam.Role] = None
 
-        self.controller_role: Optional[iam.Role] = None
-        self.scheduled_event_transformer_lambda_role: Optional[iam.Role] = None
-
         self.dcv_host_instance_profile: Optional[iam.InstanceProfile] = None
         self.dcv_host_scoped_down_instance_profile: Optional[iam.InstanceProfile] = None
 
         self.dcv_host_security_group: Optional[
             ec2.VirtualDesktopBastionAccessSecurityGroup
-        ] = None
-        self.controller_security_group: Optional[
-            ec2.VirtualDesktopPublicLoadBalancerAccessSecurityGroup
         ] = None
         self.dcv_connection_gateway_security_group: Optional[
             ec2.VirtualDesktopPublicLoadBalancerAccessSecurityGroup
@@ -260,12 +265,9 @@ class VirtualDesktopControllerStack(ResBaseConstruct):
         )
         self.external_nlb: Optional[elbv2.CfnLoadBalancer] = None
 
-        self.event_sqs_queue: Optional[sqs_.SQSQueue] = None
-        self.controller_sqs_queue: Optional[sqs_.SQSQueue] = None
         self.ssm_commands_sns_topic: Optional[sns_.SNSTopic] = None
         self.ssm_command_pass_role: Optional[iam.Role] = None
 
-        self.controller_auto_scaling_group: Optional[asg.AutoScalingGroup] = None
         self.dcv_connection_gateway_autoscaling_group: Optional[
             asg.AutoScalingGroup
         ] = None
@@ -289,16 +291,17 @@ class VirtualDesktopControllerStack(ResBaseConstruct):
         self.build_vdi_helper_infra()
 
         self.build_sqs_queues()
-        self.build_scheduled_event_notification_infra()
-        self.subscribe_to_ec2_notification_events()
+        self.subscribe_to_ec2_state_change_events()
+        self.build_vdc_events_queue_lambda()
 
-        self.build_virtual_desktop_controller()
         build_dcv_session_management_lambda(self)
         self.build_dcv_connection_gateway()
         self.build_dcv_host_infra_scoped_down()
         self.build_dcv_host_infra()
 
         self.build_controller_ssm_commands_notification_infra()
+        self.build_vdc_scheduled_event_lambda()
+        self.build_schedule_trigger_rule()
 
         self.setup_egress_rules_for_quic()
         self.build_cluster_settings()
@@ -356,7 +359,7 @@ class VirtualDesktopControllerStack(ResBaseConstruct):
         )
 
     def build_sqs_queues(self) -> None:
-        # a custom kms key is required for sqs so that sns can be given permissions as an event source for the vdc controller queue
+        # a custom kms key is required for sqs so that sns can be given permissions as an event source for the vdc events queue
         sqs_kms_key_policy = aws_iam.PolicyDocument(
             statements=VdcControllerSqsKmsKeyPolicy.create_policy_statements(
                 self.arn_builder
@@ -370,52 +373,25 @@ class VirtualDesktopControllerStack(ResBaseConstruct):
             policy=sqs_kms_key_policy,
         )
         self.sqs_kms_key.add_alias(f"alias/{self.cluster_name}/sqs")
-        sqs_kms_key_id = self.cluster_settings.kms_sqs_key_id
 
-        self.event_sqs_queue = sqs_.SQSQueue(
-            f"{self.module_id}-events",
-            self.nested_stack,
-            self.arn_builder,
-            self.parameters,
-            fifo_throughput_limit=sqs.FifoThroughputLimit.PER_MESSAGE_GROUP_ID,
-            fifo=True,
-            deduplication_scope=sqs.DeduplicationScope.MESSAGE_GROUP,
-            content_based_deduplication=True,
-            encryption_master_key=sqs_kms_key_id,
-            dead_letter_queue=sqs.DeadLetterQueue(
-                # With default 30s visibility timeout, this allows ~60 minutes of retries
-                # before moving to DLQ. Windows AMI creation can take 30-45 minutes.
-                max_receive_count=120,
-                queue=sqs_.SQSQueue(
-                    f"{self.module_id}-events-dlq",
-                    self.nested_stack,
-                    self.arn_builder,
-                    self.parameters,
-                    fifo_throughput_limit=sqs.FifoThroughputLimit.PER_MESSAGE_GROUP_ID,
-                    fifo=True,
-                    deduplication_scope=sqs.DeduplicationScope.MESSAGE_GROUP,
-                    content_based_deduplication=True,
-                    encryption_master_key=sqs_kms_key_id,
-                ),
-            ),
-        )
-
-        self.controller_sqs_queue = sqs_.SQSQueue(
-            f"{self.module_id}-controller",
+        # Standard queue for new event handlers.
+        self.events_queue = sqs_.SQSQueue(
+            f"{self.module_id}-events-v2",
             self.nested_stack,
             self.arn_builder,
             self.parameters,
             encryption_master_key=self.sqs_kms_key.key_id,
-            fifo=False,
+            visibility_timeout=cdk.Duration.seconds(
+                360
+            ),  # >= 6x Lambda timeout (60s), see https://docs.aws.amazon.com/lambda/latest/dg/services-sqs-configure.html
             dead_letter_queue=sqs.DeadLetterQueue(
-                max_receive_count=30,
+                max_receive_count=120,
                 queue=sqs_.SQSQueue(
-                    f"{self.module_id}-controller-dlq",
+                    f"{self.module_id}-events-v2-dlq",
                     self.nested_stack,
                     self.arn_builder,
                     self.parameters,
                     encryption_master_key=self.sqs_kms_key.key_id,
-                    fifo=False,
                 ),
             ),
         )
@@ -438,8 +414,6 @@ class VirtualDesktopControllerStack(ResBaseConstruct):
             ],
         )
 
-        self.ssm_command_pass_role.grant_pass_role(self.controller_role)  # type: ignore
-
         self.ssm_commands_sns_topic = sns_.SNSTopic(
             self.nested_stack,
             id_="virtual-desktop-controller-sns-topic",
@@ -450,59 +424,183 @@ class VirtualDesktopControllerStack(ResBaseConstruct):
         )
         self.ssm_commands_sns_topic.add_subscription(
             sns_subscription.SqsSubscription(
-                queue=self.controller_sqs_queue,  # type: ignore
-                dead_letter_queue=self.controller_sqs_queue.dead_letter_queue.queue,  # type: ignore
+                queue=self.events_queue,
+                dead_letter_queue=self.events_queue.dead_letter_queue.queue,  # type: ignore
             )
         )
 
-    def subscribe_to_ec2_notification_events(self) -> None:
-        ec2_event_sns_topic = self.cluster_stack.ec2_events_sns_topic
-        ec2_event_sns_topic.add_subscription(  # type: ignore
-            sns_subscription.SqsSubscription(
-                queue=self.controller_sqs_queue,  # type: ignore
-                dead_letter_queue=self.controller_sqs_queue.dead_letter_queue.queue,  # type: ignore
-                filter_policy={
-                    constants.RES_TAG_MODULE_ID.replace(
-                        ":", "_"
-                    ): sns.SubscriptionFilter.string_filter(allowlist=[self.module_id])
-                },
+    def subscribe_to_ec2_state_change_events(self) -> None:
+        ec2_state_change_rule = events.Rule(
+            scope=self.nested_stack,
+            id="ec2-state-monitoring-rule",
+            enabled=True,
+            rule_name=f"{self.cluster_name}-{self.module_id}-ec2-state-monitoring-rule",
+            description="Event Rule to monitor state changes on EC2 Instances",
+            event_pattern=events.EventPattern(
+                source=["aws.ec2"],
+                detail_type=["EC2 Instance State-change Notification"],
+                region=[cdk.Aws.REGION],
+            ),
+        )
+        ec2_state_change_rule.add_target(
+            events_targets.SqsQueue(
+                self.events_queue,
+                message=events.RuleTargetInput.from_object(
+                    {
+                        "event_type": VDCEventType.EC2_INSTANCE_STATE_CHANGED,
+                        "detail": events.EventField.from_path("$.detail"),
+                    }
+                ),
             )
         )
 
-    def build_scheduled_event_notification_infra(self) -> None:
-        lambda_name = f"{self.module_id}-scheduled-event-transformer"
-        self.scheduled_event_transformer_lambda_role = iam.Role(
+    def build_vdc_events_queue_lambda(self) -> None:
+        lambda_name = f"{self.module_id}-events-queue-handler"
+
+        events_queue_lambda_policy = VdcEventsQueueLambdaPolicy(
+            self.nested_stack,
+            description="Policy for VDC Events queue handler Lambda.",
+            name=f"{lambda_name}-policy",
+            arn_builder=self.arn_builder,
+            parameters=self.parameters,
+        )
+
+        events_queue_lambda_role = iam.Role(
             scope=self.nested_stack,
             name=f"{lambda_name}-role",
             arn_builder=self.arn_builder,
             parameters=self.parameters,
             assumed_by=["lambda"],
             description=f"{lambda_name}-role",
-            inline_policies=[
-                ControllerScheduledEventTransformerLambdaPolicy(
-                    self.nested_stack,
-                    name=f"{lambda_name}-policy",
-                    arn_builder=self.arn_builder,
-                    parameters=self.parameters,
-                )
-            ],
+            managed_policies=[events_queue_lambda_policy],
         )
 
-        scheduled_event_transformer_lambda = lambda_.Function(
+        events_queue_lambda_sg = ec2.VdcEventsQueueLambdaSecurityGroup(
+            name=f"{lambda_name}-sg",
+            scope=self.nested_stack,
+            vpc=self.vpc,
+            parameters=self.parameters,
+        )
+
+        self.vdc_events_queue_lambda = lambda_.Function(
             self.nested_stack,
             lambda_name,
-            handler=scheduled_event_transformer_handler.handler,
+            handler="vdc_events_queue_lambda.handler.handler",
+            code_directory_string=os.path.join(
+                InfraUtils.lambda_functions_with_utils_dir()
+            ),
             parameters=self.parameters,
             runtime=constants.RES_COMMON_LAMBDA_RUNTIME,
-            description=f"{self.module_id} lambda to intercept all scheduled events and transform to the required event object.",  # type: ignore
-            timeout=cdk.Duration.seconds(180),  # type: ignore
+            description=f"{self.module_id} Lambda to process events from the VDC Events SQS queue.",  # type: ignore
+            timeout=cdk.Duration.seconds(60),  # type: ignore
             layers=[self.lambda_layer],  # type: ignore
+            role=events_queue_lambda_role,  # type: ignore
             environment={
-                "IDEA_CONTROLLER_EVENTS_QUEUE_URL": self.event_sqs_queue.queue_url  # type: ignore
+                "environment_name": self.cluster_name,
+                "EVENTS_QUEUE_URL": self.events_queue.queue_url,
             },
-            role=self.scheduled_event_transformer_lambda_role,  # type: ignore
+            vpc=self.vpc,  # type: ignore
+            security_groups=[events_queue_lambda_sg],  # type: ignore
         )
 
+        cfn_events_queue_lambda: aws_lambda.CfnFunction = (
+            self.vdc_events_queue_lambda.node.default_child  # type: ignore
+        )
+        cfn_events_queue_lambda.add_property_override(
+            "VpcConfig.SubnetIds",
+            self.cluster_settings.infrastructure_host_subnets,
+        )
+        events_queue_lambda_role.add_managed_policy(
+            aws_iam.ManagedPolicy.from_aws_managed_policy_name(
+                "service-role/AWSLambdaVPCAccessExecutionRole"
+            )
+        )
+
+        self.vdc_events_queue_lambda.add_event_source(
+            lambda_event_sources.SqsEventSource(
+                self.events_queue,
+                batch_size=10,
+                report_batch_item_failures=True,
+            )
+        )
+
+    def build_vdc_scheduled_event_lambda(self) -> None:
+        lambda_name = f"{self.module_id}-scheduled-event-handler"
+
+        scheduled_event_lambda_policy = VdcScheduledEventLambdaPolicy(
+            self.nested_stack,
+            description="Policy for VDC Scheduled Event handler Lambda.",
+            name=f"{lambda_name}-policy",
+            arn_builder=self.arn_builder,
+            parameters=self.parameters,
+        )
+
+        scheduled_event_lambda_role = iam.Role(
+            scope=self.nested_stack,
+            name=f"{lambda_name}-role",
+            arn_builder=self.arn_builder,
+            parameters=self.parameters,
+            assumed_by=["lambda"],
+            description=f"{lambda_name}-role",
+            managed_policies=[scheduled_event_lambda_policy],
+        )
+
+        scheduled_event_lambda_sg = ec2.VdcScheduledEventLambdaSecurityGroup(
+            name=f"{lambda_name}-sg",
+            scope=self.nested_stack,
+            vpc=self.vpc,
+            parameters=self.parameters,
+        )
+
+        self.vdc_scheduled_event_lambda = lambda_.Function(
+            self.nested_stack,
+            lambda_name,
+            handler="vdc_scheduled_event_lambda.handler.handler",
+            code_directory_string=os.path.join(
+                InfraUtils.lambda_functions_with_utils_dir()
+            ),
+            parameters=self.parameters,
+            runtime=constants.RES_COMMON_LAMBDA_RUNTIME,
+            description=f"{self.module_id} Lambda to process scheduled events invoked directly by EventBridge.",  # type: ignore
+            timeout=cdk.Duration.seconds(60),  # type: ignore
+            layers=[self.lambda_layer],  # type: ignore
+            role=scheduled_event_lambda_role,  # type: ignore
+            environment={
+                "environment_name": self.cluster_name,
+            },
+            vpc=self.vpc,  # type: ignore
+            security_groups=[scheduled_event_lambda_sg],  # type: ignore
+        )
+
+        cfn_scheduled_event_lambda: aws_lambda.CfnFunction = (
+            self.vdc_scheduled_event_lambda.node.default_child  # type: ignore
+        )
+        cfn_scheduled_event_lambda.add_property_override(
+            "VpcConfig.SubnetIds",
+            self.cluster_settings.infrastructure_host_subnets,
+        )
+        scheduled_event_lambda_role.add_managed_policy(
+            aws_iam.ManagedPolicy.from_aws_managed_policy_name(
+                "service-role/AWSLambdaVPCAccessExecutionRole"
+            )
+        )
+
+        self.ssm_command_pass_role.grant_pass_role(scheduled_event_lambda_role)  # type: ignore
+
+        aws_ec2.CfnSecurityGroupIngress(
+            self.nested_stack,
+            f"{lambda_name}-external-alb-https-ingress",
+            group_id=self.cluster_stack.security_groups[
+                "external-load-balancer"
+            ].security_group_id,
+            source_security_group_id=scheduled_event_lambda_sg.security_group_id,
+            ip_protocol="tcp",
+            from_port=443,
+            to_port=443,
+            description="Allow HTTPS from VDC Scheduled Event Lambda",
+        )
+
+    def build_schedule_trigger_rule(self) -> None:
         schedule_trigger_rule = events.Rule(
             scope=self.nested_stack,
             id=f"{self.module_id}-schedule-rule",
@@ -513,7 +611,7 @@ class VirtualDesktopControllerStack(ResBaseConstruct):
         )
 
         schedule_trigger_rule.add_target(
-            events_targets.LambdaFunction(scheduled_event_transformer_lambda)
+            events_targets.LambdaFunction(self.vdc_scheduled_event_lambda)
         )
 
     def build_oauth2_client(self) -> None:
@@ -850,6 +948,7 @@ class VirtualDesktopControllerStack(ResBaseConstruct):
             runtime=constants.RES_COMMON_LAMBDA_RUNTIME,
             description=f"{self.module_id} general purpose lambda for VDI operations.",  # type: ignore
             timeout=cdk.Duration.seconds(60),  # type: ignore
+            memory_size=512,  # type: ignore
             layers=[self.lambda_layer],  # type: ignore
             role=vdi_helper_lambda_role,  # type: ignore
             vpc=self.vpc,  # type: ignore
@@ -984,8 +1083,6 @@ class VirtualDesktopControllerStack(ResBaseConstruct):
             managed_policies=[self.dcv_host_role_scoped_down_managed_policy],
         )
 
-        self.dcv_host_role_scoped_down.grant_pass_role(self.controller_role)  # type: ignore
-
         self.dcv_host_scoped_down_instance_profile = iam.InstanceProfile(
             scope=self.nested_stack,
             name=f"{self.module_id}-{self.COMPONENT_DCV_HOST}-scoped-down-instance-profile",
@@ -1007,7 +1104,6 @@ class VirtualDesktopControllerStack(ResBaseConstruct):
                 )
             ],
         )
-        self.dcv_host_role.grant_pass_role(self.controller_role)  # type: ignore
 
         custom_credential_broker_principal = aws_iam.ArnPrincipal(
             self.custom_credential_broker_lambda_role.role_arn  # type: ignore
@@ -1038,140 +1134,6 @@ class VirtualDesktopControllerStack(ResBaseConstruct):
             component_name="DCV Host",
         )
 
-    def build_virtual_desktop_controller(self) -> None:
-        self.controller_security_group = ec2.VirtualDesktopPublicLoadBalancerAccessSecurityGroup(
-            name=f"{self.module_id}-{self.COMPONENT_CONTROLLER}-security-group",
-            scope=self.nested_stack,
-            vpc=self.vpc,
-            parameters=self.parameters,
-            bastion_host_security_group=self.bastion_host_security_group,
-            public_loadbalancer_security_group=self.external_loadbalancer_security_group,
-            description="Security Group for Virtual Desktop Controller",
-            directory_service_access=True,
-            component_name="Virtual Desktop Controller",
-        )
-
-        self.controller_role = self._build_iam_role(
-            name=f"{self.module_id}-{self.COMPONENT_CONTROLLER}-role",
-            description=f"IAM role assigned to virtual-desktop-{self.COMPONENT_CONTROLLER}",
-            inline_policies=[
-                VirtualDesktopControllerPolicy(
-                    self.nested_stack,
-                    f"{self.module_id}-{self.COMPONENT_CONTROLLER}-policy",
-                    arn_builder=self.arn_builder,
-                    parameters=self.parameters,
-                )
-            ],
-        )
-
-        self.controller_auto_scaling_group = self._build_auto_scaling_group(
-            # component_name=self.COMPONENT_CONTROLLER,
-            instance_name_suffix=self.COMPONENT_CONTROLLER,
-            security_group=self.controller_security_group,
-            iam_role=self.controller_role,
-            userdata=BootstrapUserDataBuilder(
-                aws_region=self.aws_region,
-                bootstrap_package_uri=self.cluster_settings.installation_scripts_uri,
-                install_commands=[
-                    f"/bin/bash scripts/infrastructure-host/install.sh -p false -c virtual-desktop-controller -m {self.module_id} -e {self.cluster_name}"
-                ],
-                proxy_config=self.PROXY_CONFIG,
-                base_os=self.cluster_settings.base_os(),
-            ).build(),
-            node_type=constants.NODE_TYPE_APP,
-        )
-
-        self.controller_auto_scaling_group.node.add_dependency(self.event_sqs_queue)
-        self.controller_auto_scaling_group.node.add_dependency(
-            self.controller_sqs_queue
-        )
-
-        # external target group
-        external_target_group = elbv2.ApplicationTargetGroup(
-            self.nested_stack,
-            "controller-target-group-ext",
-            port=8443,
-            protocol=elbv2.ApplicationProtocol.HTTPS,
-            protocol_version=elbv2.ApplicationProtocolVersion.HTTP1,
-            target_type=elbv2.TargetType.INSTANCE,
-            vpc=self.vpc,
-            target_group_name=InfraUtils.get_target_group_name(
-                self.cluster_name, self.module_id, "vdc-ext"
-            ),
-        )
-        external_target_group.configure_health_check(enabled=True, path="/healthcheck")
-
-        path_patterns = self.vdc_settings.endpoints_path_patterns("external")
-        priority = self.vdc_settings.endpoints_priority("external")
-        cdk.CustomResource(
-            self.nested_stack,
-            "controller-endpoint-ext",
-            service_token=self.CLUSTER_ENDPOINTS_LAMBDA_ARN,
-            properties={
-                "endpoint_name": f"{self.module_id}-controller-endpoint-ext",
-                "listener_arn": self.cluster_stack.external_alb_https_listener.attr_listener_arn,  # type: ignore
-                "priority": priority,
-                "conditions": [{"Field": "path-pattern", "Values": path_patterns}],
-                "actions": [
-                    {
-                        "Type": "forward",
-                        "TargetGroupArn": external_target_group.target_group_arn,
-                    }
-                ],
-                OLD_CUSTOM_TAG_KEYS: self.params_transformer.get_att_string(
-                    OLD_CUSTOM_TAG_KEYS
-                ),
-            },
-            resource_type="Custom::ControllerEndpointExternal",
-        )
-
-        # internal target group
-        internal_target_group = elbv2.ApplicationTargetGroup(
-            self.nested_stack,
-            "controller-target-group-int",
-            port=8443,
-            protocol=elbv2.ApplicationProtocol.HTTPS,
-            protocol_version=elbv2.ApplicationProtocolVersion.HTTP1,
-            target_type=elbv2.TargetType.INSTANCE,
-            vpc=self.vpc,
-            target_group_name=InfraUtils.get_target_group_name(
-                self.cluster_name, self.module_id, "vdc-int"
-            ),
-        )
-        internal_target_group.configure_health_check(enabled=True, path="/healthcheck")
-
-        path_patterns = self.vdc_settings.endpoints_path_patterns("internal")
-        priority = self.vdc_settings.endpoints_priority("internal")
-        cdk.CustomResource(
-            self.nested_stack,
-            "controller-endpoint-int",
-            service_token=self.CLUSTER_ENDPOINTS_LAMBDA_ARN,
-            properties={
-                "endpoint_name": f"{self.module_id}-controller-endpoint-int",
-                "listener_arn": self.cluster_stack.internal_alb_https_listener.attr_listener_arn,  # type: ignore
-                "priority": priority,
-                "conditions": [{"Field": "path-pattern", "Values": path_patterns}],
-                "actions": [
-                    {
-                        "Type": "forward",
-                        "TargetGroupArn": internal_target_group.target_group_arn,
-                    }
-                ],
-                OLD_CUSTOM_TAG_KEYS: self.params_transformer.get_att_string(
-                    OLD_CUSTOM_TAG_KEYS
-                ),
-            },
-            resource_type="Custom::ControllerEndpointInternal",
-        )
-
-        # receiving error jsii.errors.JSIIError: Cannot add AutoScalingGroup to 2nd Target Group
-        # if same ASG is added to both internal and external target groups.
-        # workaround below - reference to https://github.com/aws/aws-cdk/issues/5667#issuecomment-827549394
-        self.controller_auto_scaling_group.node.default_child.target_group_arns = [  # type: ignore
-            internal_target_group.target_group_arn,
-            external_target_group.target_group_arn,
-        ]
-
     def build_dcv_connection_gateway(self) -> None:
         self._build_self_signed_cert_for_dcv_connection_gateway()
 
@@ -1195,9 +1157,6 @@ class VirtualDesktopControllerStack(ResBaseConstruct):
             ),
             "dcv_host_role_scoped_down_name": self.dcv_host_role_scoped_down.role_name,  # type: ignore
             "dcv_host_role_scoped_down_id": self.dcv_host_role_scoped_down.role_id,  # type: ignore
-            "scheduled_event_transformer_lambda_role_arn": self.scheduled_event_transformer_lambda_role.role_arn,  # type: ignore
-            "scheduled_event_transformer_lambda_role_name": self.scheduled_event_transformer_lambda_role.role_name,  # type: ignore
-            "scheduled_event_transformer_lambda_role_id": self.scheduled_event_transformer_lambda_role.role_id,  # type: ignore
             "custom_credential_broker_lambda_function_arn": self.custom_credential_broker_lambda_function.function_arn,  # type: ignore
             "custom_credential_broker_api_gateway_url": self._build_private_api_gateway_url(
                 self.custom_credential_broker_api_gateway_rest_api.rest_api_id,  # type: ignore
@@ -1224,13 +1183,6 @@ class VirtualDesktopControllerStack(ResBaseConstruct):
             "ssm_commands_pass_role_arn": self.ssm_command_pass_role.role_arn,  # type: ignore
             "ssm_commands_pass_role_id": self.ssm_command_pass_role.role_id,  # type: ignore
             "ssm_commands_pass_role_name": self.ssm_command_pass_role.role_name,  # type: ignore
-            "controller_iam_role_arn": self.controller_role.role_arn,  # type: ignore
-            "controller_iam_role_name": self.controller_role.role_name,  # type: ignore
-            "controller_iam_role_id": self.controller_role.role_id,  # type: ignore
-            "events_sqs_queue_url": self.event_sqs_queue.queue_url,  # type: ignore
-            "events_sqs_queue_arn": self.event_sqs_queue.queue_arn,  # type: ignore
-            "controller_sqs_queue_url": self.controller_sqs_queue.queue_url,  # type: ignore
-            "controller_sqs_queue_arn": self.controller_sqs_queue.queue_arn,  # type: ignore
             "external_nlb.load_balancer_dns_name": self.external_nlb.attr_dns_name,  # type: ignore
             "external_nlb_arn": self.external_nlb.attr_load_balancer_arn,  # type: ignore
             "gateway_security_group_id": self.dcv_connection_gateway_security_group.security_group_id,  # type: ignore
@@ -1278,15 +1230,11 @@ class VirtualDesktopControllerStack(ResBaseConstruct):
             },
             resource_type="Custom::ClusterSettings",
         )
-        self.controller_auto_scaling_group.node.add_dependency(  # type: ignore
-            self.cluster_settings_custom_resource
-        )
         self.dcv_connection_gateway_autoscaling_group.node.add_dependency(  # type: ignore
             self.cluster_settings_custom_resource
         )
 
         asg_cluster_settings = {
-            "controller.asg_arn": self.controller_auto_scaling_group.auto_scaling_group_arn,  # type: ignore
             "dcv_connection_gateway.asg_arn": self.dcv_connection_gateway_autoscaling_group.auto_scaling_group_arn,  # type: ignore
         }
 

@@ -12,7 +12,7 @@
  */
 
 // Schedule Modal
-import { VirtualDesktopSchedule, VirtualDesktopSession, VirtualDesktopWeekSchedule } from "../../../client/data-model";
+import { VirtualDesktopSchedule, VirtualDesktopSession, VirtualDesktopWeekSchedule } from "../../../client/generated/api";
 import React, { Component, RefObject } from "react";
 import IdeaTimeRangeSlider from "../../../components/time-range-slider";
 import { IdeaFormField } from "../../../components/form-field";

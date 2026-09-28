@@ -4,18 +4,20 @@
 from __future__ import annotations
 
 import uuid
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 
 from datamodel.models.day_of_week import DayOfWeek
 from datamodel.models.virtual_desktop_schedule_type import VirtualDesktopScheduleType
-from res.clients.events import events_client
 from res.resources import cluster_settings
 from res.utils import logging_utils, table_utils
 
 SCHEDULE_DB_HASH_KEY = "day_of_week"
 SCHEDULE_DB_RANGE_KEY = "schedule_id"
 SCHEDULE_DB_SESSION_ID_KEY = "idea_session_id"
+SCHEDULE_DB_SESSION_OWNER_KEY = "idea_session_owner"
 SCHEDULE_DB_SCHEDULE_TYPE_KEY = "schedule_type"
+SCHEDULE_DB_START_UP_TIME_KEY = "start_up_time"
+SCHEDULE_DB_SHUT_DOWN_TIME_KEY = "shut_down_time"
 SCHEDULE_DB_TABLE_NAME = "vdc.controller.schedules"
 
 logger = logging_utils.get_logger(SCHEDULE_DB_TABLE_NAME)
@@ -99,13 +101,14 @@ def create_schedule(schedule: Dict[str, Any]) -> Dict[str, Any]:
     created_schedule = table_utils.create_item(
         table_name=SCHEDULE_DB_TABLE_NAME, item=schedule
     )
-    events_client.publish_create_event(
-        created_schedule[SCHEDULE_DB_HASH_KEY],
-        created_schedule[SCHEDULE_DB_RANGE_KEY],
-        new_entry=created_schedule,
-        table_name=SCHEDULE_DB_TABLE_NAME,
-    )
     return created_schedule
+
+
+def get_schedules_for_day_of_week(day_of_week: DayOfWeek) -> List[Dict[str, Any]]:
+    return table_utils.query(
+        table_name=SCHEDULE_DB_TABLE_NAME,
+        attributes={SCHEDULE_DB_HASH_KEY: day_of_week.value},
+    )
 
 
 def delete_schedule(schedule: Dict[str, Any]) -> None:
@@ -241,7 +244,7 @@ def _create_or_update_schedule_for_session_for_day_of_week(
             return current_schedule
 
     _delete_schedule(current_schedule)
-    new_schedule = _create_schedule_for_day_of_week(
+    new_schedule = create_schedule_for_day_of_week(
         day_of_week, new_schedule, idea_session_id, idea_session_owner
     )
 
@@ -267,7 +270,7 @@ def _delete_schedule(schedule: Dict[str, Any]):
     delete_schedule(schedule)
 
 
-def _create_schedule_for_day_of_week(
+def create_schedule_for_day_of_week(
     day_of_week: DayOfWeek,
     schedule: Dict[str, Any],
     idea_session_id: str,
@@ -276,14 +279,28 @@ def _create_schedule_for_day_of_week(
     if schedule.get("schedule_type") == VirtualDesktopScheduleType.NO_SCHEDULE.value:
         return get_empty_schedule(day_of_week)
 
+    start_up_time = schedule.get("start_up_time")
+    shut_down_time = schedule.get("shut_down_time")
+
+    # For WORKING_HOURS, resolve times from global settings if not provided.
+    if schedule.get("schedule_type") == VirtualDesktopScheduleType.WORKING_HOURS.value:
+        if not start_up_time:
+            start_up_time = cluster_settings.get_setting(
+                "vdc.dcv_session.working_hours.start_up_time"
+            )
+        if not shut_down_time:
+            shut_down_time = cluster_settings.get_setting(
+                "vdc.dcv_session.working_hours.shut_down_time"
+            )
+
     schedules_dict = create_schedule(
         {
             "day_of_week": DayOfWeek(day_of_week),
             "idea_session_id": idea_session_id,
             "idea_session_owner": idea_session_owner,
             "schedule_type": schedule.get("schedule_type"),
-            "start_up_time": schedule.get("start_up_time"),
-            "shut_down_time": schedule.get("shut_down_time"),
+            "start_up_time": start_up_time,
+            "shut_down_time": shut_down_time,
         }
     )
     return schedules_dict

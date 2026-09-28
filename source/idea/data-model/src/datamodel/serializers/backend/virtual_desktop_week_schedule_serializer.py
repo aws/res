@@ -13,9 +13,10 @@ from typing import Dict, Any
 import json
 import logging
 
+from datamodel.models.day_of_week import DayOfWeek
 from datamodel.serializers.base_serializer import BaseSerializer
 
-DAYS_OF_WEEK = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"]
+DAYS_OF_WEEK = [day.value for day in DayOfWeek]
 
 logger = logging.getLogger(__name__)
 

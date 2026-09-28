@@ -57,12 +57,24 @@ class IntegTestStepBuilder:
         ]
         self._requires_alb = requires_alb
         self._compute_type = compute_type
+        self._invoke_options: list[str] = []
 
     def test_specific_invoke_command_argument(
         self, *arguments: str
     ) -> IntegTestStepBuilder:
         for argument in arguments:
             self._invoke_command_arguments.append(argument)
+
+        return self
+
+    def test_specific_invoke_option(self, *options: str) -> IntegTestStepBuilder:
+        """
+        Append raw invoke task options (e.g. "--marker-expr smoke_subset"). Unlike
+        test_specific_invoke_command_argument (which emits `-p key=value` pytest
+        params), these are passed directly as invoke task options.
+        """
+        for option in options:
+            self._invoke_options.append(option)
 
         return self
 
@@ -97,6 +109,8 @@ class IntegTestStepBuilder:
         invoke_command = f"invoke {self._invoke_command}"
         for invoke_command_argument in self._invoke_command_arguments:
             invoke_command = invoke_command + f" -p {invoke_command_argument}"
+        for invoke_option in self._invoke_options:
+            invoke_command = invoke_command + f" {invoke_option}"
         commands.append(invoke_command)
 
         if self._requires_alb:

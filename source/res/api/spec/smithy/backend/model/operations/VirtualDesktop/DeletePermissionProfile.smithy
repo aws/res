@@ -4,7 +4,7 @@ $version: "2.0"
 
 namespace res
 
-@http(method: "DELETE", uri: "/res/virtual-desktop/permission-profile/{profileId}")
+@http(method: "DELETE", uri: "/res/virtual-desktop/permission-profiles/{profile_id}")
 @suppress(["HttpMethodSemantics.UnexpectedPayload"])
 @idempotent
 @tags(["virtual-desktop"])
@@ -23,8 +23,8 @@ operation DeletePermissionProfile {
 structure DeletePermissionProfileRequest {
     @required
     @httpLabel
-    @jsonName("profile_id")
-    profileId: String
+    @suppress(["CamelCase"])
+    profile_id: res.virtualdesktop#VirtualDesktopPermissionProfileId
 }
 
 @output

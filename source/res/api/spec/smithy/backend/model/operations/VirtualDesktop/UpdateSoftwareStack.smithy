@@ -4,7 +4,7 @@ $version: "2.0"
 
 namespace res
 
-@http(method: "PUT", uri: "/res/virtual-desktop/software-stack/{stackId}")
+@http(method: "PUT", uri: "/res/virtual-desktop/software-stacks/{stack_id}")
 @tags(["virtual-desktop"])
 @documentation("Update Software Stack")
 operation UpdateSoftwareStack {
@@ -21,9 +21,9 @@ operation UpdateSoftwareStack {
 structure UpdateSoftwareStackRequest {
     @required
     @httpLabel
-    @jsonName("stack_id")
     @length(min: 1)
-    stackId: String
+    @suppress(["CamelCase"])
+    stack_id: String
 
     @required
     @documentation("Update software stack request")

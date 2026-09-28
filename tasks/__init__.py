@@ -20,7 +20,6 @@ idea.utils.update_source_paths([
     idea.props.datamodel_src,
     idea.props.administrator_src,
     idea.props.cluster_manager_src,
-    idea.props.virtual_desktop_src,
     idea.props.site_packages,
 ])
 

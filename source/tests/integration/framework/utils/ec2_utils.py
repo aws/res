@@ -29,17 +29,6 @@ def cluster_manager_instances(session: pytest.Session) -> list[Dict[str, Any]]:
     return instances
 
 
-def vdc_instances(session: pytest.Session) -> list[Dict[str, Any]]:
-    environment_name = session.config.getoption("--environment-name")
-    region: str = session.config.getoption("--aws-region")
-
-    instances = _all_in_service_instances_from_asgs(
-        [f"{environment_name}-vdc-controller-asg"],
-        region,
-    )
-    return instances
-
-
 def _all_in_service_instances_from_asgs(
     auto_scaling_group_names: list[str],
     region: str,

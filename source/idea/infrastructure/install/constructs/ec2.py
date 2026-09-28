@@ -293,6 +293,7 @@ class SharedStorageSecurityGroup(SecurityGroup):
         )
 
         self.setup_ingress()
+        self.setup_egress()
 
     def setup_ingress(self) -> None:
         # Add EFS ingress rule
@@ -313,6 +314,54 @@ class SharedStorageSecurityGroup(SecurityGroup):
             ec2.Peer.ipv4(self.vpc.vpc_cidr_block),
             ec2.Port.tcp_range(1021, 1023),
             description="Allow FSx Lustre traffic from all VPC nodes",
+        )
+
+        # Add FSx ONTAP / SMB ingress rules (required for AD join and
+        # Windows VDI mounts)
+        # Reference: https://docs.aws.amazon.com/fsx/latest/ONTAPGuide/self-manage-prereqs.html
+        self.add_ingress_rule(
+            ec2.Peer.ipv4(self.vpc.vpc_cidr_block),
+            ec2.Port.tcp(445),
+            description="Allow SMB traffic from all VPC nodes to FSx ONTAP",
+        )
+        self.add_ingress_rule(
+            ec2.Peer.ipv4(self.vpc.vpc_cidr_block),
+            ec2.Port.tcp(389),
+            description="Allow LDAP TCP traffic from all VPC nodes to FSx ONTAP",
+        )
+        self.add_ingress_rule(
+            ec2.Peer.ipv4(self.vpc.vpc_cidr_block),
+            ec2.Port.udp(389),
+            description="Allow LDAP UDP traffic from all VPC nodes to FSx ONTAP",
+        )
+        self.add_ingress_rule(
+            ec2.Peer.ipv4(self.vpc.vpc_cidr_block),
+            ec2.Port.tcp(88),
+            description="Allow Kerberos TCP traffic for FSx ONTAP AD join",
+        )
+        self.add_ingress_rule(
+            ec2.Peer.ipv4(self.vpc.vpc_cidr_block),
+            ec2.Port.udp(88),
+            description="Allow Kerberos UDP traffic for FSx ONTAP AD join",
+        )
+        self.add_ingress_rule(
+            ec2.Peer.ipv4(self.vpc.vpc_cidr_block),
+            ec2.Port.udp(53),
+            description="Allow DNS UDP traffic for FSx ONTAP AD join",
+        )
+        self.add_ingress_rule(
+            ec2.Peer.ipv4(self.vpc.vpc_cidr_block),
+            ec2.Port.tcp(53),
+            description="Allow DNS TCP traffic for FSx ONTAP AD join",
+        )
+
+    def setup_egress(self) -> None:
+        # Allow outbound traffic to VPC CIDR for FSx ONTAP AD join.
+        # ONTAP SVM needs to initiate connections to AD controllers.
+        self.add_egress_rule(
+            ec2.Peer.ipv4(self.vpc.vpc_cidr_block),
+            ec2.Port.all_traffic(),
+            description="Allow all outbound to VPC for FSx ONTAP AD communication",
         )
 
 
@@ -814,6 +863,62 @@ class DcvSessionManagementLambdaSecurityGroup(SecurityGroup):
             name,
             vpc,
             description="DCV Session Management Lambda security group",
+            parameters=parameters,
+        )
+        self.setup_egress()
+
+    def setup_egress(self) -> None:
+        self.add_outbound_traffic_rule()
+        self.add_dns_resolution_egress_rule()
+
+
+class VdcScheduledEventLambdaSecurityGroup(SecurityGroup):
+    """
+    Security group for the VDC Scheduled Event Lambda.
+    Only egress rules are needed — EventBridge invokes Lambda via the
+    Lambda API, not through VPC networking.
+    """
+
+    def __init__(
+        self,
+        name: str,
+        scope: constructs.Construct,
+        vpc: ec2.IVpc,
+        parameters: Union[RESParameters, BIParameters],
+    ):
+        super().__init__(
+            scope,
+            name,
+            vpc,
+            description="VDC Scheduled Event Lambda security group",
+            parameters=parameters,
+        )
+        self.setup_egress()
+
+    def setup_egress(self) -> None:
+        self.add_outbound_traffic_rule()
+        self.add_dns_resolution_egress_rule()
+
+
+class VdcEventsQueueLambdaSecurityGroup(SecurityGroup):
+    """
+    Security group for the VDC Events Queue Lambda.
+    Only egress rules are needed — SQS invokes Lambda via the Lambda API,
+    not through VPC networking.
+    """
+
+    def __init__(
+        self,
+        name: str,
+        scope: constructs.Construct,
+        vpc: ec2.IVpc,
+        parameters: Union[RESParameters, BIParameters],
+    ):
+        super().__init__(
+            scope,
+            name,
+            vpc,
+            description="VDC Events Queue Lambda security group",
             parameters=parameters,
         )
         self.setup_egress()

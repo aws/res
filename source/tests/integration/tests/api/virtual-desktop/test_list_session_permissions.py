@@ -65,12 +65,8 @@ class TestListSessionPermissions:
             api_client.list_session_permissions(res_session_id="amzn2023")
             pytest.fail("Expected 401/403 error for non-admin user")
         except Exception as e:
-            if "400" in str(e):
-                logger.info(
-                    f"Only session owner can request to list_session_permissions for session: {str(e)}"
-                )
-            else:
-                pytest.fail(f"Unexpected API error: {str(e)}")
+            assert "400" in str(e), f"Expected 400 error, got: {str(e)}"
+            assert hasattr(e, "response"), "Response should exist in the exception"
 
     @pytest.mark.parametrize("admin_username", ["clusteradmin"])
     def test_session_permissions_invalid_user(
@@ -108,19 +104,10 @@ class TestListSessionPermissions:
                 "Expected 'Unable to retrieve username' error for request with invalid auth token"
             )
         except Exception as e:
-            if "401" in str(e):
-                assert hasattr(e, "response"), "Response should exist in the exception"
-                assert e.response is not None, "Response should not be None"
-
-                response_content = e.response.text
-                if "Unable to retrieve username" in response_content:
-                    logger.info(
-                        "Request with invalid auth token correctly received 'Unable to retrieve username' error"
-                    )
-                    return
-
-            pytest.fail(
-                f"Unexpected error for request with invalid auth token: {str(e)}"
-            )
+            assert "401" in str(e), f"Expected 401 error, got: {str(e)}"
+            assert hasattr(e, "response"), "Response should exist in the exception"
+            assert (
+                "Unable to retrieve username" in e.response.text
+            ), f"Expected 'Unable to retrieve username' in response, got: {e.response.text}"
         finally:
             set_backend_lambda_test_mode(region, environment_name, True)

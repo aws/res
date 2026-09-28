@@ -31,12 +31,12 @@ structure BatchDeleteSessionRequest {
 structure BatchDeleteSessionResponse {
     @required
     @documentation("List of sessions that were successfully deleted")
-    @jsonName("successful-list")
+    @jsonName("successful_list")
     successfulList: res.virtualdesktop#VirtualDesktopSessionList
 
     @required
     @documentation("List of sessions that failed to delete")
-    @jsonName("unsuccessful-list")
+    @jsonName("unsuccessful_list")
     unsuccessfulList: BatchDeleteSessionFailureList
 }
 
@@ -47,7 +47,7 @@ structure BatchDeleteSessionFailure {
 
     @required
     @documentation("Error code for the failure")
-    @jsonName("error-code")
+    @jsonName("error_code")
     errorCode: BatchOperationErrorCode
 
     @required

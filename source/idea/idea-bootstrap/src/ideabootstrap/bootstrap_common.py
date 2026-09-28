@@ -155,7 +155,6 @@ def update_session_state(state: str):
             owner=session_owner,
             session_id=session_id,
             state=state,
-            publish_event=True,
         )
         logger.info("Updated session state to %s", state)
     except Exception as e:
@@ -163,20 +162,26 @@ def update_session_state(state: str):
 
 
 def update_session_host_info():
-    """Update session record with host info: private_dns_name, dcv_session_id."""
+    """Update session record with host info: private_dns_name, private_ip, dcv_session_id."""
     try:
         session_owner = os.environ.get("IDEA_SESSION_OWNER")
         session_id = os.environ.get("IDEA_SESSION_ID")
         private_dns_name = instance_metadata_utils.get_private_dns_name()
+        private_ip = instance_metadata_utils.get_private_ip()
 
         session = sessions.get_session(owner=session_owner, session_id=session_id)
         server = session.get(sessions.SESSION_DB_SERVER_KEY, {})
         server[sessions.SESSION_DB_PRIVATE_DNS_NAME_KEY] = private_dns_name
+        server[sessions.SESSION_DB_PRIVATE_IP_KEY] = private_ip
         session[sessions.SESSION_DB_SERVER_KEY] = server
         # TODO: Can be removed when removing dcv_session_id from the user-sessions DDB entirely.
         session[sessions.SESSION_DB_DCV_SESSION_ID_KEY] = DCV_AUTOMATIC_CONSOLE_SESSION_ID
 
         sessions.update_session(session)
-        logger.info("Updated session host info: private_dns_name=%s, dcv_session_id=console", private_dns_name)
+        logger.info(
+            "Updated session host info: private_dns_name=%s, private_ip=%s, dcv_session_id=console",
+            private_dns_name,
+            private_ip,
+        )
     except Exception as e:
         logger.error("Failed to update session host info: %s", e)

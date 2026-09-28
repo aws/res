@@ -18,7 +18,7 @@ import { Button, ColumnLayout, Container, Grid, Header, SpaceBetween } from "@cl
 import IdeaAppLayout from "../../components/app-layout/app-layout";
 import { KeyValue } from "../../components/key-value";
 import { AppContext } from "../../common";
-import { Project, SocaUserInputChoice, VirtualDesktopGPU, VirtualDesktopPlacement} from "../../client/data-model";
+import { Project, SocaUserInputChoice} from "../../client/data-model";
 import Tabs from "../../components/tabs/tabs";
 import Utils from "../../common/utils";
 import VirtualDesktopSoftwareStackEditForm from "./forms/virtual-desktop-software-stack-edit-form";
@@ -29,6 +29,7 @@ import VirtualDesktopUtilsClient from "../../client/virtual-desktop-utils-client
 import {
     VirtualDesktopBaseOs,
     VirtualDesktopGpu,
+    VirtualDesktopPlacement,
     ResMemory,
     VirtualDesktopSoftwareStack
 } from "../../client/generated/api";
@@ -223,7 +224,7 @@ class VirtualDesktopSoftwareStackDetail extends Component<VirtualDesktopSoftware
                 allowedInstanceTypes={this.state.allowedInstanceTypes}
                 supportedOsChoices={this.state.supportedOsChoices}
                 supportedGPUChoices={this.state.supportedGPUChoices}
-                onSubmit={(stack_id: string, base_os: VirtualDesktopBaseOs, name: string, description: string, ami_id: string, gpu: VirtualDesktopGPU, min_storage: ResMemory,
+                onSubmit={(stack_id: string, base_os: VirtualDesktopBaseOs, name: string, description: string, ami_id: string, gpu: VirtualDesktopGpu, min_storage: ResMemory,
                     min_ram: ResMemory, projects: Project[], placement: VirtualDesktopPlacement, allowed_instance_types: string[]) => {
                     return this.getVirtualDesktopAdminClient()
                         .updateSoftwareStack(stack_id, {

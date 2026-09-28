@@ -143,6 +143,9 @@ class ProjectsDAO:
         if project.enable_budgets is not None:
             db_project['enable_budgets'] = project.enable_budgets
 
+        if project.enabled is not None:
+            db_project['enabled'] = project.enabled
+
         if project.budget is not None and project.budget.budget_name is not None:
             db_project['budget_name'] = project.budget.budget_name
 

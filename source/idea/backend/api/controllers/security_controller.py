@@ -17,6 +17,10 @@ def bearer_auth(token, request):
     Returned value will be passed in 'token_info' parameter of your operation function, if there is one.
     'sub' or 'uid' will be set in 'user' parameter of your operation function, if there is one.
 
+    Supports two token flows:
+    - User tokens (with `username` claim): returns {"uid": <username>}.
+    - Service tokens (with `scope` and `client_id` claims): returns {"uid": <client_id>, "scope": [<scope>, ...]}.
+
     :param token: Token provided by Authorization header
     :type token: str
     :param request: The request object containing headers and authorization information
@@ -27,17 +31,29 @@ def bearer_auth(token, request):
     try:
         decoded_token = token_resource.decode_token(token=token, verify_exp=True)
 
-        if not decoded_token.get("username"):
-            raise OAuthProblem("Username missing in token")
-
-        idp_name_record = table_utils.get_item(
-            table_name=CLUSTER_SETTINGS_TABLE_NAME,
-            key={"key": COGNITO_SSO_IDP_PROVIDER_NAME},
-        )
-        idp_name = idp_name_record.get("value") if idp_name_record else None
-        username = auth_utils.get_ddb_user_name(
-            username=decoded_token["username"], idp_name=idp_name
-        )
+        if decoded_token.get("username"):
+            # User token workflow
+            idp_name_record = table_utils.get_item(
+                table_name=CLUSTER_SETTINGS_TABLE_NAME,
+                key={"key": COGNITO_SSO_IDP_PROVIDER_NAME},
+            )
+            idp_name = idp_name_record.get("value") if idp_name_record else None
+            username = auth_utils.get_ddb_user_name(
+                username=decoded_token["username"], idp_name=idp_name
+            )
+        elif decoded_token.get("scope"):
+            # Service token workflow
+            client_id = decoded_token.get("client_id")
+            if not client_id:
+                raise OAuthProblem(detail="Service token missing client_id")
+            return {
+                "uid": client_id,
+                "scope": decoded_token["scope"].split(),
+            }
+        else:
+            raise OAuthProblem("Username or scope missing in token")
+    except OAuthProblem:
+        raise
     except Exception as e:
         # Check test mode
         if os.environ.get("RES_TEST_MODE", "").lower() == "true":

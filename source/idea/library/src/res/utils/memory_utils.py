@@ -155,3 +155,13 @@ def is_less_than_or_equal(
     :return: True if memory1 <= memory2, False otherwise
     """
     return compare_memory(value1, unit1, value2, unit2) <= 0
+
+
+def mib_to_gib(mib: float) -> float:
+    """Convert MiB to GiB (binary gigabytes)."""
+    return mib / 1024
+
+
+def mib_to_gb(mib: float) -> float:
+    """Convert MiB to GB (decimal gigabytes)."""
+    return mib * (1024**2) / (1000**3)

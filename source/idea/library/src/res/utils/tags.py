@@ -3,6 +3,10 @@
 
 from typing import Dict, List
 
+from res.constants import RES_TAG_PREFIX
+
+RESERVED_TAG_KEYS = {"Name"}
+
 
 def convert_custom_tags_to_key_value_pairs(custom_tags: List[str]) -> Dict:
     result = {}
@@ -27,3 +31,12 @@ def convert_tags_list_of_dict_to_tags_dict(tags_list: list[dict]) -> dict:
             if key and value is not None:
                 result[key] = value
     return result
+
+
+def validate_user_tags(tags: Dict[str, str]) -> List[str]:
+    reserved_keys = [
+        key
+        for key in tags
+        if key.startswith(RES_TAG_PREFIX) or key in RESERVED_TAG_KEYS
+    ]
+    return reserved_keys

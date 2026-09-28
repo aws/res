@@ -46,10 +46,12 @@ class Proxy(Construct):
         identity_stack: IdentityStack,
         params: Union[RESParameters, BIParameters],
         lambda_layer: aws_cdk.aws_lambda.LayerVersion,
+        shared_res_library_layer: aws_cdk.aws_lambda.LayerVersion,
     ):
         super().__init__(scope, id)
         self.params = params
         self.lambda_layer = lambda_layer
+        self.shared_res_library_layer = shared_res_library_layer
         self.cluster_name = self.params.get_str(CommonKey.CLUSTER_NAME)
         cluster_settings = ClusterSettings(self.cluster_name, self)
         self.arn_builder = ArnBuilder(
@@ -245,7 +247,7 @@ class Proxy(Construct):
                 "HTTPS_PROXY": self.params.get_str(InternetProxyKey.HTTPS_PROXY),
                 "NO_PROXY": self.params.get_str(InternetProxyKey.NO_PROXY),
             },
-            layers=[self.lambda_layer],  # type: ignore
+            layers=[self.lambda_layer, self.shared_res_library_layer],  # type: ignore
             vpc=vpc,  # type: ignore
             security_groups=[  # type: ignore
                 ec2.SecurityGroup.from_security_group_id(

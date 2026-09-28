@@ -29,6 +29,7 @@ export interface VirtualDesktopDashboardProps extends IdeaAppLayoutProps, IdeaSi
 
 export interface VirtualDesktopDashboardState {
     sessions: VirtualDesktopSession[];
+    softwareStackNames: { [stackId: string]: string };
     loading: boolean
 }
 
@@ -50,6 +51,7 @@ class VirtualDesktopDashboard extends Component<VirtualDesktopDashboardProps, Vi
         this.allCharts = [this.instanceTypesChart, this.stateChart, this.baseOsChart];
         this.state = {
             sessions: [],
+            softwareStackNames: {},
             loading: false
         };
     }
@@ -67,6 +69,13 @@ class VirtualDesktopDashboard extends Component<VirtualDesktopDashboardProps, Vi
         this.fetchAllSessions()
             .then((sessions) => {
                 this.setState({sessions: sessions.listing ?? [], loading: false})
+                AppContext.get().client().virtualDesktop().listSoftwareStacks({}).then((stacksResult) => {
+                    const names: { [stackId: string]: string } = {};
+                    (stacksResult.listing ?? []).forEach((s: any) => {
+                        if (s.stack_id && s.name) names[s.stack_id] = s.name;
+                    });
+                    this.setState({ softwareStackNames: names });
+                });
             })
             .catch((error) => {
                 this.props.onFlashbarChange({
@@ -148,7 +157,7 @@ class VirtualDesktopDashboard extends Component<VirtualDesktopDashboardProps, Vi
                         <VirtualDesktopStateChart ref={this.stateChart} loading={this.state.loading} sessions={this.state.sessions}/>
                         <VirtualDesktopBaseOSChart ref={this.baseOsChart} loading={this.state.loading} sessions={this.state.sessions}/>
                         <VirtualDesktopProjectChart ref={this.projectChart} loading={this.state.loading} sessions={this.state.sessions}/>
-                        <VirtualDesktopSoftwareStackChart ref={this.softwareStackChart} loading={this.state.loading} sessions={this.state.sessions}/>
+                        <VirtualDesktopSoftwareStackChart ref={this.softwareStackChart} loading={this.state.loading} sessions={this.state.sessions} softwareStackNames={this.state.softwareStackNames}/>
                     </Grid>
                 }
             />

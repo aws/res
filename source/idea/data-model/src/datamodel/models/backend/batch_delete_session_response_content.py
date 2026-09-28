@@ -34,8 +34,8 @@ class BatchDeleteSessionResponseContent(Model):
         }
 
         self.attribute_map = {
-            'successful_list': 'successful-list',
-            'unsuccessful_list': 'unsuccessful-list'
+            'successful_list': 'successful_list',
+            'unsuccessful_list': 'unsuccessful_list'
         }
 
         self._successful_list = successful_list

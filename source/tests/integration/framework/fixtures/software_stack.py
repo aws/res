@@ -9,22 +9,14 @@
 #  OR CONDITIONS OF ANY KIND, express or implied. See the License for the specific language governing permissions
 #  and limitations under the License.
 
-import json
 import logging
 import os
 import uuid
+from typing import Any
 
 import pytest
 import yaml
 
-from ideadatamodel import (  # type: ignore
-    CreateSoftwareStackRequest,
-    DeleteSoftwareStackRequest,
-    ListSoftwareStackRequest,
-    Project,
-    SocaFilter,
-    VirtualDesktopSoftwareStack,
-)
 from tests.integration.framework.client.api_client import (
     ApiClient,
     CreateSoftwareStackRequestContent,
@@ -34,7 +26,6 @@ from tests.integration.framework.client.res_client import ResClient
 from tests.integration.framework.fixtures.fixture_request import FixtureRequest
 from tests.integration.framework.fixtures.res_environment import ResEnvironment
 from tests.integration.framework.model.client_auth import ClientAuth
-from tests.integration.framework.utils.virtual_desktop import api_model_to_ideadatamodel
 from tests.integration.tests.smoke.config import TEST_SOFTWARE_STACKS_GOVCLOUD
 
 logger = logging.getLogger(__name__)
@@ -44,14 +35,21 @@ logger = logging.getLogger(__name__)
 def software_stack(
     request: FixtureRequest,
     res_environment: ResEnvironment,
-) -> VirtualDesktopSoftwareStack:
+) -> Any:
     """
     Fixture for setting up/tearing down the test software stack
     """
     software_stack = request.param[0]
     project = request.getfixturevalue(request.param[1])
     admin = request.getfixturevalue(request.param[2])
-    software_stack.projects = [project]
+
+    # Optional 4th element: fixture name whose value overrides ami_id.
+    if len(request.param) > 3 and request.param[3]:
+        software_stack.ami_id = request.getfixturevalue(request.param[3])
+    # The project fixture still returns a legacy (pydantic) Project, which the new
+    # OpenAPI-generated stack cannot serialize inside projects. Attach it by its
+    # id so software_stack.to_dict() -> JSON stays encodable.
+    software_stack.projects = [{"project_id": project.project_id}]
 
     api_client = ApiClient(res_environment, admin)
     api_invoker_type = request.config.getoption("--api-invoker-type")
@@ -73,7 +71,7 @@ def software_stack(
             res_client, software_stack, res_environment.region
         )
 
-    payload = {"software_stack": json.loads(software_stack.json())}
+    payload = {"software_stack": software_stack.to_dict()}
     request_content = CreateSoftwareStackRequestContent(**payload)
     response = api_client.create_software_stack(request_content)
 
@@ -87,12 +85,11 @@ def software_stack(
 
     request.addfinalizer(tear_down)
 
-    return api_model_to_ideadatamodel(response.software_stack)  # type: ignore
+    # The response already deserializes into the new-model VirtualDesktopSoftwareStack.
+    return response.software_stack  # type: ignore
 
 
-def get_ami_id(
-    client: ResClient, software_stack: VirtualDesktopSoftwareStack, region: str
-) -> str:
+def get_ami_id(client: ResClient, software_stack: Any, region: str) -> str:
     """
     Retrieve AMI ID from base-software-stack-config.yaml
 

@@ -80,16 +80,6 @@ def cluster_manager(c):
 
 
 @task
-def virtual_desktop_controller(c):
-    # type: (Context) -> None
-    """
-    package virtual desktop controller
-    """
-    package_tool = PackageTool(c, 'idea-virtual-desktop-controller')
-    package_tool.package()
-    idea.console.success(f'distribution created: {package_tool.output_archive_name}')
-
-@task
 def dcv_connection_gateway(c):
     package_tool = PackageTool(c, 'idea-dcv-connection-gateway')
     package_tool.package()
@@ -194,8 +184,6 @@ def package_all(c):
     ad_sync(c)
 
     cluster_manager(c)
-
-    virtual_desktop_controller(c)
 
     dcv_connection_gateway(c)
 

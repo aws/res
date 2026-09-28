@@ -16,6 +16,7 @@ from typing import Dict, Any, Optional
 import logging
 
 from datamodel.serializers.base_serializer import BaseSerializer, SerializerUtils
+from res.utils import time_utils  # type: ignore
 
 logger = logging.getLogger(__name__)
 
@@ -47,7 +48,8 @@ class VirtualDesktopSessionPermissionSerializer(BaseSerializer):
         )
 
         for attribute in ["expiry_date", "idea_session_created_on"]:
-            data[attribute] = int(data.get(attribute) or 0)
+            value = data.get(attribute)
+            data[attribute] = time_utils.iso_to_ms(value) if value else 0
 
         return data
 

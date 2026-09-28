@@ -4,7 +4,7 @@ $version: "2.0"
 
 namespace res
 
-@http(method: "PUT", uri: "/res/virtual-desktop/session-permission")
+@http(method: "PUT", uri: "/res/virtual-desktop/session-permissions")
 @readonly
 @tags(["virtual-desktop"])
 @documentation("Get a list of session permissions")

@@ -61,6 +61,16 @@ class VdiHelperPolicy(ManagedPolicy):
             ),
             iam.PolicyStatement(
                 effect=iam.Effect.ALLOW,
+                actions=["ec2:DeleteFleets"],
+                resources=[arn_builder.get_arn("ec2", "fleet/*")],
+                conditions={
+                    "StringEquals": {
+                        "aws:ResourceTag/res:EnvironmentName": arn_builder.cluster_name,
+                    }
+                },
+            ),
+            iam.PolicyStatement(
+                effect=iam.Effect.ALLOW,
                 actions=["sqs:SendMessage"],
                 resources=[
                     arn_builder.get_sqs_arn("vdc-events.fifo"),

@@ -43,12 +43,12 @@ class VirtualDesktopSessionConnection(Model):
         }
 
         self.attribute_map = {
-            'idea_session_id': 'idea-session-id',
-            'idea_session_owner': 'idea-session-owner',
+            'idea_session_id': 'idea_session_id',
+            'idea_session_owner': 'idea_session_owner',
             'endpoint': 'endpoint',
-            'web_url_path': 'web-url-path',
-            'access_token': 'access-token',
-            'failure_reason': 'failure-reason'
+            'web_url_path': 'web_url_path',
+            'access_token': 'access_token',
+            'failure_reason': 'failure_reason'
         }
 
         self._idea_session_id = idea_session_id

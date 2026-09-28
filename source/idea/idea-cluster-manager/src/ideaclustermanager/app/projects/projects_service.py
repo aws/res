@@ -33,8 +33,20 @@ from ideadatamodel import (
 from ideasdk.utils import Utils, ApiUtils
 from ideasdk.launch_configurations import LaunchScriptsHelper, LaunchRoleHelper
 from ideasdk.context import SocaContext, ArnBuilder
-from ideasdk.client.vdc_client import AbstractVirtualDesktopControllerClient
+from res.clients.api_client.res_api_client import ResApiClient
 from res.utils import iam_utils
+from res import exceptions as res_exceptions
+
+from datamodel.models.backend.batch_delete_session_request_content import (
+    BatchDeleteSessionRequestContent,
+)
+from datamodel.models.backend.batch_stop_session_request_content import (
+    BatchStopSessionRequestContent,
+)
+from datamodel.models.backend.virtual_desktop_session import VirtualDesktopSession
+from datamodel.models.backend.update_software_stack_request_content import (
+    UpdateSoftwareStackRequestContent,
+)
 
 from ideaclustermanager.app.projects.db.projects_dao import ProjectsDAO
 from ideaclustermanager.app.authz.db.role_assignments_dao import RoleAssignmentsDAO
@@ -46,10 +58,15 @@ from typing import List, Set
 
 class ProjectsService:
 
-    def __init__(self, context: SocaContext, accounts_service: AccountsService, vdc_client: AbstractVirtualDesktopControllerClient):
+    def __init__(
+        self,
+        context: SocaContext,
+        accounts_service: AccountsService,
+        res_api_client: ResApiClient,
+    ):
         self.context = context
         self.accounts_service = accounts_service
-        self.vdc_client = vdc_client
+        self.res_api_client = res_api_client
         self.logger = context.logger('projects')
         self.arn_builder = ArnBuilder(self.context.config())
 
@@ -93,8 +110,8 @@ class ProjectsService:
             budget_name = project.budget.budget_name
             self.context.aws_util().budgets_get_budget(budget_name)
 
-        # ensure project is always disabled during creation
-        project.enabled = False
+        # create project as enabled
+        project.enabled = True
 
         # Validate scripts
         scripts = project.scripts
@@ -124,16 +141,8 @@ class ProjectsService:
 
         created_project = self.projects_dao.convert_from_db(db_created_project)
 
-        # and then call enable_project() to propagate the status
-        self.enable_project(EnableProjectRequest(
-                project_id=created_project.project_id
-            ))
-
-        enabled_project = self.get_project(
-            GetProjectRequest(project_id=created_project.project_id))
-
         return CreateProjectResult(
-            project=enabled_project.project
+            project=created_project
         )
 
     def delete_project(self, request: DeleteProjectRequest) -> DeleteProjectResult:
@@ -159,18 +168,49 @@ class ProjectsService:
         if project is not None:
             project_obj = self.projects_dao.convert_from_db(project)
             project_id = project_obj.project_id
-            sessions_by_project_id = self.vdc_client.list_sessions_by_project_id(project_id)
+            sessions_by_project_id = self._list_sessions_by_project_id(project_id)
             if sessions_by_project_id:
-                self.vdc_client.delete_sessions(sessions=sessions_by_project_id, force_delete=True)
+                response = self.res_api_client.batch_delete_session(
+                    BatchDeleteSessionRequestContent(
+                        sessions=[
+                            VirtualDesktopSession(
+                                idea_session_id=s.idea_session_id,
+                                owner=s.owner,
+                                force=True,
+                            )
+                            for s in sessions_by_project_id
+                        ]
+                    )
+                )
+                if response and response.unsuccessful_list:
+                    failed_ids = [
+                        s.idea_session_id for s in response.unsuccessful_list
+                    ]
+                    self.logger.warning(
+                        f"Failed to delete {len(failed_ids)} sessions for project {project_id}: {failed_ids}."
+                    )
 
-            software_stacks_by_project_id = self.vdc_client.list_software_stacks_by_project_id(project_id)
-            if software_stacks_by_project_id:
-                    for stack in software_stacks_by_project_id:
-                        updated_projects = [p for p in stack.projects if p.project_id != project_id]
-                        stack.projects = updated_projects
-                        self.vdc_client.update_software_stack(
-                            software_stack=stack
-                        )
+            software_stacks_by_project_id = []
+            next_token = None
+            while True:
+                stacks_response = self.res_api_client.list_software_stacks(
+                    project_id=project_id, next_token=next_token,
+                )
+                software_stacks_by_project_id.extend(stacks_response.listing or [])
+                next_token = stacks_response.next_token
+                if not next_token:
+                    break
+
+            for stack in software_stacks_by_project_id:
+                stack.projects = [
+                    p for p in (stack.projects or []) if p.project_id != project_id
+                ]
+                self.res_api_client.update_software_stack(
+                    stack_id=stack.stack_id,
+                    request_content=UpdateSoftwareStackRequestContent(
+                        software_stack=stack,
+                    ),
+                )
 
             role_assignments = self.role_assignments_dao.list_role_assignments(resource_key=f"{project_id}:project")
             for role_assignment in role_assignments:
@@ -335,13 +375,28 @@ class ProjectsService:
             )
 
         project_id = self.projects_dao.convert_from_db(project).project_id
-        sessions_by_project_id = self.vdc_client.list_sessions_by_project_id(project_id)
-        for session in sessions_by_project_id:
-            # Force stop all the sessions associated with the project
-            session.force = True
+        sessions_by_project_id = self._list_sessions_by_project_id(project_id)
 
         if sessions_by_project_id:
-            self.vdc_client.stop_sessions(sessions_by_project_id)
+            response = self.res_api_client.batch_stop_session(
+                BatchStopSessionRequestContent(
+                    sessions=[
+                        VirtualDesktopSession(
+                            idea_session_id=s.idea_session_id,
+                            owner=s.owner,
+                            force=True,
+                        )
+                        for s in sessions_by_project_id
+                    ]
+                )
+            )
+            if response and response.unsuccessful_list:
+                failed_ids = [
+                    s.idea_session_id for s in response.unsuccessful_list
+                ]
+                self.logger.warning(
+                    f"Failed to stop {len(failed_ids)} sessions for project {project_id}: {failed_ids}."
+                )
         self.projects_dao.update_project({
             'project_id': project['project_id'],
             'enabled': False
@@ -430,7 +485,18 @@ class ProjectsService:
         # This gets all projects for a user via direct project-user role assignments or from any of their group-project assignments
         user = self.context.accounts.get_user(request.username)
         is_user_enabled = Utils.is_true(user.enabled)
-        user_projects = self.role_assignments_dao.get_projects_for_user(request.username, Utils.get_as_string_list(user.additional_groups, []))
+
+        # Only include groups that are enabled
+        enabled_groups = []
+        for group_name in Utils.get_as_string_list(user.additional_groups, []):
+            try:
+                group = self.accounts_service.get_group(group_name)
+                if group and Utils.is_true(group.enabled, True):
+                    enabled_groups.append(group_name)
+            except res_exceptions.GroupNotFound:
+                continue
+
+        user_projects = self.role_assignments_dao.get_projects_for_user(request.username, enabled_groups)
 
         result = []
         if is_user_enabled:
@@ -456,6 +522,13 @@ class ProjectsService:
     def list_policies(self) -> ListPoliciesResult:
         policies = self.context.aws_util().list_available_host_policies()
         return ListPoliciesResult(policies=policies)
+    
+    def _list_sessions_by_project_id(self, project_id: str) -> List:
+        """Return all sessions belonging to ``project_id`` across all pages."""
+        return [
+            s for s in self.res_api_client.list_all_sessions()
+            if s.project and s.project.project_id == project_id
+        ]
 
     def _create_vdi_role_and_instance_profile(self, project_name: str , policy_arns: Set[str], ) -> bool:
         self.logger.debug(f'Creating new VDI role for project {project_name}')

@@ -12,9 +12,9 @@
 import logging
 import threading
 import time
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 
-from tests.integration.framework.utils.remote_command_runner import RemoteCommandRunner
+from res.utils import ssm_utils  # type: ignore[import]
 
 logger = logging.getLogger(__name__)
 
@@ -24,15 +24,22 @@ class SetTestModeThread(threading.Thread):
     Custom Thread Class for setting the test mode on a server instance
     """
 
-    def __init__(
-        self, remote_command_runner: RemoteCommandRunner, instance_id: str, enable: bool
-    ):
+    def __init__(self, instance_id: str, enable: bool):
         super().__init__()
 
-        self._remote_command_runner = remote_command_runner
         self._instance_id = instance_id
         self._enable = enable
         self._exc: Optional[BaseException] = None
+
+    def _run_command(self, commands: List[str]) -> str:
+        result = ssm_utils.send_command(
+            instance_ids=[self._instance_id],
+            commands=commands,
+            base_os="linux",
+            output_to_s3=False,
+        )
+        invocation = ssm_utils.wait_for_command(result["CommandId"], self._instance_id)
+        return str(invocation.get("StandardOutputContent", ""))
 
     def set_test_mode(self) -> None:
         set_test_mode_commands = [
@@ -43,14 +50,12 @@ class SetTestModeThread(threading.Thread):
         ]
         health_check_commands = ["curl https://localhost:8443/healthcheck -k"]
 
-        self._remote_command_runner.run(self._instance_id, set_test_mode_commands)
+        self._run_command(set_test_mode_commands)
 
         start_time = time.process_time()
         while time.process_time() - start_time < 30:
             try:
-                output = self._remote_command_runner.run(
-                    self._instance_id, health_check_commands
-                )
+                output = self._run_command(health_check_commands)
                 assert output == '{"success":true}'
                 logger.debug(
                     f"server is relaunched successfully. instance id: {self._instance_id}"
@@ -79,14 +84,11 @@ class SetTestModeThread(threading.Thread):
 
 
 def set_test_mode_for_all_servers(
-    region: str,
     server_instances: list[Dict[str, Any]],
     enable: bool,
 ) -> None:
-    remote_command_runner = RemoteCommandRunner(region)
-
     threads = [
-        SetTestModeThread(remote_command_runner, instance.get("InstanceId", ""), enable)
+        SetTestModeThread(instance.get("InstanceId", ""), enable)
         for instance in server_instances
     ]
     for thread in threads:

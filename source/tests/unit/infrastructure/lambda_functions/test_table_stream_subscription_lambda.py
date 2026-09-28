@@ -3,7 +3,7 @@
 
 import base64
 import json
-from unittest.mock import Mock
+from unittest.mock import Mock, patch
 
 from res.clients.ad_sync import ad_sync_client
 from res.resources.dynamodb import dynamodb_stream_subscription
@@ -13,6 +13,7 @@ from idea.infrastructure.resources.lambda_functions.table_stream_subscription_la
 )
 from idea.infrastructure.resources.lambda_functions.table_stream_subscription_lambda.table_stream_subscription_handler import (
     ADConfigEventSubscriber,
+    GlobalAllowedInstanceTypesEventSubscriber,
 )
 
 EVENTS = {
@@ -149,3 +150,56 @@ def test_ad_config_event_subscriber_on_delete_start_ad_sync(
     monkeypatch.setattr(ad_sync_client, "start_ad_sync", start_ad_sync_mock)
     AD_CONFIG_EVENT_SUBSCRIBER.on_delete(ENTRY_WITH_ADDITIONAL_SSSD_CONFIGS_KEY)
     start_ad_sync_mock.assert_called_once()
+
+
+GLOBAL_INSTANCE_TYPES_SUBSCRIBER = GlobalAllowedInstanceTypesEventSubscriber()
+
+ENTRY_WITH_GLOBAL_ALLOWED_KEY = {
+    "key": "vdc.dcv_session.instance_types.allow",
+    "value": ["m5.xlarge", "m5.2xlarge"],
+}
+ENTRY_WITH_UNRELATED_KEY = {
+    "key": "vdc.some_other_setting",
+    "value": "something",
+}
+
+
+def test_global_allowed_instance_types_subscriber_monitors_correct_key():
+    assert GLOBAL_INSTANCE_TYPES_SUBSCRIBER.is_entry_monitored(
+        ENTRY_WITH_GLOBAL_ALLOWED_KEY
+    )
+
+
+def test_global_allowed_instance_types_subscriber_ignores_unrelated_key():
+    assert not GLOBAL_INSTANCE_TYPES_SUBSCRIBER.is_entry_monitored(
+        ENTRY_WITH_UNRELATED_KEY
+    )
+
+
+@patch(
+    "idea.infrastructure.resources.lambda_functions.table_stream_subscription_lambda.table_stream_subscription_handler.update_software_stack_allowed_instance_types"
+)
+def test_global_allowed_instance_types_subscriber_on_update(mock_update):
+    old_entry = {"key": "vdc.dcv_session.instance_types.allow", "value": ["m5.xlarge"]}
+    new_entry = {
+        "key": "vdc.dcv_session.instance_types.allow",
+        "value": ["m5.xlarge", "m5.2xlarge"],
+    }
+    GLOBAL_INSTANCE_TYPES_SUBSCRIBER.on_update(old_entry, new_entry)
+    mock_update.assert_called_once_with(["m5.xlarge", "m5.2xlarge"])
+
+
+@patch(
+    "idea.infrastructure.resources.lambda_functions.table_stream_subscription_lambda.table_stream_subscription_handler.update_software_stack_allowed_instance_types"
+)
+def test_global_allowed_instance_types_subscriber_on_create_no_op(mock_update):
+    GLOBAL_INSTANCE_TYPES_SUBSCRIBER.on_create(ENTRY_WITH_GLOBAL_ALLOWED_KEY)
+    mock_update.assert_not_called()
+
+
+@patch(
+    "idea.infrastructure.resources.lambda_functions.table_stream_subscription_lambda.table_stream_subscription_handler.update_software_stack_allowed_instance_types"
+)
+def test_global_allowed_instance_types_subscriber_on_delete_no_op(mock_update):
+    GLOBAL_INSTANCE_TYPES_SUBSCRIBER.on_delete(ENTRY_WITH_GLOBAL_ALLOWED_KEY)
+    mock_update.assert_not_called()

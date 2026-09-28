@@ -15,7 +15,7 @@ import { Box, Button, Header, Modal, Tabs } from "@cloudscape-design/components"
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import { faDownload, faExternalLinkAlt } from "@fortawesome/free-solid-svg-icons";
 import React from "react";
-import { VirtualDesktopSession } from "../../../client/data-model";
+import { VirtualDesktopSession } from "../../../client/generated/api";
 import { AppContext } from "../../../common";
 
 function downloadDcvClient(os: string) {

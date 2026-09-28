@@ -11,32 +11,45 @@
 
 import json
 import logging
+import re
 import time
-from typing import Any
+from typing import Any, Optional
 
-from ideadatamodel import (  # type: ignore
-    DeleteSoftwareStackRequest,
-    GetSessionConnectionInfoRequest,
-    GetSessionInfoRequest,
-    GetSoftwareStackInfoRequest,
-    ListSessionsRequest,
-    VirtualDesktopBaseOS,
-    VirtualDesktopSession,
-    VirtualDesktopSessionConnectionInfo,
-    VirtualDesktopSessionState,
-    VirtualDesktopSoftwareStack,
-)
+from res.resources import cluster_settings  # type: ignore[import]
+from res.utils import ssm_utils  # type: ignore[import]
+
 from tests.integration.framework.client.api_client import (
     ApiClient,
     DeleteSoftwareStackRequestContent,
 )
-from tests.integration.framework.client.res_client import ResClient
-from tests.integration.framework.utils.remote_command_runner import (
-    EC2InstancePlatform,
-    RemoteCommandRunner,
-)
+from tests.integration.framework.utils.model_utils import get_backend_model_class
 
 logger = logging.getLogger(__name__)
+
+INSUFFICIENT_CAPACITY_PATTERNS = (
+    re.compile(r"InsufficientInstanceCapacity", re.IGNORECASE),
+    re.compile(
+        r"We currently do not have sufficient .+ capacity",
+        re.IGNORECASE,
+    ),
+)
+
+
+def is_insufficient_capacity(message: Optional[str]) -> bool:
+    """Return True if ``message`` matches a known EC2 insufficient-capacity error."""
+    if not message:
+        return False
+    return any(pattern.search(message) for pattern in INSUFFICIENT_CAPACITY_PATTERNS)
+
+
+# Backend data-model classes (source/idea/data-model). The session APIs consume
+# and return these.
+VirtualDesktopSessionState = get_backend_model_class(
+    "virtual_desktop_session_state", "VirtualDesktopSessionState"
+)
+VirtualDesktopBaseOS = get_backend_model_class(
+    "virtual_desktop_base_os", "VirtualDesktopBaseOs"
+)
 
 SESSION_COMPLETE_STATES = [
     VirtualDesktopSessionState.READY,
@@ -49,28 +62,26 @@ SESSION_COMPLETE_STATES = [
 MAX_WAITING_TIME_FOR_LAUNCHING_SESSION_IN_SEC = 3600
 MAX_WAITING_TIME_FOR_DELETING_SESSION_IN_SEC = 300
 MAX_WAITING_TIME_FOR_STOPPING_IDLE_SESSION_IN_SEC = 1200
+MAX_WAITING_TIME_FOR_SESSION_STATE_IN_SEC = 1200
 MAX_WAITING_TIME_FOR_SESSION_CONNECTION_COUNT_IN_SEC = 300
 MAX_WAITING_TIME_FOR_AMI_CREATION = 900
 
+# Max seconds to wait for the idle config file to be created by the VDI bootstrap.
+# The bootstrap writes the default idle config during instance initialization;
+# we must wait for it to exist before overwriting with forced idle settings.
+MAX_WAITING_TIME_FOR_IDLE_CONFIG_FILE_IN_SEC = 300
 
-def wait_for_launching_session(
-    api_client: ApiClient, session: VirtualDesktopSession
-) -> VirtualDesktopSession:
+
+def wait_for_launching_session(api_client: ApiClient, session: Any) -> Any:
     start_time = time.time()
     while time.time() - start_time < MAX_WAITING_TIME_FOR_LAUNCHING_SESSION_IN_SEC:
         get_session_info_response = api_client.get_session(
             session.idea_session_id, session.owner
         )
-        api_session = get_session_info_response.session  # type: ignore
-
-        # Convert API model to ideadatamodel
-        # TODO: Could be removed after other Sessions API is migrated.
-        if hasattr(api_session, "to_dict"):
-            session_dict = api_session.to_dict()
-        else:
-            session_dict = json.loads(json.dumps(api_session, default=str))
-
-        session = VirtualDesktopSession(**session_dict)
+        # The response already deserializes into the new-model session with nested
+        # types coerced (server, project, ...). Rebuilding via the constructor
+        # would leave nested values as plain dicts (no attribute access).
+        session = get_session_info_response.session  # type: ignore
         session_state = session.state
 
         if session_state in SESSION_COMPLETE_STATES:
@@ -88,9 +99,7 @@ def wait_for_launching_session(
     ), f"Failed to launch session {session.name} within {MAX_WAITING_TIME_FOR_LAUNCHING_SESSION_IN_SEC} seconds"
 
 
-def wait_for_deleting_session(
-    api_client: ApiClient, session: VirtualDesktopSession
-) -> None:
+def wait_for_deleting_session(api_client: ApiClient, session: Any) -> None:
     start_time = time.time()
     while time.time() - start_time < MAX_WAITING_TIME_FOR_DELETING_SESSION_IN_SEC:
         list_sessions_response = api_client.list_sessions()
@@ -110,9 +119,7 @@ def wait_for_deleting_session(
     ), f"Failed to delete session {session.dcv_session_id} within {MAX_WAITING_TIME_FOR_DELETING_SESSION_IN_SEC} seconds"
 
 
-def wait_for_stopped_idle_session(
-    api_client: ApiClient, session: VirtualDesktopSession
-) -> None:
+def wait_for_stopped_idle_session(api_client: ApiClient, session: Any) -> None:
     start_time = time.time()
     while time.time() - start_time < MAX_WAITING_TIME_FOR_STOPPING_IDLE_SESSION_IN_SEC:
         get_session_info_response = api_client.get_session(
@@ -132,6 +139,57 @@ def wait_for_stopped_idle_session(
     ), f"Failed to stop idle session {session.name} within {MAX_WAITING_TIME_FOR_STOPPING_IDLE_SESSION_IN_SEC} seconds"
 
 
+# Terminal states a session cannot recover from. If a session reaches one of
+# these while waiting for a different state, it will never reach the target, so
+# we fail fast instead of polling until timeout.
+SESSION_UNRECOVERABLE_STATES = [
+    VirtualDesktopSessionState.ERROR,
+    VirtualDesktopSessionState.DELETED,
+]
+
+
+def wait_for_session_state(
+    api_client: ApiClient,
+    session: Any,
+    expected_state: str,
+    timeout: int = MAX_WAITING_TIME_FOR_SESSION_STATE_IN_SEC,
+) -> Any:
+    """Poll a session until it reaches ``expected_state``.
+
+    Fails fast if the session reaches an unrecoverable terminal state that is
+    not the one we are waiting for. Returns the refreshed backend-model session
+    so callers can read its updated fields.
+    """
+    start_time = time.time()
+    while time.time() - start_time < timeout:
+        get_session_info_response = api_client.get_session(
+            session.idea_session_id, session.owner
+        )
+        session = get_session_info_response.session  # type: ignore
+        session_state = session.state
+
+        if session_state == expected_state:
+            return session
+
+        if (
+            session_state in SESSION_UNRECOVERABLE_STATES
+            and session_state != expected_state
+        ):
+            assert False, (
+                f"Session {session.name} reached unrecoverable state "
+                f"{session_state} while waiting for {expected_state}: "
+                f"{session.failure_reason}"
+            )
+
+        logger.debug(f"session state: {session_state}")
+        time.sleep(30)
+
+    assert False, (
+        f"Session {session.name} did not reach {expected_state} within "
+        f"{timeout} seconds"
+    )
+
+
 """
 Force the auto stop script to run on a session by setting the idle config to an idle timeout threshold of 0
 LINUX: Overwrites the existing idle config file
@@ -139,59 +197,109 @@ WINDOWS: Writes a new idle config file due to a race condition where the Idle_Co
 """
 
 
-def force_idle_session(
-    region: str, session: VirtualDesktopSession, env_name: str
-) -> None:
-    logger.info(f"Setting {session.name} session config to idle...")
+def force_idle_session(session: Any, transition_state: str = "Stop") -> None:
+    """Force idle detection by writing the idle config to the VDI instance.
+
+    Args:
+        session: The session object (must have server.instance_id, base_os, name)
+        transition_state: "Stop" for idle-stop or "Terminate" for idle-terminate
+    """
+    logger.info(
+        f"Setting {session.name} session config to idle "
+        f"(transition_state={transition_state})..."
+    )
     forced_idle_cpu_threshold = 100
     forced_idle_timeout = 0
-    platform = (
-        EC2InstancePlatform.WINDOWS
-        if session.software_stack.base_os == VirtualDesktopBaseOS.WINDOWS
-        else EC2InstancePlatform.LINUX
-    )
-    remote_command_runner = RemoteCommandRunner(region, platform)
-    if platform == EC2InstancePlatform.LINUX:
+    base_os = "windows" if session.base_os == VirtualDesktopBaseOS.WINDOWS else "linux"
+    if base_os == "linux":
         linux_idle_config_path = "/opt/idea/.idle_config.json"
+        vdi_helper_api_url = cluster_settings.get_setting(
+            "vdc.vdi_helper_api_gateway_url"
+        )
+        idle_config = json.dumps(
+            {
+                "idle_cpu_threshold": forced_idle_cpu_threshold,
+                "idle_timeout": forced_idle_timeout,
+                "vdi_helper_api_url": vdi_helper_api_url,
+                "transition_state": transition_state,
+            }
+        )
         commands = [
             "sudo su -",
-            f"cat <<< $(jq '.idle_cpu_threshold = {forced_idle_cpu_threshold} | .idle_timeout = {forced_idle_timeout}' {linux_idle_config_path}) > {linux_idle_config_path}",
+            f"timeout={MAX_WAITING_TIME_FOR_IDLE_CONFIG_FILE_IN_SEC}; elapsed=0; while [ ! -f {linux_idle_config_path} ]; do sleep 1; elapsed=$((elapsed+1)); if [ $elapsed -ge $timeout ]; then echo 'Timed out waiting for {linux_idle_config_path}' >&2; exit 1; fi; done",
+            f"cat > {linux_idle_config_path} << 'IDLE_EOF'\n{idle_config}\nIDLE_EOF",
         ]
     else:
         windows_idle_config_path = r"C:\IDEA\Idle_Config.json"
-        vdi_helper_api_gateway_url_lookup_key = (
-            r"{\"key\": {\"S\": \"vdc.vdi_helper_api_gateway_url\"}}"
+        vdi_helper_api_url = cluster_settings.get_setting(
+            "vdc.vdi_helper_api_gateway_url"
         )
-        cluster_settings_table_name = f"{env_name}.cluster-settings"
-        transition_state = "Stop"
         commands = [
-            f"$vdi_helper_api_gateway_url_item = aws dynamodb get-item --table-name {cluster_settings_table_name} --key '{vdi_helper_api_gateway_url_lookup_key}' --region {region} | ConvertFrom-Json",
-            "$vdi_helper_api_gateway_url = $vdi_helper_api_gateway_url_item.Item.value.S",
+            f"$timeout = {MAX_WAITING_TIME_FOR_IDLE_CONFIG_FILE_IN_SEC}; $elapsed = 0; while (-not (Test-Path '{windows_idle_config_path}')) {{ Start-Sleep -Seconds 1; $elapsed++; if ($elapsed -ge $timeout) {{ throw 'Timed out waiting for {windows_idle_config_path}' }} }}",
             "$idle_config = New-Object PSObject",
             f"$idle_config | Add-Member -MemberType NoteProperty -Name 'idle_cpu_threshold' -Value '{forced_idle_cpu_threshold}'",
             f"$idle_config | Add-Member -MemberType NoteProperty -Name 'idle_timeout' -Value '{forced_idle_timeout}'",
-            f"$idle_config | Add-Member -MemberType NoteProperty -Name 'vdi_helper_api_url' -Value $vdi_helper_api_gateway_url",
+            f"$idle_config | Add-Member -MemberType NoteProperty -Name 'vdi_helper_api_url' -Value '{vdi_helper_api_url}'",
             f"$idle_config | Add-Member -MemberType NoteProperty -Name 'transition_state' -Value '{transition_state}'",
             f"$idle_config | ConvertTo-Json | Set-Content -Path '{windows_idle_config_path}' -Encoding UTF8",
         ]
 
-    remote_command_runner.run(session.server.instance_id, commands)
+    instance_id = session.server.instance_id
+    result = ssm_utils.send_command(
+        instance_ids=[instance_id],
+        commands=commands,
+        base_os=base_os,
+        output_to_s3=False,
+    )
+    ssm_utils.wait_for_command(result["CommandId"], instance_id)
 
 
-def wait_for_session_connection_count(
-    region: str, session: VirtualDesktopSession, count: int
-) -> None:
+def force_idle_session_terminate(session: Any) -> None:
+    """Force idle detection with transition_state=Terminate (session deleted, not stopped)."""
+    force_idle_session(session, transition_state="Terminate")
+
+
+MAX_WAITING_TIME_FOR_DELETED_IDLE_SESSION_IN_SEC = 1200
+
+
+def wait_for_deleted_idle_session(api_client: ApiClient, session: Any) -> None:
+    """Poll until a session reaches DELETED state (used for terminate-on-idle)."""
+    start_time = time.time()
+    while time.time() - start_time < MAX_WAITING_TIME_FOR_DELETED_IDLE_SESSION_IN_SEC:
+        list_sessions_response = api_client.list_sessions()
+        existing_sessions = list_sessions_response.listing or []  # type: ignore[attr-defined]
+
+        if not any(
+            s.idea_session_id == session.idea_session_id for s in existing_sessions
+        ):
+            return
+
+        for s in existing_sessions:
+            if (
+                s.idea_session_id == session.idea_session_id
+                and s.state == VirtualDesktopSessionState.DELETED
+            ):
+                return
+
+        logger.debug(f"session {session.idea_session_id} still exists, waiting...")
+        time.sleep(30)
+
+    assert False, (
+        f"Session {session.name} was not deleted within "
+        f"{MAX_WAITING_TIME_FOR_DELETED_IDLE_SESSION_IN_SEC} seconds"
+    )
+
+
+def wait_for_session_connection_count(session: Any, count: int) -> None:
     start_time = time.time()
     while (
         time.time() - start_time < MAX_WAITING_TIME_FOR_SESSION_CONNECTION_COUNT_IN_SEC
     ):
-        platform = (
-            EC2InstancePlatform.WINDOWS
-            if session.software_stack.base_os == VirtualDesktopBaseOS.WINDOWS
-            else EC2InstancePlatform.LINUX
+        base_os = (
+            "windows" if session.base_os == VirtualDesktopBaseOS.WINDOWS else "linux"
         )
         dcv_session_info = describe_dcv_session(
-            region, session.server.instance_id, session.dcv_session_id, platform
+            session.server.instance_id, session.dcv_session_id, base_os
         )
 
         num_of_connections = dcv_session_info["num-of-connections"]
@@ -207,7 +315,7 @@ def wait_for_session_connection_count(
 
 
 def wait_for_software_stack_to_be_active(
-    api_client: ApiClient, software_stack: VirtualDesktopSoftwareStack
+    api_client: ApiClient, software_stack: Any
 ) -> None:
     start_time = time.time()
     while time.time() - start_time < MAX_WAITING_TIME_FOR_AMI_CREATION:
@@ -233,20 +341,26 @@ def wait_for_software_stack_to_be_active(
 
 
 def describe_dcv_session(
-    region: str,
     server_instance_id: str,
     dcv_session_id: str,
-    platform: EC2InstancePlatform,
+    base_os: str,
 ) -> Any:
-    remote_command_runner = RemoteCommandRunner(region, platform)
-    if platform == EC2InstancePlatform.LINUX:
-        commands = [f"sudo dcv describe-session {dcv_session_id} -j"]
-    else:
+    if base_os == "windows":
         commands = [
             rf'&"C:\Program Files\NICE\DCV\Server\bin\dcv.exe" describe-session {dcv_session_id} -j'
         ]
+    else:
+        commands = [f"sudo dcv describe-session {dcv_session_id} -j"]
 
-    output = remote_command_runner.run(server_instance_id, commands)
+    result = ssm_utils.send_command(
+        instance_ids=[server_instance_id],
+        commands=commands,
+        base_os=base_os,
+        output_to_s3=False,
+    )
+    invocation = ssm_utils.wait_for_command(result["CommandId"], server_instance_id)
+    output = invocation.get("StandardOutputContent", "")
+
     try:
         dcv_session_info = json.loads(output)
     except json.JSONDecodeError as e:
