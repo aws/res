@@ -1,3 +1,5 @@
+> **End of development notice:** AWS is discontinuing development of Research and Engineering Studio on AWS (RES). 2026.09 is the final release, supported through September 30, 2027. RES remains open source and keeps running in your account. For more information, see [RES end of support](https://docs.aws.amazon.com/res/latest/ug/res-end-of-support.html).
+
 # Research and Engineering Studio on AWS (RES)
 
 Research and Engineering Studio on AWS (RES) is an open source, easy-to-use web-based portal for administrators to create and manage secure cloud-based research and engineering environments. Using RES, scientists and engineers can visualize data and run interactive applications without the need for cloud expertise. 
