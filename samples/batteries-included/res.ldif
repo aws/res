@@ -1,0 +1,136 @@
+# Create a OU to be used by RES
+dn: OU=RES,OU=${OU},DC=${DC}
+changetype: add
+objectClass: top
+objectClass: organizationalUnit
+ou: RES
+description: The RES application will limit syncing groups and group-members in the RES OU
+
+# Create a OU to be used by RES to create computers
+dn: OU=Computers,OU=RES,OU=${OU},DC=${DC}
+changetype: add
+objectClass: top
+objectClass: organizationalUnit
+ou: Computers
+description: The RES application will limit creating computers to this OU
+
+# Create a OU to be used by RES to create groups and add users to
+dn: OU=Users,OU=RES,OU=${OU},DC=${DC}
+changetype: add
+objectClass: top
+objectClass: organizationalUnit
+ou: Users
+description: The RES application will limit syncing groups and group-members in the RES OU
+
+# Create a user: user1 in RES OU
+dn: CN=user1,OU=Users,OU=RES,OU=${OU},DC=${DC}
+changetype: add
+objectClass: top
+objectClass: person
+objectClass: organizationalPerson
+objectClass: user
+cn: user1
+sAMAccountName: user1
+name: user1
+userPrincipalName: user1@${DirectoryDomain}
+mail: user1@${DirectoryDomain}
+uidNumber: 1011
+gidNumber: 1006
+unixHomeDirectory: /home/user1
+loginShell: /bin/bash
+
+# Create a user: admin1 in RES OU
+dn: CN=admin1,OU=Users,OU=RES,OU=${OU},DC=${DC}
+changetype: add
+objectClass: top
+objectClass: person
+objectClass: organizationalPerson
+objectClass: user
+cn: admin1
+sAMAccountName: admin1
+name: admin1
+userPrincipalName: admin1@${DirectoryDomain}
+mail: admin1@${DirectoryDomain}
+uidNumber: 1012
+gidNumber: 1006
+unixHomeDirectory: /home/admin1
+loginShell: /bin/bash
+
+# Create a user: user2 outside RES OU
+dn: CN=user2,OU=Users,OU=${OU},DC=${DC}
+changetype: add
+objectClass: top
+objectClass: person
+objectClass: organizationalPerson
+objectClass: user
+cn: user2
+sAMAccountName: user2
+name: user2
+userPrincipalName: user2@${DirectoryDomain}
+mail: user2@${DirectoryDomain}
+uidNumber: 1013
+gidNumber: 1007
+unixHomeDirectory: /home/user2
+loginShell: /bin/bash
+
+# Create a user: admin2 outside RES OU
+dn: CN=admin2,OU=Users,OU=${OU},DC=${DC}
+changetype: add
+objectClass: top
+objectClass: person
+objectClass: organizationalPerson
+objectClass: user
+cn: admin2
+sAMAccountName: admin2
+name: admin2
+userPrincipalName: admin2@${DirectoryDomain}
+mail: admin2@${DirectoryDomain}
+uidNumber: 1014
+gidNumber: 1007
+unixHomeDirectory: /home/admin2
+loginShell: /bin/bash
+
+# Create a group: RESAdministrators in RES OU
+dn: CN=RESAdministrators,OU=Users,OU=RES,OU=${OU},DC=${DC}
+changetype: add
+objectClass: top
+objectClass: group
+cn: RESAdministrators
+description: Represents the group of sudoers and admins in RES
+distinguishedName: CN=RESAdministrators,OU=Users,OU=RES,OU=${OU},DC=${DC}
+name: RESAdministrators
+sAMAccountName: RESAdministrators
+objectCategory: CN=Group,CN=Schema,CN=Configuration,DC=${DC}
+gidNumber: 1005
+member: CN=admin1,OU=Users,OU=RES,OU=${OU},DC=${DC}
+member: CN=admin2,OU=Users,OU=${OU},DC=${DC}
+
+# Create a group: group1 in RES OU
+dn: CN=group_1,OU=Users,OU=RES,OU=${OU},DC=${DC}
+changetype: add
+objectClass: top
+objectClass: group
+cn: group_1
+description: Represents a project group in RES
+distinguishedName: CN=group_1,OU=Users,OU=RES,OU=${OU},DC=${DC}
+name: group_1
+sAMAccountName: group_1
+objectCategory: CN=Group,CN=Schema,CN=Configuration,DC=${DC}
+gidNumber: 1006
+member: CN=user1,OU=Users,OU=RES,OU=${OU},DC=${DC}
+member: CN=admin1,OU=Users,OU=RES,OU=${OU},DC=${DC}
+
+# Create a group: group2 in RES OU
+dn: CN=group_2,OU=Users,OU=RES,OU=${OU},DC=${DC}
+changetype: add
+objectClass: top
+objectClass: group
+cn: group_2
+description: Represents a project group in RES
+distinguishedName: CN=group_2,OU=Users,OU=RES,OU=${OU},DC=${DC}
+name: group_2
+sAMAccountName: group_2
+objectCategory: CN=Group,CN=Schema,CN=Configuration,DC=${DC}
+gidNumber: 1007
+member: CN=user2,OU=Users,OU=${OU},DC=${DC}
+member: CN=admin2,OU=Users,OU=${OU},DC=${DC}

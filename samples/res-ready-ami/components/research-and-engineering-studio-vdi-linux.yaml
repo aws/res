@@ -1,0 +1,74 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: ImageBuilder Component to bootstrap RES VDI Linux
+
+Resources:
+  RESVDILinuxInstaller:
+    Type: AWS::ImageBuilder::Component
+    Properties:
+      Name: 'research-and-engineering-studio-vdi-linux'
+      Description: RES VDI Bootstrap for Linux
+      Version: '1.0.0'
+      Platform: Linux
+      Data: |
+        #  Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+        #
+        #  Licensed under the Apache License, Version 2.0 (the "License"). You may not use this file except in compliance
+        #  with the License. A copy of the License is located at
+        #
+        #      http://www.apache.org/licenses/LICENSE-2.0
+        #
+        #  or in the 'license' file accompanying this file. This file is distributed on an 'AS IS' BASIS, WITHOUT WARRANTIES
+        #  OR CONDITIONS OF ANY KIND, express or implied. See the License for the specific language governing permissions
+        #  and limitations under the License.
+        name: research-and-engineering-studio-vdi-linux
+        description: An RES EC2 Image Builder component to install required RES software dependencies for Linux VDI.
+        schemaVersion: 1.0
+
+        phases:
+          - name: build
+            steps:
+              - name: PrepareRESBootstrap
+                action: ExecuteBash
+                onFailure: Abort
+                maxAttempts: 3
+                inputs:
+                    commands:
+                        - 'mkdir -p /root/bootstrap/logs'
+                        - 'mkdir -p /root/bootstrap/latest'
+              - name: DownloadRESLinuxInstallPackage
+                action: S3Download
+                onFailure: Abort
+                maxAttempts: 3
+                inputs:
+                    - source: 's3://research-engineering-studio-us-east-1/releases/latest/res-installation-scripts.tar.gz'
+                      destination: '/root/bootstrap/res-installation-scripts/res-installation-scripts.tar.gz'
+              - name: RunInstallScript
+                action: ExecuteBash
+                onFailure: Abort
+                maxAttempts: 3
+                inputs:
+                    commands:
+                      - 'cd /root/bootstrap/res-installation-scripts'
+                      - 'tar -xf res-installation-scripts.tar.gz'
+                      - 'cd scripts/virtual-desktop-host/linux'
+                      - '/bin/bash install.sh -g NONE'
+              - name: RunInstallPostRebootScript
+                action: ExecuteBash
+                onFailure: Abort
+                maxAttempts: 3
+                inputs:
+                    commands:
+                      - 'cd /root/bootstrap/res-installation-scripts/scripts/virtual-desktop-host/linux'
+                      - '/bin/bash install_post_reboot.sh -g NONE'
+              - name: PreventAL2023FromUninstallingCronie
+                action: ExecuteBash
+                onFailure: Abort
+                maxAttempts: 3
+                inputs:
+                    commands:
+                      - 'rm -f /tmp/imagebuilder_service/crontab_installed' 
+
+
+Outputs:
+  ImageBuilderComponent:
+    Value: !Ref RESVDILinuxInstaller

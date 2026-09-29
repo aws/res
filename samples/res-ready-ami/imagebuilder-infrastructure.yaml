@@ -1,0 +1,128 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: Image Builder Infrastructure Configuration for RES Environment
+
+Metadata:
+  AWS::CloudFormation::Interface:
+    ParameterGroups:
+      - Label:
+          default: RES Configuration
+        Parameters:
+          - EnvironmentName
+      - Label:
+          default: Networking
+        Parameters:
+          - VPC
+          - ImageBuilderInfrastructureSubnet
+
+Parameters:
+  EnvironmentName:
+    Type: String
+    Description: Provide name of the RES Environment. Must be unique for your account and AWS Region.
+    AllowedPattern: ^res-[a-z\-\_0-9]{0,7}$
+    ConstraintDescription: EnvironmentName must start with "res-" without capital letters and should be less than or equal to 11 characters.
+  VPC:
+    Description: VPC where RES is deployed
+    Type: 'AWS::EC2::VPC::Id'
+  ImageBuilderInfrastructureSubnet:
+    Type: AWS::EC2::Subnet::Id
+    Description: Choose a subnet for ec2 Image Builder Infrastructure
+
+
+Resources:
+  InfrastructureConfigSecurityGroup:
+    Type: 'AWS::EC2::SecurityGroup'
+    Properties:
+      GroupDescription: !Sub ${EnvironmentName} Image Builder Infrastructure Config SG
+      GroupName: !Sub ${EnvironmentName}-image-builder-infra-sg
+      VpcId: !Ref VPC
+      SecurityGroupEgress:
+        - IpProtocol: '-1'
+          CidrIp: 0.0.0.0/0
+
+  InfrastructureConfigSGInboundSelfRule:
+    Type: 'AWS::EC2::SecurityGroupIngress'
+    Properties:
+      IpProtocol: '-1'
+      GroupId: !Ref InfrastructureConfigSecurityGroup
+      Description: Allow outbound traffic to SG members
+      SourceSecurityGroupId: !Ref InfrastructureConfigSecurityGroup
+
+  RESEC2InstanceProfileRoleForImageBuilder:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+        - Effect: Allow
+          Principal:
+            Service: ec2.amazonaws.com
+          Action: "sts:AssumeRole"
+      ManagedPolicyArns: 
+        - !Sub arn:${AWS::Partition}:iam::aws:policy/AmazonS3ReadOnlyAccess
+        - !Sub arn:${AWS::Partition}:iam::aws:policy/AmazonSSMManagedInstanceCore
+        - !Sub arn:${AWS::Partition}:iam::aws:policy/EC2InstanceProfileForImageBuilder
+      Policies:
+        - PolicyName: !Sub ${AWS::StackName}-RES-EnvironmentPolicy
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+            - Sid: RESDynamoDBAccess
+              Effect: Allow
+              Action: "dynamodb:GetItem"
+              Resource: !Sub "arn:${AWS::Partition}:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${EnvironmentName}.cluster-settings"
+              Condition:
+                ForAllValues:StringLike:
+                  "dynamodb:LeadingKeys":
+                  - "global-settings.gpu_settings.*"
+                  - "global-settings.package_config.*"
+                  - "cluster-manager.host_modules.*"
+                  - "identity-provider.cognito.enable_native_user_login"
+            - Sid: RESS3Access
+              Effect: Allow
+              Action: "s3:GetObject"
+              Resource: 
+                - !Sub "arn:${AWS::Partition}:s3:::${EnvironmentName}-cluster-${AWS::Region}-${AWS::AccountId}/idea/vdc/res-ready-install-script-packages/*"
+                - !Sub "arn:${AWS::Partition}:s3:::research-engineering-studio-${AWS::Region}/host_modules/*"
+            - Sid: GPUDriverAccess
+              Effect: Allow
+              Action: 
+                - s3:GetObject
+                - s3:ListBucket
+              Resource:
+                - "arn:aws:s3:::dcv-license.us-east-1/*" # partition-exception: AWS-owned S3 bucket for DCV license, standard partition only
+                - "arn:aws:s3:::ec2-linux-nvidia-drivers/*" # partition-exception: AWS-owned S3 bucket for NVIDIA drivers, standard partition only
+                - "arn:aws:s3:::ec2-linux-nvidia-drivers" # partition-exception: AWS-owned S3 bucket for NVIDIA drivers, standard partition only
+                - "arn:aws:s3:::nvidia-gaming/*" # partition-exception: AWS-owned S3 bucket for NVIDIA gaming drivers, standard partition only
+                - "arn:aws:s3:::nvidia-gaming-drivers" # partition-exception: AWS-owned S3 bucket for NVIDIA gaming drivers, standard partition only
+                - "arn:aws:s3:::nvidia-gaming-drivers/*" # partition-exception: AWS-owned S3 bucket for NVIDIA gaming drivers, standard partition only
+                - "arn:aws:s3:::ec2-amd-linux-drivers/*" # partition-exception: AWS-owned S3 bucket for AMD drivers, standard partition only
+                - "arn:aws:s3:::ec2-amd-linux-drivers" # partition-exception: AWS-owned S3 bucket for AMD drivers, standard partition only
+      RoleName: !Sub "${EnvironmentName}-EC2InstanceProfileForImageBuilder"
+
+  RESEC2InstanceProfileForImageBuilder:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      Roles:
+        - !Ref RESEC2InstanceProfileRoleForImageBuilder
+
+
+  RESInfrastructureConfig:
+    Type: AWS::ImageBuilder::InfrastructureConfiguration
+    Properties:
+      Name: !Sub "${AWS::StackName}-${EnvironmentName}-InfrastructureConfig"
+      InstanceProfileName: !Ref RESEC2InstanceProfileForImageBuilder
+      InstanceTypes: 
+        - m5.large
+        - m5.xlarge
+        - m5.2xlarge
+      SecurityGroupIds:
+        - !Ref InfrastructureConfigSecurityGroup
+      SubnetId: !Ref ImageBuilderInfrastructureSubnet
+
+Outputs:
+  RESEC2InstanceProfileForImageBuilderRole:
+    Description: RES EC2 Instance Profile for Image Builder
+    Value: !GetAtt RESEC2InstanceProfileForImageBuilder.Arn
+  RESInfrastructureConfig:
+    Description: RES Image Builder Infrastructure Configuration
+    Value: !Ref RESInfrastructureConfig

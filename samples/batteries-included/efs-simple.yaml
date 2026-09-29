@@ -1,0 +1,280 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: EFS Filesystem with Multi-AZ Mount Targets.
+  This template creates an Amazon EFS filesystem with configurable mount targets across multiple Availability Zones.
+  It supports encrypted data at rest, enforced TLS for data in transit, and automatic backups through AWS Backup.
+  Security is managed through dedicated security groups that control NFS access to the filesystem.
+  Throughput can be configured for either bursting or elastic modes to match workload requirements.
+  Use this template as a foundation for deploying shared storage solutions with customized security and performance settings.
+  Refer to the Outputs tab for the filesystem ID and security group ID needed to mount the filesystem.
+
+Metadata:
+  AWS::CloudFormation::Interface:
+    ParameterGroups:
+      - Label:
+          default: Filesystem Options
+        Parameters:
+          - AutomaticBackups
+          - ThroughputMode
+          - EnforceTLS
+      - Label:
+          default: Networking and Access
+        Parameters:
+          - VpcId
+          - SubnetIds
+          - SubnetCount
+          - SecurityGroupName
+
+Parameters:
+  VpcId:
+    Description: VPC where you will deploy the EFS filesystem
+    Type: AWS::EC2::VPC::Id
+  SubnetIds:
+    Description: Choose up to three subnets in different AZs in the VPC
+    Type: List<AWS::EC2::Subnet::Id>
+  AutomaticBackups:
+    Description: Automatic backups for the filesystem
+    Type: String
+    Default: DISABLED
+    AllowedValues:
+         - "ENABLED"
+         - "DISABLED"
+  SubnetCount:
+    Description: Count of subnets selected in SubnetIds (must match)
+    Type: String
+    Default: "3"
+    AllowedValues:
+         - "1"
+         - "2"
+         - "3"
+  ThroughputMode:
+    Description: EFS filesystem throughput mode
+    Type: String
+    Default: "elastic"
+    AllowedValues:
+         - "elastic"
+         - "bursting"
+  EnforceTLS:
+    Description: Enforce TLS for data in transit
+    Type: String
+    Default: "true"
+    AllowedValues:
+      - "true"
+      - "false"
+  SecurityGroupName:
+    Type: String
+    Description: (Optional) An existing security group to associate to the file system. If none is provided, a new security group will be created.
+    Default: ""
+
+Conditions:
+  1AZCondition: !Or
+    - !Equals [!Ref 'SubnetCount', '1']
+    - !Condition '2AZCondition'
+  2AZCondition: !Or
+    - !Equals [!Ref 'SubnetCount', '2']
+    - !Condition '3AZCondition'
+  3AZCondition: !Equals [!Ref 'SubnetCount', '3']
+  EnforceTLSCondition: !Equals ["true", !Ref EnforceTLS]
+  CreateSecurityGroup: !Equals ["", !Ref SecurityGroupName]
+  UseExistingSecurityGroup: !Not [!Equals ["", !Ref SecurityGroupName]]
+
+Resources:
+
+  EfsFilesystem:
+    Type: AWS::EFS::FileSystem
+    DeletionPolicy: Delete
+    UpdateReplacePolicy: Delete
+    Properties:
+      FileSystemTags:
+        - Key: Name
+          Value: !Sub "${AWS::StackName}-efs"
+      FileSystemPolicy:
+        Version: 2012-10-17
+        Id: efs-prevent-anonymous-access-policy
+        Statement:
+          - Sid: efs-statement
+            Effect: Allow
+            Principal:
+              AWS: '*'
+            Action:
+              - 'elasticfilesystem:ClientRootAccess'
+              - 'elasticfilesystem:ClientWrite'
+              - 'elasticfilesystem:ClientMount'
+            Condition:
+              Bool:
+                'elasticfilesystem:AccessedViaMountTarget': 'true'
+          - !If
+            - EnforceTLSCondition
+            - Sid: efs-enforce-tls
+              Effect: Deny
+              Principal:
+                AWS: '*'
+              Action: '*'
+              Condition:
+                Bool:
+                  'aws:SecureTransport': 'false'
+            - !Ref 'AWS::NoValue'
+      BackupPolicy: 
+        Status: !Ref AutomaticBackups
+      Encrypted: true
+      ThroughputMode: !Ref ThroughputMode
+
+  # Security group
+  EfsSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Condition: CreateSecurityGroup
+    Properties: 
+      GroupDescription: !Sub 
+       - 'Allows traffic to EFS filesystem ${FileSystemId}'
+       - FileSystemId: !Ref EfsFilesystem
+      GroupName: !Sub '${AWS::StackName}-efs-security-group'
+      VpcId: !Ref VpcId
+
+  # Clients join this group for access to the EFS file system
+  EfsClientSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: !Sub
+        - 'Clients join this group for access to EFS filesystem ${FileSystemId}'
+        - FileSystemId: !Ref EfsFilesystem
+      GroupName: !Sub '${AWS::StackName}-efs-client-security-group'
+      VpcId: !Ref VpcId
+
+  EfsSecurityGroupInboundRule:
+    Type: 'AWS::EC2::SecurityGroupIngress'
+    Condition: CreateSecurityGroup
+    Properties:
+      IpProtocol: tcp
+      Description: Allow incoming traffic to EFS from members of security group
+      FromPort: 2049
+      ToPort: 2049
+      GroupId: !Ref EfsSecurityGroup
+      SourceSecurityGroupId: !Ref EfsClientSecurityGroup
+
+  EfsClientSecurityGroupOutboundRule:
+    Type: 'AWS::EC2::SecurityGroupEgress'
+    Properties:
+      IpProtocol: tcp
+      Description: Allow outgoing traffic from members of security group to EFS
+      FromPort: 2049
+      ToPort: 2049
+      GroupId: !Ref EfsClientSecurityGroup
+      DestinationSecurityGroupId: !If 
+          - CreateSecurityGroup
+          - !Ref EfsSecurityGroup
+          - !GetAtt SecurityGroupLookup.GroupId
+
+  EfsMountTarget1:
+    Type: AWS::EFS::MountTarget
+    Condition: 1AZCondition
+    Properties:
+         FileSystemId: !Ref EfsFilesystem
+         SecurityGroups: !If 
+                - CreateSecurityGroup
+                - [!Ref EfsSecurityGroup]
+                - [!GetAtt SecurityGroupLookup.GroupId]
+         SubnetId: !Select [ 0, !Ref SubnetIds ]
+
+  EfsMountTarget2:
+    Type: AWS::EFS::MountTarget
+    Condition: 2AZCondition
+    Properties:
+         FileSystemId: !Ref EfsFilesystem
+         SecurityGroups: !If 
+                - CreateSecurityGroup
+                - [!Ref EfsSecurityGroup]
+                - [!GetAtt SecurityGroupLookup.GroupId]
+         SubnetId: !Select [ 1, !Ref SubnetIds ]
+
+  EfsMountTarget3:
+    Type: AWS::EFS::MountTarget
+    Condition: 3AZCondition
+    Properties:
+         FileSystemId: !Ref EfsFilesystem
+         SecurityGroups: !If 
+                - CreateSecurityGroup
+                - [!Ref EfsSecurityGroup]
+                - [!GetAtt SecurityGroupLookup.GroupId]
+         SubnetId: !Select [ 2, !Ref SubnetIds ]
+
+  SecurityGroupLookup:
+    Type: Custom::SecurityGroupLookup
+    Condition: UseExistingSecurityGroup
+    Properties:
+      ServiceToken: !GetAtt SecurityGroupLookupFunction.Arn
+      ServiceTimeout: 60
+      VpcId: !Ref VpcId
+      GroupName: !Ref SecurityGroupName
+
+  SecurityGroupLookupRole:
+    Type: AWS::IAM::Role
+    Condition: UseExistingSecurityGroup
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - !Sub arn:${AWS::Partition}:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      Policies:
+        - PolicyName: DescribeSecurityGroups
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action: ec2:DescribeSecurityGroups
+                Resource: '*'
+
+  SecurityGroupLookupFunction:
+    Type: AWS::Lambda::Function
+    Condition: UseExistingSecurityGroup
+    Properties:
+      Timeout: 60
+      Runtime: python3.12
+      Handler: index.handler
+      Role: !GetAtt SecurityGroupLookupRole.Arn
+      Code:
+        ZipFile: |
+          import boto3
+          import cfnresponse
+          
+          def handler(event, context):
+            try:
+              if event['RequestType'] in ['Create', 'Update']:
+                ec2 = boto3.client('ec2')
+                vpc_id = event['ResourceProperties']['VpcId']
+                group_name = event['ResourceProperties']['GroupName']
+                
+                response = ec2.describe_security_groups(
+                  Filters=[
+                    {'Name': 'vpc-id', 'Values': [vpc_id]},
+                    {'Name': 'group-name', 'Values': [group_name]}
+                  ]
+                )
+                
+                if len(response['SecurityGroups']) == 0:
+                  raise Exception(f"Security group {group_name} not found in VPC {vpc_id}")
+                
+                group_id = response['SecurityGroups'][0]['GroupId']
+                cfnresponse.send(event, context, cfnresponse.SUCCESS, 
+                               {'GroupId': group_id})
+              else:
+                cfnresponse.send(event, context, cfnresponse.SUCCESS, {})
+            except Exception as e:
+              cfnresponse.send(event, context, cfnresponse.FAILED, 
+                             {'Error': str(e)})
+
+Outputs:
+  EFSFilesystemId:
+    Description: The ID of the EFS filesystem that has been created
+    Value: !Ref EfsFilesystem
+    Export:
+      Name: !Sub ${AWS::StackName}-EFSFilesystemId
+  SecurityGroupId:
+    Description: Clients join this group for access to the filesystem
+    Value: !Ref EfsClientSecurityGroup
+    Export:
+      Name: !Sub ${AWS::StackName}-SecurityGroupId
+

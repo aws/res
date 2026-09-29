@@ -1,0 +1,442 @@
+Description: A template for launching Microsoft Windows Management Hosts into a subnet that runs a bootup powershell script
+
+Metadata:
+  AWS::CloudFormation::Interface:
+    ParameterGroups:
+      - Label:
+          default: "Active Directory Configuration"
+        Parameters:
+          - DomainName
+          - DirectoryId
+          - DnsIpAddress1
+          - DnsIpAddress2
+          - DelegationUser
+          - ServiceAccountName
+          - DelegationPassword
+      - Label:
+          default: "Network Configuration"
+        Parameters:
+          - VpcId
+          - Subnet
+      - Label:
+          default: "Host Configuration"
+        Parameters:
+          - Keypair
+          - AdminNodeAmiId
+          - StopAdAdminInstance
+          - PSS3Path
+          - PSS3PathRegion
+          - InstanceType
+          - ClientIpCidr
+          - ClientPrefixList
+
+Parameters:
+
+  PSS3Path:
+    Description: (Optional) An S3 Path (without the s3://) to a powershell script that will run as the delegation user after joining the domain.
+    Type: String
+
+  PSS3PathRegion:
+    Description: Region where the PSS3Path file resides.
+    Default: us-east-1
+    Type: String
+
+  DomainName:
+    Description: Active Directory Domain Name. The supplied LDIF file which provides bootstrap users uses this domain. A different LDIF file needs to be provided for a different domain.
+    Type: String
+    Default: corp.res.com
+    AllowedPattern: ^([a-zA-Z0-9]+[\\.-])+([a-zA-Z0-9])+$
+
+  ServiceAccountName:
+    Description: Username for the Service Account
+    Type: String
+    MinLength: 4
+    Default: ServiceAccount
+
+  DirectoryId:
+    Description: ID for the AWS Managed Active Directory resource
+    Type: String
+
+  DnsIpAddress1:
+    Description: IP Address for a dns in the Directory specified in DirectoryId
+    Type: String
+
+  DnsIpAddress2:
+    Description: IP Address for a dns in the Directory specified in DirectoryId
+    Type: String
+
+  DelegationUser:
+    Description: User in the Active Directory that can delecate computer write access
+    Type: String
+    Default: Admin
+
+  DelegationPassword:
+    Description: User in the Active Directory that can delecate computer write access
+    Type: String
+    MinLength: 8
+    MaxLength: 64
+    AllowedPattern: (?=^.{8,64}$)((?=.*\d)(?=.*[A-Z])(?=.*[a-z])|(?=.*\d)(?=.*[^A-Za-z0-9\s])(?=.*[a-z])|(?=.*[^A-Za-z0-9\s])(?=.*[A-Z])(?=.*[a-z])|(?=.*\d)(?=.*[A-Z])(?=.*[^A-Za-z0-9\s]))^.*
+    NoEcho: true
+
+  Keypair:
+    Description: EC2 Keypair to access management instance.
+    Type: AWS::EC2::KeyPair::KeyName
+
+  AdminNodeAmiId:
+    Description: AMI for the Admin Node
+    Type: 'AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>'
+    Default: '/aws/service/ami-windows-latest/Windows_Server-2022-English-Full-Base'
+
+  VpcId:
+    Description: VPC where you will create the AD and management instance(s).
+    Type: AWS::EC2::VPC::Id
+
+  Subnet:
+    Description: Subnet where to launch the AD management instance.
+    Type: AWS::EC2::Subnet::Id
+
+  ClientIpCidr:
+    Description: CIDR for incoming RDP traffic for management instance.
+    Default: ""
+    Type: String
+    AllowedPattern: ^((\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})/(\d{1,2}))?$
+    ConstraintDescription: ClientIP must be a valid IP or network range of the form x.x.x.x/x. specify your IP/NETMASK (e.g x.x.x/32 or x.x.x.x/24 for subnet range)
+
+  ClientPrefixList:
+    Description: Prefix list ID for incoming traffic for the management instance.
+    Default: ""
+    Type: String
+    AllowedPattern: ^(pl-[a-z0-9]{8,20})?$
+    ConstraintDescription: Must be a valid prefix list ID, which begins with pl-.
+
+  InstanceType:
+    Type: String
+    Default: t3.xlarge
+
+  StopAdAdminInstance:
+    Description: Automatically stop the management instance after launch to reduce costs.
+    Type: String
+    Default: "False"
+    AllowedValues:
+         - "True"
+         - "False"
+
+Conditions:
+  AddPrefixList: !Not [!Equals [!Ref ClientPrefixList, ""]]
+  AddCidrIngress: !Not [!Equals [!Ref ClientIpCidr, ""]]
+
+Resources:
+
+  DisableImdsv1LaunchTemplate:
+    Type: AWS::EC2::LaunchTemplate
+    Properties:
+      LaunchTemplateData:
+        MetadataOptions:
+          HttpEndpoint: enabled
+          HttpTokens: required
+
+  InstanceRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Action: sts:AssumeRole
+            Principal:
+              Service:
+                - ec2.amazonaws.com
+      ManagedPolicyArns:
+        - !Sub arn:${AWS::Partition}:iam::aws:policy/AmazonSSMManagedInstanceCore
+        - !Sub arn:${AWS::Partition}:iam::aws:policy/AmazonSSMDirectoryServiceAccess
+      Policies:
+        - PolicyName: AccessPSFile
+          PolicyDocument:
+            Statement:
+              - Sid: GetObjectPSS3Path
+                Action:
+                  - s3:*
+                Effect: Allow
+                Resource: !Sub
+                  - arn:${AWS::Partition}:s3:::${S3Path}
+                  - { S3Path: !Ref PSS3Path }
+              - Sid: ReadSecret
+                Action:
+                  - secretsmanager:GetResourcePolicy
+                  - secretsmanager:GetSecretValue
+                  - secretsmanager:DescribeSecret
+                  - secretsmanager:ListSecretVersionIds
+                Effect: Allow
+                Resource: !Ref DelegationPasswordSecret
+              - Sid: ListBucketPSS3Path
+                Action:
+                  - s3:List*
+                Effect: Allow
+                Resource: !Sub
+                  - arn:${AWS::Partition}:s3:::${Bucket}
+                  - { Bucket: !Select [0, !Split ['/', !Ref PSS3Path ]] }
+
+  InstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      Roles:
+        - !Ref InstanceRole
+
+  DelegationPasswordSecret:
+    Type: AWS::SecretsManager::Secret
+    Properties:
+      Description: Secret string for delegation user
+      Name: !Sub
+        - DelegationPasswordSecret-${StackIdSuffix}
+        - { StackIdSuffix: !Select [2, !Split ['/', !Ref 'AWS::StackId']] }
+      SecretString: !Ref DelegationPassword
+
+  AWSJoinDirectoryServiceDomainAssociation:
+    Type: AWS::SSM::Association
+    Properties:
+      AssociationName: !Sub
+        - ${StackIdSuffix}-aws-join-directory-service-domain-association
+        - { StackIdSuffix: !Select [2, !Split ['/', !Ref 'AWS::StackId']] }
+      Name: AWS-JoinDirectoryServiceDomain
+      Parameters:
+        directoryId:
+          - !Ref DirectoryId
+        directoryName:
+          - !Ref DomainName
+        dnsIpAddresses:
+          - !Ref DnsIpAddress1
+          - !Ref DnsIpAddress2
+      Targets:
+        - Key: InstanceIds
+          Values:
+            - !Ref Instance
+      WaitForSuccessTimeoutSeconds: 300
+
+  InstanceSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties: 
+      GroupDescription: Allow RDP Access
+      VpcId: !Ref VpcId
+
+  InstanceSecurityGroupIngressClientCidr:
+    Condition: AddCidrIngress
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      FromPort: 3389
+      ToPort: 3389
+      IpProtocol: tcp
+      GroupId: !GetAtt InstanceSecurityGroup.GroupId
+      CidrIp: !Ref ClientIpCidr
+
+  InstanceSecurityGroupIngressPrefixList:
+    Condition: AddPrefixList
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      FromPort: 3389
+      ToPort: 3389
+      IpProtocol: tcp
+      GroupId: !GetAtt InstanceSecurityGroup.GroupId
+      SourcePrefixListId: !Ref ClientPrefixList
+
+  Instance:
+    Type: AWS::EC2::Instance
+    # CreationPolicy:
+    #   ResourceSignal:
+    #     Timeout: PT15M
+    Properties:
+      Tags:
+        - Key: "Name"
+          Value: !Sub [ "AdDomainWindowsNode-${StackIdSuffix}", {StackIdSuffix: !Select [1, !Split ['/', !Ref 'AWS::StackId']]}]
+      IamInstanceProfile: !Ref InstanceProfile
+      ImageId: !Ref AdminNodeAmiId
+      InstanceType: !Ref InstanceType
+      KeyName: !Ref Keypair
+      LaunchTemplate:
+        LaunchTemplateId: !Ref 'DisableImdsv1LaunchTemplate'
+        Version: !GetAtt 'DisableImdsv1LaunchTemplate.LatestVersionNumber'
+      NetworkInterfaces:
+        - DeviceIndex: 0
+          SubnetId: !Ref Subnet
+          GroupSet:
+            - !Ref InstanceSecurityGroup
+      UserData:
+        Fn::Base64:
+          !Sub
+            - |
+              <powershell>
+              Install-WindowsFeature RSAT-ADDS
+              Add-WindowsFeature AD-Domain-Services
+
+              if(!"${PSS3Path}") { return }
+
+              $path = "${PSS3Path}"
+              $bucket,$prefix = $path -split "/",2
+
+              $folder = "C:\Temp"
+              $dest_path = "$folder\$prefix" -replace '/','\'
+              $runner_path = "$folder\runner.ps1"
+
+              # Create temp folder where this user (local admin) can write and the domain-joined user can read
+              if(-not(Test-path "$folder"))
+              {
+                  mkdir $folder
+                  $acl = Get-Acl -Path $folder
+                  $allow_write = New-Object System.Security.AccessControl.FileSystemAccessRule("Users","Modify","3","0","Allow")
+                  $acl.SetAccessRule($allow_write)
+                  $acl | Set-Acl -Path $folder
+              }
+
+              $runner_script = @'
+              $dest_path = $args[0]
+              $task_name = "Setup domain task"
+                            $user = "${DomainName}\${DelegationUser}"
+                            $password = Get-SECSecretValue -SecretId "${SecretArn}" -Select SecretString
+              $pass = ConvertTo-SecureString -String "$password" -AsPlainText -Force
+              $cred = New-Object -Type PSCredential($user, $pass)
+              $action = New-ScheduledTaskAction -Execute "powershell" -Argument "-executionpolicy bypass -command `"$dest_path 2>&1 > c:\temp\task.log`""
+              $trigger = New-ScheduledTaskTrigger -AtStartup -RandomDelay 00:00:03
+
+              # Set  the task to run as a local administrator with highest level privileges
+              $settings = New-ScheduledTaskSettingsSet -StartWhenAvailable -AllowStartIfOnBatteries -RunOnlyIfNetworkAvailable
+              Register-ScheduledTask -Action $action -Settings $settings -Trigger $trigger -TaskName "$task_name" -Description "Runs a powershell script as the delegation user after connecting to the Active Directory domain." -User $user -Password $password
+              if($?) {
+                Start-ScheduledTask -TaskName "Setup domain task"
+                while ((Get-ScheduledTask -TaskName $task_name).State -eq 'Running') {
+                  Write-Verbose -Message "Waiting for sync to finish"
+                  Start-Sleep -Seconds  5
+                }
+                Unregister-ScheduledTask -TaskName $task_name -Confirm:$false # remove subtask
+                Unregister-ScheduledTask -TaskName "Setup domain" -Confirm:$false # remove the parent task that called us
+                if ("${StopAdAdminInstance}" -eq "True") {
+                  stop-computer
+                }
+              }
+              '@
+
+              # if the bootstrap script doesn't exist, retrieve it
+              if(-not(Test-path "$dest_path" -PathType leaf)) {
+                  Read-S3Object -BucketName $bucket -Key $prefix -File $dest_path -Region ${PSS3PathRegion}
+                  $service_account_name = "${ServiceAccountName}"
+                  $ou = "${OU}"
+                  $dc = "${DC}"
+                  (Get-Content $dest_path).Replace('${!ServiceAccount}', $service_account_name).Replace('${!OU}', $ou).Replace('${!DC}', $dc) | Set-Content $dest_path
+              }
+
+              echo "Writing to: $runner_path for trampoline to $dest_path" 
+              Set-Content -Path $runner_path -Value $runner_script
+
+              $action = New-ScheduledTaskAction -Execute "powershell" -Argument "-executionpolicy bypass -command `"$runner_path \`"$dest_path\`" 2>&1 > c:\temp\startup_task.log`""
+              $trigger =  New-ScheduledTaskTrigger -AtStartup -RandomDelay 00:00:30
+              # Set  the task to run as a local administrator with highest level privileges
+              $principal = New-ScheduledTaskPrincipal -UserID "NT AUTHORITY\SYSTEM" -RunLevel Highest  -LogonType ServiceAccount
+              $settings = New-ScheduledTaskSettingsSet -StartWhenAvailable
+              Register-ScheduledTask -Action $action -Settings $settings -Trigger $trigger -TaskName "Setup domain" -Description "Runs a powershell script as the delegation user after connecting to the Active Directory domain." -Principal $principal
+              </powershell>
+            - { PSS3Path: !Ref PSS3Path,
+                PSS3PathRegion: !Ref PSS3PathRegion,
+                SecretArn: !Ref DelegationPasswordSecret,
+                DomainName: !Ref DomainName,
+                DelegationUser: !Ref DelegationUser,
+                ServiceAccountName: !Ref ServiceAccountName,
+                StopAdAdminInstance: !Ref StopAdAdminInstance,
+                DC: !Join [",DC=", !Split [".", !Ref DomainName ]],
+                OU: !Select [0, !Split ['.', !Ref DomainName ]]
+                }
+
+  PostRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Action:
+              - sts:AssumeRole
+            Effect: Allow
+            Principal:
+              Service:
+                - lambda.amazonaws.com
+      Policies:
+        - PolicyName: LogOutput
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Action:
+                - logs:CreateLogGroup
+                - logs:CreateLogStream
+                - logs:PutLogEvents
+                Effect: Allow
+                Resource: '*'
+        - PolicyName: StopInstances
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action:
+                  - ec2:StopInstances
+                Resource: !Sub
+                  - arn:${AWS::Partition}:ec2:${AWS::Region}:${AWS::AccountId}:instance/${InstanceId}
+                  - { InstanceId: !Ref Instance }
+
+  PostLambda:
+    Type: AWS::Lambda::Function
+    Properties:
+      Description: !Sub "${AWS::StackName}: custom resource handler to finish setting up stack after other resources have been created."
+      Handler: index.handler
+      MemorySize: 128
+      Role: !GetAtt PostRole.Arn
+      Runtime: python3.12
+      Timeout: 300
+      TracingConfig:
+        Mode: Active
+      Code:
+        ZipFile: |
+          import time
+          import cfnresponse
+          import boto3
+          import logging
+          import random
+          import string
+          logger = logging.getLogger()
+          logger.setLevel(logging.INFO)
+
+          ec2 = boto3.client("ec2")
+
+          def create_physical_resource_id():
+              alnum = string.ascii_uppercase + string.ascii_lowercase + string.digits
+              return "".join(random.choice(alnum) for _ in range(16))
+
+          def redact_keys(event: dict, redactions: set):
+              ret = {}
+              for k in event.keys():
+                  if k in redactions:
+                      ret[k] = "[REDACTED]"
+                  else:
+                      ret[k] = redact_keys(event[k], redactions) if type(event[k]) is dict else event[k] # handle nesting
+              return ret
+          
+          def handler(event, context):
+              print( 'boto version {}'.format(boto3.__version__))
+
+              response_data = {}
+              reason = None
+              response_status = cfnresponse.SUCCESS
+
+              if event['RequestType'] == 'Create':
+                  response_data['Message'] = 'Resource creation successful!'
+                  physical_resource_id = create_physical_resource_id()
+              else:
+                  physical_resource_id = event['PhysicalResourceId']
+
+              cfnresponse.send(event, context, response_status, response_data, physical_resource_id, reason)
+
+  Post:
+    Type: Custom::PostLambda
+    Properties:
+      ServiceToken: !GetAtt PostLambda.Arn
+      InstanceId: !Ref Instance
+      StopAdAdminInstance: !Ref StopAdAdminInstance
+
+Outputs:
+  ManagementHostId:
+    Value: !Ref Instance
+    Description: Instance ID for Windows Active Directory Domain Management Node

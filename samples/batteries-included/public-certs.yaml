@@ -1,0 +1,401 @@
+# Vendored from aws-samples/aws-hpc-recipes, recipes/security/public_certs/assets/main.yaml
+# Upstream commit b043720a237c4a33b3825ac75ccba7bf493b2635
+# Vendored 2026-09-12. Modified: instance role scoped to what the UserData uses and its Route 53 condition corrected; IMDS hop limit reduced to 1.
+# Refresh: re-apply the changes in samples/PROVENANCE.md to the upstream file at that commit.
+
+Description: Stack for creating a certificate using Let's Encrypt
+
+Metadata:
+  AWS::CloudFormation::Interface:
+    ParameterGroups:
+      - Label:
+          default: "Domain Information"
+        Parameters:
+          - DomainName
+      - Label:
+          default: "Environment"
+        Parameters:
+          - SubnetId
+          - AdminNodeAmiId
+      - Label:
+          default: "Certificate Node"
+        Parameters:
+          - CertificateNodeInstancetype
+
+Parameters:
+  DomainName:
+    Description: Domain Name for domain that lives in Route53 in account.
+    Type: String
+    Default: corp.pcluster.com
+    AllowedPattern: ^([a-zA-Z0-9]+[\\.-])+([a-zA-Z0-9])+$
+  SubnetId:
+    Description: Choose a subnet to launch the Admin Node in.
+    Type: AWS::EC2::Subnet::Id
+  AdminNodeAmiId:
+    Description: AMI for the Admin Node
+    Type: 'AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>'
+    Default: '/aws/service/ami-amazon-linux-latest/amzn2-ami-hvm-x86_64-gp2'
+  CertificateNodeInstancetype:
+    Description: EC2 instance type for the Certificate Node
+    Type: String
+    Default: t3.micro
+
+Transform: AWS::Serverless-2016-10-31
+
+Resources:
+  CertificateSecret:
+    Type: AWS::SecretsManager::Secret
+    Properties:
+      Description: Domain certificate
+      Name: !Sub [ "Certificate-${StackIdSuffix}", { StackIdSuffix: !Select [ 1, !Split [ '/', !Ref 'AWS::StackId' ] ] } ]
+
+  PrivateKeySecret:
+    Type: AWS::SecretsManager::Secret
+    Properties:
+      Description: Domain private key
+      Name: !Sub [ "PrivateKey-${StackIdSuffix}", { StackIdSuffix: !Select [ 1, !Split [ '/', !Ref 'AWS::StackId' ] ] } ]
+
+  DisableImdsv1LaunchTemplate:
+    Type: AWS::EC2::LaunchTemplate
+    Properties:
+      LaunchTemplateData:
+        MetadataOptions:
+          HttpEndpoint: enabled
+          HttpPutResponseHopLimit: 1
+          HttpTokens: required
+
+  InstanceRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Statement:
+          - Action: sts:AssumeRole
+            Effect: Allow
+            Principal:
+              Service: ec2.amazonaws.com
+        Version: "2012-10-17"
+      ManagedPolicyArns:
+        - !Sub arn:${AWS::Partition}:iam::aws:policy/AmazonSSMManagedInstanceCore
+      Policies:
+        - PolicyDocument:
+            Statement:
+              - Action:
+                  - route53:ChangeResourceRecordSets
+                Effect: Allow
+                Resource: "*"
+                Condition:
+                  StringLike:
+                    route53:ChangeResourceRecordSetsNormalizedRecordNames: "_acme-challenge.*"
+                  StringEqualsIfExists:
+                    route53:ChangeResourceRecordSetsRecordTypes: "TXT"
+                    route53:ChangeResourceRecordSetsActions:
+                      - CREATE
+                      - UPSERT
+                      - DELETE
+          PolicyName: ModifyRoute53
+        - PolicyDocument:
+            Statement:
+              - Action:
+                  - secretsmanager:PutSecretValue
+                Effect: Allow
+                Resource:
+                  - !Ref CertificateSecret
+                  - !Ref PrivateKeySecret
+          PolicyName: PutDomainCertificateSecrets
+        - PolicyDocument:
+            Statement:
+              # cfn-init reads this stack's resource metadata; cfn-signal reports back.
+              - Action:
+                  - cloudformation:DescribeStackResource
+                  - cloudformation:SignalResource
+                Effect: Allow
+                Resource: !Sub arn:${AWS::Partition}:cloudformation:${AWS::Region}:${AWS::AccountId}:stack/${AWS::StackName}/*
+              # acme.sh's Route 53 provider needs to find the zone and poll the
+              # change. The record write itself is granted, conditioned, above.
+              - Action:
+                  - route53:ListHostedZones
+                  - route53:GetChange
+                Effect: Allow
+                Resource: "*"
+              - Action:
+                  - route53:ListResourceRecordSets
+                Effect: Allow
+                Resource: !Sub arn:${AWS::Partition}:route53:::hostedzone/*
+          PolicyName: CfnSignalAndRoute53Lookup
+  InstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      Roles:
+        - Ref: InstanceRole
+
+  CertificateNode:
+    Type: AWS::EC2::Instance
+    CreationPolicy:
+      ResourceSignal:
+        Timeout: PT15M
+    Metadata:
+      "AWS::CloudFormation::Init":
+        configSets:
+          setup:
+            - install_dependencies
+        install_dependencies:
+          packages:
+            yum:
+              git: []
+    Properties:
+      IamInstanceProfile:
+        Ref: InstanceProfile
+      ImageId: !Ref AdminNodeAmiId
+      InstanceType:
+        Ref: CertificateNodeInstancetype
+      LaunchTemplate:
+        LaunchTemplateId: !Ref 'DisableImdsv1LaunchTemplate'
+        Version: !GetAtt 'DisableImdsv1LaunchTemplate.LatestVersionNumber'
+      SubnetId: !Ref SubnetId
+      Tags:
+        - Key: "Name"
+          Value: !Sub [ "CertificateNode-${StackIdSuffix}", {StackIdSuffix: !Select [1, !Split ['/', !Ref 'AWS::StackId']]}]
+      UserData:
+        Fn::Base64:
+          !Sub
+            - |
+              #!/bin/bash -e
+              set -o pipefail
+              exec > >(tee /var/log/user-data.log|logger -t user-data -s 2>/dev/console) 2>&1
+              yum update -y aws-cfn-bootstrap
+
+              /opt/aws/bin/cfn-init -v --stack "${AWS::StackName}" --resource CertificateNode --configsets setup --region "${AWS::Region}"
+              echo "Domain Name: ${DomainName}"
+              echo "Domain Certificate Secret: ${CertificateSecret}"
+              echo "Domain Private Key Secret: ${PrivateKeySecret}"
+
+              sudo yum install -y wget
+              export HOME=/tmp/home
+              mkdir -p $HOME
+              cd /tmp
+              wget https://bootstrap.pypa.io/pip/3.7/get-pip.py
+              mkdir -p pip
+              python3 ./get-pip.py --target $PWD/pip
+              $PWD/pip/bin/pip3 install boto3
+              eval $(python3 -c "from botocore.credentials import InstanceMetadataProvider, InstanceMetadataFetcher; provider = InstanceMetadataProvider(iam_role_fetcher=InstanceMetadataFetcher(timeout=1000, num_attempts=2)); c = provider.load().get_frozen_credentials(); print(f'export AWS_ACCESS_KEY_ID={c.access_key}'); print(f'export AWS_SECRET_ACCESS_KEY={c.secret_key}'); print(f'export AWS_SESSION_TOKEN={c.token}')")
+
+              mkdir certificates
+              cd certificates
+              VERSION=3.1.0
+              wget https://github.com/acmesh-official/acme.sh/archive/refs/tags/$VERSION.tar.gz -O acme-$VERSION.tar.gz
+              tar -xvf acme-$VERSION.tar.gz
+              cd acme.sh-$VERSION
+              ./acme.sh --install
+              ./acme.sh --set-default-ca --server letsencrypt
+              ./acme.sh --issue --dns dns_aws --keylength 4096  -d ${DomainName} -d "*.${DomainName}"
+
+              CERTKEYFILE=$HOME/.acme.sh/${DomainName}/${DomainName}.key
+              CERTCERFILE=$HOME/.acme.sh/${DomainName}/${DomainName}.cer
+
+              aws secretsmanager put-secret-value \
+                --secret-id ${PrivateKeySecret} \
+                --secret-string file://$CERTKEYFILE \
+                --region "${AWS::Region}"
+
+              aws secretsmanager put-secret-value \
+                --secret-id ${CertificateSecret} \
+                --secret-string file://$CERTCERFILE \
+                --region "${AWS::Region}"
+
+              /opt/aws/bin/cfn-signal -e "$?" --stack "${AWS::StackName}" --resource CertificateNode --region "${AWS::Region}"
+
+              sudo shutdown now -h
+
+            - { DomainName: !Ref DomainName,
+                CertificateSecret: !Ref CertificateSecret,
+                PrivateKeySecret: !Ref PrivateKeySecret,
+              }
+
+  CertificateRenewalLambdaRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Action:
+              - sts:AssumeRole
+            Effect: Allow
+            Principal:
+              Service:
+                - lambda.amazonaws.com
+      Policies:
+        - PolicyName: GetLatestALAMIID
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Action:
+                - ssm:GetParameter
+                Effect: Allow
+                Resource: !Sub "arn:${AWS::Partition}:ssm:${AWS::Region}::parameter/aws/service/ami-amazon-linux-latest/amzn2-ami-hvm-x86_64-gp2"
+        - PolicyName: LaunchEC2Instance
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Action:
+                - ec2:RunInstances
+                - ec2:CreateTags
+                Effect: Allow
+                Resource: "*"
+        - PolicyName: AllowPassRoleToInstanceRole
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Action:
+                - iam:PassRole
+                Effect: Allow
+                Resource:
+                  - !GetAtt InstanceRole.Arn
+
+  CertificateRenewalLambda:
+    Type: AWS::Lambda::Function
+    Properties:
+      Description: !Sub "${AWS::StackName}: custom resource handler to launch EC2 instances to renew hosts."
+      Handler: index.handler
+      Role: !GetAtt CertificateRenewalLambdaRole.Arn
+      Runtime: python3.12
+      TracingConfig:
+        Mode: Active
+      Code:
+        ZipFile: 
+          !Sub 
+            - |
+              import boto3
+              import logging
+              logger = logging.getLogger()
+              logger.setLevel(logging.INFO)
+
+              ssm = boto3.client('ssm')
+              ec2 = boto3.client('ec2')
+
+              logger.info("LaunchTemplateID: ${LaunchTemplateID}")
+              logger.info("LaunchTemplateVersion: ${LaunchTemplateVersion}")
+              logger.info("InstanceProfileARN: ${InstanceProfileARN}")
+              logger.info("CertificateNodeInstancetype: ${CertificateNodeInstancetype}")
+              logger.info("SubnetId: ${SubnetId}")
+              logger.info("NameTag: ${NameTag}")
+              logger.info("CertificateSecret: ${CertificateSecret}")
+              logger.info("PrivateKeySecret: ${PrivateKeySecret}")
+
+              def get_latest_al_ami_id():
+                latest_al_ami_id = ssm.get_parameter(Name='/aws/service/ami-amazon-linux-latest/amzn2-ami-hvm-x86_64-gp2')['Parameter']['Value']
+                logger.info('latest Amazon Linux AMI ID: '+ latest_al_ami_id)
+                return latest_al_ami_id
+
+              def handler(event, context):
+                latest_ami_id = get_latest_al_ami_id()
+
+                instance = ec2.run_instances(
+                  IamInstanceProfile={
+                    'Arn': '${InstanceProfileARN}',
+                  },
+                  ImageId=latest_ami_id,
+                  InstanceType='${CertificateNodeInstancetype}',
+                  MinCount=1,
+                  MaxCount=1,
+                  LaunchTemplate={
+                    'LaunchTemplateId': '${LaunchTemplateID}',
+                    'Version': '${LaunchTemplateVersion}',
+                  },
+                  SubnetId='${SubnetId}',
+                  TagSpecifications=[
+                    {
+                      'ResourceType': 'instance',
+                      'Tags':[
+                        {
+                          'Key': 'Name',
+                          'Value': '${NameTag}'
+                        }
+                      ]
+                    }
+                  ],
+                  InstanceInitiatedShutdownBehavior='terminate',
+                  UserData="""#!/bin/bash -e
+                  set -o pipefail
+                  exec > >(tee /var/log/user-data.log|logger -t user-data -s 2>/dev/console) 2>&1
+                  yum update -y aws-cfn-bootstrap
+
+                  echo "Domain Name: ${DomainName}"
+                  echo "Domain Certificate Secret: ${CertificateSecret}"
+                  echo "Domain Private Key Secret: ${PrivateKeySecret}"
+
+                  sudo yum install -y wget
+                  export HOME=/tmp/home
+                  mkdir -p $HOME
+                  cd /tmp
+                  wget https://bootstrap.pypa.io/pip/3.7/get-pip.py
+                  mkdir -p pip
+                  python3 ./get-pip.py --target $PWD/pip
+                  $PWD/pip/bin/pip3 install boto3
+                  eval $(python3 -c "from botocore.credentials import InstanceMetadataProvider, InstanceMetadataFetcher; provider = InstanceMetadataProvider(iam_role_fetcher=InstanceMetadataFetcher(timeout=1000, num_attempts=2)); c = provider.load().get_frozen_credentials(); print(f'export AWS_ACCESS_KEY_ID={c.access_key}'); print(f'export AWS_SECRET_ACCESS_KEY={c.secret_key}'); print(f'export AWS_SESSION_TOKEN={c.token}')")
+
+                  mkdir certificates
+                  cd certificates
+                  VERSION=3.1.0
+                  wget https://github.com/acmesh-official/acme.sh/archive/refs/tags/$VERSION.tar.gz -O acme-$VERSION.tar.gz
+                  tar -xvf acme-$VERSION.tar.gz
+                  cd acme.sh-$VERSION
+                  ./acme.sh --install
+                  ./acme.sh --set-default-ca --server letsencrypt
+                  ./acme.sh --issue --dns dns_aws --keylength 4096  -d ${DomainName} -d "*.${DomainName}"
+
+                  CERTKEYFILE=$HOME/.acme.sh/${DomainName}/${DomainName}.key
+                  CERTCERFILE=$HOME/.acme.sh/${DomainName}/${DomainName}.cer
+
+                  aws secretsmanager put-secret-value \
+                    --secret-id ${PrivateKeySecret} \
+                    --secret-string file://$CERTKEYFILE \
+                    --region "${AWS::Region}"
+
+                  aws secretsmanager put-secret-value \
+                    --secret-id ${CertificateSecret} \
+                    --secret-string file://$CERTCERFILE \
+                    --region "${AWS::Region}"
+
+                  sudo shutdown now -h
+                  """,
+                )
+
+            - { LaunchTemplateID: !Ref DisableImdsv1LaunchTemplate,
+                LaunchTemplateVersion: !GetAtt DisableImdsv1LaunchTemplate.LatestVersionNumber,
+                InstanceProfileARN: !GetAtt InstanceProfile.Arn,
+                CertificateNodeInstancetype: !Ref CertificateNodeInstancetype,
+                SubnetId: !Ref SubnetId,
+                NameTag: !Sub [ "CertificateRenewalNode-${StackIdSuffix}", {StackIdSuffix: !Select [1, !Split ['/', !Ref 'AWS::StackId']]}],
+                DomainName: !Ref DomainName,
+                CertificateSecret: !Ref CertificateSecret,
+                PrivateKeySecret: !Ref PrivateKeySecret,
+              }
+
+  InvokeLambdaPermission:
+    Type: AWS::Lambda::Permission
+    Properties: 
+      FunctionName: !Ref CertificateRenewalLambda
+      Action: lambda:InvokeFunction
+      Principal: events.amazonaws.com
+      SourceArn: !GetAtt CertAutoRenewalTriggerRule.Arn
+
+
+  CertAutoRenewalTriggerRule:
+    Type: AWS::Events::Rule
+    Properties: 
+      Description: "Trigger certificate renewal periodically"
+      ScheduleExpression: "rate(60 days)"
+      State: "ENABLED"
+      Targets:  
+        - Arn: !GetAtt CertificateRenewalLambda.Arn
+          Id: "CertificateRenewalLambda"
+  
+
+Outputs:
+  CertificateArn:
+    Value: !Ref CertificateSecret
+  PrivateKeySecretArn:
+    Value: !Ref PrivateKeySecret
+  CertificateNode:
+    Value: !Ref CertificateNode
+    Description: Instance ID for Management Node

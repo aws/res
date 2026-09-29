@@ -1,0 +1,52 @@
+# Vendored from aws-samples/aws-hpc-recipes, recipes/res/res_ready_ami/assets/nested-imagebuilder-components.yaml
+# Upstream commit b043720a237c4a33b3825ac75ccba7bf493b2635
+# Vendored 2026-09-12. Modified: nested TemplateURL values parameterised.
+# Refresh: re-apply the changes in samples/PROVENANCE.md to the upstream file at that commit.
+AWSTemplateFormatVersion: '2010-09-09'
+Description: ImageBuilder Components for RES-ready AMIs
+
+### Stack metadata
+Metadata:
+  AWS::CloudFormation::Interface:
+    ParameterGroups:
+      - Label:
+          default: Sample Template Location
+        Parameters:
+          - SamplesS3Base
+
+Parameters:
+  SamplesS3Base:
+    Description: HTTPS base URL of the bucket and prefix holding the RES sample templates, without a trailing slash. Printed by publish-samples.sh.
+    Type: String
+    AllowedPattern: ^https://[^\s]+[^/\s]$
+
+Resources:
+
+  RESVDILinuxStack:
+    Type: AWS::CloudFormation::Stack
+    DeletionPolicy: Delete
+    UpdateReplacePolicy: Delete
+    Properties:
+      TemplateURL: !Sub "${SamplesS3Base}/res-ready-ami/components/research-and-engineering-studio-vdi-linux.yaml"
+      TimeoutInMinutes: 10
+
+  RESVDIWindowsStack:
+    Type: AWS::CloudFormation::Stack
+    DeletionPolicy: Delete
+    UpdateReplacePolicy: Delete
+    Properties:
+      TemplateURL: !Sub "${SamplesS3Base}/res-ready-ami/components/research-and-engineering-studio-vdi-windows.yaml"
+      TimeoutInMinutes: 10
+
+
+Outputs:
+  RESVDILinuxComponent:
+    Description: RESVDILinuxComponent
+    Value: !GetAtt [ RESVDILinuxStack, Outputs.ImageBuilderComponent ]
+    Export:
+      Name: !Sub "${AWS::StackName}-RESVDILinuxComponent"
+  RESVDIWindowsComponent:
+    Description: RESVDIWindowsComponent
+    Value: !GetAtt [ RESVDIWindowsStack, Outputs.ImageBuilderComponent ]
+    Export:
+      Name: !Sub "${AWS::StackName}-RESVDIWindowsComponent"

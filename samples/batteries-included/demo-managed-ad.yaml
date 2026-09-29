@@ -1,0 +1,1099 @@
+# Vendored from aws-samples/aws-hpc-recipes, recipes/dir/demo_managed_ad/assets/main.yaml
+# Upstream commit b043720a237c4a33b3825ac75ccba7bf493b2635
+# Vendored 2026-09-12. Modified: the directory administrator password is no longer passed on the ldapmodify command line.
+# Refresh: re-apply the changes in samples/PROVENANCE.md to the upstream file at that commit.
+
+Description: AWS Managed Microsoft Active Directory to support multi-user AWS ParallelCluster
+
+Metadata:
+  AWS::CloudFormation::Interface:
+    ParameterGroups:
+      - Label:
+          default: "Active Directory Configuration"
+        Parameters:
+          - DomainName
+          - SubDomain
+          - AdminPassword
+          - ServiceAccountName
+          - ServiceAccountPassword
+          - ManagedAdEdition
+      - Label:
+          default: "Active Directory Bootstrapping"
+        Parameters:
+          - UserName
+          - UserPassword
+          - LDIFS3Path
+      - Label:
+          default: "Network Configuration"
+        Parameters:
+          - Vpc
+          - PrivateSubnetOne
+          - PrivateSubnetTwo
+      - Label:
+          default: "Host Configuration"
+        Parameters:
+          - Keypair
+          - AdminNodeAmiId
+          - StopAdAdminInstance
+          - AdDomainAdminNodeInstancetype
+          - AllowedIps
+          - ClientPrefixList
+
+Parameters:
+  ManagedAdEdition:
+    Description: Select an AWS Managed Microsoft AD edition.
+    Type: String
+    Default: Standard
+    AllowedValues:
+         - Standard
+         - Enterprise
+  DomainName:
+    Description: Active Directory Domain Name.
+    Type: String
+    Default: corp.pcluster.com
+    AllowedPattern: ^([a-zA-Z0-9]+[\\.-])+([a-zA-Z0-9])+$
+  SubDomain:
+    Description: (Optional, but required for GovCloud regions) SubDomain for the Active Directory Domain Name. If provided Active Directory Domain Name will be (SubDomain).(DomainName)
+    Type: String
+    Default: ""
+  AdminPassword:
+    Description: Active Directory Admin Password.
+    Type: String
+    MinLength: 8
+    MaxLength: 64
+    AllowedPattern: (?=^.{8,64}$)((?=.*\d)(?=.*[A-Z])(?=.*[a-z])|(?=.*\d)(?=.*[^A-Za-z0-9\s])(?=.*[a-z])|(?=.*[^A-Za-z0-9\s])(?=.*[A-Z])(?=.*[a-z])|(?=.*\d)(?=.*[A-Z])(?=.*[^A-Za-z0-9\s]))^.*
+    NoEcho: true
+  ServiceAccountName:
+    Description: Username for the Service Account
+    Type: String
+    MinLength: 4
+    Default: ReadOnlyUser
+  ServiceAccountPassword:
+    Description: Active Directory Service Account Password.
+    Type: String
+    MinLength: 8
+    MaxLength: 64
+    AllowedPattern: (?=^.{8,64}$)((?=.*\d)(?=.*[A-Z])(?=.*[a-z])|(?=.*\d)(?=.*[^A-Za-z0-9\s])(?=.*[a-z])|(?=.*[^A-Za-z0-9\s])(?=.*[A-Z])(?=.*[a-z])|(?=.*\d)(?=.*[A-Z])(?=.*[^A-Za-z0-9\s]))^.*
+    NoEcho: true
+  UserName:
+    Description: (Optional) Cluster user that is created in the Active Directory.
+    Type: String
+    Default: ""
+  UserPassword:
+    Description: (Optional) Cluster user Password (Required if a UserName is provided).
+    Type: String
+    Default: ""
+    NoEcho: true
+  LDIFS3Path:
+    Description: (Optional) An S3 Path (without the s3://) to an LDIF file that will be used during stack creation.
+    Type: String
+    Default: ""
+  Keypair:
+    Description: EC2 Keypair to access the management instance.
+    Type: AWS::EC2::KeyPair::KeyName
+  AllowedIps:
+    Description: (Optional) CIDR-formatted IP range for SSH access to the management instance.
+    Type: String
+    Default: ""
+    AllowedPattern: ^(((\d{1,3})\.){3}\d{1,3}/\d{1,2})?$
+  ClientPrefixList:
+    Description: (Optional) VPC Prefix List ID for incoming traffic to the management instance.
+    Default: ""
+    Type: String
+    AllowedPattern: ^(pl-[a-z0-9]{8,20})?$
+    ConstraintDescription: Must be a valid prefix list ID, which begins with pl-.
+  Vpc:
+    Description: VPC ID to create the AD and management instance(s) in.
+    Type: AWS::EC2::VPC::Id
+  PrivateSubnetOne:
+    Description: Subnet ID of the first private subnet in the VPC. 
+    Type: AWS::EC2::Subnet::Id
+  PrivateSubnetTwo:
+    Description: Subnet ID of the second private subnet in the VPC.
+    Type: AWS::EC2::Subnet::Id
+  AdminNodeAmiId:
+    Description: AMI for the management instance.
+    Type: 'AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>'
+    Default: '/aws/service/ami-amazon-linux-latest/amzn2-ami-hvm-x86_64-gp2'
+  AdDomainAdminNodeInstancetype:
+    Description: EC2 instance type for the management instance.
+    Type: String
+    Default: t3.micro
+  StopAdAdminInstance:
+    Description: Automatically stop the management instance to save costs.
+    Type: String
+    Default: "False"
+    AllowedValues:
+         - "True"
+         - "False"
+
+Transform: AWS::Serverless-2016-10-31
+
+Conditions:
+  CreateVPC: !Equals [!Ref Vpc, ""]
+  # CreateAD: !Equals [!Ref Ad, ""]
+  CreateAD: !Equals ["", ""]
+  isUSEast1: !Equals [!Ref "AWS::Region", "us-east-1"]
+  ImportLDIFS3: !Not [ !Equals [!Ref LDIFS3Path, ""] ]
+  SubDomainProvided: !Not [ !Equals [!Ref SubDomain, ""] ]
+  SubDomainNotProvided: !Equals [!Ref SubDomain, ""]
+  AddPrefixList: !Not [!Equals [!Ref ClientPrefixList, ""]]
+  AddCidrIngress: !Not [!Equals [!Ref AllowedIps, ""]]
+  GovCloud: !Equals [!Ref AWS::Partition, 'aws-us-gov']
+  China: !Equals [!Ref AWS::Partition, 'aws-cn']
+
+Resources:
+
+  DisableImdsv1LaunchTemplate:
+    Type: AWS::EC2::LaunchTemplate
+    Properties:
+      LaunchTemplateData:
+        MetadataOptions:
+          HttpEndpoint: enabled
+          HttpPutResponseHopLimit: 4
+          HttpTokens: required
+
+  PrepRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Action:
+              - sts:AssumeRole
+            Effect: Allow
+            Principal:
+              Service:
+                - lambda.amazonaws.com
+      Policies:
+        - PolicyName: LogOutput
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Action:
+                - logs:CreateLogGroup
+                - logs:CreateLogStream
+                - logs:PutLogEvents
+                Effect: Allow
+                # Resource: !Sub arn:${AWS::Partition}:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/${AWS::StackName}-Prep:*
+                Resource: '*'
+        - PolicyName: DescribeDirectory
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action:
+                  - ds:DescribeDirectories
+                # Resource: !Sub arn:${AWS::Partition}:ds:*:${AWS::AccountId}:directory/*
+                Resource: '*'
+
+  PclusterVpc:
+    Type: AWS::EC2::VPC
+    Condition: CreateVPC
+    Properties:
+      CidrBlock: 10.0.0.0/16
+      EnableDnsHostnames: true
+      EnableDnsSupport: true
+      InstanceTenancy: default
+  PclusterVpcIGW:
+    Type: AWS::EC2::InternetGateway
+    Condition: CreateVPC
+  PclusterVpcSubnet1Route:
+    Type: AWS::EC2::Route
+    Condition: CreateVPC
+    DependsOn:
+    - PclusterVpcGWA
+    Properties:
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId:
+        Ref: PclusterVpcIGW
+      RouteTableId:
+        Ref: PclusterVpcSubnet1RouteTable
+  PclusterVpcSubnet1RouteTable:
+    Type: AWS::EC2::RouteTable
+    Condition: CreateVPC
+    Properties:
+      VpcId:
+        Ref: PclusterVpc
+  PclusterVpcSubnet1RTA:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Condition: CreateVPC
+    Properties:
+      RouteTableId:
+        Ref: PclusterVpcSubnet1RouteTable
+      SubnetId:
+        Ref: PclusterVpcSubnet1
+  PclusterVpcSubnet1:
+    Type: AWS::EC2::Subnet
+    Condition: CreateVPC
+    Properties:
+      AvailabilityZone: !Sub ${AWS::Region}a
+      CidrBlock: 10.0.0.0/17
+      MapPublicIpOnLaunch: true
+      VpcId:
+        Ref: PclusterVpc
+  PclusterVpcSunet1Route:
+    Type: AWS::EC2::Route
+    Condition: CreateVPC
+    DependsOn:
+    - PclusterVpcGWA
+    Properties:
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId:
+        Ref: PclusterVpcIGW
+      RouteTableId:
+        Ref: PclusterVpcSubnet2RouteTable
+  PclusterVpcSubnet2RouteTable:
+    Type: AWS::EC2::RouteTable
+    Condition: CreateVPC
+    Properties:
+      VpcId:
+        Ref: PclusterVpc
+  PclusterVpcSubnet2RTA:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Condition: CreateVPC
+    Properties:
+      RouteTableId:
+        Ref: PclusterVpcSubnet2RouteTable
+      SubnetId:
+        Ref: PclusterVpcSubnet2
+  PclusterVpcSubnet2:
+    Type: AWS::EC2::Subnet
+    Condition: CreateVPC
+    Properties:
+      AvailabilityZone: !Sub ${AWS::Region}b
+      CidrBlock: 10.0.128.0/17
+      MapPublicIpOnLaunch: true
+      VpcId:
+        Ref: PclusterVpc
+  PclusterVpcGWA:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Condition: CreateVPC
+    Properties:
+      InternetGatewayId:
+        Ref: PclusterVpcIGW
+      VpcId:
+        Ref: PclusterVpc
+
+  PrepLambda:
+    Type: AWS::Lambda::Function
+    Properties:
+      Description: !Sub "${AWS::StackName}: custom resource handler to prepare the stack."
+      Handler: index.handler
+      MemorySize: 128
+      Role: !GetAtt PrepRole.Arn
+      Runtime: python3.12
+      Timeout: 300
+      TracingConfig:
+        Mode: Active
+      Code:
+        ZipFile: |
+          import time
+          import cfnresponse
+          import boto3
+          import logging
+          import random
+          import string
+          logger = logging.getLogger()
+          logger.setLevel(logging.INFO)
+          ec2 = boto3.client("ec2")
+          ds = boto3.client("ds")
+
+          def create_physical_resource_id():
+              alnum = string.ascii_uppercase + string.ascii_lowercase + string.digits
+              return "".join(random.choice(alnum) for _ in range(16))
+
+          def handler(event, context):
+              print(event)
+              print( 'boto version {}'.format(boto3.__version__))
+              domain = event['ResourceProperties']['DomainName']
+              vpc_id = event['ResourceProperties']['Vpc']
+              directory_id = event['ResourceProperties']['DirectoryId']
+              subnet1_id = event['ResourceProperties']['PrivateSubnetOne']
+              subnet2_id = event['ResourceProperties']['PrivateSubnetTwo']
+
+              directory = ds.describe_directories(DirectoryIds=[directory_id])['DirectoryDescriptions'][0]
+              dns_ip_addrs = directory['DnsIpAddrs']
+
+              response_data = {}
+              reason = None
+              response_status = cfnresponse.SUCCESS
+              stack_id_suffix = event['StackId'].split("/")[1]
+
+              if event['RequestType'] == 'Create':
+                  response_data['Message'] = 'Resource creation successful!'
+                  physical_resource_id = create_physical_resource_id()
+
+                  # provide outputs
+                  response_data['DomainName'] = domain
+                  response_data['DomainShortName'] = domain.split(".")[0].upper()
+                  response_data['VpcId'] = vpc_id
+                  response_data['Subnet1Id'] = subnet1_id
+                  response_data['Subnet2Id'] = subnet2_id
+                  response_data['DnsIpAddresses'] = dns_ip_addrs
+                  for i, addr in enumerate(dns_ip_addrs):
+                    addr_index = i + 1
+                    response_data[f'DnsIpAddress{addr_index}'] = addr
+              else:
+                  physical_resource_id = event['PhysicalResourceId']
+              cfnresponse.send(event, context, response_status, response_data, physical_resource_id, reason)
+
+  Directory:
+    Type: AWS::DirectoryService::MicrosoftAD
+    Condition: CreateAD
+    Properties:
+      Name: !If [ SubDomainNotProvided, !Ref DomainName, !Join [ ".", [ !Ref SubDomain, !Ref DomainName] ] ]
+      Password: !Ref AdminPassword
+      Edition: !Ref ManagedAdEdition
+      VpcSettings:
+        SubnetIds:
+          - !If [CreateVPC, !Ref PclusterVpcSubnet1, !Ref PrivateSubnetOne ]
+          - !If [CreateVPC, !Ref PclusterVpcSubnet2, !Ref PrivateSubnetTwo ]
+        VpcId: !If [CreateVPC, !Ref PclusterVpc, !Ref Vpc ]
+
+  Prep:
+    Type: Custom::PrepLambda
+    Properties:
+      ServiceToken: !GetAtt PrepLambda.Arn
+      DomainName:  !If [ SubDomainNotProvided, !Ref DomainName, !Join [ ".", [ !Ref SubDomain, !Ref DomainName] ] ]
+      Vpc: !If [CreateVPC, !Ref PclusterVpc, !Ref Vpc ]
+      PrivateSubnetOne: !If [CreateVPC, !Ref PclusterVpcSubnet1, !Ref PrivateSubnetOne ]
+      PrivateSubnetTwo: !If [CreateVPC, !Ref PclusterVpcSubnet2, !Ref PrivateSubnetTwo ]
+      # DirectoryId: !If [CreateAD, !Ref Directory, !Ref Ad ]
+      DirectoryId: !Ref Directory
+
+  InstanceSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Allow SSH access
+      VpcId: !If [CreateVPC, !Ref PclusterVpc, !Ref Vpc ]
+
+  InstanceSecurityGroupIngressClientCidr:
+    Condition: AddCidrIngress
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      FromPort: 22
+      ToPort: 22
+      IpProtocol: tcp
+      GroupId: !GetAtt InstanceSecurityGroup.GroupId
+      CidrIp: !Ref AllowedIps
+
+  InstanceSecurityGroupIngressPrefixList:
+    Condition: AddPrefixList
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      FromPort: 22
+      ToPort: 22
+      IpProtocol: tcp
+      GroupId: !GetAtt InstanceSecurityGroup.GroupId
+      SourcePrefixListId: !Ref ClientPrefixList
+
+  JoinRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Statement:
+          - Action: sts:AssumeRole
+            Effect: Allow
+            Principal:
+              Service: ec2.amazonaws.com
+        Version: "2012-10-17"
+      ManagedPolicyArns:
+        - !Sub arn:${AWS::Partition}:iam::aws:policy/AmazonSSMManagedInstanceCore
+        - !Sub arn:${AWS::Partition}:iam::aws:policy/AmazonSSMDirectoryServiceAccess
+      Policies:
+        - PolicyDocument:
+            Statement:
+              - Action:
+                  - ds:ResetUserPassword
+                Effect: Allow
+                Resource: !Sub
+                  - arn:${AWS::Partition}:ds:${AWS::Region}:${AWS::AccountId}:directory/${DirectoryId}
+                  - { DirectoryId: !Ref Directory }
+          PolicyName: ResetUserPassword
+        - PolicyDocument:
+            Statement:
+              - Action:
+                  - s3:GetObject
+                Effect: Allow
+                Resource: !Sub
+                  - arn:${AWS::Partition}:s3:::${S3Path}
+                  - { S3Path: !Ref LDIFS3Path }
+          PolicyName: AccessLDIFFile
+        - PolicyDocument:
+            Statement:
+              - Action:
+                  - secretsmanager:PutSecretValue
+                Effect: Allow
+                Resource:
+                  - !Ref DomainCertificateSecret
+                  - !Ref DomainPrivateKeySecret
+          PolicyName: PutDomainCertificateSecrets
+  JoinProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      Roles:
+        - Ref: JoinRole
+
+  AdDomainAdminNode:
+    Type: AWS::EC2::Instance
+    CreationPolicy:
+      ResourceSignal:
+        Timeout: PT60M
+    Metadata:
+      "AWS::CloudFormation::Init":
+        configSets:
+          setup:
+            - install_dependencies
+        install_dependencies:
+          packages:
+            yum:
+              sssd: []
+              realmd: []
+              oddjob: []
+              oddjob-mkhomedir: []
+              adcli: []
+              samba-common: []
+              samba-common-tools: []
+              krb5-workstation: []
+              openldap-clients: []
+              policycoreutils-python: []
+              openssl: []
+    Properties:
+      IamInstanceProfile:
+        Ref: JoinProfile
+      ImageId: !Ref AdminNodeAmiId
+      InstanceType:
+        Ref: AdDomainAdminNodeInstancetype
+      KeyName: !Ref Keypair
+      LaunchTemplate:
+        LaunchTemplateId: !Ref 'DisableImdsv1LaunchTemplate'
+        Version: !GetAtt 'DisableImdsv1LaunchTemplate.LatestVersionNumber'
+      SecurityGroupIds:
+        - Ref: InstanceSecurityGroup
+      SubnetId: !If [CreateVPC, !Ref PclusterVpcSubnet1, !Ref PrivateSubnetOne ]
+      Tags:
+        - Key: "Name"
+          Value: !Sub [ "AdDomainAdminNode-${StackIdSuffix}", {StackIdSuffix: !Select [1, !Split ['/', !Ref 'AWS::StackId']]}]
+      BlockDeviceMappings:
+        - DeviceName: /dev/xvda
+          Ebs:
+            VolumeSize: 8
+            VolumeType: gp2
+            Encrypted: true
+      UserData:
+        Fn::Base64:
+          !Sub
+            - |
+              #!/bin/bash -e
+              set -o pipefail
+              exec > >(tee /var/log/user-data.log|logger -t user-data -s 2>/dev/console) 2>&1
+              yum update -y aws-cfn-bootstrap
+              /opt/aws/bin/cfn-init -v --stack "${AWS::StackName}" --resource AdDomainAdminNode --configsets setup --region "${AWS::Region}"
+              echo "Domain Name: ${DirectoryDomain}"
+              echo "Domain Certificate Secret: ${DomainCertificateSecretArn}"
+              echo "Domain Private Key Secret: ${DomainPrivateKeySecretArn}"
+              ADMIN_PW='${AdminPassword}'
+              echo "$ADMIN_PW" | sudo realm join -U Admin "${DirectoryDomain}"
+              sleep 10
+              echo "Creating Service Account..."
+              echo "$ADMIN_PW" | adcli create-user -x -U Admin --domain="${DirectoryDomain}" --display-name=${ServiceAccountName} ${ServiceAccountName}
+              sleep 0.5
+              if [ "${UserName}" != "" ]; then
+                echo "Creating User..."
+                echo "$ADMIN_PW" | adcli create-user -x -U Admin --domain="${DirectoryDomain}" --display-name="${UserName}" "${UserName}"
+              fi
+
+              export DC="${DC}"
+              export OU="${OU}"
+              export DirectoryDomain="${DirectoryDomain}"
+              export ServiceAccountName="${ServiceAccountName}"
+
+              if [ "${LDIFS3Path}" != "" ]; then
+                echo "Running LDIF File..."
+                aws s3 cp s3://${LDIFS3Path} --region "${AWS::Region}" - | envsubst > /tmp/ldif.tmp
+                ADMIN_PW_FILE=$(mktemp)
+                chmod 600 "$ADMIN_PW_FILE"
+                printf '%s' "$ADMIN_PW" > "$ADMIN_PW_FILE"
+                ldapmodify -x -h ${DirectoryDomain} -D "cn=Admin,ou=Users,ou=${OU},dc=${DC}" -y "$ADMIN_PW_FILE" -f /tmp/ldif.tmp
+                rm -f "$ADMIN_PW_FILE"
+              fi
+              
+              echo "Creating domain certificate..."
+              PRIVATE_KEY="${DirectoryDomain}.key"
+              CERTIFICATE="${DirectoryDomain}.crt"
+              printf '.\n.\n.\n.\n.\n%s\n.\n' "${DirectoryDomain}" | openssl req -x509 -sha256 -nodes -newkey rsa:2048 -keyout "$PRIVATE_KEY" -days 365 -out "$CERTIFICATE"
+              
+              echo "Storing domain private key to Secrets Manager..."
+              aws secretsmanager put-secret-value --secret-id "${DomainPrivateKeySecretArn}" --secret-string "file://$PRIVATE_KEY" --region "${AWS::Region}"
+              
+              echo "Storing domain certificate to Secrets Manager..."
+              aws secretsmanager put-secret-value --secret-id "${DomainCertificateSecretArn}" --secret-string "file://$CERTIFICATE" --region "${AWS::Region}"
+              
+              echo "Deleting private key and certificate from local file system..."
+              rm -rf "$PRIVATE_KEY" "$CERTIFICATE"
+              
+              /opt/aws/bin/cfn-signal -e "$?" --stack "${AWS::StackName}" --resource AdDomainAdminNode --region "${AWS::Region}"
+
+            - { DirectoryDomain: !GetAtt Prep.DomainName,
+                AdminPassword: !Ref AdminPassword,
+                ServiceAccountName: !Ref ServiceAccountName,
+                UserName: !Ref UserName,
+                DomainCertificateSecretArn: !Ref DomainCertificateSecret,
+                DomainPrivateKeySecretArn: !Ref DomainPrivateKeySecret,
+                LDIFS3Path: !Ref LDIFS3Path,
+                DC: !Join [",dc=", !Split [".", !If [ SubDomainNotProvided, !Ref DomainName, !Join [ ".", [ !Ref SubDomain, !Ref DomainName] ] ] ]],
+                OU: !GetAtt Prep.DomainShortName
+            }
+
+  PostRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Action:
+              - sts:AssumeRole
+            Effect: Allow
+            Principal:
+              Service:
+                - lambda.amazonaws.com
+      Policies:
+        - PolicyName: LogOutput
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Action:
+                - logs:CreateLogGroup
+                - logs:CreateLogStream
+                - logs:PutLogEvents
+                Effect: Allow
+                Resource: '*'
+        - PolicyName: ResetPassword
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action:
+                  - ds:ResetUserPassword
+                Resource: !Sub
+                  - arn:${AWS::Partition}:ds:${AWS::Region}:${AWS::AccountId}:directory/${DirectoryId}
+                  # - { DirectoryId: !If [CreateAD, !Ref Directory, !Ref Ad ] }
+                  - { DirectoryId: !Ref Directory }
+        - PolicyName: StopInstances
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action:
+                  - ec2:StopInstances
+                Resource: !Sub
+                  - arn:${AWS::Partition}:ec2:${AWS::Region}:${AWS::AccountId}:instance/${InstanceId}
+                  - { InstanceId: !Ref AdDomainAdminNode }
+
+  PostLambda:
+    Type: AWS::Lambda::Function
+    Properties:
+      Description: !Sub "${AWS::StackName}: custom resource handler to finish setting up stack after other resources have been created."
+      Handler: index.handler
+      MemorySize: 128
+      Role: !GetAtt PostRole.Arn
+      Runtime: python3.12
+      Timeout: 300
+      TracingConfig:
+        Mode: Active
+      Code:
+        ZipFile: |
+          import time
+          import cfnresponse
+          import boto3
+          import logging
+          import random
+          import string
+          logger = logging.getLogger()
+          logger.setLevel(logging.INFO)
+          ds = boto3.client("ds")
+          ec2 = boto3.client("ec2")
+
+          def create_physical_resource_id():
+              alnum = string.ascii_uppercase + string.ascii_lowercase + string.digits
+              return "".join(random.choice(alnum) for _ in range(16))
+          
+          def redact_keys(event: dict, redactions: set):
+              ret = {}
+              for k in event.keys():
+                  if k in redactions:
+                      ret[k] = "[REDACTED]"
+                  else:
+                      ret[k] = redact_keys(event[k], redactions) if type(event[k]) is dict else event[k] # handle nesting
+              return ret
+          
+          def handler(event, context):
+              print(redact_keys(event, {"ServiceAccountPassword", "UserPassword", "AdminPassword"}))
+              print( 'boto version {}'.format(boto3.__version__))
+              directory_id = event['ResourceProperties']['DirectoryId']
+              instance_id = event['ResourceProperties']['AdminNodeInstanceId']
+
+              service_account_name = event['ResourceProperties']['ServiceAccountName']
+              service_account_password = event['ResourceProperties']['ServiceAccountPassword']
+              user_name = event['ResourceProperties']['UserName']
+              user_password = event['ResourceProperties']['UserPassword']
+              admin_password = event['ResourceProperties']['AdminPassword']
+              stop_ad_admin_instance = event['ResourceProperties']['StopAdAdminInstance'] == 'True'
+
+              response_data = {}
+              reason = None
+              response_status = cfnresponse.SUCCESS
+
+              if event['RequestType'] == 'Create':
+                  response_data['Message'] = 'Resource creation successful!'
+                  physical_resource_id = create_physical_resource_id()
+                  ds.reset_user_password(DirectoryId=directory_id, UserName=service_account_name, NewPassword=service_account_password)
+                  if user_name != "":
+                    ds.reset_user_password(DirectoryId=directory_id, UserName=user_name, NewPassword=user_password)
+                  ds.reset_user_password(DirectoryId=directory_id, UserName='Admin', NewPassword=admin_password)
+                  if stop_ad_admin_instance:
+                    ec2.stop_instances(InstanceIds=[instance_id])
+
+              else:
+                  physical_resource_id = event['PhysicalResourceId']
+              cfnresponse.send(event, context, response_status, response_data, physical_resource_id, reason)
+
+  Post:
+    Type: Custom::PostLambda
+    Properties:
+      ServiceToken: !GetAtt PostLambda.Arn
+      AdminNodeInstanceId: !Ref AdDomainAdminNode
+      # DirectoryId: !If [CreateAD, !Ref Directory, !Ref Ad ]
+      DirectoryId: !Ref Directory
+      UserName: !Ref UserName
+      UserPassword: !Ref UserPassword
+      AdminPassword: !Ref AdminPassword
+      ServiceAccountName: !Ref ServiceAccountName
+      ServiceAccountPassword: !Ref ServiceAccountPassword
+      StopAdAdminInstance: !Ref StopAdAdminInstance
+
+  CredentialsSecret:
+    Type: AWS::SecretsManager::Secret
+    Properties:
+      Description: Credentials for Microsoft Active Directory. The username and password for the Active Directory ServiceAccount user formatted as a username:password key/value pair.
+      Name: !Sub [ "CredentialsSecret-${StackIdSuffix}", {StackIdSuffix: !Select [1, !Split ['/', !Ref 'AWS::StackId']]}]
+      SecretString:
+        Fn::Sub: '{"ServiceAccount":"${ServiceAccountPassword}"}'
+
+  DomainCertificateSecret:
+    Type: AWS::SecretsManager::Secret
+    Properties:
+      Description: Domain certificate
+      Name: !Sub [ "DomainCertificateSecret-${StackIdSuffix}", { StackIdSuffix: !Select [ 1, !Split [ '/', !Ref 'AWS::StackId' ] ] } ]
+
+  DomainPrivateKeySecret:
+    Type: AWS::SecretsManager::Secret
+    Properties:
+      Description: Domain private key
+      Name: !Sub [ "DomainPrivateKeySecret-${StackIdSuffix}", { StackIdSuffix: !Select [ 1, !Split [ '/', !Ref 'AWS::StackId' ] ] } ]
+
+  NetworkLoadBalancer:
+    Type: AWS::ElasticLoadBalancingV2::LoadBalancer
+    Properties:
+      Scheme: internal
+      Subnets:
+        - !If [CreateVPC, !Ref PclusterVpcSubnet1, !Ref PrivateSubnetOne ]
+        - !If [CreateVPC, !Ref PclusterVpcSubnet2, !Ref PrivateSubnetTwo ]
+      Type: network
+
+  NetworkLoadBalancerTargetGroup:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      Port: 389
+      Protocol: TCP
+      VpcId: !If [CreateVPC, !Ref PclusterVpc, !Ref Vpc ]
+      HealthCheckEnabled: True
+      HealthCheckIntervalSeconds: 10
+      HealthCheckPort: 389
+      HealthCheckProtocol: TCP
+      HealthCheckTimeoutSeconds: 10
+      HealthyThresholdCount: 3
+      TargetGroupAttributes:
+        - Key: deregistration_delay.timeout_seconds
+          Value: 60
+      Targets:
+        - Id: !Select [0, !GetAtt Prep.DnsIpAddresses]
+          Port: 389
+        - Id: !Select [1, !GetAtt Prep.DnsIpAddresses]
+          Port: 389
+      TargetType: ip
+
+  DNS:
+    Type: AWS::Route53::HostedZone
+    Properties:
+      Name: !Ref DomainName
+      VPCs:
+        - VPCId: !If [ CreateVPC, !Ref PclusterVpc, !Ref Vpc ]
+          VPCRegion: !Ref AWS::Region
+
+  DNSARecord:
+    Type: AWS::Route53::RecordSet
+    Condition: SubDomainNotProvided
+    Properties:
+      HostedZoneId: !Ref DNS
+      Name: !Ref DomainName
+      AliasTarget:
+        DNSName: !GetAtt NetworkLoadBalancer.DNSName
+        HostedZoneId: !GetAtt NetworkLoadBalancer.CanonicalHostedZoneID
+      Type: A
+
+  DNSRecordCNAME:
+    Type: AWS::Route53::RecordSet
+    Condition: SubDomainProvided
+    Properties:
+      HostedZoneId: !Ref DNS
+      Name: !Join [ ".", [ !Ref SubDomain, !Ref DomainName] ]
+      ResourceRecords: [!GetAtt NetworkLoadBalancer.DNSName]
+      Type: CNAME
+      TTL: '900'
+
+  NetworkLoadBalancerListener:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    Properties:
+      DefaultActions:
+        - Type: forward
+          TargetGroupArn: !Ref NetworkLoadBalancerTargetGroup
+      LoadBalancerArn: !Ref NetworkLoadBalancer
+      Port: '636'
+      Protocol: TLS
+      SslPolicy: ELBSecurityPolicy-TLS-1-2-2017-01
+      Certificates:
+        - CertificateArn: !GetAtt DomainCertificateSetup.DomainCertificateArn
+
+  DomainCertificateSetupLambdaRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Action:
+              - sts:AssumeRole
+            Effect: Allow
+            Principal:
+              Service:
+                - lambda.amazonaws.com
+      Policies:
+        - PolicyName: LogOutput
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Action:
+                  - logs:CreateLogGroup
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Effect: Allow
+                Resource: '*'
+        - PolicyName: ManageDomainCertificate
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action:
+                  - acm:ImportCertificate
+                  - acm:AddTagsToCertificate
+                Resource: !Sub arn:${AWS::Partition}:acm:${AWS::Region}:${AWS::AccountId}:certificate/*
+                Condition:
+                  StringEquals:
+                    aws:RequestTag/StackId: !Sub ${AWS::StackId}
+              - Effect: Allow
+                Action:
+                  - secretsmanager:GetSecretValue
+                Resource:
+                  - !Ref DomainCertificateSecret
+                  - !Ref DomainPrivateKeySecret
+
+  DomainCertificateSetupLambda:
+    Type: AWS::Lambda::Function
+    Properties:
+      Description: !Sub "${AWS::StackName}: custom resource handler to import the domain certificate into ACM."
+      Handler: index.handler
+      MemorySize: 128
+      Role: !GetAtt DomainCertificateSetupLambdaRole.Arn
+      Runtime: python3.12
+      Timeout: 300
+      TracingConfig:
+        Mode: Active
+      Code:
+        ZipFile: |
+          import time
+          import cfnresponse
+          import boto3
+          import logging
+          import random
+          import string
+          logger = logging.getLogger()
+          logger.setLevel(logging.INFO)
+          acm = boto3.client("acm")
+          sm = boto3.client("secretsmanager")
+
+          def create_physical_resource_id():
+              alnum = string.ascii_uppercase + string.ascii_lowercase + string.digits
+              return "".join(random.choice(alnum) for _ in range(16))
+
+          def import_certificate(certificate_secret_arn, private_key_secret_arn, tags):
+            logger.info('Reading secrets from Secrets Manager...')
+            domain_certificate = sm.get_secret_value(SecretId=certificate_secret_arn)["SecretString"]
+            domain_private_key = sm.get_secret_value(SecretId=private_key_secret_arn)["SecretString"]
+            logger.info('Importing certificate into ACM...')
+            certificate_arn = acm.import_certificate(
+              Certificate=domain_certificate, PrivateKey=domain_private_key, Tags=tags
+            )["CertificateArn"]
+            return certificate_arn
+
+          def handler(event, context):
+              logger.info(f"Context: {context}")
+              logger.info(f"Event: {event}")
+              logger.info(f"Boto version: {boto3.__version__}")
+
+              domain_name = event['ResourceProperties']['DomainName']
+              certificate_secret_arn = event['ResourceProperties']['DomainCertificateSecretArn']
+              private_key_secret_arn = event['ResourceProperties']['DomainPrivateKeySecretArn']
+              tags = [{ 'Key': 'StackId', 'Value': event['StackId']}]
+
+              response_data = {}
+              reason = None
+              response_status = cfnresponse.SUCCESS
+
+              physical_resource_id = event.get("PhysicalResourceId", create_physical_resource_id())
+
+              try:
+                if event['RequestType'] == 'Create':
+                  certificate_arn = import_certificate(certificate_secret_arn, private_key_secret_arn, tags)
+                  response_data['DomainCertificateArn'] = certificate_arn
+                  response_data['Message'] = f"Resource creation successful! ACM certificate imported: {certificate_arn}"
+              except Exception as e:
+                response_status = cfnresponse.FAILED
+                reason = str(e)
+              cfnresponse.send(event, context, response_status, response_data, physical_resource_id, reason)
+
+  DomainCertificateSetup:
+    Type: Custom::DomainCertificateSetupLambda
+    DependsOn:
+      - Post
+    Properties:
+      ServiceToken: !GetAtt DomainCertificateSetupLambda.Arn
+      DomainName: !If [ SubDomainNotProvided, !Ref DomainName, !Join [ ".", [ !Ref SubDomain, !Ref DomainName] ] ]
+      DomainCertificateSecretArn: !Ref DomainCertificateSecret
+      DomainPrivateKeySecretArn: !Ref DomainPrivateKeySecret
+
+  DhcpOptions:
+    Type: AWS::EC2::DHCPOptions
+    Properties:
+      DomainName:
+        !If 
+          - isUSEast1 
+          - "ec2.internal"
+          - !Join [ ".", [!Ref "AWS::Region", "compute.internal"]]
+      DomainNameServers: 
+        - !GetAtt Prep.DnsIpAddress1
+        - !GetAtt Prep.DnsIpAddress2
+        - AmazonProvidedDNS
+
+  VPCDHCPOptionsAssociation:
+    Type: AWS::EC2::VPCDHCPOptionsAssociation
+    Properties: 
+      DhcpOptionsId: !GetAtt DhcpOptions.DhcpOptionsId
+      VpcId: !If [CreateVPC, !Ref PclusterVpc, !Ref Vpc ]
+
+  CleanupLambdaRole:
+    Type: AWS::IAM::Role
+    DependsOn:
+      - DomainCertificateSetup
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Action:
+              - sts:AssumeRole
+            Effect: Allow
+            Principal:
+              Service:
+                - lambda.amazonaws.com
+      Policies:
+        - PolicyName: LogOutput
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Action:
+                  - logs:CreateLogGroup
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Effect: Allow
+                Resource: '*'
+        - PolicyName: DeleteDomainCertificate
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action:
+                  - acm:DeleteCertificate
+                Resource: !GetAtt DomainCertificateSetup.DomainCertificateArn
+
+  CleanupLambda:
+    Type: AWS::Lambda::Function
+    Properties:
+      Description: !Sub "${AWS::StackName}: custom resource handler to cleanup resources."
+      Handler: index.handler
+      MemorySize: 128
+      Role: !GetAtt CleanupLambdaRole.Arn
+      Runtime: python3.12
+      Timeout: 900
+      TracingConfig:
+        Mode: Active
+      Code:
+        ZipFile: |
+          import time
+          import cfnresponse
+          import boto3
+          import logging
+          import random
+          import string
+          logger = logging.getLogger()
+          logger.setLevel(logging.INFO)
+          acm = boto3.client("acm")
+
+          def create_physical_resource_id():
+            alnum = string.ascii_uppercase + string.ascii_lowercase + string.digits
+            return "".join(random.choice(alnum) for _ in range(16))
+
+          def delete_certificate(certificate_arn):
+            logger.info(f"Deleting ACM certificate {certificate_arn}...")
+            max_attempts = 10
+            sleep_time = 60
+            for attempt in range(1, max_attempts+1):
+              try:
+                acm.delete_certificate(CertificateArn=certificate_arn)
+                break
+              except acm.exceptions.ResourceInUseException as e:
+                logger.info(f"(Attempt {attempt}/{max_attempts}) Cannot delete ACM certificate because it is in use. Retrying in {sleep_time} seconds...")
+                if attempt == max_attempts:
+                  raise Exception(f"Cannot delete certificate {certificate_arn}: {e}")
+                else:
+                  time.sleep(sleep_time)
+
+          def handler(event, context):
+            logger.info(f"Context: {context}")
+            logger.info(f"Event: {event}")
+            logger.info(f"Boto version: {boto3.__version__}")
+
+            response_data = {}
+            reason = None
+            response_status = cfnresponse.SUCCESS
+
+            physical_resource_id = event.get("PhysicalResourceId", create_physical_resource_id())
+
+            try:
+              if event['RequestType'] == 'Delete':
+                certificate_arn = event['ResourceProperties']['DomainCertificateArn']
+                delete_certificate(certificate_arn)
+            except Exception as e:
+              response_status = cfnresponse.FAILED
+              reason = str(e)
+            cfnresponse.send(event, context, response_status, response_data, physical_resource_id, reason)
+
+  Cleanup:
+    Type: Custom::CleanupLambda
+    DependsOn:
+      - DomainCertificateSetup
+    Properties:
+      ServiceToken: !GetAtt CleanupLambda.Arn
+      DomainCertificateArn: !GetAtt DomainCertificateSetup.DomainCertificateArn
+
+  DomainCertificateSecretReadPolicy:
+    Type: AWS::IAM::ManagedPolicy
+    DependsOn:
+      - DomainCertificateSecret
+    Properties:
+      ManagedPolicyName: !Sub [ "DomainCertificateSecretReadPolicy-${StackIdSuffix}", { StackIdSuffix: !Select [ 1, !Split [ '/', !Ref 'AWS::StackId' ] ] } ]
+      PolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Action:
+              - secretsmanager:GetSecretValue
+            Resource:
+              - !Ref DomainCertificateSecret
+
+Outputs:
+  VpcId:
+    Value: !If [CreateVPC, !Ref PclusterVpc, !Ref Vpc ]
+  PrivateSubnetIds:
+    Value: !Join [",", [!If [CreateVPC, !Ref PclusterVpcSubnet1, !Ref PrivateSubnetOne ], !If [CreateVPC, !Ref PclusterVpcSubnet2, !Ref PrivateSubnetTwo ]]]
+    Export:
+        Name: !Sub ${AWS::StackName}-PrivateSubnetIds
+  DomainName:
+    Value: !If [ SubDomainNotProvided, !Ref DomainName, !Join [ ".", [ !Ref SubDomain, !Ref DomainName] ] ]
+    Export:
+        Name: !Sub ${AWS::StackName}-DomainName
+  DomainComponents:
+    Description: "Domain name expressed as Domain Components"
+    Value: !Sub 
+      - "dc=${dc}"
+      - dc: !Join [",dc=", !Split [".", !If [ SubDomainNotProvided, !Ref DomainName, !Join [ ".", [ !Ref SubDomain, !Ref DomainName] ] ] ]]
+    Export:
+      Name: !Sub ${AWS::StackName}-DomainComponents
+  CredentialsSecretArn:
+    Value: !Ref CredentialsSecret
+    Export:
+        Name: !Sub ${AWS::StackName}-CredentialsSecretArn
+  DomainCertificateArn:
+    Value: !GetAtt DomainCertificateSetup.DomainCertificateArn
+    Export:
+        Name: !Sub ${AWS::StackName}-DomainCertificateArn
+  DomainCertificateSecretArn:
+    Value: !Ref DomainCertificateSecret
+    Export:
+        Name: !Sub ${AWS::StackName}-DomainCertificateSecretArn
+  DomainShortName:
+    Value: !GetAtt Prep.DomainShortName
+  DomainServiceAccount:
+    Description: Username for Service Account created during stack creation.
+    Value: !Sub
+      - cn=${service_account_name},ou=Users,ou=${ou},dc=${dc}
+      - { service_account_name: !Ref ServiceAccountName, dc: !Join [",dc=", !Split [".", !If [ SubDomainNotProvided, !Ref DomainName, !Join [ ".", [ !Ref SubDomain, !Ref DomainName] ] ] ]], ou: !GetAtt Prep.DomainShortName }
+    Export:
+        Name: !Sub ${AWS::StackName}-DomainServiceAccount
+  DnsIpAddress1:
+    Value: !GetAtt Prep.DnsIpAddress1
+  DnsIpAddress2:
+    Value: !GetAtt Prep.DnsIpAddress2
+  DomainAddrLdap:
+    Value: !Sub
+      - ldap://${address}
+      - address: !Join [",ldap://", !GetAtt Prep.DnsIpAddresses]
+    Export:
+        Name: !Sub ${AWS::StackName}-DomainAddrLdap
+  DomainAddrLdaps:
+    Value: !Sub
+      - ldaps://${DomainName}
+      - DomainName: !If [ SubDomainNotProvided, !Ref DomainName, !Join [ ".", [ !Ref SubDomain, !Ref DomainName] ] ]
+    Export:
+        Name: !Sub ${AWS::StackName}-DomainAddrLdaps
+  DomainCertificateSecretReadPolicy:
+    Value: !Ref DomainCertificateSecretReadPolicy
+    Export:
+        Name: !Sub ${AWS::StackName}-DomainCertificateSecretReadPolicy
+  DirectoryId:
+    Value: !Ref Directory
+    Export:
+        Name: !Sub ${AWS::StackName}-DirectoryId
+  DomainManagementNodeId:
+    Value: !Ref AdDomainAdminNode
+    Description: Instance ID for Linux Active Directory Domain Management Node
+    Export:
+        Name: !Sub ${AWS::StackName}-DomainManagementNodeId
+  DomainManagementNodeSystemManagerUrl:
+    Description: URL to access the HeadNode via SystemManager
+    Value: !Sub
+      - https://${ConsoleDomain}/systems-manager/session-manager/${InstanceId}?region=${AWS::Region}
+      - { ConsoleDomain: !If [ GovCloud, 'console.amazonaws-us-gov.com', !If [ China, 'console.amazonaws.cn', !Sub '${AWS::Region}.console.aws.amazon.com']],
+          InstanceId: !Ref AdDomainAdminNode
+        }
+    Export:
+      Name: !Sub ${AWS::StackName}-DomainManagementNodeSystemManagerUrl

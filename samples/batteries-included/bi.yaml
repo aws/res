@@ -1,0 +1,664 @@
+# Vendored from aws-samples/aws-hpc-recipes, recipes/res/res_demo_env/assets/bi.yaml
+# Upstream commit b043720a237c4a33b3825ac75ccba7bf493b2635
+# Vendored 2026-09-12. Modified: nested TemplateURL and sample data-file paths parameterised.
+# Refresh: re-apply the changes in samples/PROVENANCE.md to the upstream file at that commit.
+Description: A set of external resources that can support a Research and Engineering Studio Environment deployment
+
+Metadata:
+  AWS::CloudFormation::Interface:
+    ParameterGroups:
+      - Label:
+          default: "Sample Template Location"
+        Parameters:
+          - SamplesS3Base
+          - SamplesS3Path
+      - Label:
+          default: "AD Configuration"
+        Parameters:
+          - CreateActiveDirectory
+          - DomainName
+          - SubDomain
+          - AdminPassword
+          - ServiceAccountPassword
+      - Label:
+          default: "AD Management Hosts Configuration"
+        Parameters:
+          - Keypair
+          - LDIFS3Path
+          - ClientIpCidr
+          - ClientPrefixList
+          - StopAdAdminInstances
+      - Label:
+          default: "VPC Configuration"
+        Parameters:
+          - CidrBlock
+          - CidrPublicSubnetA
+          - CidrPrivateSubnetA
+          - CidrPublicSubnetB
+          - CidrPrivateSubnetB
+
+Parameters:
+  SamplesS3Base:
+    Description: HTTPS base URL of the bucket and prefix holding the RES sample templates, without a trailing slash. Printed by publish-samples.sh.
+    Type: String
+    AllowedPattern: ^https://[^\s]+[^/\s]$
+  SamplesS3Path:
+    Description: The same location in bucket/prefix form, without the s3:// scheme and without a trailing slash. Printed by publish-samples.sh.
+    Type: String
+    AllowedPattern: ^[a-z0-9][a-z0-9.\-]{1,61}[a-z0-9](/[^\s]*[^/\s])?$
+  DomainName:
+    Description: (Optional) Active Directory Domain Name. The supplied LDIF file which provides bootstrap users uses this domain. A different LDIF file needs to be provided for a different domain.
+    Type: String
+    Default: corp.res.com
+    AllowedPattern: ^$|^([a-zA-Z0-9]+[\\.-])+([a-zA-Z0-9])+$
+  SubDomain:
+    Description: (Optional, but required for GovCloud regions) SubDomain for the Active Directory Domain Name. If provided, Active Directory Domain Name will be {SubDomain}.{DomainName}
+    Type: String
+    Default: ""
+  PortalDomainName:
+    Description: (Optional) Domain Name for web portal domain that lives in Route53 in account (may be different from the Active Directory domain). Used to generate certs, leave blank to skip certificate generation.
+    Type: String
+    Default: ""
+  EnvironmentName:
+    Description: (Optional) EnvironmentName must start with "res-" without capital letters and should be less than or equal to 11 characters. Required to generate certificates.
+    Type: String
+    AllowedPattern: ^$|^res-[a-z\-\_0-9]{0,7}$
+    Default: res-demo
+  AdminPassword:
+    Description: (Optional) Provide the Active Directory Administrator Account Password Directly or Resource ARN to Secret Containing Password.
+    Type: String
+    MinLength: 0
+    MaxLength: 2048
+    AllowedPattern: ^$|(arn:(aws(-cn|-us-gov)?):secretsmanager:(us(-gov)?|ap|ca|cn|eu|il|sa|me)-(central|(north|south)?(east|west)?)-\d:\d{12}:secret:[a-zA-Z0-9/_+=.@-]+)|(?=^.{8,64}$)((?=.*\d)(?=.*[A-Z])(?=.*[a-z])|(?=.*\d)(?=.*[^A-Za-z0-9\s])(?=.*[a-z])|(?=.*[^A-Za-z0-9\s])(?=.*[A-Z])(?=.*[a-z])|(?=.*\d)(?=.*[A-Z])(?=.*[^A-Za-z0-9\s]))^.*
+    NoEcho: true
+  ServiceAccountPassword:
+    Description: (Optional) Provide the Active Directory Service Account Password Directly or Resource ARN to Secret Containing Password.
+    Type: String
+    MinLength: 0
+    MaxLength: 2048
+    AllowedPattern: ^$|(arn:(aws(-cn|-us-gov)?):secretsmanager:(us(-gov)?|ap|ca|cn|eu|il|sa|me)-(central|(north|south)?(east|west)?)-\d:\d{12}:secret:[a-zA-Z0-9/_+=.@-]+)|(?=^.{8,64}$)((?=.*\d)(?=.*[A-Z])(?=.*[a-z])|(?=.*\d)(?=.*[^A-Za-z0-9\s])(?=.*[a-z])|(?=.*[^A-Za-z0-9\s])(?=.*[A-Z])(?=.*[a-z])|(?=.*\d)(?=.*[A-Z])(?=.*[^A-Za-z0-9\s]))^.*
+    NoEcho: true
+  LDIFS3Path:
+    Description: (Optional) An S3 Path (without the s3://) to an LDIF file that will be used during stack creation.
+    Type: String
+    Default: ""
+  StopAdAdminInstances:
+    Description: Automatically stop management instances to save costs.
+    Type: String
+    Default: "False"
+    AllowedValues:
+         - "True"
+         - "False"
+  Keypair:
+    Description: (Optional) EC2 Keypair to access AD management instances.
+    Type: String
+    MinLength: 0
+    MaxLength: 2048
+  ClientIpCidr:
+    Description: (Optional) CIDR controlling incoming traffic to AD management instances.
+    Default: ""
+    Type: String
+    AllowedPattern: ^((\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})/(\d{1,2}))?$
+    ConstraintDescription: ClientIP must be a valid IP or network range of the form x.x.x.x/x. specify your IP/NETMASK (e.g x.x.x/32 or x.x.x.x/24 for subnet range)
+  ClientPrefixList:
+    Description: (Optional) VPC Prefix List ID controlling incoming traffic to AD management instances.
+    Default: ""
+    Type: String
+    AllowedPattern: ^(pl-[a-z0-9]{8,20})?$
+    ConstraintDescription: Must be a valid VPC Prefix List ID, which begins with `pl-`.  Prefix Lists can be configured at https://console.aws.amazon.com/vpcconsole/home#ManagedPrefixLists
+  EFSThroughputMode:
+    Description: (Optional) EFS filesystem throughput mode.
+    Type: String
+    Default: "bursting"
+    AllowedValues:
+      - "elastic"
+      - "bursting"
+  RetainStorageResources:
+    Description: (Optional) Retain the home file system and the RES VPC on RES deletion. Provide `True` to eliminate risk of accidentally deleting data.
+    Type: String
+    Default: "True"
+    AllowedValues:
+      - "True"
+      - "False"
+  CreateActiveDirectory:
+    Description: Create a demo Active Directory for RES to connect to. If `True` is selected, the following parameters are required DomainName, AdminPassword, ServiceAccountPassword, and Keypair.
+    Type: String
+    Default: "False"
+    AllowedValues:
+         - "True"
+         - "False"
+  CidrBlock:
+    AllowedPattern: '((\d{1,3})\.){3}\d{1,3}/\d{1,2}'
+    Default: 10.3.0.0/16
+    Description: VPC CIDR Block (eg 10.3.0.0/16)
+    Type: String
+  CidrPublicSubnetA:
+    AllowedPattern: '((\d{1,3})\.){3}\d{1,3}/\d{1,2}'
+    Default: 10.3.0.0/20
+    Description: VPC CIDR Block for the Public Subnet A
+    Type: String
+  CidrPublicSubnetB:
+    AllowedPattern: '((\d{1,3})\.){3}\d{1,3}/\d{1,2}'
+    Default: 10.3.16.0/20
+    Description: VPC CIDR Block for the Public Subnet B
+    Type: String
+  CidrPrivateSubnetA:
+    AllowedPattern: '((\d{1,3})\.){3}\d{1,3}/\d{1,2}'
+    Default: 10.3.128.0/20
+    Description: VPC CIDR Block for the Private Subnet A
+    Type: String
+  CidrPrivateSubnetB:
+    AllowedPattern: '((\d{1,3})\.){3}\d{1,3}/\d{1,2}'
+    Default: 10.3.144.0/20
+    Description: VPC CIDR Block for the Private Subnet B
+    Type: String
+
+Conditions:
+  GenerateCerts: !Not [!Equals [!Ref PortalDomainName, ""]]
+  UseEnvironmentName: !Not [!Equals [!Ref EnvironmentName, ""]]
+  SubDomainNotProvided: !Equals [!Ref SubDomain, ""]
+  InGovCloud: !Equals [!Ref 'AWS::Partition', "aws-us-gov"]
+  RetainStorageAndNetworking: !Equals [!Ref RetainStorageResources, "True"]
+  CreateAD: !Equals [!Ref CreateActiveDirectory, "True"]
+  LDIFSuppliedByUser: !Not [!Equals [!Ref LDIFS3Path, ""]]
+
+Resources:
+
+##### Nested stacks
+
+  Networking:
+    Type: AWS::CloudFormation::Stack
+    DeletionPolicy: !If [ RetainStorageAndNetworking, Retain, Delete ]
+    Properties:
+      Parameters:
+        ProvisionSubnetsC: "False"
+        CidrBlock: !Ref CidrBlock
+        CidrPublicSubnetA: !Ref CidrPublicSubnetA
+        CidrPrivateSubnetA: !Ref CidrPrivateSubnetA
+        CidrPublicSubnetB: !Ref CidrPublicSubnetB
+        CidrPrivateSubnetB: !Ref CidrPrivateSubnetB
+      TemplateURL: !Sub "${SamplesS3Base}/batteries-included/network-large-scale.yaml"
+
+  DirectoryService:
+    Condition: CreateAD
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      Parameters:
+        DomainName: !Ref DomainName
+        SubDomain: !Ref SubDomain
+        AdminPassword: !GetAtt PasswordResolver.AdminPassword
+        ServiceAccountPassword: !GetAtt PasswordResolver.ServiceAccountPassword
+        ServiceAccountName: ServiceAccount
+        LDIFS3Path: !If
+          - LDIFSuppliedByUser
+          - !Ref LDIFS3Path
+          - !Sub "${SamplesS3Path}/batteries-included/res.ldif"
+        Keypair: !Ref Keypair
+        UserName: ""
+        UserPassword: ""
+        AllowedIps: !Ref ClientIpCidr
+        ClientPrefixList: !Ref ClientPrefixList
+        # StopAdAdminInstance: !Ref StopAdAdminInstances
+        Vpc: !GetAtt [ Networking, Outputs.VPC ]
+        PrivateSubnetOne: {"Fn::Select": [0, { "Fn::Split" : [",", !GetAtt [ Networking, Outputs.PrivateSubnets ]] }]}
+        PrivateSubnetTwo: {"Fn::Select": [1, { "Fn::Split" : [",", !GetAtt [ Networking, Outputs.PrivateSubnets ]] }]}
+      TemplateURL: !Sub "${SamplesS3Base}/batteries-included/demo-managed-ad.yaml"
+
+  WindowsManagementHost:
+    Condition: CreateAD
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      Parameters:
+        DomainName: !If [ SubDomainNotProvided, !Ref DomainName, !Join [ ".", [ !Ref SubDomain, !Ref DomainName] ] ]
+        DelegationUser: Admin
+        DelegationPassword: !GetAtt PasswordResolver.AdminPassword
+        DirectoryId: !GetAtt [ DirectoryService, Outputs.DirectoryId ]
+        DnsIpAddress1: !GetAtt [ DirectoryService, Outputs.DnsIpAddress1 ]
+        DnsIpAddress2: !GetAtt [ DirectoryService, Outputs.DnsIpAddress2 ]
+        Keypair: !Ref Keypair
+        VpcId: !GetAtt [ Networking, Outputs.VPC ]
+        Subnet: {"Fn::Select": [0, { "Fn::Split" : [",", !GetAtt [ Networking, Outputs.PublicSubnets ]] }]}
+        StopAdAdminInstance: !Ref StopAdAdminInstances
+        ClientIpCidr: !Ref ClientIpCidr
+        ClientPrefixList: !Ref ClientPrefixList
+        PSS3Path: !Sub "${SamplesS3Path}/batteries-included/service_account.ps1"
+        PSS3PathRegion: !Ref AWS::Region
+      TemplateURL: !Sub "${SamplesS3Base}/batteries-included/demo-managed-ad-windows-host.yaml"
+
+  Storage:
+    Type: AWS::CloudFormation::Stack
+    DeletionPolicy: !If [ RetainStorageAndNetworking, Retain, Delete ]
+    Properties:
+      Parameters:
+        VpcId: !GetAtt [ Networking, Outputs.VPC ]
+        SubnetCount: 2
+        SubnetIds: !GetAtt [ Networking, Outputs.PrivateSubnets ]
+        ThroughputMode: !Ref EFSThroughputMode
+      TemplateURL: !Sub "${SamplesS3Base}/batteries-included/efs-simple.yaml"
+
+  Certs:
+    Condition: GenerateCerts
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      Parameters:
+        SubnetId: {"Fn::Select": [0, { "Fn::Split" : [",", !GetAtt [ Networking, Outputs.PrivateSubnets ]] }]}
+        DomainName: !Ref PortalDomainName
+      TemplateURL: !Sub "${SamplesS3Base}/batteries-included/public-certs.yaml"
+      Tags:
+        - Key: "res:EnvironmentName"
+          Value: !Ref EnvironmentName
+        - Key: "res:ClusterName"
+          Value: !Ref EnvironmentName
+        - Key: "res:ModuleName"
+          Value: virtual-desktop-controller
+        - Key: "bi:Deployment"
+          Value: "true"
+
+  ACMCertificate:
+    Condition: GenerateCerts
+    Type: AWS::CertificateManager::Certificate
+    Properties:
+      DomainName: !Ref PortalDomainName
+      ValidationMethod: DNS
+      SubjectAlternativeNames:
+        - !Sub ["*.${PortalDomainName}", {PortalDomainName: !Ref PortalDomainName }]
+      DomainValidationOptions:
+      - DomainName: !Ref PortalDomainName
+        HostedZoneId: !GetAtt HostedZoneResolver.HostedZoneId
+
+##### Custom Operations
+
+  HostedZoneResolverRole:
+    Type: AWS::IAM::Role
+    Condition: GenerateCerts
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Action:
+              - sts:AssumeRole
+            Effect: Allow
+            Principal:
+              Service:
+                - lambda.amazonaws.com
+      Policies:
+        - PolicyName: LogOutput
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Action:
+                - logs:CreateLogGroup
+                - logs:CreateLogStream
+                - logs:PutLogEvents
+                Effect: Allow
+                # Resource: !Sub arn:${AWS::Partition}:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/${AWS::StackName}-Prep:*
+                Resource: '*'
+        - PolicyName: ListHostedZones
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action:
+                  - route53:ListHostedZones
+                Resource: '*'
+
+  HostedZoneResolverLambda:
+    Type: AWS::Lambda::Function
+    Condition: GenerateCerts
+    Properties:
+      Description: !Sub "${AWS::StackName}: custom resource handler to resolve hosted zones."
+      Handler: index.handler
+      MemorySize: 128
+      Role: !GetAtt HostedZoneResolverRole.Arn
+      Runtime: python3.12
+      Timeout: 300
+      TracingConfig:
+        Mode: Active
+      Code:
+        ZipFile: |
+          import cfnresponse
+          import boto3
+          import logging
+          import random
+          import string
+          import re
+          logger = logging.getLogger()
+          logger.setLevel(logging.INFO)
+          route53 = boto3.client("route53")
+
+          def create_physical_resource_id():
+              alnum = string.ascii_uppercase + string.ascii_lowercase + string.digits
+              return "".join(random.choice(alnum) for _ in range(16))
+
+          def handler(event, context):
+            try:
+                print(event)
+                print( 'boto version {}'.format(boto3.__version__))
+
+                portal_domain_name = event['ResourceProperties']['PortalDomainName']
+
+                response_data = {}
+                reason = None
+                response_status = cfnresponse.SUCCESS
+
+                if event['RequestType'] == 'Create':
+                    response_data['Message'] = 'Resource creation successful!'
+                    physical_resource_id = create_physical_resource_id()
+
+                    # use route53 to find the right hosted zone
+                    zone_data = route53.list_hosted_zones()
+                    zones = filter(lambda x: f"{portal_domain_name}.".endswith(x['Name']), zone_data['HostedZones'])
+                    for zone in zones:
+                      zone_id = re.match(r'\/hostedzone\/(.*)', zone['Id']).groups(0)[0]
+                      logger.info(f"hosted zone = {zone} for portal_domain_name {portal_domain_name} with zone_id {zone_id}")
+                      response_data['HostedZoneId'] = zone_id
+                else:
+                    physical_resource_id = event['PhysicalResourceId']
+                cfnresponse.send(event, context, response_status, response_data, physical_resource_id, reason)
+            except Exception as e:
+              cfnresponse.send(event, context, cfnresponse.FAILED, {"error": str(e)})
+
+  HostedZoneResolver:
+    Type: Custom::HostedZoneResolver
+    Condition: GenerateCerts
+    Properties:
+      ServiceToken: !GetAtt HostedZoneResolverLambda.Arn
+      PortalDomainName: !Ref PortalDomainName
+
+  EFSSecurityGroupRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Action:
+              - sts:AssumeRole
+            Effect: Allow
+            Principal:
+              Service:
+                - lambda.amazonaws.com
+      Policies:
+        - PolicyName: LogOutput
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Action:
+                  - logs:CreateLogGroup
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Effect: Allow
+                Resource: '*'
+        - PolicyName: EC2DescribeVpcs
+          PolicyDocument:
+            Statement:
+              - Action:
+                  - ec2:DescribeVpcs
+                Effect: Allow
+                Resource: '*'
+                  # - !Sub ["arn:${AWS::Partition}:ec2:${AWS::Region}:${AWS::AccountId}:vpc/${VpcID}", VpcID: !GetAtt [ Networking, Outputs.VPC ]]
+        - PolicyName: EFSRead
+          PolicyDocument:
+            Statement:
+              - Action:
+                  - elasticfilesystem:DescribeFileSystems
+                  - elasticfilesystem:DescribeMountTargets
+                  - elasticfilesystem:DescribeMountTargetSecurityGroups
+                Effect: Allow
+                Resource:
+                  - !Sub ["arn:${AWS::Partition}:elasticfilesystem:${AWS::Region}:${AWS::AccountId}:file-system/${FSID}", FSID: !GetAtt [ Storage, Outputs.EFSFilesystemId ]]
+        - PolicyName: EFSAttribute
+          PolicyDocument:
+            Statement:
+              - Action:
+                  - ec2:DescribeNetworkInterfaceAttribute
+                Effect: Allow
+                Resource:
+                  - '*'
+        - PolicyName: EC2AddIngressRule
+          PolicyDocument:
+            Statement:
+              - Action:
+                  - ec2:AuthorizeSecurityGroupIngress
+                  - ec2:CreateTags
+                Effect: Allow
+                Resource:
+                  - '*'
+                    #- !Sub ["arn:${AWS::Partition}:ec2:${AWS::Region}:${AWS::AccountId}:security-group/${SGID}", SGID: !GetAtt [ Storage, Outputs.SecurityGroupId ]]
+
+  EFSSecurityGroupLambda:
+    Type: AWS::Lambda::Function
+    Properties:
+      Description: !Sub "${AWS::StackName}: custom resource handler to finish setting up stack after other resources have been created."
+      Handler: index.handler
+      MemorySize: 128
+      Role: !GetAtt EFSSecurityGroupRole.Arn
+      Runtime: python3.12
+      Timeout: 300
+      TracingConfig:
+        Mode: Active
+      Code:
+        ZipFile: |
+          import cfnresponse
+          import boto3
+          import logging
+          import random
+          import string
+          import secrets
+          import json
+          logger = logging.getLogger()
+          logger.setLevel(logging.INFO)
+          ec2 = boto3.client("ec2")
+          efs = boto3.client("efs")
+
+          def create_physical_resource_id():
+              alnum = string.ascii_uppercase + string.ascii_lowercase + string.digits
+              return "".join(random.choice(alnum) for _ in range(16))
+
+          def handler(event, context):
+              print(event)
+              print( 'boto version {}'.format(boto3.__version__))
+
+              vpc_id = event['ResourceProperties']['VpcId']
+              efs_id = event['ResourceProperties']['EfsId']
+
+              response_data = {}
+              reason = None
+              response_status = cfnresponse.SUCCESS
+
+              if event['RequestType'] == 'Create':
+                  response_data['Message'] = 'Resource creation successful!'
+                  physical_resource_id = create_physical_resource_id()
+
+                  cidr = ec2.describe_vpcs(VpcIds=[vpc_id])["Vpcs"][0]['CidrBlock']
+                  fss = efs.describe_file_systems(FileSystemId=efs_id)
+
+                  mt = efs.describe_mount_targets(FileSystemId=efs_id)["MountTargets"]
+                  mt_id = mt[0]['MountTargetId']
+
+                  sg = efs.describe_mount_target_security_groups(MountTargetId=mt_id)["SecurityGroups"][0]
+                  ec2.authorize_security_group_ingress(GroupId=sg, CidrIp=cidr, FromPort=2049, ToPort=2049, IpProtocol='tcp', )
+
+              else:
+                  physical_resource_id = event['PhysicalResourceId']
+              cfnresponse.send(event, context, response_status, response_data, physical_resource_id, reason)
+
+  EFSSecurityGroup:
+    Type: Custom::EFSSecurityGroup
+    Properties:
+      ServiceToken: !GetAtt EFSSecurityGroupLambda.Arn
+      VpcId: !GetAtt [ Networking, Outputs.VPC ]
+      EfsId: !GetAtt [ Storage, Outputs.EFSFilesystemId ]
+
+  PasswordResolverRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Action:
+              - sts:AssumeRole
+            Effect: Allow
+            Principal:
+              Service:
+                - lambda.amazonaws.com
+      Policies:
+        - PolicyName: AdminServicePassword
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action:
+                  - secretsmanager:GetSecretValue
+                Resource: '*'
+                Condition:
+                  StringEquals:
+                    secretsmanager:ResourceTag/res:Deployment:
+                      - "true"
+
+  PasswordResolverLambda:
+    Type: AWS::Lambda::Function
+    Properties:
+      Description: !Sub "${AWS::StackName}: custom resource handler to resolve password config for Admin and Service Account."
+      Handler: index.handler
+      MemorySize: 128
+      Role: !GetAtt PasswordResolverRole.Arn
+      Runtime: python3.12
+      Timeout: 300
+      TracingConfig:
+        Mode: Active
+      Code:
+        ZipFile: |
+          import re
+          import time
+          import json
+          import cfnresponse
+          import boto3
+          import random
+          import string
+          secrets = boto3.client("secretsmanager")
+
+          def create_physical_resource_id():
+              alnum = string.ascii_uppercase + string.ascii_lowercase + string.digits
+              return "".join(random.choice(alnum) for _ in range(16))
+          
+          def handler(event, context):
+              admin_password = event['ResourceProperties']['AdminPassword']
+              service_account_password = event['ResourceProperties']['ServiceAccountPassword']
+
+              response_data = {}
+              reason = None
+              response_status = cfnresponse.SUCCESS
+
+              if event['RequestType'] == 'Create':
+                  try:
+                    response_data['Message'] = 'Resource creation successful!'
+                    physical_resource_id = create_physical_resource_id()
+
+                    secretsmanager_arn_regex_pattern = r"(arn:(aws(-cn|-us-gov)?):secretsmanager:(us(-gov)?|ap|ca|cn|eu|il|sa|me)-(central|(north|south)?(east|west)?)-\d:\d{12}:secret:[a-zA-Z0-9/_+=.@-]+)"
+                    admin_arn_match = re.search(secretsmanager_arn_regex_pattern, admin_password)
+                    service_account_arn_match = re.search(secretsmanager_arn_regex_pattern, service_account_password)
+
+                    resolved_admin_password = json.loads(secrets.get_secret_value(SecretId=admin_password)['SecretString'])["password"] if admin_arn_match else admin_password
+                    resolved_service_account_password = json.loads(secrets.get_secret_value(SecretId=service_account_password)['SecretString'])["password"] if service_account_arn_match else service_account_password
+
+                    # provide outputs
+                    response_data['AdminPassword'] = resolved_admin_password
+                    response_data['ServiceAccountPassword'] = resolved_service_account_password
+                  except:
+                    response_status = cfnresponse.FAILED
+              else:
+                  physical_resource_id = event['PhysicalResourceId']
+              cfnresponse.send(event, context, response_status, response_data, physical_resource_id, reason)
+
+  PasswordResolver:
+    Type: Custom::PasswordResolverLambda
+    Properties:
+      ServiceToken: !GetAtt PasswordResolverLambda.Arn
+      AdminPassword: !Ref AdminPassword
+      ServiceAccountPassword: !Ref ServiceAccountPassword
+
+Outputs:
+  VpcId:
+    Value: !GetAtt [ Networking, Outputs.VPC ]
+  PrivateSubnets:
+    Value: !GetAtt [ Networking, Outputs.PrivateSubnets ]
+  PublicSubnets:
+    Value: !GetAtt [ Networking, Outputs.PublicSubnets ]
+  CertificateSecretArn:
+    Description: ARN for a secret that contains the generated certificate.
+    Value: !GetAtt [ Certs, Outputs.CertificateArn ]
+    Condition: GenerateCerts
+  PrivateKeySecretArn:
+    Description: ARN for a secret that contains the generated certificate private key.
+    Value: !GetAtt [ Certs, Outputs.PrivateKeySecretArn ]
+    Condition: GenerateCerts
+  ACMCertificateARNforWebApp:
+    Description: ARN for an ACM Certificate that is generated for the PortalDomainName
+    Value: !Ref ACMCertificate
+    Condition: GenerateCerts
+  EnvironmentName:
+    Description: Name of Research and Engineering Studio environment.
+    Value: !Ref EnvironmentName
+    Condition: UseEnvironmentName
+  Keypair:
+    Description: Keypair used for management instances
+    Value: !Ref Keypair
+    Condition: CreateAD
+  ActiveDirectoryName:
+    Description: Fully Qualified Domain Name (FQDN) for your Active Directory
+    Value: !If [ SubDomainNotProvided, !Ref DomainName, !Join [ ".", [ !Ref SubDomain, !Ref DomainName] ] ]
+    Condition: CreateAD
+  ADShortName:
+    Description: Please provide the short name in Active directory
+    Value: !GetAtt [ DirectoryService, Outputs.DomainShortName ]
+    Condition: CreateAD
+  LDAPConnectionURI:
+    Value: !Sub
+      - ldap://${DomainName}
+      - { DomainName: !If [ SubDomainNotProvided, !Ref DomainName, !Join [ ".", [ !Ref SubDomain, !Ref DomainName] ] ] }
+    Condition: CreateAD
+  SudoersGroupName:
+    Value: RESAdministrators
+    Condition: CreateAD
+  LDAPBase:
+    Value: !Sub
+      - dc=${dc}
+      - { dc: !Join [",dc=", !Split [".", !If [ SubDomainNotProvided, !Ref DomainName, !Join [ ".", [ !Ref SubDomain, !Ref DomainName] ] ] ]] }
+    Condition: CreateAD
+  ServiceAccountCredentialsSecretArn:
+    Value: !GetAtt [ DirectoryService, Outputs.CredentialsSecretArn ]
+    Condition: CreateAD
+  ServiceAccountUserDN:
+    Description: The Distinguished Name (DN) of the ServiceAccount user in your Active Directory
+    Value: !Sub
+      - CN=ServiceAccount,OU=Users,OU=${ou},DC=${dc}
+      - {dc: !Join [",DC=", !Split [".", !If [ SubDomainNotProvided, !Ref DomainName, !Join [ ".", [ !Ref SubDomain, !Ref DomainName]]]]], ou:  !GetAtt [ DirectoryService, Outputs.DomainShortName ]}
+    Condition: CreateAD
+  SharedHomeFilesystemId:
+    Value: !GetAtt [ Storage, Outputs.EFSFilesystemId ]
+  UsersOU:
+    Description: The OU for all users who might join the system. The value provided here is based off of a supplied LDIF file.
+    Value: !Sub
+      - OU=Users,OU=RES,OU=${ou},DC=${dc}
+      - { dc: !Join [",DC=", !Split [".", !If [ SubDomainNotProvided, !Ref DomainName, !Join [ ".", [ !Ref SubDomain, !Ref DomainName]]]]], ou:  !GetAtt [ DirectoryService, Outputs.DomainShortName ]}
+    Condition: CreateAD
+  GroupsOU:
+    Description: The OU for groups that users belong to who might join the system. The value provided here is based off of a supplied LDIF file.
+    Value: !Sub
+      - OU=Users,OU=RES,OU=${ou},DC=${dc}
+      - { dc: !Join [",DC=", !Split [".", !If [ SubDomainNotProvided, !Ref DomainName, !Join [ ".", [ !Ref SubDomain, !Ref DomainName]]]]], ou:  !GetAtt [ DirectoryService, Outputs.DomainShortName ]}
+    Condition: CreateAD
+  ComputersOU:
+    Description: The OU for computers that join the AD. The value provided here is based off of a supplied LDIF file.
+    Value: !Sub
+      - OU=Computers,OU=RES,OU=${ou},DC=${dc}
+      - { dc: !Join [",DC=", !Split [".", !If [ SubDomainNotProvided, !Ref DomainName, !Join [ ".", [ !Ref SubDomain, !Ref DomainName]]]]], ou:  !GetAtt [ DirectoryService, Outputs.DomainShortName ]}
+    Condition: CreateAD
+  ActiveDirectoryDNSIPs:
+    Description: The DNS IPs of your Active Directory
+    Value: !Join [ ",", [ !GetAtt [ DirectoryService, Outputs.DnsIpAddress1 ], !GetAtt [ DirectoryService, Outputs.DnsIpAddress2 ] ] ]
+    Condition: CreateAD
+
+  VpcCidr:
+    Description: VPC CIDR block
+    Value: !Ref CidrBlock

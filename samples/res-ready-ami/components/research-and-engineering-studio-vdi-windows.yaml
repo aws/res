@@ -1,0 +1,58 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: ImageBuilder Component to bootstrap RES VDI Windows
+
+Resources:
+  RESVDIWindowsInstaller:
+    Type: AWS::ImageBuilder::Component
+    Properties:
+      Name: 'research-and-engineering-studio-vdi-windows'
+      Description: RES VDI Bootstrap for Windows
+      Version: '1.0.0'
+      Platform: Windows
+      Data: |
+        #  Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+        #
+        #  Licensed under the Apache License, Version 2.0 (the "License"). You may not use this file except in compliance
+        #  with the License. A copy of the License is located at
+        #
+        #      http://www.apache.org/licenses/LICENSE-2.0
+        #
+        #  or in the 'license' file accompanying this file. This file is distributed on an 'AS IS' BASIS, WITHOUT WARRANTIES
+        #  OR CONDITIONS OF ANY KIND, express or implied. See the License for the specific language governing permissions
+        #  and limitations under the License.
+        name: research-and-engineering-studio-vdi-windows
+        description: An RES EC2 Image Builder component to install required RES software dependencies for Windows VDI.
+        schemaVersion: 1.0
+
+        phases:
+          - name: build
+            steps:
+              - name: CreateRESBootstrapFolder
+                action: CreateFolder
+                onFailure: Abort
+                maxAttempts: 3
+                inputs:
+                    - path: 'C:\Users\Administrator\RES\Bootstrap'
+                      overwrite: true
+              - name: DownloadRESWindowsInstallPackage
+                action: S3Download
+                onFailure: Abort
+                maxAttempts: 3
+                inputs:
+                    - source: 's3://research-engineering-studio-us-east-1/releases/latest/res-installation-scripts.tar.gz'
+                      destination: '{{ build.CreateRESBootstrapFolder.inputs[0].path }}\res-installation-scripts.tar.gz'
+              - name: RunInstallScript
+                action: ExecutePowerShell
+                onFailure: Abort
+                maxAttempts: 3
+                inputs:
+                    commands:
+                        - 'cd {{ build.CreateRESBootstrapFolder.inputs[0].path }}'
+                        - 'tar -xf res-installation-scripts.tar.gz'
+                        - 'Import-Module .\scripts\virtual-desktop-host\windows\Install.ps1'
+                        - 'Install-WindowsEC2Instance -PrebakeAMI'
+
+
+Outputs:
+  ImageBuilderComponent:
+    Value: !Ref RESVDIWindowsInstaller
