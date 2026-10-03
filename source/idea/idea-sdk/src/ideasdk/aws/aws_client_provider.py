@@ -19,6 +19,7 @@ from threading import RLock
 from typing import List, Dict, Any, Optional, Set
 import botocore.exceptions
 from botocore.client import Config
+from botocore.credentials import DeferredRefreshableCredentials
 
 AWS_CLIENT_S3 = 's3'
 AWS_CLIENT_EC2 = 'ec2'
@@ -245,6 +246,9 @@ class AwsClientProvider(AwsClientProviderProtocol):
                 else:
                     raise e
         else:
+            # To prevent a dead loop for SSO credentials
+            if isinstance(credentials, DeferredRefreshableCredentials):
+                credentials.get_frozen_credentials()
             return credentials.refresh_needed(refresh_in=30)
 
     def supported_clients(self) -> Set[str]:
