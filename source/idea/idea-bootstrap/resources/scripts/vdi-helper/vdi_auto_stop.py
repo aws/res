@@ -119,8 +119,7 @@ def _get_uptime() -> float:
 
 def _get_cpu_utilization() -> float:
     """Returns the current CPU utilization as a percentage."""
-    params: Dict[str, Any] = {"interval": 1} if os.name == "nt" else {"percpu": False}
-    return psutil.cpu_percent(**params)
+    return psutil.cpu_percent(percpu=False, interval = 1)
 
 
 def _get_dcv_latest_interaction_time() -> float:
